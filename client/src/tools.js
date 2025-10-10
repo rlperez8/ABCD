@@ -1,47 +1,7 @@
-/**
- * Draws the live price label on the price-axis canvas as the mouse moves.
- *
- * This function converts the mouse's Y position into a price value
- * based on the current chart scaling and vertical offset. It then
- * renders that price as text next to the mouse cursor.
- *
- * @param {Object} candleChartRef - A React ref object containing all current chart state and geometry info.
- * @param {CanvasRenderingContext2D} ctx_price - The 2D canvas rendering context used to draw the price text.
- *
- * @description
- * Steps performed:
- * 1. Converts the mouse's Y-coordinate into the chart’s inverted coordinate system.
- * 2. Translates that pixel position into a price value using the `pixels_per_price_unit` ratio.
- * 3. Adjusts for the chart’s vertical offset (`current_Y_OffSet`).
- * 4. Multiplies by `unit_amount` to get the actual price.
- * 5. Renders the price value at the mouse’s Y position on the price canvas.
- *
- * @example
- * // Example usage inside a render loop:
- * draw_mouse_price(candleChartRef, ctx_price);
- */
-export const draw_mouse_price = (candleChartRef, ctx_price) => {
 
-    ctx_price.beginPath();
-    ctx_price.fillStyle = "rgb(74, 13, 13)";
 
-    // Flip Mouse Y-Coordinate (convert canvas coordinate to chart coordinate)
-    const flipped_y_coord = Math.abs(
-        candleChartRef.current.mouse.pos.y - candleChartRef.current.height.currentBaselineY
-    );
 
-    // Convert flipped Y-Coordinate into a chart price coordinate
-    const y_loc_price = flipped_y_coord / candleChartRef.current.price.current_pixels_per_price_unit;
 
-    // Compute the actual price
-    const price = y_loc_price * candleChartRef.current.unit_amount;
-
-    // Draw the price value near the mouse cursor
-    ctx_price.fillStyle = "gray";
-    ctx_price.font = "20px Source Sans Pro";
-    ctx_price.fillText(price.toFixed(2), 20, candleChartRef.current.mouse.pos.y + 5);
-    ctx_price.stroke();
-};
 export const update_zoom_out_info = (candleChartRef) => {
 
     console.log('current mid:',candleChartRef.current.price.current_mid_price)

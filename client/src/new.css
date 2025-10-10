@@ -734,13 +734,18 @@ input:focus {
     width: 100%;
     height: 100%;
     display: flex;
-    /* flex-direction: row; */
+    flex-direction: row;
     box-sizing: border-box;
-    border: 1px solid rgb(88, 88, 88);
     border: 2px solid rgb(33, 33, 32);
-    flex-direction: column;
+    /* flex-direction: column; */
     border-radius: 10px;
 
+}
+.chart_container{
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 .chart_tool_header{
     width: 100%;

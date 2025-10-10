@@ -2,6 +2,7 @@ import React, {useState, useRef, useEffect} from "react";
 import './new.css'
 import * as CandleChartTools from './candle_chart_tools.js';
 import * as tools from './tools.js';
+import * as docs from './jsdocs.js'
 
 
 export const Candle_Chart = (props) => {
@@ -1107,7 +1108,7 @@ export const Candle_Chart = (props) => {
             draw_Y_mouse()
             CandleChartTools.draw_Y_price_tag(candleChartRef, canvas, ctx_price)
             draw_X_mouse()
-            tools.draw_mouse_price(candleChartRef, ctx_price)
+            docs.draw_mouse_price(candleChartRef, ctx_price)
             ctx_date.clearRect(0, 0, canvas_date.width, canvas_date.height);
             // draw_x_grid_date();
             draw_X_date_tag()
@@ -1235,26 +1236,11 @@ export const Candle_Chart = (props) => {
 
    
 
-            candleChartRef.current.height.current_Y_OffSet =  (parseFloat(selected_pattern.pattern_A_high)* (candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.price.counter))
-            candleChartRef.current.height.prev_Y_OffSet =  (parseFloat(selected_pattern.pattern_A_high) * (candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.price.counter))
+    
 
-            candleChartRef.current.height.current_Y_OffSet -= candleChartRef.current.height.startingBaselineY/2
-            candleChartRef.current.height.prev_Y_OffSet -= candleChartRef.current.height.startingBaselineY/2
-
-
-            candleChartRef.current.height.currentBaselineY = candleChartRef.current.height.startingBaselineY + candleChartRef.current.height.current_Y_OffSet
-            candleChartRef.current.height.previousBaselineY = candleChartRef.current.height.startingBaselineY + candleChartRef.current.height.current_Y_OffSet
-            
+            docs.push_price_to_middle_screen(candleChartRef, selected_pattern)
 
             candleChartRef.current.selected_candle = parseFloat(selected_pattern.pattern_A_high)
-
-            console.log('=================')
-            console.log('current_mid:',candleChartRef.current.price.current_mid_price)
-            console.log('new_mid:',(candleChartRef.current.height.currentBaselineY - (candleChartRef.current.height.startingBaselineY/2))/ (candleChartRef.current.price.current_pixels_per_price_unit))
-            let new_mid = (candleChartRef.current.height.currentBaselineY - (candleChartRef.current.height.startingBaselineY/2))/ (candleChartRef.current.price.current_pixels_per_price_unit)
-            candleChartRef.current.price.current_mid_price = new_mid
-            candleChartRef.current.price.prev_mid_price = new_mid
-            candleChartRef.current.price.static_mid = new_mid
         
       
   

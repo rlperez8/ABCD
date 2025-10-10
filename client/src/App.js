@@ -506,8 +506,7 @@ set_ab_candles(sortedData);
 
           <div className='main'>
 
-       
-            {/* <div className='statistics'>
+            <div className='statistics'>
               <div className='stat1_header'>
                 Count
               </div>
@@ -655,111 +654,109 @@ set_ab_candles(sortedData);
 
 
 
-            </div> */}
+            </div> 
 
-            <div className='chart_tool_header'>
+            <div className='chart_container'>
+              
+              <div className='chart_tool_header'>
 
              
-            </div>
-
-            <div className='data_'>
-
-              <div className='chart_button'>
-                <div className='but'>
-
-                  <img className='abcd_img' src={abcd}></img>
-                </div>
-
-                <div className='but'>
-
-                  <img className='abcd_img' src={prices}></img>
-                </div>
-
-                <div className='but'>
-
-                  <img className='abcd_img' src={retracement}></img>
-                </div>
-
-                <div className='but'>
-
-                  <img className='abcd_img' src={candles_}></img>
-                </div>
-                 
-                 
               </div>
 
-              <div className='data_half'>
+              <div className='data_'>
 
-                <Candle_Chart 
-                  selected_candles={formatted_candles} 
-                  chart_height={chart_height}
-                  set_is_listing_status={set_is_listing_status}
-                  is_listing_status={is_listing_status}
-                  ticker_symbol={ticker_symbol}
-                  set_canvas_dimensions={set_canvas_dimensions}
-                  // selected_abcd={selected_abcd}  
-                  // selected_ab={selected_ab}
-                  selected_pattern={selected_pattern}
-                />
-                
-              </div>
-{/* 
-              <div className='data_half'>
+                <div className='chart_button'>
+                  <div className='but'>
 
-                <div className='table_options'>
-                 {optionCells.map((label, idx) => (
-                  <div key={idx} className={label === selected_table_option ? 'option_cell_selected': 'option_cell'}
-                  onClick={()=>{set_selected_table_option(label);
-                    handle_selected_option(abcd_patterns, label)
-                  }}>
-                        {label}
-                      </div>
-                    ))}
-
-                </div>
-                <div className='strategy_station_con'>
-                  
-                  <div className='chart_header'>
-                      {table_columns.map((col,index)=>{
-                          return(
-                              <div key={index}  className='col1'>{col}</div>
-                          )
-                      })}
-                      
+                    <img className='abcd_img' src={abcd}></img>
                   </div>
 
-                  <Table 
-                    table_columns={table_columns}
-                    selected_pattern_index={selected_pattern_index}
-                    set_selected_pattern={set_selected_pattern}
-                    set_selected_pattern_index={set_selected_pattern_index}
-                    table={table}
-                    abcd_patterns={abcd_patterns}
+                  <div className='but'>
+
+                    <img className='abcd_img' src={prices}></img>
+                  </div>
+
+                  <div className='but'>
+
+                    <img className='abcd_img' src={retracement}></img>
+                  </div>
+
+                  <div className='but'>
+
+                    <img className='abcd_img' src={candles_}></img>
+                  </div>
+                  
+                  
+                </div>
+
+                <div className='data_half'>
+
+                  <Candle_Chart 
+                    selected_candles={formatted_candles} 
+                    chart_height={chart_height}
+                    set_is_listing_status={set_is_listing_status}
+                    is_listing_status={is_listing_status}
+                    ticker_symbol={ticker_symbol}
+                    set_canvas_dimensions={set_canvas_dimensions}
+                    // selected_abcd={selected_abcd}  
+                    // selected_ab={selected_ab}
+                    selected_pattern={selected_pattern}
                   />
+                  
+                </div>
+  
+                <div className='data_half'>
+
+                  <div className='table_options'>
+                  {optionCells.map((label, idx) => (
+                    <div key={idx} className={label === selected_table_option ? 'option_cell_selected': 'option_cell'}
+                    onClick={()=>{set_selected_table_option(label);
+                      handle_selected_option(abcd_patterns, label)
+                    }}>
+                          {label}
+                        </div>
+                      ))}
+
+                  </div>
+                  <div className='strategy_station_con'>
+                    
+                    <div className='chart_header'>
+                        {table_columns.map((col,index)=>{
+                            return(
+                                <div key={index}  className='col1'>{col}</div>
+                            )
+                        })}
+                        
+                    </div>
+
+                    <Table 
+                      table_columns={table_columns}
+                      selected_pattern_index={selected_pattern_index}
+                      set_selected_pattern={set_selected_pattern}
+                      set_selected_pattern_index={set_selected_pattern_index}
+                      table={table}
+                      abcd_patterns={abcd_patterns}
+                    />
+                
               
-            
-                </div> 
-              </div> */}
+                  </div> 
+                </div>
+              </div>
+
+
             </div>
 
-{/* 
+            
+
             <Filter
               filters={filters}
               set_filters={set_filters}
               fetch_filtered={fetch_filtered}
-            /> */}
-
-
+            />
             
           </div>
 
-       
-        
-        
-        </>
-        
-
-        }
+        </>}
         
 
         
