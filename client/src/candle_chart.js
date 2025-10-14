@@ -320,7 +320,7 @@ export const Candle_Chart = (props) => {
             ctx.save()
             let x_mouse_location = candleChartRef.current.mouse.pos.y
             ctx.beginPath();
-            ctx.lineWidth = 2
+            ctx.lineWidth = .5
             ctx.strokeStyle = 'white'
             ctx.setLineDash([5, 5]); 
             ctx.moveTo(0,x_mouse_location);    
@@ -366,7 +366,7 @@ export const Candle_Chart = (props) => {
             let d = `${formattedDate} ${shortYear}`
      
             ctx.beginPath(); 
-            ctx.lineWidth = 2
+            ctx.lineWidth = .5
             ctx.strokeStyle = 'white'
             ctx.setLineDash([5, 5]); 
             ctx.moveTo(-pixelStart - candleChartRef.current.width.current_X_origin, canvas.height);    
@@ -998,7 +998,7 @@ export const Candle_Chart = (props) => {
             CandleChartTools.drawPrices(candleChartRef, ctx_price, cp);
             // CandleChartTools.highlight_selected_pattern(candleChartRef, ctx, canvas)
             // CandleChartTools.display_mid_point(canvas, ctx, ctx_price, candleChartRef)
-            draw_.mouse_price(candleChartRef, ctx_price)
+            
 
             
             draw_Y_mouse()
@@ -1013,6 +1013,7 @@ export const Candle_Chart = (props) => {
             draw_retracement()
             draw_price_levels()
             draw_ABCD_lines()
+            draw_.mouse_price(candleChartRef, ctx_price)
             // draw_StopLoss_Enter_TakeProfit()
             // draw_SL_EN_TP_prices()
             animationFrameId = null;
@@ -1202,7 +1203,7 @@ export const Candle_Chart = (props) => {
             <div className='candle_chart_wrapper'>
                 <div className='canvas'>
 
-                    {/* <div className='header-bar'>
+                    <div className='header-bar'>
     
                         <div className='header_slot' onClick={()=>{set_is_listing_status(!is_listing_status)}}>{ticker_symbol}</div>
                             <div className='header_slot'>
@@ -1222,7 +1223,7 @@ export const Candle_Chart = (props) => {
                                 <div className='header_two' style={{color: candle_color}}>{candle_low}</div>
                             </div>
                     </div>
-     */}
+    
                     <canvas id='canvas' 
                     ref={canvas_chart}
                         onMouseDown={handleMouseDown}

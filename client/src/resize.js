@@ -95,21 +95,6 @@ export const chart_zoom_out = (candleChartRef, threshold) => {
         candleChartRef.current.price.current_mid_price = mid_price
         candleChartRef.current.price.prev_mid_price = mid_price
     }
-
-
-    const add_shrink_expand_to_candle_top = (obj, candleChartRef) => {
-        let res = (obj.candle_close - obj.candle_open) / candleChartRef.current.unit_amount;
-        res = res * candleChartRef.current.price.current_pixels_per_price_unit;
-        return res;
-    };
-  
-
-    candleChartRef.current.candles.candles = candleChartRef.current.candles.candles.map((obj) => ({
-        ...obj,
-        current_height:Math.abs(obj.current_height) > 1 ? add_shrink_expand_to_candle_top(obj, candleChartRef): 1,
-    }));
-
-
 };
 export const chart_zoom_in = (candleChartRef, threshold) => {
 
@@ -137,38 +122,7 @@ export const chart_zoom_in = (candleChartRef, threshold) => {
         candleChartRef.current.price.current_mid_price = mid_price
         candleChartRef.current.price.prev_mid_price = mid_price
 
-        }
-
-    const add_shrink_expand_to_candle_top = (obj) => {
-        let res = (obj.candle_close - obj.candle_open) / candleChartRef.current.unit_amount
-        res = res * candleChartRef.current.price.current_pixels_per_price_unit
-        return Math.trunc(res);
-                    
     }
-    const add_shrink_expand_to_candle = (price) => {
-        let res = price / candleChartRef.current.unit_amount
-        res = res * candleChartRef.current.price.current_pixels_per_price_unit
-        res = res - candleChartRef.current.height.startingBaselineY
-        res = res + candleChartRef.current.zoom.shrink_expand_height
-
-        return Math.trunc(res); 
-    }
-    candleChartRef.current.candles.candles = candleChartRef.current.candles.candles.map((obj) => {
-
-        return {
-            ...obj,
-            current_high: add_shrink_expand_to_candle(obj.high),
-            current_height: add_shrink_expand_to_candle_top(obj),
-            // current_bottom: add_shrink_expand_to_candle(obj.open),
-            current_low: add_shrink_expand_to_candle(obj.low)
-        };
-    });
-
-
-
-
-
-
 };
 
 

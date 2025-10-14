@@ -1,43 +1,77 @@
 import * as utilites from './utilities.js'
-
 /**
- * Draws candlesticks on a canvas for the given chart reference.
- * 
- * This function iterates over all candles in `candleChartRef.current.candles.candles`
- * and renders each candle at its correct pixel position. It calculates the
- * vertical pixel position based on the candle’s open price and the current chart baseline.
- * Each candle is filled with its color and outlined with a black border.
- * 
- * @function
- * @param {Object} candleChartRef - Reference object for the chart containing candle data and chart settings.
- * @param {CanvasRenderingContext2D} ctx - The canvas 2D rendering context where the candles will be drawn.
- * 
+ * Draws all candlestick objects on the main chart canvas.
+ *
+ * Converts each candle's price data into pixel coordinates, calculates
+ * candle height and width, and renders both the candle body and its border.
+ * This function dynamically adjusts candle placement based on chart position,
+ * scaling, and spacing defined in `candleChartRef`.
+ *
+ * @function candles
+ * @param {Object} candleChartRef - React ref object containing all chart state and dimension data.
+ * @param {Object} candleChartRef.current - Current state of the chart reference.
+ * @param {Object} candleChartRef.current.height - Height-related values and Y-baseline positions.
+ * @param {number} candleChartRef.current.height.currentBaselineY - The current Y-axis baseline for price-to-pixel conversion.
+ * @param {number} candleChartRef.current.height.startingBaselineY - The starting Y position used to center and align the chart.
+ * @param {Object} candleChartRef.current.width - Width-related data for chart positioning.
+ * @param {number} candleChartRef.current.width.current_X_origin - Current horizontal offset of the chart in pixels.
+ * @param {Object} candleChartRef.current.price - Price scaling information.
+ * @param {number} candleChartRef.current.price.current_pixels_per_price_unit - Pixel count that represents one price unit.
+ * @param {Object} candleChartRef.current.candles - Container for candle data and metadata.
+ * @param {Array<Object>} candleChartRef.current.candles.candles - Array of individual candle objects.
+ * @param {number} candleChartRef.current.current_candle_width - Width of each candle body in pixels.
+ * @param {number} candleChartRef.current.current_pixels_between_candles - Horizontal spacing between each candle.
+ * @param {CanvasRenderingContext2D} ctx - The 2D drawing context used to render candles on the canvas.
+ *
  * @example
- * // Assuming you have a canvas context `ctx` and a candle chart reference `candleChartRef`
- * drawCandles(candleChartRef, ctx);
+ * // Typical usage inside a render loop:
+ * candles(candleChartRef, ctx);
+ *
+ * @description
+ * ### Steps performed:
+ * 1. Calculates the starting X-position for the first candle.
+ * 2. Converts each candle's open and close prices into pixel Y-coordinates.
+ * 3. Determines each candle's height and vertical placement.
+ * 4. Draws filled rectangles for candle bodies using `ctx.fillRect()`.
+ * 5. Outlines each candle with a black border using `ctx.strokeRect()`.
+ * 6. Advances X-position for the next candle based on width and spacing.
  */
 export const candles = (candleChartRef, ctx) => {
-  let startingX = -(candleChartRef.current.current_pixels_between_candles / 2);
 
-  candleChartRef.current.candles.candles.forEach(item => {
-    const x = Math.floor(startingX - candleChartRef.current.width.current_X_origin);
+    // Define Starting X-Location
+    let startingX = -(candleChartRef.current.current_pixels_between_candles / 2);
+    let x = Math.floor(startingX - candleChartRef.current.width.current_X_origin);
 
-    const price_pixel_height = utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_open)
-    const price_pixel_location = Math.floor(candleChartRef.current.height.currentBaselineY - price_pixel_height);
+    candleChartRef.current.candles.candles.forEach(item => {
 
-    const width = -candleChartRef.current.current_candle_width;
-    const height = -Math.floor(item.current_height);
+        // Convert Open and Close Price into Pixels
+        let candle_open_pixel = utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_open);
+        const candle_close_pixel = utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_close);
 
-    // Fill the candle body
-    ctx.fillStyle = item.color;
-    ctx.fillRect(x, price_pixel_location, width, height);
+        // Get Candle Height
+        let candle_height = candle_open_pixel - candle_close_pixel;
 
-    // Add a black border
-    ctx.strokeStyle = "black";
-    ctx.lineWidth = 2; // adjust thickness if desired (e.g., 1.5 for sharper look)
-    ctx.strokeRect(x, price_pixel_location, width, height);
+        // Get Price Location on Canvas
+        candle_open_pixel = Math.floor(candleChartRef.current.height.currentBaselineY - candle_open_pixel);    
+    
+        // Get Candle Width
+        const width = -candleChartRef.current.current_candle_width;
 
-    startingX -= candleChartRef.current.current_candle_width + candleChartRef.current.current_pixels_between_candles;
+        // Add Color to Candle
+        ctx.fillStyle = item.color;
+
+        // Draw Candle
+        ctx.fillRect(x, candle_open_pixel, width, candle_height);
+
+        // Add Border
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+
+        // Draw Candle Border
+        ctx.strokeRect(x, candle_open_pixel, width, candle_height);
+
+        // Update Current X-Location
+        x -= candleChartRef.current.current_candle_width + candleChartRef.current.current_pixels_between_candles;
   });
 };
 
