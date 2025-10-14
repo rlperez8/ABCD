@@ -1,5 +1,5 @@
 import * as utilites from './utilities.js'
-import * as tools from './tools.js'
+
 /**
  * Updates the chart's vertical position and mid-price based on mouse movement.
  * Calculates how many pixels the mouse moved vertically, shifts the chart's baseline,
@@ -20,56 +20,6 @@ export const chart_Y_movement = (candleChartRef) => {
     // Adjust Current Mid Price
     let convert_pixels = pixels_mouse_moved / candleChartRef.current.price.current_pixels_per_price_unit;
     candleChartRef.current.price.current_mid_price = candleChartRef.current.price.prev_mid_price - convert_pixels;
-};
-
-export const chart_zoom_out = (candleChartRef, threshold) => {
-
-    // Increase Unit Size
-    candleChartRef.current.price.current_pixels_per_price_unit -= 1;
-    candleChartRef.current.price.current_price_unit_pixel_size = Math.floor(candleChartRef.current.price.current_price_unit_pixel_size - 1);
-
-
-    // Increase Canvas Height
-    candleChartRef.current.height.currentBaselineY -= candleChartRef.current.price.current_mid_price;
-    candleChartRef.current.height.previousBaselineY -= candleChartRef.current.price.current_mid_price;
-
-
-    // Change Grid Size
-    if (candleChartRef.current.price.current_price_unit_pixel_size === threshold) {
-        
-        // Increase Unit Size
-        candleChartRef.current.price.current_pixels_per_price_unit *= 2;
-        candleChartRef.current.price.prev_pixels_per_price_unit *= 2;
-        candleChartRef.current.price.current_price_unit_pixel_size = candleChartRef.current.price.current_pixels_per_price_unit
-        
-        // Increase Displayed Numbers
-    
-
-        candleChartRef.current.unit_amount *= 2
-
-        console.log('unit_amount',candleChartRef.current.unit_amount)
- 
-
-
-        const mid_price = utilites.get_mid_price(candleChartRef)
-        candleChartRef.current.price.current_mid_price = mid_price
-        candleChartRef.current.price.prev_mid_price = mid_price
-        }
-
-
-    const add_shrink_expand_to_candle_top = (obj, candleChartRef) => {
-        let res = (obj.candle_close - obj.candle_open) / candleChartRef.current.unit_amount;
-        res = res * candleChartRef.current.price.current_pixels_per_price_unit;
-        return res;
-    };
-  
-
-    candleChartRef.current.candles.candles = candleChartRef.current.candles.candles.map((obj) => ({
-        ...obj,
-        current_height:Math.abs(obj.current_height) > 1 ? add_shrink_expand_to_candle_top(obj, candleChartRef): 1,
-    }));
-
-
 };
 /**
  * Centers the chart vertically around a target price value.
@@ -119,18 +69,76 @@ export const push_price_to_middle_screen = (candleChartRef,selected_pattern) => 
 
 };
 
+export const chart_zoom_out = (candleChartRef, threshold) => {
+
+    // Decrease Unit Size
+    candleChartRef.current.price.current_pixels_per_price_unit -= 1;
+    candleChartRef.current.price.current_price_unit_pixel_size = Math.floor(candleChartRef.current.price.current_price_unit_pixel_size - 1);
+
+    // Decrease Canvas Height
+    candleChartRef.current.height.currentBaselineY -= candleChartRef.current.price.current_mid_price;
+    candleChartRef.current.height.previousBaselineY -= candleChartRef.current.price.current_mid_price;
+
+    // Change Grid Size
+    if (candleChartRef.current.price.current_price_unit_pixel_size === threshold) {
+        
+        // Decrease Pixels Per Grid 
+        candleChartRef.current.price.current_pixels_per_price_unit *= 2;
+        candleChartRef.current.price.prev_pixels_per_price_unit *= 2;
+        candleChartRef.current.price.current_price_unit_pixel_size = candleChartRef.current.price.current_pixels_per_price_unit
+        
+        // Increase Displayed Grid Size
+        candleChartRef.current.unit_amount *= 2 
+
+        // Update Mid Price
+        const mid_price = utilites.get_mid_price(candleChartRef)
+        candleChartRef.current.price.current_mid_price = mid_price
+        candleChartRef.current.price.prev_mid_price = mid_price
+    }
 
 
+    const add_shrink_expand_to_candle_top = (obj, candleChartRef) => {
+        let res = (obj.candle_close - obj.candle_open) / candleChartRef.current.unit_amount;
+        res = res * candleChartRef.current.price.current_pixels_per_price_unit;
+        return res;
+    };
+  
+
+    candleChartRef.current.candles.candles = candleChartRef.current.candles.candles.map((obj) => ({
+        ...obj,
+        current_height:Math.abs(obj.current_height) > 1 ? add_shrink_expand_to_candle_top(obj, candleChartRef): 1,
+    }));
 
 
-export const zoomIn = (candleChartRef, expand_threshold) => {
-                
-    
-    // candleChartRef.current.zoom.current -= 1;
-    tools.update_zoom_in_info(candleChartRef)
-    tools.zoom_in_threshold(candleChartRef, expand_threshold)
-    
-    
+};
+export const chart_zoom_in = (candleChartRef, threshold) => {
+
+    // Increase Unit Size
+    candleChartRef.current.price.current_pixels_per_price_unit += 1;
+    candleChartRef.current.price.current_price_unit_pixel_size = Math.floor(candleChartRef.current.price.current_price_unit_pixel_size +1)
+
+    // Increase Canvas Height
+    candleChartRef.current.height.currentBaselineY += candleChartRef.current.price.current_mid_price;
+    candleChartRef.current.height.previousBaselineY += candleChartRef.current.price.current_mid_price;
+
+    // Change Grid Size
+    if (candleChartRef.current.price.current_price_unit_pixel_size === threshold) {
+
+        // Increase Pixels Per Grid
+        candleChartRef.current.price.current_pixels_per_price_unit /= 2;
+        candleChartRef.current.price.prev_pixels_per_price_unit /= 2;
+        candleChartRef.current.price.current_price_unit_pixel_size = candleChartRef.current.price.current_pixels_per_price_unit
+
+        // Increase Displayed Grid Size
+        candleChartRef.current.unit_amount /= 2
+        
+        // Update Mid Price
+        const mid_price = utilites.get_mid_price(candleChartRef)
+        candleChartRef.current.price.current_mid_price = mid_price
+        candleChartRef.current.price.prev_mid_price = mid_price
+
+        }
+
     const add_shrink_expand_to_candle_top = (obj) => {
         let res = (obj.candle_close - obj.candle_open) / candleChartRef.current.unit_amount
         res = res * candleChartRef.current.price.current_pixels_per_price_unit
@@ -155,6 +163,15 @@ export const zoomIn = (candleChartRef, expand_threshold) => {
             current_low: add_shrink_expand_to_candle(obj.low)
         };
     });
-    
-    
+
+
+
+
+
+
 };
+
+
+
+
+

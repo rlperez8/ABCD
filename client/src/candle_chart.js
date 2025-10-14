@@ -1,8 +1,7 @@
 import React, {useState, useRef, useEffect} from "react";
 import './new.css'
 import * as CandleChartTools from './candle_chart_tools.js';
-import * as tools from './tools.js';
-import * as docs from './jsdocs.js'
+import * as draw_ from './draw_.js'
 import * as resize from './resize.js'
 
 export const Candle_Chart = (props) => {
@@ -556,7 +555,7 @@ export const Candle_Chart = (props) => {
             let expand_threshold = Math.floor(candleChartRef.current.price.starting_price_unit_pixel_size  * 1.5)
         
             
-            // if (e.deltaY < 0) resize.zoomIn(candleChartRef, expand_threshold);
+            if (e.deltaY < 0) resize.chart_zoom_in(candleChartRef, expand_threshold);
             if (e.deltaY > 0) resize.chart_zoom_out(candleChartRef, threshold)
             if (!animationFrameId) {
                 animationFrameId = requestAnimationFrame(draw);
@@ -990,20 +989,22 @@ export const Candle_Chart = (props) => {
                 
             }
       
-            console.log('unit_amount',candleChartRef.current.unit_amount)
   
             
             CandleChartTools.drawGrid(candleChartRef, ctx, canvas);
             CandleChartTools.draw_x_grid(candleChartRef, ctx, canvas)
-            docs.draw_candles(candleChartRef, ctx);
+            draw_.candles(candleChartRef, ctx);
             CandleChartTools.drawWicks(candleChartRef, ctx);
             CandleChartTools.drawPrices(candleChartRef, ctx_price, cp);
             // CandleChartTools.highlight_selected_pattern(candleChartRef, ctx, canvas)
             // CandleChartTools.display_mid_point(canvas, ctx, ctx_price, candleChartRef)
+            draw_.mouse_price(candleChartRef, ctx_price)
+
+            
             draw_Y_mouse()
             CandleChartTools.draw_Y_price_tag(candleChartRef, canvas, ctx_price)
             draw_X_mouse()
-            docs.draw_mouse_price(candleChartRef, ctx_price)
+            
             ctx_date.clearRect(0, 0, canvas_date.width, canvas_date.height);
             // draw_x_grid_date();
             draw_X_date_tag()

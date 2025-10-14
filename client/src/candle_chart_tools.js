@@ -1,4 +1,4 @@
-import * as tools from './tools.js';
+
 import * as docs from './jsdocs.js'
 import * as resize from './resize.js'
 export const reset_candle_canvas = (canvas_chart) => {
