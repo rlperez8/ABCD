@@ -57,74 +57,50 @@ export const draw_mouse_price = (candleChartRef, ctx_price) => {
  * console.log(pixelY); // → 100
  */
 export const get_pixel_location_of_a_price = (candleChartRef, price) => {
-    const one_dollar_pixel_size =
-        candleChartRef.current.price.current_pixels_per_price_unit /
-        candleChartRef.current.price.counter;
-
+    
+    const one_dollar_pixel_size = candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.price.counter;
     const price_pixel_location = price * one_dollar_pixel_size;
 
     return price_pixel_location;
 };
+
 /**
- * Centers the chart vertically around a target price value.
- *
- * This function converts a selected pattern's price into its corresponding
- * pixel location on the canvas, then adjusts the chart's baseline (Y-axis)
- * so that the price appears centered vertically on the screen. It also updates
- * the chart's current, previous, and static mid-price references in price units.
- *
-
- * @returns {void} This function does not return a value; it directly mutates
- * the `candleChartRef` object to update chart positioning and price metadata.
- *
- * @description
- * Steps performed:
- * 1. Convert the pattern's price into a pixel location using chart scaling.
- * 2. Move the chart's Y-baseline down to align with that price.
- * 3. Shift the baseline by half the screen height to visually center the price.
- * 4. Calculate the total chart height in both pixels and price units.
- * 5. Determine the half-screen price range.
- * 6. Compute and store the chart's mid-price (center price).
- *
+ * Draws candlesticks on a canvas for the given chart reference.
+ * 
+ * This function iterates over all candles in `candleChartRef.current.candles.candles`
+ * and renders each candle at its correct pixel position. It calculates the
+ * vertical pixel position based on the candle’s open price and the current chart baseline.
+ * Each candle is filled with its color and outlined with a black border.
+ * 
+ * @function
+ * @param {Object} candleChartRef - Reference object for the chart containing candle data and chart settings.
+ * @param {CanvasRenderingContext2D} ctx - The canvas 2D rendering context where the candles will be drawn.
+ * 
  * @example
- * // Example usage:
- * push_price_to_middle_screen();
- *
- * // After execution, the chart will center around selected_pattern.pattern_A_high
- * // and candleChartRef.current.price.current_mid_price will reflect that value.
+ * // Assuming you have a canvas context `ctx` and a candle chart reference `candleChartRef`
+ * drawCandles(candleChartRef, ctx);
  */
-export const push_price_to_middle_screen = (candleChartRef,selected_pattern) => {
-    // Convert target price into pixel location
-    const price_pixel_location = get_pixel_location_of_a_price(
-        candleChartRef,
-        parseFloat(selected_pattern.pattern_A_high)
-    );
+export const draw_candles = (candleChartRef, ctx) => {
+  let startingX = -(candleChartRef.current.current_pixels_between_candles / 2);
 
-    // Push Baseline-Y Down by Converted Price Amount
-    candleChartRef.current.height.currentBaselineY = price_pixel_location;
-    candleChartRef.current.height.previousBaselineY = price_pixel_location;
+  candleChartRef.current.candles.candles.forEach(item => {
+    const x = Math.floor(startingX - candleChartRef.current.width.current_X_origin);
 
-    // Shift Baseline-Y to Center of Screen
-    const half_screen_height =
-        candleChartRef.current.height.startingBaselineY / 2;
-    candleChartRef.current.height.currentBaselineY += half_screen_height;
-    candleChartRef.current.height.previousBaselineY += half_screen_height;
+    const price_pixel_height = get_pixel_location_of_a_price(candleChartRef, item.candle_open)
+    const price_pixel_location = Math.floor(candleChartRef.current.height.currentBaselineY - price_pixel_height);
 
-    // Calculate total canvas height (in price units)
-    const total_height_pixels = candleChartRef.current.height.currentBaselineY;
-    const total_height_prices =
-        total_height_pixels /
-        candleChartRef.current.price.current_pixels_per_price_unit;
+    const width = -candleChartRef.current.current_candle_width;
+    const height = -Math.floor(item.current_height);
 
-    // Compute half-screen price range
-    const half_screen_price =
-        half_screen_height /
-        candleChartRef.current.price.current_pixels_per_price_unit;
+    // Fill the candle body
+    ctx.fillStyle = item.color;
+    ctx.fillRect(x, price_pixel_location, width, height);
 
-    // Determine and store mid-price value
-    const mid_price = total_height_prices - half_screen_price;
+    // Add a black border
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2; // adjust thickness if desired (e.g., 1.5 for sharper look)
+    ctx.strokeRect(x, price_pixel_location, width, height);
 
-    candleChartRef.current.price.current_mid_price = mid_price;
-    candleChartRef.current.price.prev_mid_price = mid_price;
-    candleChartRef.current.price.static_mid = mid_price;
+    startingX -= candleChartRef.current.current_candle_width + candleChartRef.current.current_pixels_between_candles;
+  });
 };

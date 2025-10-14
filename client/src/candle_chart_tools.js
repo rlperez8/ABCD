@@ -1,5 +1,6 @@
 import * as tools from './tools.js';
-
+import * as docs from './jsdocs.js'
+import * as resize from './resize.js'
 export const reset_candle_canvas = (canvas_chart) => {
     const canvas = canvas_chart.current;
     const ctx = canvas.getContext('2d');
@@ -32,10 +33,7 @@ export const reset_date_canvas = (canvas_dates) => {
 }
 export const handle_BaselineY = (candleChartRef) => {
 
-    let new_bottom = 
-        (candleChartRef.current.candles.starting_candle_Y + 
-            candleChartRef.current.height.startingBaselineY ) - 
-                (candleChartRef.current.height.startingBaselineY /2)
+    let new_bottom = (candleChartRef.current.candles.starting_candle_Y + candleChartRef.current.height.startingBaselineY ) - (candleChartRef.current.height.startingBaselineY /2)
 
     candleChartRef.current.height.previousBaselineY = new_bottom
     candleChartRef.current.height.startingBaselineY = new_bottom
@@ -83,29 +81,7 @@ export const draw_x_grid = (candleChartRef, ctx, canvas)=>{
     ctx.restore()
 
 }
-export const drawCandles = (candleChartRef, ctx) => {
-  let startingX = -(candleChartRef.current.current_pixels_between_candles / 2);
 
-  candleChartRef.current.candles.candles.forEach(item => {
-    const x = Math.floor(startingX - candleChartRef.current.width.current_X_origin);
-    const y = Math.floor(candleChartRef.current.height.currentBaselineY - (item.candle_open * (candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.price.counter))
-    );
-
-    const width = -candleChartRef.current.current_candle_width;
-    const height = -Math.floor(item.current_height);
-
-    // Fill the candle body
-    ctx.fillStyle = item.color;
-    ctx.fillRect(x, y, width, height);
-
-    // Add a white border
-    ctx.strokeStyle = "black";
-    ctx.lineWidth = 2; // adjust thickness if desired (e.g., 1.5 for sharper look)
-    ctx.strokeRect(x, y, width, height);
-
-    startingX -= candleChartRef.current.current_candle_width + candleChartRef.current.current_pixels_between_candles;
-  });
-};
 export const drawWicks = (candleChartRef, ctx) => {
     
     let startingX = -(candleChartRef.current.candles.complete_width / 2)
@@ -231,14 +207,6 @@ export const draw_Y_price_tag = (candleChartRef, canvas, ctx_price) =>{
     ctx_price.restore();
 }
 
-export const zoomOut = (candleChartRef, threshold) => {
-
-   
-    tools.update_zoom_out_info(candleChartRef)
-    tools.zoom_out_threshold(candleChartRef, threshold)
-    tools.updateCandles(candleChartRef)
-
-};
 
 export const zoomIn = (candleChartRef, expand_threshold) => {
                 

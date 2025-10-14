@@ -3,7 +3,7 @@ import './new.css'
 import * as CandleChartTools from './candle_chart_tools.js';
 import * as tools from './tools.js';
 import * as docs from './jsdocs.js'
-
+import * as resize from './resize.js'
 
 export const Candle_Chart = (props) => {
 
@@ -531,7 +531,7 @@ export const Candle_Chart = (props) => {
 
                 
               
-                tools.handle_y_movement(candleChartRef)
+                resize.chart_Y_movement(candleChartRef)
                 
     
             
@@ -545,13 +545,9 @@ export const Candle_Chart = (props) => {
             animationFrameId = requestAnimationFrame(draw); 
         };
         const handleResize = () => {
-        //   canvas.width = canvas.offsetWidth;
-        //   canvas.height = canvas.offsetHeight;
-          draw(); 
+            draw(); 
         };
         const handleResize_price = () => {
-            // canvas.width = canvas.offsetWidth;
-            // canvas.height = canvas.offsetHeight ;
             draw(); 
         };
         const candle_height_zoom = (e) => {
@@ -561,7 +557,7 @@ export const Candle_Chart = (props) => {
         
             
             if (e.deltaY < 0) CandleChartTools.zoomIn(candleChartRef, expand_threshold);
-            if (e.deltaY > 0) CandleChartTools.zoomOut(candleChartRef, threshold);
+            if (e.deltaY > 0) resize.chart_zoom_out(candleChartRef, threshold)
             if (!animationFrameId) {
                 animationFrameId = requestAnimationFrame(draw);
             }
@@ -1100,7 +1096,7 @@ export const Candle_Chart = (props) => {
             
             CandleChartTools.drawGrid(candleChartRef, ctx, canvas);
             CandleChartTools.draw_x_grid(candleChartRef, ctx, canvas)
-            CandleChartTools.drawCandles(candleChartRef, ctx);
+            docs.draw_candles(candleChartRef, ctx);
             CandleChartTools.drawWicks(candleChartRef, ctx);
             CandleChartTools.drawPrices(candleChartRef, ctx_price, cp);
             // CandleChartTools.highlight_selected_pattern(candleChartRef, ctx, canvas)
@@ -1238,7 +1234,7 @@ export const Candle_Chart = (props) => {
 
     
 
-            docs.push_price_to_middle_screen(candleChartRef, selected_pattern)
+            resize.push_price_to_middle_screen(candleChartRef, selected_pattern)
 
             candleChartRef.current.selected_candle = parseFloat(selected_pattern.pattern_A_high)
         

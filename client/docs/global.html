@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Global</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Global</h1>
+
+    
+
+
+
+
+<section>
+
+<header>
+    
+        <h2></h2>
+        
+    
+</header>
+
+<article>
+    <div class="container-overview">
+    
+        
+
+        
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+        
+    
+    </div>
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+        <h3 class="subsection-title">Members</h3>
+
+        
+            
+<h4 class="name" id="draw_mouse_price"><span class="type-signature">(constant) </span>draw_mouse_price<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Steps performed:1. Converts the mouse's Y-coordinate into the chart’s inverted coordinate system.2. Translates that pixel position into a price value using the `pixels_per_price_unit` ratio.3. Adjusts for the chart’s vertical offset (`current_Y_OffSet`).4. Multiplies by `unit_amount` to get the actual price.5. Renders the price value at the mouse’s Y position on the price canvas.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="jsdocs.js.html">jsdocs.js</a>, <a href="jsdocs.js.html#line23">line 23</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+    <h5>Example</h5>
+    
+    <pre class="prettyprint"><code>// Example usage inside a render loop:draw_mouse_price(candleChartRef, ctx_price);</code></pre>
+
+
+
+        
+            
+<h4 class="name" id="get_pixel_location_of_a_price"><span class="type-signature">(constant) </span>get_pixel_location_of_a_price<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Calculates the pixel position on the chart that corresponds to a given price value.This function converts a price (e.g., $50) into its vertical pixel locationon the chart, based on the current scaling factor defined in `candleChartRef`.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="jsdocs.js.html">jsdocs.js</a>, <a href="jsdocs.js.html#line59">line 59</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+    <h5>Example</h5>
+    
+    <pre class="prettyprint"><code>// If each dollar equals 2 pixels, a price of 50 would be at 100 pixels:const pixelY = get_pixel_location_of_a_price(50);console.log(pixelY); // → 100</code></pre>
+
+
+
+        
+            
+<h4 class="name" id="push_price_to_middle_screen"><span class="type-signature">(constant) </span>push_price_to_middle_screen<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Steps performed:1. Convert the pattern's price into a pixel location using chart scaling.2. Move the chart's Y-baseline down to align with that price.3. Shift the baseline by half the screen height to visually center the price.4. Calculate the total chart height in both pixels and price units.5. Determine the half-screen price range.6. Compute and store the chart's mid-price (center price).
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="jsdocs.js.html">jsdocs.js</a>, <a href="jsdocs.js.html#line96">line 96</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+    <h5>Example</h5>
+    
+    <pre class="prettyprint"><code>// Example usage:push_price_to_middle_screen();// After execution, the chart will center around selected_pattern.pattern_A_high// and candleChartRef.current.price.current_mid_price will reflect that value.</code></pre>
+
+
+
+        
+    
+
+    
+
+    
+
+    
+</article>
+
+</section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#draw_mouse_price">draw_mouse_price</a></li><li><a href="global.html#get_pixel_location_of_a_price">get_pixel_location_of_a_price</a></li><li><a href="global.html#push_price_to_middle_screen">push_price_to_middle_screen</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Fri Oct 10 2025 00:42:52 GMT-0500 (Central Daylight Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
