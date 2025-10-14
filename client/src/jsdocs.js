@@ -58,7 +58,7 @@ export const draw_mouse_price = (candleChartRef, ctx_price) => {
  */
 export const get_pixel_location_of_a_price = (candleChartRef, price) => {
     
-    const one_dollar_pixel_size = candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.price.counter;
+    const one_dollar_pixel_size = candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.unit_amount;
     const price_pixel_location = price * one_dollar_pixel_size;
 
     return price_pixel_location;

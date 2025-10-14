@@ -87,8 +87,8 @@ export const drawWicks = (candleChartRef, ctx) => {
     let startingX = -(candleChartRef.current.candles.complete_width / 2)
     candleChartRef.current.candles.candles.forEach(item => {
         const x = Math.floor(startingX - candleChartRef.current.width.current_X_origin);
-        const yHigh = Math.floor(candleChartRef.current.height.currentBaselineY - ( item.high * (candleChartRef.current.price.current_pixels_per_price_unit/candleChartRef.current.price.counter)));
-        const yLow = Math.floor(candleChartRef.current.height.currentBaselineY - ( item.low * (candleChartRef.current.price.current_pixels_per_price_unit/candleChartRef.current.price.counter)));
+        const yHigh = Math.floor(candleChartRef.current.height.currentBaselineY - ( item.high * (candleChartRef.current.price.current_pixels_per_price_unit/candleChartRef.current.unit_amount)));
+        const yLow = Math.floor(candleChartRef.current.height.currentBaselineY - ( item.low * (candleChartRef.current.price.current_pixels_per_price_unit/candleChartRef.current.unit_amount)));
         ctx.save()
         ctx.beginPath(); // start fresh path per wick
         ctx.strokeStyle = item.color;
@@ -115,7 +115,7 @@ export const drawPrices = (candleChartRef, ctx_price, cp) => {
     let price = 0
     for (let y = start_pixel; y >= 0; y -= candleChartRef.current.price.current_pixels_per_price_unit) {
         ctx_price.fillText(price.toFixed(2), x_position, y + 8); 
-        price += candleChartRef.current.price.counter;
+        price += candleChartRef.current.unit_amount;
     }
 }
 export const highlight_selected_pattern = (candleChartRef, ctx, canvas) => {
@@ -153,9 +153,9 @@ export const highlight_selected_pattern = (candleChartRef, ctx, canvas) => {
 };
 export const display_mid_point = (canvas, ctx, ctx_price, candleChartRef) => {
 
-    let num = (candleChartRef.current.height.currentBaselineY - (candleChartRef.current.height.startingBaselineY/2))/ (candleChartRef.current.price.current_pixels_per_price_unit/candleChartRef.current.price.counter)
+    let num = (candleChartRef.current.height.currentBaselineY - (candleChartRef.current.height.startingBaselineY/2))/ (candleChartRef.current.price.current_pixels_per_price_unit/candleChartRef.current.unit_amount)
 
-    // let num = parseFloat(candleChartRef.current.price.current_mid_price * candleChartRef.current.price.counter)
+
     const { width, height } = ctx_price.canvas;
 
     // Price Tag
@@ -208,41 +208,7 @@ export const draw_Y_price_tag = (candleChartRef, canvas, ctx_price) =>{
 }
 
 
-export const zoomIn = (candleChartRef, expand_threshold) => {
-                
-    
-    // candleChartRef.current.zoom.current -= 1;
-    tools.update_zoom_in_info(candleChartRef)
-    tools.zoom_in_threshold(candleChartRef, expand_threshold)
-    
-    
-    const add_shrink_expand_to_candle_top = (obj) => {
-        let res = (obj.candle_close - obj.candle_open) / candleChartRef.current.unit_amount
-        res = res * candleChartRef.current.price.current_pixels_per_price_unit
-        return Math.trunc(res);
-                    
-    }
-    const add_shrink_expand_to_candle = (price) => {
-        let res = price / candleChartRef.current.unit_amount
-        res = res * candleChartRef.current.price.current_pixels_per_price_unit
-        res = res - candleChartRef.current.height.startingBaselineY
-        res = res + candleChartRef.current.zoom.shrink_expand_height
 
-        return Math.trunc(res); 
-    }
-    candleChartRef.current.candles.candles = candleChartRef.current.candles.candles.map((obj) => {
-
-        return {
-            ...obj,
-            current_high: add_shrink_expand_to_candle(obj.high),
-            current_height: add_shrink_expand_to_candle_top(obj),
-            // current_bottom: add_shrink_expand_to_candle(obj.open),
-            current_low: add_shrink_expand_to_candle(obj.low)
-        };
-    });
-    
-    
-};
 
 
 
