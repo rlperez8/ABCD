@@ -37,44 +37,22 @@ import * as utilites from './utilities.js'
  * 6. Advances X-position for the next candle based on width and spacing.
  */
 export const candles = (candleChartRef, ctx) => {
+    
+    let candle_X = -(candleChartRef.current.current_pixels_between_candles / 2);
+    candle_X = Math.floor(candle_X - candleChartRef.current.width.current_X_origin);
 
-    // Define Starting X-Location
-    let startingX = -(candleChartRef.current.current_pixels_between_candles / 2);
-    let x = Math.floor(startingX - candleChartRef.current.width.current_X_origin);
+    let wick_X = -(candleChartRef.current.candles.complete_width / 2)
+    wick_X = Math.floor(wick_X - candleChartRef.current.width.current_X_origin);
 
     candleChartRef.current.candles.candles.forEach(item => {
 
-        // Convert Open and Close Price into Pixels
-        let candle_open_pixel = utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_open);
-        const candle_close_pixel = utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_close);
+        utilites.draw_candle(item, candleChartRef, ctx, candle_X)
+        utilites.draw_wick(item, candleChartRef, ctx, wick_X)
 
-        // Get Candle Height
-        let candle_height = candle_open_pixel - candle_close_pixel;
-
-        // Get Price Location on Canvas
-        candle_open_pixel = Math.floor(candleChartRef.current.height.currentBaselineY - candle_open_pixel);    
-    
-        // Get Candle Width
-        const width = -candleChartRef.current.current_candle_width;
-
-        // Add Color to Candle
-        ctx.fillStyle = item.color;
-
-        // Draw Candle
-        ctx.fillRect(x, candle_open_pixel, width, candle_height);
-
-        // Add Border
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 2;
-
-        // Draw Candle Border
-        ctx.strokeRect(x, candle_open_pixel, width, candle_height);
-
-        // Update Current X-Location
-        x -= candleChartRef.current.current_candle_width + candleChartRef.current.current_pixels_between_candles;
+        candle_X -= candleChartRef.current.current_candle_width + candleChartRef.current.current_pixels_between_candles;
+        wick_X -= candleChartRef.current.current_candle_width + candleChartRef.current.current_pixels_between_candles;
   });
 };
-
 /**
  * Draws the live price label on the price-axis canvas as the mouse moves.
  *

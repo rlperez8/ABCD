@@ -82,26 +82,7 @@ export const draw_x_grid = (candleChartRef, ctx, canvas)=>{
 
 }
 
-export const drawWicks = (candleChartRef, ctx) => {
-    
-    let startingX = -(candleChartRef.current.candles.complete_width / 2)
-    candleChartRef.current.candles.candles.forEach(item => {
-        const x = Math.floor(startingX - candleChartRef.current.width.current_X_origin);
-        const yHigh = Math.floor(candleChartRef.current.height.currentBaselineY - ( item.high * (candleChartRef.current.price.current_pixels_per_price_unit/candleChartRef.current.unit_amount)));
-        const yLow = Math.floor(candleChartRef.current.height.currentBaselineY - ( item.low * (candleChartRef.current.price.current_pixels_per_price_unit/candleChartRef.current.unit_amount)));
-        ctx.save()
-        ctx.beginPath(); // start fresh path per wick
-        ctx.strokeStyle = item.color;
-        ctx.lineWidth = 1;
-        ctx.moveTo(x, yHigh);
-        ctx.lineTo(x, yLow);
-        ctx.stroke();
-        ctx.restore();
-    
-        startingX -= candleChartRef.current.current_candle_width + candleChartRef.current.current_pixels_between_candles;
-    });
-    
-};
+
 export const drawPrices = (candleChartRef, ctx_price, cp) => {
             
     const start_pixel = candleChartRef.current.height.currentBaselineY

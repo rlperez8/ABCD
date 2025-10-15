@@ -994,7 +994,7 @@ export const Candle_Chart = (props) => {
             CandleChartTools.drawGrid(candleChartRef, ctx, canvas);
             CandleChartTools.draw_x_grid(candleChartRef, ctx, canvas)
             draw_.candles(candleChartRef, ctx);
-            CandleChartTools.drawWicks(candleChartRef, ctx);
+            // CandleChartTools.drawWicks(candleChartRef, ctx);
             CandleChartTools.drawPrices(candleChartRef, ctx_price, cp);
             // CandleChartTools.highlight_selected_pattern(candleChartRef, ctx, canvas)
             // CandleChartTools.display_mid_point(canvas, ctx, ctx_price, candleChartRef)
