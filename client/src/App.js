@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Candle_Chart } from './candle_chart';
+import { Candle_Chart } from './candle_chart/candle_chart';
 import './new.css'
 import search from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/search.png';
 import abcd from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/abcd.png';
@@ -8,10 +8,16 @@ import retracement from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/
 import candles_ from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/candles.png';
 import Table from './table';
 import Filter from './filter';
+import ChartMain from './candle_chart/chart_main';
+import * as route from './backend_routes.js';
+import PerformanceTable from './PeformanceTable.js';
+
 
 const App = () => {
 
   const chart_container = useRef(null)
+  const [selected_peformance, set_selected_peformance] = useState('AAON')
+  const [ticker_performance, set_ticker_peformance] = useState([])
   const [ab_candles, set_ab_candles] = useState([])
   const [abc_patterns, set_abc_patterns] = useState([])
   const [abcd_patterns, set_abcd_patterns] = useState([])
@@ -100,87 +106,9 @@ const App = () => {
   const [data, set_data] = useState()
 
   // GET
-  const get_ab_candles = async () => {
-  try {
-    const res = await fetch("http://localhost:8000/ab_candles", {
-      method: "GET",
-      headers: { "Content-Type": "application/json" }
-    });
-
-    const responseData = await res.json();
-
-    const sortedData = responseData.data.sort((a, b) => {
-    const firstCompare = new Date(a.pattern_A_pivot_date) - new Date(b.pattern_A_pivot_date);
-    
-    if (firstCompare !== 0) {
-      return firstCompare; // sort by first date
-    }
-    
-    // if same first date → sort by second date
-    return new Date(a.pattern_B_pivot_date) - new Date(b.pattern_B_pivot_date);
-  });
-
-set_ab_candles(sortedData);
-
-  } catch (error) {
-    console.log(error);
-  }
-  };
-  const get_abc_candles = async () => {
-    try {
-        const res = await fetch("http://localhost:8000/abc_patterns", {
-          method: "GET",
-          headers: { "Content-Type": "application/json" }
-        });
-
-        const responseData = await res.json();
-       
-        set_abc_patterns(responseData.data)
-    
-    } catch (error) {
-        console.log(error);
-    }
-  };
-  const get_abcd_candles = async () => {
-    try {
-        const res = await fetch("http://localhost:8000/abcd_patterns", {
-          method: "GET",
-          headers: { "Content-Type": "application/json" }
-        });
-
-        const responseData = await res.json();
  
-        set_statistics(responseData.stats)
-        set_abcd_patterns(responseData.data)
-        set_data(responseData)
-        
-    
-    } catch (error) {
-        console.log(error);
-    }
-  };
-  const get_candles = async (symbol) => {
 
-    try{
-      const res = await fetch('http://localhost:8000/get_selected_ticker', 
-        {
-          method: "POST", 
-          headers: {"Content-Type": "application/json",}, 
-          body: JSON.stringify({'symbol':symbol})
-        });
-
-      if (!res.ok) {
-        console.error(`Server Error: ${res.status} - ${res.statusText}`);
-        throw new Error("Request failed");
-      }
-      const responseData = await res.json();
-      set_candles(responseData.data)
-
-    } catch(error) {
-      console.error(error)
-    }
-
-  }
+  // const get_ticker_peformances
   // Define Chart Height
   useEffect(() => {
     if (chart_container.current) {
@@ -208,56 +136,13 @@ set_ab_candles(sortedData);
           current_bottom : 0,
           current_low : 0,
           color: item.candle_open > item.candle_close ? '#ef5350' : '#26a69a',
-          // o: item.candle_open,
+
       }))
-      
 
-  
-      let chartHeight = canvas_dimesions.chart_height
-
-      const current_pixels_per_price_unit = chartHeight / 10
-
-      const toCanvasY = (price) => {
-          let a = price * current_pixels_per_price_unit
-          let price_px = chartHeight - a;
-          return price_px
-      }         
-      const toHeight = (close, open) => (close - open) * current_pixels_per_price_unit;
-
-      let startX = 0;
-      new_candles = new_candles.map((candle) => {
-          startX += 15;
-          const bottom = toCanvasY(Math.min(candle.open, candle.close));
-          const height = (candle.candle_close - candle.candle_open) * current_pixels_per_price_unit; 
-          const high = toCanvasY(candle.high);
-          const low = toCanvasY(candle.low);
-
-          return {
-              ...candle,
-              prev_high : high,
-              prev_height : height,
-              prev_bottom : bottom,
-              prev_low : low,
-              current_high : high,
-              current_height : height,
-              current_bottom : bottom,
-              current_low : low,
-          };
-      });
       set_formatted_candles(new_candles)
-  
-
 
   }, [candles])
-  useEffect(()=>{
-    get_candles(ticker_symbol); 
-    // get_listed_tickers('',asset_type)
-    // get_abcd_of_selected_symbol(ticker_symbol)
-    get_ab_candles()
-    get_abc_candles()
-    get_abcd_candles()
-  
-  }, [])  
+   
   useEffect(() => {
     const handleKeyDown = (event) => {
     
@@ -369,30 +254,9 @@ set_ab_candles(sortedData);
     "Trade RRR", "Trade Risk", "Trade Reward"
   ]
   };
+
+ 
   
-
-  // FETCH FILTERED =====
-  const fetch_filtered = async (value) => {
-
-    try {
-        const res = await fetch("http://localhost:8000/filtered_patterns", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ value }) 
-        });
-
-        const responseData = await res.json();
-        set_statistics(responseData.stats)
-        set_abcd_patterns(responseData.data)  
-        handle_selected_option(responseData.data, selected_table_option)
-
-        
-    
-    } catch (error) {
-        console.log(error);
-    }
-  }
-
   // SET TABLE
   const handle_selected_option = (abcd_patterns, option) => {
 
@@ -411,11 +275,46 @@ set_ab_candles(sortedData);
     );
     set_table(newObj);
     set_table_columns(columnGroupsTitles[key])
-    console.log(newObj.length)
+ 
   };
 
+  // First Mount
+  useEffect(()=>{
 
+    const fetchCandles = async () => {
+      try {
+        const candles = await route.get_candles(ticker_symbol);
+        set_candles(candles)
+
+        const filter = {
+          'bc_retracement_greater': '0', 
+          'bc_retracement_less': 5000, 
+          'cd_retracement_greater': 0, 
+          'cd_retracement_less': 5000, 
+          'ab_leg_greater': 0, 
+          'ab_leg_less': 5000, 
+          'bc_leg_greater': 0, 
+          'bc_leg_less': 5000, 
+          'cd_leg_greater': 0, 
+          'cd_leg_less': 5000
+        }
+        const peformances = await route.fetch_filtered(filter)
+       
+        set_ticker_peformance(peformances)
+
+      } catch (err) {
+        console.error('Error fetching candles:', err);
+      }
+    };
+    fetchCandles();
+
+    // // get_listed_tickers('',asset_type)
+    // // get_abcd_of_selected_symbol(ticker_symbol)
+    // get_ab_candles()
+    // get_abc_candles()
+    // get_abcd_candles()
   
+  }, [ticker_symbol]) 
 
   return (
 
@@ -481,7 +380,7 @@ set_ab_candles(sortedData);
             {listing_status.map((item, index) => {
               return (
                 <div className={item.symbol === ticker_symbol ? 'symbol_status_selected' : 'symbol_status'} key={index} onClick={()=>{
-                  get_candles(item.symbol); 
+                  route.get_candles(item.symbol); 
                   set_is_listing_status(!is_listing_status);
                   set_ticker_symbol(item.symbol);
                   get_abcd_of_selected_symbol(item.symbol)
@@ -506,7 +405,67 @@ set_ab_candles(sortedData);
 
           <div className='main'>
 
-            <div className='statistics'>
+            <ChartMain
+              abcd={abcd}
+            prices={prices}
+            retracement={retracement}
+            candles_={candles_}
+            formatted_candles={formatted_candles}
+            chart_height={chart_height}
+            Candle_Chart={Candle_Chart}
+            is_listing_status={is_listing_status}
+            set_is_listing_status={set_is_listing_status}
+            ticker_symbol={ticker_symbol}
+            set_canvas_dimensions={set_canvas_dimensions}
+              selected_pattern={selected_pattern}
+            />
+
+          {/* <div className='data_half'>
+                <div className='table_options'>
+                {optionCells.map((label, idx) => (
+                  <div key={idx} className={label === selected_table_option ? 'option_cell_selected': 'option_cell'}
+                  onClick={()=>{set_selected_table_option(label);
+                    handle_selected_option(abcd_patterns, label)
+                  }}>
+                        {label}
+                      </div>
+                    ))}
+
+                </div>
+                <div className='strategy_station_con'>
+                  
+                  <div className='chart_header'>
+                      {table_columns.map((col,index)=>{
+                          return(
+                              <div key={index}  className='col1'>{col}</div>
+                          )
+                      })}
+                      
+                  </div>
+
+                  <Table 
+                    table_columns={table_columns}
+                    selected_pattern_index={selected_pattern_index}
+                    set_selected_pattern={set_selected_pattern}
+                    set_selected_pattern_index={set_selected_pattern_index}
+                    table={table}
+                    abcd_patterns={abcd_patterns}
+                  />
+              
+            
+                </div> 
+          </div> */}
+
+
+            <PerformanceTable
+              ticker_performance={ticker_performance}
+              set_candles={set_candles}
+              set_selected_peformance={set_selected_peformance}
+              selected_peformance={selected_peformance}
+            
+            />
+
+            {/* <div className='statistics'>
               <div className='stat1_header'>
                 Count
               </div>
@@ -705,56 +664,22 @@ set_ab_candles(sortedData);
                   
                 </div>
   
-                <div className='data_half'>
-
-                  <div className='table_options'>
-                  {optionCells.map((label, idx) => (
-                    <div key={idx} className={label === selected_table_option ? 'option_cell_selected': 'option_cell'}
-                    onClick={()=>{set_selected_table_option(label);
-                      handle_selected_option(abcd_patterns, label)
-                    }}>
-                          {label}
-                        </div>
-                      ))}
-
-                  </div>
-                  <div className='strategy_station_con'>
-                    
-                    <div className='chart_header'>
-                        {table_columns.map((col,index)=>{
-                            return(
-                                <div key={index}  className='col1'>{col}</div>
-                            )
-                        })}
-                        
-                    </div>
-
-                    <Table 
-                      table_columns={table_columns}
-                      selected_pattern_index={selected_pattern_index}
-                      set_selected_pattern={set_selected_pattern}
-                      set_selected_pattern_index={set_selected_pattern_index}
-                      table={table}
-                      abcd_patterns={abcd_patterns}
-                    />
-                
-              
-                  </div> 
-                </div>
               </div>
 
 
             </div>
 
-            
+      
+            */}
 
-            <Filter
-              filters={filters}
-              set_filters={set_filters}
-              fetch_filtered={fetch_filtered}
-            />
+         
             
           </div>
+              <Filter
+              filters={filters}
+              set_filters={set_filters}
+              fetch_filtered={route.fetch_filtered}
+            />
 
         </>}
         

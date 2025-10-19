@@ -77,8 +77,7 @@ def get_selected_ticker():
 
         },inplace=True)
         
-        # stored_accounts = stored_accounts.head(10)
-        
+
    
         return jsonify({"status": "success", "data": stored_accounts.to_dict(orient='records')})
 
@@ -367,51 +366,201 @@ def get_abcd_patterns():
         print('Error:', error_message)
         return jsonify({'error': error_message}), 500
 
+# @app.route('/filtered_patterns', methods=['POST'])
+# def filtered_patterns():
+    
+#     try:
+
+#         data = request.get_json(force=True)['value']
+        
+#         # Get Filtered Data
+#         cd_retracement_greater = data['cd_retracement_greater']
+#         cd_retracement_less = data['cd_retracement_less']
+#         bc_retracement_greater = data['bc_retracement_greater']
+#         bc_retracement_less = data['bc_retracement_less']
+        
+#         ab_leg_greater = data['ab_leg_greater']
+#         ab_leg_less = data['ab_leg_less']
+#         bc_leg_greater = data['bc_leg_greater']
+#         bc_leg_less = data['bc_leg_less']
+#         cd_leg_greater = data['cd_leg_greater']
+#         cd_leg_less = data['cd_leg_less']
+
+#         a_date = data['a_date']
+#         a_date = datetime.strptime(a_date, "%m-%d-%Y").strftime("%Y-%m-%d")
+#         b_date = data['b_date']
+#         b_date = datetime.strptime(b_date, "%m-%d-%Y").strftime("%Y-%m-%d")
+#         c_date = data['c_date']
+#         c_date = datetime.strptime(c_date, "%m-%d-%Y").strftime("%Y-%m-%d")
+
+#         symbol = 'AAON' 
+        
+#         query = '''
+#             SELECT * 
+#             FROM pattern_abcd
+#             WHERE symbol = %s
+#             AND pattern_C_price_retracement BETWEEN %s AND %s
+#             AND pattern_D_price_retracement BETWEEN %s AND %s
+#             AND pattern_AB_bar_length BETWEEN %s AND %s
+#             AND pattern_BC_bar_length BETWEEN %s AND %s
+#             AND pattern_CD_bar_length BETWEEN %s AND %s
+#             AND pattern_A_pivot_date = %s
+#             AND pattern_B_pivot_date = %s
+#             AND pattern_C_pivot_date = %s
+#         '''
+#         df = pd.read_sql_query(query, engine, params=(
+#             symbol,
+#             bc_retracement_greater,
+#             bc_retracement_less,
+#             cd_retracement_greater,
+#             cd_retracement_less,
+#             ab_leg_greater,
+#             ab_leg_less,
+#             bc_leg_greater,
+#             bc_leg_less,
+#             cd_leg_greater,
+#             cd_leg_less,
+#             a_date,
+#             b_date,
+#             c_date
+            
+#             ))
+
+#         # ============================
+#         df = df.replace({np.nan: None})
+#         df['pattern_D_price_retracement'] = df['pattern_D_price_retracement'].astype(float)
+#         df['pattern_AB_bar_length'] = df['pattern_AB_bar_length'].astype(float)
+#         df['pattern_BC_bar_length'] = df['pattern_BC_bar_length'].astype(float)
+#         df['pattern_CD_bar_length'] = df['pattern_CD_bar_length'].astype(float)
+
+#         # Convert to datetime
+#         df["pattern_A_pivot_date"] = pd.to_datetime(
+#             df["pattern_A_pivot_date"], 
+#             format="%a, %d %b %Y %H:%M:%S %Z", 
+#             errors="coerce"
+#         )
+#         df["pattern_B_pivot_date"] = pd.to_datetime(
+#             df["pattern_A_pivot_date"], 
+#             format="%a, %d %b %Y %H:%M:%S %Z", 
+#             errors="coerce"
+#         )
+#         df["pattern_C_pivot_date"] = pd.to_datetime(
+#             df["pattern_A_pivot_date"], 
+#             format="%a, %d %b %Y %H:%M:%S %Z", 
+#             errors="coerce"
+#         )
+
+#         # Convert to MM-DD-YYYY format (string)
+#         df["pattern_A_pivot_date"] = df["pattern_A_pivot_date"].dt.strftime("%m-%d-%Y")
+#         df["pattern_B_pivot_date"] = df["pattern_B_pivot_date"].dt.strftime("%m-%d-%Y")
+#         df["pattern_C_pivot_date"] = df["pattern_C_pivot_date"].dt.strftime("%m-%d-%Y")
+
+#         # Get Ticker Peformance
+#         def safe_round(val, digits=2, replace_with=0):
+#             """Round value safely, replace NaN with given fallback (default=0)."""
+#             if pd.isna(val) or (isinstance(val, float) and np.isnan(val)):
+#                 return replace_with
+#             return round(val, digits)
+        
+#         statistics = {
+#             'count_total': len(df),
+#             'count_won': len(df[df['trade_result'] == 'Win']),
+#             'count_lost': len(df[df['trade_result'] == 'Lost']),
+#             'count_open': len(df[df['trade_result'] == 'Open']),  
+
+#             'retracement': {
+#                 'bc': {
+#                     'avg': safe_round(df['pattern_C_price_retracement'].mean(), 2),
+#                     'min': safe_round(df['pattern_C_price_retracement'].min(), 2),
+#                     'max': safe_round(df['pattern_C_price_retracement'].max(), 2),
+#                     'median': safe_round(df['pattern_C_price_retracement'].median(), 2),
+#                     'std': safe_round(df['pattern_C_price_retracement'].std(), 2)
+#                 },
+#                 'cd': {
+#                     'avg': safe_round(df['pattern_D_price_retracement'].mean(), 2),
+#                     'min': safe_round(df['pattern_D_price_retracement'].min(), 2),
+#                     'max': safe_round(df['pattern_D_price_retracement'].max(), 2),
+#                     'median': safe_round(df['pattern_D_price_retracement'].median(), 2),
+#                     'std': safe_round(df['pattern_D_price_retracement'].std(), 2)
+#                 }
+#             },
+#             'size': {
+#                 'ab': {
+#                     'avg': safe_round(df['pattern_AB_bar_length'].mean(), 0),
+#                     'min': safe_round(df['pattern_AB_bar_length'].min(), 0),
+#                     'max': safe_round(df['pattern_AB_bar_length'].max(), 0),
+#                     'median': safe_round(df['pattern_AB_bar_length'].median(), 0),
+#                     'std': safe_round(df['pattern_AB_bar_length'].std(), 0)
+#                 },
+#                 'bc': {
+#                     'avg': safe_round(df['pattern_BC_bar_length'].mean(), 0),
+#                     'min': safe_round(df['pattern_BC_bar_length'].min(), 0),
+#                     'max': safe_round(df['pattern_BC_bar_length'].max(), 0),
+#                     'median': safe_round(df['pattern_BC_bar_length'].median(), 0),
+#                     'std': safe_round(df['pattern_BC_bar_length'].std(), 0)
+#                 },
+#                 'cd': {
+#                     'avg': safe_round(df['pattern_CD_bar_length'].mean(), 0),
+#                     'min': safe_round(df['pattern_CD_bar_length'].min(), 0),
+#                     'max': safe_round(df['pattern_CD_bar_length'].max(), 0),
+#                     'median': safe_round(df['pattern_CD_bar_length'].median(), 0),
+#                     'std': safe_round(df['pattern_CD_bar_length'].std(), 0)
+#                 }
+#             }
+#         }
+
+#         statistics['win_pct'] = (
+#             round((statistics['count_won'] / statistics['count_total']) * 100, 2)
+#             if statistics['count_total'] > 0 else 0
+#         )
+
+#         return jsonify({
+#             "status": "success",
+#             "data": df.to_dict(orient='records'),
+#             'stats': statistics
+#         })
+
+#     except Exception as e:
+#         error_message = str(e)
+#         print('Error:', error_message)
+#         return jsonify({'error': error_message}), 500
+
 @app.route('/filtered_patterns', methods=['POST'])
 def filtered_patterns():
-    
- 
     try:
-
         data = request.get_json(force=True)['value']
-        
-        for key, value in data.items():
-            print(key,value)
+
+        print(data)
+
+        # Extract filters
         cd_retracement_greater = data['cd_retracement_greater']
         cd_retracement_less = data['cd_retracement_less']
         bc_retracement_greater = data['bc_retracement_greater']
         bc_retracement_less = data['bc_retracement_less']
-        
+
         ab_leg_greater = data['ab_leg_greater']
         ab_leg_less = data['ab_leg_less']
         bc_leg_greater = data['bc_leg_greater']
         bc_leg_less = data['bc_leg_less']
         cd_leg_greater = data['cd_leg_greater']
         cd_leg_less = data['cd_leg_less']
-        a_date = data['a_date']
-        a_date = datetime.strptime(a_date, "%m-%d-%Y").strftime("%Y-%m-%d")
-        b_date = data['b_date']
-        b_date = datetime.strptime(b_date, "%m-%d-%Y").strftime("%Y-%m-%d")
-        c_date = data['c_date']
-        c_date = datetime.strptime(c_date, "%m-%d-%Y").strftime("%Y-%m-%d")
 
-        symbol = 'AAON' 
-        
+        # a_date = datetime.strptime(data['a_date'], "%m-%d-%Y").strftime("%Y-%m-%d")
+        # b_date = datetime.strptime(data['b_date'], "%m-%d-%Y").strftime("%Y-%m-%d")
+        # c_date = datetime.strptime(data['c_date'], "%m-%d-%Y").strftime("%Y-%m-%d")
+
+        # Query all patterns that match filters across ALL tickers
         query = '''
             SELECT * 
             FROM pattern_abcd
-            WHERE symbol = %s
-            AND pattern_C_price_retracement BETWEEN %s AND %s
+            WHERE pattern_C_price_retracement BETWEEN %s AND %s
             AND pattern_D_price_retracement BETWEEN %s AND %s
             AND pattern_AB_bar_length BETWEEN %s AND %s
             AND pattern_BC_bar_length BETWEEN %s AND %s
             AND pattern_CD_bar_length BETWEEN %s AND %s
-            AND pattern_A_pivot_date = %s
-            AND pattern_B_pivot_date = %s
-            AND pattern_C_pivot_date = %s
+       
         '''
         df = pd.read_sql_query(query, engine, params=(
-            symbol,
             bc_retracement_greater,
             bc_retracement_less,
             cd_retracement_greater,
@@ -422,116 +571,71 @@ def filtered_patterns():
             bc_leg_less,
             cd_leg_greater,
             cd_leg_less,
-            a_date,
-            b_date,
-            c_date
-            
-            ))
+    
+        ))
+
+        print(df)
+
+        if df.empty:
+            return jsonify({"status": "success", "data": [], "stats": []})
 
         df = df.replace({np.nan: None})
-        df['pattern_D_price_retracement'] = df['pattern_D_price_retracement'].astype(float)
-        df['pattern_AB_bar_length'] = df['pattern_AB_bar_length'].astype(float)
-        df['pattern_BC_bar_length'] = df['pattern_BC_bar_length'].astype(float)
-        df['pattern_CD_bar_length'] = df['pattern_CD_bar_length'].astype(float)
+    
 
-        # Convert to datetime
-        df["pattern_A_pivot_date"] = pd.to_datetime(
-            df["pattern_A_pivot_date"], 
-            format="%a, %d %b %Y %H:%M:%S %Z", 
-            errors="coerce"
-        )
-
-        df["pattern_B_pivot_date"] = pd.to_datetime(
-            df["pattern_A_pivot_date"], 
-            format="%a, %d %b %Y %H:%M:%S %Z", 
-            errors="coerce"
-        )
-        df["pattern_C_pivot_date"] = pd.to_datetime(
-            df["pattern_A_pivot_date"], 
-            format="%a, %d %b %Y %H:%M:%S %Z", 
-            errors="coerce"
-        )
-
-        # Convert to MM-DD-YYYY format (string)
-        df["pattern_A_pivot_date"] = df["pattern_A_pivot_date"].dt.strftime("%m-%d-%Y")
-        df["pattern_B_pivot_date"] = df["pattern_B_pivot_date"].dt.strftime("%m-%d-%Y")
-        df["pattern_C_pivot_date"] = df["pattern_C_pivot_date"].dt.strftime("%m-%d-%Y")
-
+        # Helper to round safely
         def safe_round(val, digits=2, replace_with=0):
-            """Round value safely, replace NaN with given fallback (default=0)."""
             if pd.isna(val) or (isinstance(val, float) and np.isnan(val)):
                 return replace_with
             return round(val, digits)
-        
-        statistics = {
-    'count_total': len(df),
-    'count_won': len(df[df['trade_result'] == 'Win']),
-    'count_lost': len(df[df['trade_result'] == 'Lost']),
-    'count_open': len(df[df['trade_result'] == 'Open']),  
 
-    'retracement': {
-        'bc': {
-            'avg': safe_round(df['pattern_C_price_retracement'].mean(), 2),
-            'min': safe_round(df['pattern_C_price_retracement'].min(), 2),
-            'max': safe_round(df['pattern_C_price_retracement'].max(), 2),
-            'median': safe_round(df['pattern_C_price_retracement'].median(), 2),
-            'std': safe_round(df['pattern_C_price_retracement'].std(), 2)
-        },
-        'cd': {
-            'avg': safe_round(df['pattern_D_price_retracement'].mean(), 2),
-            'min': safe_round(df['pattern_D_price_retracement'].min(), 2),
-            'max': safe_round(df['pattern_D_price_retracement'].max(), 2),
-            'median': safe_round(df['pattern_D_price_retracement'].median(), 2),
-            'std': safe_round(df['pattern_D_price_retracement'].std(), 2)
-        }
-    },
-    'size': {
-        'ab': {
-            'avg': safe_round(df['pattern_AB_bar_length'].mean(), 0),
-            'min': safe_round(df['pattern_AB_bar_length'].min(), 0),
-            'max': safe_round(df['pattern_AB_bar_length'].max(), 0),
-            'median': safe_round(df['pattern_AB_bar_length'].median(), 0),
-            'std': safe_round(df['pattern_AB_bar_length'].std(), 0)
-        },
-        'bc': {
-            'avg': safe_round(df['pattern_BC_bar_length'].mean(), 0),
-            'min': safe_round(df['pattern_BC_bar_length'].min(), 0),
-            'max': safe_round(df['pattern_BC_bar_length'].max(), 0),
-            'median': safe_round(df['pattern_BC_bar_length'].median(), 0),
-            'std': safe_round(df['pattern_BC_bar_length'].std(), 0)
-        },
-        'cd': {
-            'avg': safe_round(df['pattern_CD_bar_length'].mean(), 0),
-            'min': safe_round(df['pattern_CD_bar_length'].min(), 0),
-            'max': safe_round(df['pattern_CD_bar_length'].max(), 0),
-            'median': safe_round(df['pattern_CD_bar_length'].median(), 0),
-            'std': safe_round(df['pattern_CD_bar_length'].std(), 0)
-        }
-    }
-}
+        # Group by ticker and calculate stats
+        results = []
+        grouped = df.groupby("symbol")
 
+        for ticker, g in grouped:
+            stats = {
+                'ticker': ticker,
+                'count_total': len(g),
+                'count_won': len(g[g['trade_result'] == 'Win']),
+                'count_lost': len(g[g['trade_result'] == 'Lost']),
+                'count_open': len(g[g['trade_result'] == 'Open']),
+                'win_pct': safe_round(
+                    (len(g[g['trade_result'] == 'Win']) / len(g)) * 100, 2
+                ) if len(g) > 0 else 0,
+                'retracement_bc_avg': safe_round(g['pattern_C_price_retracement'].mean()),
+                'retracement_cd_avg': safe_round(g['pattern_D_price_retracement'].mean()),
+                'ab_leg_avg': safe_round(g['pattern_AB_bar_length'].mean()),
+                'bc_leg_avg': safe_round(g['pattern_BC_bar_length'].mean()),
+                'cd_leg_avg': safe_round(g['pattern_CD_bar_length'].mean())
+            }
+            results.append(stats)
 
-        statistics['win_pct'] = (
-            round((statistics['count_won'] / statistics['count_total']) * 100, 2)
-            if statistics['count_total'] > 0 else 0
-        )
+        unique_symbols = df['symbol'].unique().tolist()
+        for each in results:
+            print(each)
+        # return jsonify({"status": "success", "data": df.to_dict(orient='records'), "stats": []})
 
-        
-                        
-      
-     
         return jsonify({
             "status": "success",
-            "data": df.to_dict(orient='records'),
-            'stats': statistics
+            "data": results
         })
 
     except Exception as e:
-        error_message = str(e)
-        print('Error:', error_message)
-        return jsonify({'error': error_message}), 500
+        print("Error:", e)
+        return jsonify({'error': str(e)}), 500
+    
+# from sqlalchemy import create_engine, text
+# @app.route('/ticker_peformances', methhods=['GET'])
+# def ticker_performance():
+
+    query = '''
+        SELECT * FROM pattern_abcd
+
+    '''
+    df = pd.read_sql_query(query, engine, params=())
 
 
+    print(df)
 
 if __name__ == "__main__":
 

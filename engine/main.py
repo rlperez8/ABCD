@@ -1,15 +1,9 @@
 from storage import *
 import traceback
 
-# tickers = DataBase().get_stored_table('listing_status')
-# tickers = tickers['symbol'].tolist()
-# DataBase().delete_data('pattern_abcd')
 
 
-# for ticker in ['AAPL']:
-
-def main(ticker):
-
+def run_strategy(ticker):
     try: 
         candles = DataBase().get_stored_candles('candles', ticker)
         candles = candles[['date','open','high','low','close','volume']]
@@ -35,5 +29,14 @@ def main(ticker):
         traceback.print_exc()  
         pass
 
+def main():
 
-main('AAON')
+    
+    alpha = AlphaVantage()
+    # # tickers = alpha.get_listing_status()
+    # # print(tickers)
+    alpha.load_single_symbol_candle_data('full', 'NVDA')
+
+    run_strategy('NVDA')
+
+main()

@@ -49,17 +49,17 @@ export const chart_Y_movement = (candleChartRef) => {
  * // After execution, the chart will center around selected_pattern.pattern_A_high
  * // and candleChartRef.current.price.current_mid_price will reflect that value.
  */
-export const push_price_to_middle_screen = (candleChartRef,selected_pattern) => {
+export const push_price_to_middle_screen = (candleChartRef,selected_pattern, size) => {
 
     // Convert target price into pixel location
-    const price_pixel_location = utilites.get_pixel_location_of_a_price(candleChartRef, parseFloat(selected_pattern.pattern_A_high));
+    const price_pixel_location = utilites.get_pixel_location_of_a_price(candleChartRef, parseFloat(selected_pattern.pattern_A_high), size);
 
     // Push Baseline-Y Down by Converted Price Amount
     candleChartRef.current.height.currentBaselineY = price_pixel_location;
     candleChartRef.current.height.previousBaselineY = price_pixel_location;
 
     // Shift Baseline-Y to Center of Screen
-    const half_screen_height = candleChartRef.current.height.startingBaselineY / 2;
+    const half_screen_height = candleChartRef.current.height.startingBaselineY / 4;
     candleChartRef.current.height.currentBaselineY += half_screen_height;
     candleChartRef.current.height.previousBaselineY += half_screen_height;
 

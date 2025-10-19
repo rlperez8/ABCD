@@ -281,12 +281,17 @@ class AlphaVantage:
 
     def __init__(self) -> None:
         
+        # self.api_key = 'ZA9N4R1HE9ARIJ0S'
         self.api_key = '10NSLCA2J0HLW7HG'
+        # 10NSLCA2J0HLW7HG
     
     def validate_candle_activity():
+
         all_candles = DataBase().get_stored_table('candles')
         all_symbols = all_candles['symbol'].to_list()
+
         yesterdays_candles = all_candles[all_candles['date'].astype(str) == '2024-08-16']
+
         symbols = yesterdays_candles['symbol'].to_list()
 
         diff = set(all_symbols) - set(symbols)
@@ -358,7 +363,8 @@ class AlphaVantage:
                 '4. close': 'close',
                 '5. volume': 'volume'
             })
-
+            
+            print(df)
             DataBase().insert_data(df, 'candles')
 
     def get_all_symbol_candle_data_batch(self, output_size, tickers, max_workers=5):
@@ -2583,16 +2589,26 @@ class ABCD(bt.Strategy):
         merged_patterns = StrategyTools().merge_patterns(self.pattern_abcd)    
         sorted_objects = sorted(merged_patterns, key=lambda x: x.pattern_A_pivot_date)
 
-        DataBase().delete_data('pattern_a')
-        DataBase().delete_data('pattern_ab')
-        DataBase().delete_data('pattern_abc')
-        DataBase().delete_data('pattern_abcd')
+        # DataBase().delete_data('pattern_a')
+        # DataBase().delete_data('pattern_ab')
+        # DataBase().delete_data('pattern_abc')
+        # DataBase().delete_data('pattern_abcd')
         
         StrategyTools().load_a_patterns(self.a_pivots)
         StrategyTools().load_ab_patterns(self.ab_pivotPairs)
         StrategyTools().load_abc_patterns(self.abc_pivotTrios)
         # StrategyTools().load_abcd_patterns(sorted_objects)
         StrategyTools().load_abcd_patterns(self.pattern_abcd)
+
+
+        # # Update Ticker Overall Peformance
+        # data = [each.__dict__ for each in self.pattern_abcd]
+        # df = pd.DataFrame(data)
+
+        # df = df[df['trade_is_open']==True].reset_index(drop=True)
+        # print(df)
+
+
 
 class Pattern_A():
 

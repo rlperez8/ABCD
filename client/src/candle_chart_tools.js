@@ -1,6 +1,4 @@
 
-import * as docs from './jsdocs.js'
-import * as resize from './resize.js'
 export const reset_candle_canvas = (canvas_chart) => {
     const canvas = canvas_chart.current;
     const ctx = canvas.getContext('2d');
@@ -41,65 +39,10 @@ export const handle_BaselineY = (candleChartRef) => {
 
     return candleChartRef.current
 }
-export const drawGrid = (candleChartRef, ctx, canvas) => {
-    ctx.save()
-    ctx.beginPath();
-    ctx.strokeStyle = 'gray';
-    ctx.lineWidth = .2;
-            
-    for (
-        let y = candleChartRef.current.height.currentBaselineY; 
-        y > 0; 
-        y -= candleChartRef.current.price.current_pixels_per_price_unit
-    ) {
-        const yPos = Math.floor(y);
-        ctx.moveTo(0, yPos);
-        ctx.lineTo(canvas.width, yPos);
-    }
-    
-    ctx.stroke();
-    ctx.restore()
-};
-export const draw_x_grid = (candleChartRef, ctx, canvas)=>{
-
-    ctx.save()
-    ctx.beginPath();
-    ctx.strokeStyle = 'gray';
-    ctx.lineWidth = .2;
 
 
-    let starting_x_loc = -(candleChartRef.current.candles.complete_width/2)
-    let ending_x_loc = -(candleChartRef.current.width.grid_width - candleChartRef.current.width.current_X_origin)
 
-    for (let y = starting_x_loc; y > ending_x_loc; y -= candleChartRef.current.x_grid_width) {
-        const yPos = y;
-        ctx.moveTo(yPos - candleChartRef.current.width.current_X_origin, 0);
-        ctx.lineTo(yPos - candleChartRef.current.width.current_X_origin, canvas.height);
-    }
-    
-    ctx.stroke();
-    ctx.restore()
-
-}
-
-
-export const drawPrices = (candleChartRef, ctx_price, cp) => {
-            
-    const start_pixel = candleChartRef.current.height.currentBaselineY
-    const font_size = Math.floor(cp.width / 4);
-    const x_position = cp.width / 4;
-
-    ctx_price.font = `${font_size}px Source Sans Pro`;
-    ctx_price.fillStyle = 'gray';
-    
-    
-    let price = 0
-    for (let y = start_pixel; y >= 0; y -= candleChartRef.current.price.current_pixels_per_price_unit) {
-        ctx_price.fillText(price.toFixed(2), x_position, y + 8); 
-        price += candleChartRef.current.unit_amount;
-    }
-}
-export const highlight_selected_pattern = (candleChartRef, ctx, canvas) => {
+const highlight_selected_pattern = (candleChartRef, ctx, canvas) => {
 
     const start = (candleChartRef.current.pattern.highlighter.x_orgin);
     const end = (candleChartRef.current.pattern.highlighter.x_orgin) + (candleChartRef.current.candles.complete_width * (candleChartRef.current.pattern.length+2));
@@ -172,22 +115,6 @@ export const display_mid_point = (canvas, ctx, ctx_price, candleChartRef) => {
 
     
 }
-export const draw_Y_price_tag = (candleChartRef, canvas, ctx_price) =>{
-            
-    let x_mouse_location = candleChartRef.current.mouse.pos.y
-
-    let x = 0
-    let width = canvas.width
-    let height = 25
-    ctx_price.beginPath(); 
-    ctx_price.fillStyle = "#151c20e0";
-    ctx_price.fillStyle ="#151c20e0";
-
-    ctx_price.fillRect(x, x_mouse_location- (height/2), width, height);
-    ctx_price.stroke();
-    ctx_price.restore();
-}
-
 
 
 
