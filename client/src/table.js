@@ -4,7 +4,7 @@ import { Grid  } from 'react-window';
 const Table = (props) => {
 
     const {
-        table_columns,
+
         selected_pattern_index,
         set_selected_pattern,
         set_selected_pattern_index,
@@ -12,7 +12,10 @@ const Table = (props) => {
         abcd_patterns,
     } = props
 
+
+
     const CellComponent = ({ columnIndex, rowIndex, style, table }) => {
+     
       
         const row = table[rowIndex];  
         if (!row) return <div style={style}></div>;
@@ -37,9 +40,8 @@ const Table = (props) => {
     return(
         <div className='table_container'>
         
-       
-
             <Grid
+                className="my-grid"
                 cellComponent={CellComponent}
                 cellProps={{ table }}
                 columnCount={table.length > 0 ? Object.keys(table[0]).length : 0}

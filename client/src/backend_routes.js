@@ -83,19 +83,19 @@ try {
     console.log(error);
 }
 };
-const get_abcd_candles = async () => {
-try {
-    const res = await fetch("http://localhost:8000/abcd_patterns", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" }
-    });
+export const get_abcd_candles = async (symbol) => {
 
-    const responseData = await res.json();
+  try {
+      const res = await fetch("http://localhost:8000/abcd_patterns", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({'symbol':symbol})
+      });
 
-    // set_statistics(responseData.stats)
-    // set_abcd_patterns(responseData.data)
-    // set_data(responseData)
+      const responseData = await res.json();
     
+      return responseData.data
+
 
 } catch (error) {
     console.log(error);
