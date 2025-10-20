@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import { Grid  } from 'react-window';
 
 
@@ -12,40 +13,90 @@ const Table = (props) => {
         abcd_patterns,
     } = props
 
+    const containerRef = useRef(null);
+    const [containerWidth, setContainerWidth] = useState(0);
 
+    useEffect(() => {
+        if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
+        }
+
+        // Optional: update on window resize
+        const handleResize = () => {
+        if (containerRef.current) {
+            setContainerWidth(containerRef.current.offsetWidth);
+        }
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    console.log(containerWidth)
+    
+
+    const [hovered_row_index, set_hovered_index] = useState(0)
+
+    const columns = ['trade_result', 'trade_entered_date','trade_exited_date','trade_entered_price','trade_exited_price','trade_pnl','trade_return_percentage','pattern_ABCD_bar_length']
 
     const CellComponent = ({ columnIndex, rowIndex, style, table }) => {
      
-      
+       
         const row = table[rowIndex];  
         if (!row) return <div style={style}></div>;
         const keys = Object.keys(row);
-        const columnKey = keys[columnIndex];
+        const columnKey = columns[columnIndex];
         const content = row[columnKey];
 
+        // Selected Row
+        
+        const selected_row = rowIndex === hovered_row_index || rowIndex === selected_pattern_index ? 'truncate_active' : 'truncate';
+
+
+        let cellContent = content;
+
+        if (columnIndex === 0 && content === 'Win') {
+            cellContent = <div className="first_column_box">{content}</div>;
+
+        } else if (columnIndex === 0 && content === 'Lost') {
+            cellContent = <div className="lost_column_box">{content}</div>;
+        
+        } else if (columnIndex === 5 && Number(content) > 50) {
+            cellContent = <div className="positive_pnl">${content}</div>;
+
+        }else if (columnIndex === 5 && Number(content) <= 50) {
+            cellContent = <div className="negative_pnl">${content}</div>;
+        }
+
+        
+
         return (
-            <div className={rowIndex === selected_pattern_index ? "truncate_active" : 'truncate'}
+            <div className={selected_row}
                 onClick={() => {
          
                     set_selected_pattern(abcd_patterns[rowIndex]);  
                     set_selected_pattern_index(rowIndex)
                 }}
                 style={style}
+                onMouseEnter={() => {
+                    set_hovered_index(rowIndex);
+                    // console.log("Hovered row:", rowIndex);
+                    }}
             >
-                {content}
+                {cellContent}
             </div>
         );
     };
 
     return(
-        <div className='table_container'>
+        <div className='table_container' ref={containerRef}>
         
             <Grid
                 className="my-grid"
                 cellComponent={CellComponent}
                 cellProps={{ table }}
-                columnCount={table.length > 0 ? Object.keys(table[0]).length : 0}
-                columnWidth={150}
+                // columnCount={table.length > 0 ? Object.keys(table[0]).length : 0}
+                columnCount={8}
+                columnWidth={containerWidth/8}
                 rowCount={table?.length}
                 rowHeight={25}
             />

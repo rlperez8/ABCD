@@ -171,14 +171,10 @@ const App = () => {
   }, [ab_candles, selected_pattern_index]);
   
 
-
- 
-
-
-  // First Mount
   useEffect(()=>{
 
-    const fetchCandles = async () => {
+    
+    const inital_load_data = async () => {
       try {
         // Get Candles
         const candles = await route.get_candles(ticker_symbol);
@@ -208,16 +204,11 @@ const App = () => {
         console.error('Error fetching candles:', err);
       }
     };
-    fetchCandles();
-
-    // // get_listed_tickers('',asset_type)
-    // // get_abcd_of_selected_symbol(ticker_symbol)
-    // get_ab_candles()
-    // get_abc_candles()
-    // 
+    inital_load_data();
   
-  }, [ticker_symbol]) 
+  }, []) 
 
+  console.log(abcd_patterns[0])
   return (
 
       <div className='App' >
@@ -320,8 +311,10 @@ const App = () => {
             ticker_symbol={ticker_symbol}
             set_canvas_dimensions={set_canvas_dimensions}
               selected_pattern={selected_pattern}
+              
             />
 
+            <div className='x'>
 
             <PerformanceTable
               ticker_performance={ticker_performance}
@@ -329,18 +322,42 @@ const App = () => {
               set_selected_peformance={set_selected_peformance}
               selected_peformance={selected_peformance}
 
-              selected_pattern_index={selected_pattern_index}
-              set_selected_pattern_index={set_selected_pattern_index}
-              set_selected_pattern={set_selected_pattern}
-              table={table}
-              abcd_patterns={abcd_patterns}
-            
+              set_ticker_symbol={set_ticker_symbol}     
+              set_abcd_patterns={set_abcd_patterns}
+              set_table={set_table}   
             />
 
-      
+            <div className='patterns_table_main'>
+         <div className='peformance_table_header'>
+                <div className='ticker_column'>Result</div>
+                <div className='ticker_column'>Enter Date.</div>
+                <div className='ticker_column'>Exit Date</div>
+                <div className='ticker_column'>Enter Price</div>
+                <div className='ticker_column'>Exit Price</div>
+                <div className='ticker_column'>PNL</div>
+                <div className='ticker_column'>Return %</div>
+                <div className='ticker_column'>ABCD Length</div>
+
+            </div>
+                <div className='patterns_table_inner'>
+                {table.length > 0 &&
+                    <Table 
+                        selected_pattern_index={selected_pattern_index}
+                        set_selected_pattern={set_selected_pattern}
+                        set_selected_pattern_index={set_selected_pattern_index}
+                        table={table}
+                        abcd_patterns={abcd_patterns}
+                        
+                    />
+                }
+                </div>
+            </div> 
+            
+
+                </div>
             
           </div>
-          
+
               <Filter
               filters={filters}
               set_filters={set_filters}

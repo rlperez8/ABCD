@@ -1,7 +1,6 @@
 
 import * as route from './backend_routes.js';
-import Table from './table';
-import React, { useState, useEffect, useRef } from 'react';
+
 const PerformanceTable = (props) => {
 
     const {
@@ -10,40 +9,61 @@ const PerformanceTable = (props) => {
         set_candles,
         set_selected_peformance,
         selected_peformance,
-
-        selected_pattern_index,
-        set_selected_pattern_index,
-        set_selected_pattern,
-        table,
-        abcd_patterns
-
+        set_ticker_symbol,
+        set_abcd_patterns,
+        set_table
 
     } = props
+    // console.log(selected_peformance)
 
     return(
 
         <div className='peformance_table_main'>
+
+
+            <div className='peformance_table_header'>
+                <div className='ticker_column'>Symbol</div>
+                <div className='ticker_column'>Win Pct.</div>
+                <div className='ticker_column'>Total</div>
+                <div className='ticker_column'>Won</div>
+                <div className='ticker_column'>Lost</div>
+                <div className='ticker_column'>Open</div>
+
+            </div>
+
             {ticker_performance.map((ticker,key)=>{
                 return(
-                    <>
+                
                 <div 
                     key={key}
                     onClick={()=>{
-                
+                   
                         const fetch = async () => {
+                                
+                            set_ticker_symbol(ticker.ticker)
+
                             const candles = await route.get_candles(ticker.ticker)
                             set_candles(candles)
                             set_selected_peformance(ticker.ticker)
-                            await route.get_abcd_candles(ticker.ticker)
-                        }
+
+                            const abcd_patterns = await route.get_abcd_candles(ticker.ticker)
+                            set_abcd_patterns(abcd_patterns)
+                            set_table(abcd_patterns)
+
+                            
+
+                            
+
+                            
+                }
                         fetch()
                     }} 
                     
                     className={selected_peformance === ticker.ticker ? 'ticker_row_selected' : 'ticker_row'}>
                     
                     
-                    <div className='ticker_column'>{ticker.ticker}</div>
-                    <div className='ticker_column'>{ticker.win_pct}</div>
+                    <div className='ticker_column_symbol'>{ticker.ticker}</div>
+                    <div className='ticker_column'>{ticker.win_pct}%</div>
                     <div className='ticker_column'>{ticker.count_total}</div>
                     <div className='ticker_column'>{ticker.count_won}</div>
                     <div className='ticker_column'>{ticker.count_lost}</div>
@@ -51,23 +71,9 @@ const PerformanceTable = (props) => {
 
                 </div>
 
-                {selected_peformance === ticker.ticker &&
-                    <div className='patterns_table_main'>
-                        <div className='patterns_table_inner'>
-                        {table.length > 0 &&
-                            <Table 
-                                selected_pattern_index={selected_pattern_index}
-                                set_selected_pattern={set_selected_pattern}
-                                set_selected_pattern_index={set_selected_pattern_index}
-                                table={table}
-                                abcd_patterns={abcd_patterns}
-                            />
-                        }
-                        </div>
-                    </div> 
-                }
                
-                </>)
+               
+                )
                 
             })}
 

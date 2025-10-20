@@ -35,8 +35,8 @@ def main():
     alpha = AlphaVantage()
     # # tickers = alpha.get_listing_status()
     # # print(tickers)
-    alpha.load_single_symbol_candle_data('full', 'NVDA')
+    alpha.load_single_symbol_candle_data('full', 'GME')
 
-    run_strategy('NVDA')
+    run_strategy('GME')
 
 main()

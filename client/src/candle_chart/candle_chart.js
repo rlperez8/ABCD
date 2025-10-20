@@ -14,7 +14,10 @@ export const Candle_Chart = (props) => {
         set_canvas_dimensions,
         selected_abcd,
         selected_ab,
-        selected_pattern
+        selected_pattern,
+        is_price_levels,
+        is_retracement,
+        is_abcd_pattern
 
 	} = props
     
@@ -496,7 +499,7 @@ export const Candle_Chart = (props) => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.beginPath();
             ctx_price.clearRect(0, 0, cp.width, cp.height);
-         
+            
             chart.candles(ctx);
             chart.prices(ctx_price, cp);
             // chart.grid_X(ctx, canvas)
@@ -511,9 +514,9 @@ export const Candle_Chart = (props) => {
             mouse.date_background(ctx_date, candle_width, canvas_date)
             mouse.mouse_date(canvas_date, ctx_date)
 
-            abcd_.abcd(ctx, ab, abcd)
-            abcd_.retracement(ctx, ab)
-            abcd_.price_levels(ctx_price, ctx, canvas, ab)
+            is_abcd_pattern && abcd_.abcd(ctx, ab, abcd)
+            is_retracement && abcd_.retracement(ctx, ab)
+            is_price_levels &&  abcd_.price_levels(ctx_price, ctx, canvas, ab)
 
         
        
@@ -554,7 +557,7 @@ export const Candle_Chart = (props) => {
             cp.removeEventListener('wheel', candle_height_zoom)
     
         };
-    }, [selected_candles, abcd, selected_pattern, ab]);
+    }, [selected_candles, abcd, selected_pattern, ab, is_price_levels, is_retracement, is_abcd_pattern]);
 
     // ===== Format Pattern
     useEffect(()=>{
