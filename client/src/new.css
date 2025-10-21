@@ -680,24 +680,6 @@ input:focus {
 }
 
 
-/* TABLE */
-.table_container{
-    width: 100%;
-    height: 100%;
-    /* border-radius: 10px; */
-    /* overflow-x: scroll;
-    overflow-y: hidden; */
-    box-sizing: border-box;
-}
-.table_container::-webkit-scrollbar {
-  display: none;
-}
-
-
-.table_container {
-  -ms-overflow-style: none;  
-  scrollbar-width: none;    
-}
 
 
 .chart_header {
@@ -887,24 +869,35 @@ input:focus {
     color: #d1cfcf;
 }
 
-.filter_settings{
-    min-width: 400px;
-    /* background-color: rgb(208, 206, 206); */
+.filter_settings {
+     display: flex;
+     flex-wrap: wrap;
+     /* gap: 10px; */
+    align-items: center;      
+    justify-content: flex-start;
+    width: 50%;
+    justify-content: center;
+    align-items: center;
+    height: 33%;
+    overflow: hidden;
+ 
 }
-
 .filter_box{
-    width: 100%;
-    height: 45px;
-    min-height: 45px;
-    max-height: 45px;
-
-    box-sizing: border-box;
-    display: flex;
+  display: flex;
+  align-items: center;
+  /* gap: 6px; */
+  /* padding: 6px 10px; */
+  /* border-radius: 8px; */
+  background-color: #000000; /* optional */
+  color: white;
+  width: 100%;
+  border: 1px solid rgb(52, 52, 52);
+  border-radius: 5px;
 }
 .filter_box_key{
     width: 50%;
     height: 100%;
-    color: rgb(224, 222, 222);
+    color: rgb(138, 134, 134);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -916,7 +909,7 @@ input:focus {
 .filter_box_val{
     width: 50%;
     height: 100%;
-    color: white;
+    color: rgb(120, 116, 116);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -937,15 +930,59 @@ input:focus {
   }
 
 .input_style{
-
     width: 80%;
+    height: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    /* height: 30%; */
+    background-color: black;
+    color: white;
+    font-weight: 900;
+    font-size: 120%;
+    color: rgb(56, 167, 158);
+     text-align: center;  
+    border: none
+}
+.input_style:focus {
+    width: 80%;
+    height: 30px;
+    min-height: 30px;
+    max-height: 30px;
     /* height: 30%; */
     background-color: black;
     color: white;
     font-weight: 900;
     font-size: 150%;
-    color: rgb(213, 84, 84);
+    /* color: rgb(213, 84, 84); */
      text-align: center;  
+    border: 1px solid rgb(28, 134, 163);         
+}
+.abcd_types_filter_container{
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+}
+.abcd_types_filter{
+    width: 50%;
+    height: 50px;
+    border: 1px solid rgb(68, 74, 74);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+}
+.abcd_types_filter_selected{
+    width: 50%;
+    height: 50px;
+    border: 1px solid rgb(68, 74, 74);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgb(3, 22, 31);;
+    
+
 }
 .truncate_active{
     color: white;
@@ -961,7 +998,9 @@ input:focus {
     justify-content: center;
     align-items: center;
     /* background-color: teal; */
-    /* border-bottom: 1px solid rgb(38, 38, 38) */
+    border-bottom: 1px solid rgb(38, 38, 38);
+    box-sizing: border-box;
+    /* height: 500px; */
 }
 
 
@@ -1013,15 +1052,11 @@ input:focus {
 
 .peformance_table_main{
     width: 100%;
-    height: 25%;
-    /* border: 1px solid orange; */
+    height: 33%;
     display: flex;
     flex-direction: column;
-    overflow: scroll;
-    
-    /* border: 1px solid orange; */
 }
-.peformance_table_main::-webkit-scrollbar {
+.peformance_table_body::-webkit-scrollbar {
     display: none;
 }
 .peformance_table_header{
@@ -1030,13 +1065,19 @@ input:focus {
     /* border-bottom: 1px solid rgb(110, 105, 105);s */
     display: flex;
     flex-direction: row;
-    background-color: rgb(5, 20, 20);
+    background-color: rgb(3, 22, 31);
     font-weight: 700;
     
 }
+.peformance_table_body{
+    width: 100%;
+    height: 100%;
+    overflow: scroll;
+}
 .ticker_row{
     width: 100%;
- height: 50px;
+    height: 50px;
+    min-height: 50px;
      border-bottom: 1px solid rgb(44, 44, 46);
     color: white;
     display: flex;
@@ -1048,6 +1089,7 @@ input:focus {
 .ticker_row:hover{
     width: 100%;
     height: 50px;
+    min-height: 50px;
     /* border-bottom: 1px solid rgb(66, 66, 68); */
     color: white;
     display: flex;
@@ -1059,6 +1101,7 @@ input:focus {
 .ticker_row_selected{
       width: 100%;
     height: 50px;
+    min-height: 50px;
     border-bottom: 1px solid rgb(66, 66, 68);
     color: white;
     display: flex;
@@ -1088,7 +1131,7 @@ input:focus {
     flex-direction: row;
     justify-content: center;
     align-items: center;
-    color: rgb(76, 121, 107);
+    color: teal;
     font-weight: 800;
 
 }
@@ -1097,7 +1140,7 @@ input:focus {
     justify-content: center;
     align-items: center;
     width: 100%;
-    height: 75%;
+    height: 33%;
     /* min-height: 25%; */
     flex-direction: column;
     
@@ -1117,26 +1160,38 @@ input:focus {
 .my-grid::-webkit-scrollbar-track { background-color: #1c1818; }
 
 .first_column_box{
-    background-color: rgb(10, 48, 48);
+    /* background-color: rgb(23, 66, 103); */
     width: 50px;
-    height: 70%;
+height: 50%;
     display: flex;
     justify-content: center;
     align-items: center;
-    border: 1px solid rgb(11, 76, 69);
+    border: 2px solid rgb(37, 115, 175);
     border-radius: 5px;
     font-weight: 600;
 }
 .lost_column_box{
-    background-color: rgb(84, 37, 37);
+    /* background-color: rgb(84, 37, 37); */
+    width: 50px;
+    height: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 2px solid rgb(117, 34, 34);
+    border-radius: 5px;
+    font-weight: 600;
+}
+.open_column_box{
+    /* background-color: rgb(132, 132, 137); */
     width: 50px;
     height: 70%;
     display: flex;
     justify-content: center;
     align-items: center;
-    border: 1px solid rgb(181, 32, 16);
+    border: 2px solid rgb(117, 112, 112);
     border-radius: 5px;
     font-weight: 600;
+    color: rgb(243, 238, 238);
 }
 .first_column{
     display: flex;
@@ -1154,5 +1209,63 @@ input:focus {
 }
 .x{
  width: 40%;
+ max-width: 700px;
  height: 100%;
+ display: flex;
+ flex-direction: column;
+ justify-content: center;
+ align-items: center;
+}
+
+/* TABLE */
+.table_container{
+    width: 100%;
+    height: 100%;
+    /* border-radius: 10px; */
+    /* overflow-x: scroll;
+    overflow-y: hidden; */
+    box-sizing: border-box;
+ 
+    overflow: hidden;
+}
+.table_container::-webkit-scrollbar {
+  display: none;
+}
+
+
+.table_container {
+  -ms-overflow-style: none;  
+  scrollbar-width: none;    
+}
+
+.table_container .ReactWindow__List {
+    overflow-x: hidden;  /* for the inner react-window list */
+}
+.ReactWindow__List {
+    scrollbar-width: none;       
+    -ms-overflow-style: none;    
+}
+
+.ReactWindow__List::-webkit-scrollbar {
+    display: none;               /* Chrome/Safari/Edge */
+}
+.table_container{
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  
+    &::-webkit-scrollbar {
+      width: 1px;
+    }
+  
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  
+    &::-webkit-scrollbar-thumb {
+      background-color: transparent;
+    }
+  }
+
+  .no-scrollbars::-webkit-scrollbar { 
+    display: none;  /* Safari and Chrome */
 }

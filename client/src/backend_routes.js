@@ -21,7 +21,24 @@ export const get_candles = async (symbol) => {
     }
 
 }
-export const fetch_filtered = async (value) => {
+export const fetch_filtered_peformances = async (value) => {
+
+    try {
+        const res = await fetch("http://localhost:8000/filtered_peformances", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value }) 
+        });
+
+        const responseData = await res.json();
+
+        return responseData.data
+    
+    } catch (error) {
+        console.log(error);
+    }
+}
+export const fetch_filtered_patterns = async (value) => {
 
     try {
         const res = await fetch("http://localhost:8000/filtered_patterns", {
@@ -31,11 +48,6 @@ export const fetch_filtered = async (value) => {
         });
 
         const responseData = await res.json();
-        console.log(responseData.data)
-        // set_ticker_peformance(responseData.data)
-        // set_statistics(responseData.stats)
-        // set_abcd_patterns(responseData.data)  
-        // handle_selected_option(responseData.data, selected_table_option)
 
         return responseData.data
     
@@ -43,6 +55,29 @@ export const fetch_filtered = async (value) => {
         console.log(error);
     }
 }
+export const get_abcd_candles = async (symbol,filter) => {
+
+  try {
+      const res = await fetch("http://localhost:8000/filtered_patterns", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            'symbol':symbol,
+            'filter': filter})
+      });
+
+      const responseData = await res.json();
+    
+      return responseData.data
+
+
+} catch (error) {
+    console.log(error);
+}
+};
+
+
+
 const get_ab_candles = async () => {
 try {
 const res = await fetch("http://localhost:8000/ab_candles", {
@@ -78,24 +113,6 @@ try {
     const responseData = await res.json();
     
     
-
-} catch (error) {
-    console.log(error);
-}
-};
-export const get_abcd_candles = async (symbol) => {
-
-  try {
-      const res = await fetch("http://localhost:8000/abcd_patterns", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({'symbol':symbol})
-      });
-
-      const responseData = await res.json();
-    
-      return responseData.data
-
 
 } catch (error) {
     console.log(error);

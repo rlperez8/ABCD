@@ -251,3 +251,89 @@ class DataBase:
                 cursor.close()
                 connection.close()
                 print("Connection closed.")
+
+    def get_ticker_performance_sql(self, data):
+        query = '''
+            SELECT 
+                symbol,
+                COUNT(*) AS count_total,
+                SUM(CASE WHEN trade_result = 'Win' THEN 1 ELSE 0 END) AS count_won,
+                SUM(CASE WHEN trade_result = 'Lost' THEN 1 ELSE 0 END) AS count_lost,
+                SUM(CASE WHEN trade_result = 'Open' THEN 1 ELSE 0 END) AS count_open,
+                ROUND(
+                    CASE 
+                        WHEN SUM(CASE WHEN trade_result IN ('Win', 'Lost') THEN 1 ELSE 0 END) = 0 THEN 0
+                        ELSE (
+                            SUM(CASE WHEN trade_result = 'Win' THEN 1 ELSE 0 END) * 100.0 /
+                            SUM(CASE WHEN trade_result IN ('Win', 'Lost') THEN 1 ELSE 0 END)
+                        )
+                    END,
+                    2
+                ) AS win_pct,
+                ROUND(AVG(pattern_C_price_retracement), 2) AS retracement_bc_avg,
+                ROUND(AVG(pattern_D_price_retracement), 2) AS retracement_cd_avg,
+                ROUND(AVG(pattern_AB_bar_length), 2) AS ab_leg_avg,
+                ROUND(AVG(pattern_BC_bar_length), 2) AS bc_leg_avg,
+                ROUND(AVG(pattern_CD_bar_length), 2) AS cd_leg_avg
+            FROM pattern_abcd
+            WHERE pattern_C_price_retracement BETWEEN %s AND %s
+            AND pattern_D_price_retracement BETWEEN %s AND %s
+            AND pattern_AB_bar_length BETWEEN %s AND %s
+            AND pattern_BC_bar_length BETWEEN %s AND %s
+            AND pattern_CD_bar_length BETWEEN %s AND %s
+            GROUP BY symbol
+            ORDER BY symbol;
+        '''
+        
+        params = (
+            data['bc_retracement_greater'],
+            data['bc_retracement_less'],
+            data['cd_retracement_greater'],
+            data['cd_retracement_less'],
+            data['ab_leg_greater'],
+            data['ab_leg_less'],
+            data['bc_leg_greater'],
+            data['bc_leg_less'],
+            data['cd_leg_greater'],
+            data['cd_leg_less']
+        )
+
+        df = pd.read_sql_query(query, self.engine, params=params)
+        return df
+
+
+    
+
+    def get_ticker_peformance(self,patterns):
+
+        def safe_round(val, digits=2, replace_with=0):
+            if pd.isna(val) or (isinstance(val, float) and np.isnan(val)):
+                return replace_with
+            return round(val, digits)
+
+
+        # Group by ticker and calculate stats
+        peformances = []
+        grouped = patterns.groupby("symbol")
+
+        for ticker, g in grouped:
+            stats = {
+                'ticker': ticker,
+                'count_total': len(g),
+                'count_won': len(g[g['trade_result'] == 'Win']),
+                'count_lost': len(g[g['trade_result'] == 'Lost']),
+                'count_open': len(g[g['trade_result'] == 'Open']),
+                'win_pct': safe_round(
+                    (len(g[g['trade_result'] == 'Win']) / len(g)) * 100, 2
+                ) if len(g) > 0 else 0,
+                'retracement_bc_avg': safe_round(g['pattern_C_price_retracement'].mean()),
+                'retracement_cd_avg': safe_round(g['pattern_D_price_retracement'].mean()),
+                'ab_leg_avg': safe_round(g['pattern_AB_bar_length'].mean()),
+                'bc_leg_avg': safe_round(g['pattern_BC_bar_length'].mean()),
+                'cd_leg_avg': safe_round(g['pattern_CD_bar_length'].mean())
+            }
+            peformances.append(stats)
+
+
+
+        return peformances

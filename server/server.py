@@ -4,6 +4,10 @@ from flask_cors import CORS, cross_origin
 from sqlalchemy import create_engine
 import numpy as np 
 from datetime import datetime
+
+from storage import *
+
+
 app = Flask(__name__)
 CORS(app)
 
@@ -224,150 +228,73 @@ def get_abc_patterns():
         print('Error:', error_message)
         return jsonify({'error': error_message}), 500
 
-@app.route('/abcd_patterns', methods=['POST'])
-def get_abcd_patterns():
-    
- 
+@app.route('/filtered_patterns', methods=['POST'])
+def filtered_patterns():
     try:
-    
         data = request.get_json(force=True)
 
-        print(data)
-
-        # Extract filters
+        # Extract filters safely
         symbol = data['symbol']
-        
-        query = '''
-            SELECT * FROM pattern_abcd
-            WHERE symbol = %s
-        '''
-        df = pd.read_sql_query(query, engine, params=(symbol,))
+        filter_ = data['filter']
 
+        query = '''
+            SELECT *
+            FROM pattern_abcd
+            WHERE pattern_C_price_retracement BETWEEN %s AND %s
+              AND pattern_D_price_retracement BETWEEN %s AND %s
+              AND pattern_AB_bar_length BETWEEN %s AND %s
+              AND pattern_BC_bar_length BETWEEN %s AND %s
+              AND pattern_CD_bar_length BETWEEN %s AND %s
+              AND symbol = %s
+        '''
+
+        params = (
+            filter_['bc_retracement_greater'],
+            filter_['bc_retracement_less'],
+            filter_['cd_retracement_greater'],
+            filter_['cd_retracement_less'],
+            filter_['ab_leg_greater'],
+            filter_['ab_leg_less'],
+            filter_['bc_leg_greater'],
+            filter_['bc_leg_less'],
+            filter_['cd_leg_greater'],
+            filter_['cd_leg_less'],
+            symbol
+        )
+
+        df = pd.read_sql_query(query, engine, params=params)
         df = df.replace({np.nan: None})
-        
+        print(df)
 
         return jsonify({
             "status": "success",
             "data": df.to_dict(orient='records'),
-      
         })
 
     except Exception as e:
-        error_message = str(e)
-        print('Error:', error_message)
-        return jsonify({'error': error_message}), 500
+        print('Error:', e)
+        return jsonify({'error': str(e)}), 500
 
 
-@app.route('/filtered_patterns', methods=['POST'])
-def filtered_patterns():
+@app.route('/filtered_peformances', methods=['POST'])
+def filtered_peformances():
     try:
         data = request.get_json(force=True)['value']
-
- 
-
-        # Extract filters
-        cd_retracement_greater = data['cd_retracement_greater']
-        cd_retracement_less = data['cd_retracement_less']
-        bc_retracement_greater = data['bc_retracement_greater']
-        bc_retracement_less = data['bc_retracement_less']
-
-        ab_leg_greater = data['ab_leg_greater']
-        ab_leg_less = data['ab_leg_less']
-        bc_leg_greater = data['bc_leg_greater']
-        bc_leg_less = data['bc_leg_less']
-        cd_leg_greater = data['cd_leg_greater']
-        cd_leg_less = data['cd_leg_less']
-
-        # a_date = datetime.strptime(data['a_date'], "%m-%d-%Y").strftime("%Y-%m-%d")
-        # b_date = datetime.strptime(data['b_date'], "%m-%d-%Y").strftime("%Y-%m-%d")
-        # c_date = datetime.strptime(data['c_date'], "%m-%d-%Y").strftime("%Y-%m-%d")
-
-        # Query all patterns that match filters across ALL tickers
-        query = '''
-            SELECT * 
-            FROM pattern_abcd
-            WHERE pattern_C_price_retracement BETWEEN %s AND %s
-            AND pattern_D_price_retracement BETWEEN %s AND %s
-            AND pattern_AB_bar_length BETWEEN %s AND %s
-            AND pattern_BC_bar_length BETWEEN %s AND %s
-            AND pattern_CD_bar_length BETWEEN %s AND %s
-       
-        '''
-        df = pd.read_sql_query(query, engine, params=(
-            bc_retracement_greater,
-            bc_retracement_less,
-            cd_retracement_greater,
-            cd_retracement_less,
-            ab_leg_greater,
-            ab_leg_less,
-            bc_leg_greater,
-            bc_leg_less,
-            cd_leg_greater,
-            cd_leg_less,
-    
-        ))
-
-
-
-        if df.empty:
-            return jsonify({"status": "success", "data": [], "stats": []})
-
-        df = df.replace({np.nan: None})
-    
-
-        # Helper to round safely
-        def safe_round(val, digits=2, replace_with=0):
-            if pd.isna(val) or (isinstance(val, float) and np.isnan(val)):
-                return replace_with
-            return round(val, digits)
-
-        # Group by ticker and calculate stats
-        results = []
-        grouped = df.groupby("symbol")
-
-        for ticker, g in grouped:
-            stats = {
-                'ticker': ticker,
-                'count_total': len(g),
-                'count_won': len(g[g['trade_result'] == 'Win']),
-                'count_lost': len(g[g['trade_result'] == 'Lost']),
-                'count_open': len(g[g['trade_result'] == 'Open']),
-                'win_pct': safe_round(
-                    (len(g[g['trade_result'] == 'Win']) / len(g)) * 100, 2
-                ) if len(g) > 0 else 0,
-                'retracement_bc_avg': safe_round(g['pattern_C_price_retracement'].mean()),
-                'retracement_cd_avg': safe_round(g['pattern_D_price_retracement'].mean()),
-                'ab_leg_avg': safe_round(g['pattern_AB_bar_length'].mean()),
-                'bc_leg_avg': safe_round(g['pattern_BC_bar_length'].mean()),
-                'cd_leg_avg': safe_round(g['pattern_CD_bar_length'].mean())
-            }
-            results.append(stats)
-
-        unique_symbols = df['symbol'].unique().tolist()
+        db = DataBase()
+        filtered_abcd_patterns = db.get_ticker_performance_sql(data)
      
-        # return jsonify({"status": "success", "data": df.to_dict(orient='records'), "stats": []})
+        filtered_abcd_patterns.rename(columns={'symbol': 'ticker'}, inplace=True)
 
         return jsonify({
             "status": "success",
-            "data": results
+            "data": filtered_abcd_patterns.to_dict(orient='records')
         })
 
     except Exception as e:
         print("Error:", e)
         return jsonify({'error': str(e)}), 500
     
-# from sqlalchemy import create_engine, text
-# @app.route('/ticker_peformances', methhods=['GET'])
-# def ticker_performance():
 
-    query = '''
-        SELECT * FROM pattern_abcd
-
-    '''
-    df = pd.read_sql_query(query, engine, params=())
-
-
-    print(df)
 
 if __name__ == "__main__":
 

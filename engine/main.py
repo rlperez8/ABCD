@@ -5,7 +5,9 @@ import traceback
 
 def run_strategy(ticker):
     try: 
+        
         candles = DataBase().get_stored_candles('candles', ticker)
+       
         candles = candles[['date','open','high','low','close','volume']]
         candles['date'] = pd.to_datetime(candles['date']).dt.date
         # candles = candles[candles['date']>= pd.to_datetime('2020-01-01').date()]
@@ -31,12 +33,23 @@ def run_strategy(ticker):
 
 def main():
 
-    
     alpha = AlphaVantage()
-    # # tickers = alpha.get_listing_status()
-    # # print(tickers)
-    alpha.load_single_symbol_candle_data('full', 'GME')
+    db = DataBase()
 
-    run_strategy('GME')
+    # # Get Tickers
+    # tickers = alpha.get_listing_status()['symbol'].to_list()[61:100]
+
+    # # Load Candles
+    # for ticker in tickers:
+    #     alpha.load_single_symbol_candle_data('full', ticker)
+
+
+    # Pull Loaded Candle Tickers
+    my_tickers = db.get_distinct_symbols('candles','symbol')['symbol'].to_list()[70:100]
+    # Run Strategy
+    for symbol in my_tickers:
+        run_strategy(symbol)
+
+
 
 main()

@@ -31,12 +31,11 @@ const Table = (props) => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    console.log(containerWidth)
-    
+
 
     const [hovered_row_index, set_hovered_index] = useState(0)
 
-    const columns = ['trade_result', 'trade_entered_date','trade_exited_date','trade_entered_price','trade_exited_price','trade_pnl','trade_return_percentage','pattern_ABCD_bar_length']
+    const columns = ['trade_result', 'trade_entered_date','trade_entered_price','trade_exited_price','trade_pnl','trade_return_percentage','pattern_ABCD_bar_length']
 
     const CellComponent = ({ columnIndex, rowIndex, style, table }) => {
      
@@ -60,10 +59,13 @@ const Table = (props) => {
         } else if (columnIndex === 0 && content === 'Lost') {
             cellContent = <div className="lost_column_box">{content}</div>;
         
-        } else if (columnIndex === 5 && Number(content) > 50) {
+        } else if (columnIndex === 0) {
+            cellContent = <div className="open_column_box">Open</div>;
+        
+        }else if (columnIndex === 5 && Number(content) > 0) {
             cellContent = <div className="positive_pnl">${content}</div>;
 
-        }else if (columnIndex === 5 && Number(content) <= 50) {
+        }else if (columnIndex === 5 && Number(content) <= 0) {
             cellContent = <div className="negative_pnl">${content}</div>;
         }
 
@@ -95,10 +97,11 @@ const Table = (props) => {
                 cellComponent={CellComponent}
                 cellProps={{ table }}
                 // columnCount={table.length > 0 ? Object.keys(table[0]).length : 0}
-                columnCount={8}
-                columnWidth={containerWidth/8}
+                columnCount={7}
+                columnWidth={containerWidth/7}
                 rowCount={table?.length}
-                rowHeight={25}
+                rowHeight={40}
+                style={{ overflowX: 'none' }} 
             />
         </div>
     )

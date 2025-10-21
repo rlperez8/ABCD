@@ -281,9 +281,9 @@ class AlphaVantage:
 
     def __init__(self) -> None:
         
-        # self.api_key = 'ZA9N4R1HE9ARIJ0S'
-        self.api_key = '10NSLCA2J0HLW7HG'
-        # 10NSLCA2J0HLW7HG
+        self.api_key = 'ZA9N4R1HE9ARIJ0S'
+        # self.api_key = '10NSLCA2J0HLW7HG'
+ 
     
     def validate_candle_activity():
 
@@ -382,7 +382,7 @@ class AlphaVantage:
     
     def get_listing_status(self):
         
-        CSV_URL = 'https://www.alphavantage.co/query?function=LISTING_STATUS&apikey=10NSLCA2J0HLW7HG'
+        CSV_URL = 'https://www.alphavantage.co/query?function=LISTING_STATUS&apikey=ZA9N4R1HE9ARIJ0S'
 
         with requests.Session() as s:
             download = s.get(CSV_URL)
@@ -2355,6 +2355,8 @@ class Core:
                     abcd.trade_take_profit = float(abcd.trade_entered_price + (float(abcd.pattern_C_high) - float(data_low[-1])))
                     abcd.trade_stop_loss = float(abcd.trade_entered_price - (float(abcd.pattern_C_high) - float(data_low[-1])))
                     abcd.d_dropped_below_b = date(ago=-1)
+
+                    abcd.trade_result = 'Open'
                     
                 
         
@@ -2418,7 +2420,7 @@ class Core:
                         
                         if stop_loss_market_hit:
 
-                            each.trade_pnl = round(each.trade_risk,2)
+                            each.trade_pnl = round(-each.trade_risk,2)
                             each.trade_result = 'Lost'
                             each.trade_exited_price = each.trade_stop_loss
                             each.trade_return_percentage = round((each.trade_risk / each.trade_entered_price) * 100,2)
@@ -2607,8 +2609,6 @@ class ABCD(bt.Strategy):
 
         # df = df[df['trade_is_open']==True].reset_index(drop=True)
         # print(df)
-
-
 
 class Pattern_A():
 

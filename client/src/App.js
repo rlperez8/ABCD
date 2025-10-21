@@ -11,6 +11,7 @@ import Filter from './filter';
 import ChartMain from './candle_chart/chart_main';
 import * as route from './backend_routes.js';
 import PerformanceTable from './PeformanceTable.js';
+import PatternTable from './PatternTable.js';
 
 
 const App = () => {
@@ -193,13 +194,13 @@ const App = () => {
           'cd_leg_greater': 0, 
           'cd_leg_less': 5000
         }
-        const peformances = await route.fetch_filtered(filter)
+        const peformances = await route.fetch_filtered_peformances(filter)
         set_ticker_peformance(peformances)
 
         // Get ABCD Patterns
-        const abcd_patterns = await route.get_abcd_candles('AAON')
-        set_abcd_patterns(abcd_patterns)
-        set_table(abcd_patterns)
+        // const abcd_patterns = await route.get_abcd_candles('AAON')
+        // set_abcd_patterns(abcd_patterns)
+        // set_table(abcd_patterns)
       } catch (err) {
         console.error('Error fetching candles:', err);
       }
@@ -208,7 +209,26 @@ const App = () => {
   
   }, []) 
 
-  console.log(abcd_patterns[0])
+
+  useEffect(()=>{
+
+    const fetch_new_patterns = async ()=>{
+      try {
+        console.log(filters)
+        const filter = await route.get_abcd_candles('AAON', filters)
+        console.log(filter)
+        set_abcd_patterns(filter)
+        set_table(filter)
+       } catch (err) {
+        console.error('Error fetching candles:', err);
+      }
+
+    }
+
+    fetch_new_patterns()
+  },[filters])
+
+
   return (
 
       <div className='App' >
@@ -316,53 +336,41 @@ const App = () => {
 
             <div className='x'>
 
-            <PerformanceTable
-              ticker_performance={ticker_performance}
-              set_candles={set_candles}
-              set_selected_peformance={set_selected_peformance}
-              selected_peformance={selected_peformance}
+             
 
-              set_ticker_symbol={set_ticker_symbol}     
-              set_abcd_patterns={set_abcd_patterns}
-              set_table={set_table}   
-            />
+              
+              <Filter
+                filters={filters}
+                set_filters={set_filters}
+                fetch_filtered_peformances={route.fetch_filtered_peformances}
+                set_ticker_peformance={set_ticker_peformance}
+              />
 
-            <div className='patterns_table_main'>
-         <div className='peformance_table_header'>
-                <div className='ticker_column'>Result</div>
-                <div className='ticker_column'>Enter Date.</div>
-                <div className='ticker_column'>Exit Date</div>
-                <div className='ticker_column'>Enter Price</div>
-                <div className='ticker_column'>Exit Price</div>
-                <div className='ticker_column'>PNL</div>
-                <div className='ticker_column'>Return %</div>
-                <div className='ticker_column'>ABCD Length</div>
+              <PerformanceTable
+                set_ticker_peformance={set_ticker_peformance}
+                ticker_performance={ticker_performance}
+                set_candles={set_candles}
+                set_selected_peformance={set_selected_peformance}
+                selected_peformance={selected_peformance}
+
+                set_ticker_symbol={set_ticker_symbol}     
+                set_abcd_patterns={set_abcd_patterns}
+                set_table={set_table}   
+                filters={filters}
+              />
+
+              <PatternTable
+                table={table}
+                selected_pattern_index={selected_pattern_index}
+                set_selected_pattern={set_selected_pattern}
+                set_selected_pattern_index={set_selected_pattern_index}
+                abcd_patterns={abcd_patterns}
+              />
 
             </div>
-                <div className='patterns_table_inner'>
-                {table.length > 0 &&
-                    <Table 
-                        selected_pattern_index={selected_pattern_index}
-                        set_selected_pattern={set_selected_pattern}
-                        set_selected_pattern_index={set_selected_pattern_index}
-                        table={table}
-                        abcd_patterns={abcd_patterns}
-                        
-                    />
-                }
-                </div>
-            </div> 
             
+            </div>
 
-                </div>
-            
-          </div>
-
-              <Filter
-              filters={filters}
-              set_filters={set_filters}
-              fetch_filtered={route.fetch_filtered}
-            />
 
         </>}
         
