@@ -15,12 +15,16 @@ const ChartMain = (props) => {
         set_is_listing_status,
         ticker_symbol,
         set_canvas_dimensions,
-        selected_pattern
+        selected_pattern,
+        is_loading_patterns
     } = props
 
     const [is_abcd_pattern, set_abcd_pattern] = useState(true)
     const [is_price_levels, set_price_levels] = useState(true)
     const [is_retracement, set_retracement] = useState(true)
+
+    // console.log('new candles:', formatted_candles)
+    // console.log('new pattern',selected_pattern)
 
 
     return(
@@ -63,9 +67,15 @@ const ChartMain = (props) => {
                   
                   
                 </div>
+                    
+                    {is_loading_patterns &&
+                    <div className="overlay">
+                             <div className='loading_container'>Loading...</div>
+                    </div>
+}
+                    {formatted_candles.length > 0 &&
 
-
-                  <Candle_Chart 
+                   <Candle_Chart 
                     selected_candles={formatted_candles} 
                     chart_height={chart_height}
                     set_is_listing_status={set_is_listing_status}
@@ -76,7 +86,8 @@ const ChartMain = (props) => {
                     is_price_levels={is_price_levels}
                     is_retracement={is_retracement}
                     is_abcd_pattern={is_abcd_pattern}
-                  />
+                    is_loading_patterns={is_loading_patterns}
+                  />}
                   
           
   

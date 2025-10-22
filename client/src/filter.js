@@ -6,21 +6,31 @@ const Filter = (props) => {
         filters,
         set_filters,
         fetch_filtered_peformances,
-        set_ticker_peformance
+        set_ticker_peformance,
+        is_loading,
+        set_loading,
+        set_selected_pattern_index
     } = props
     
-    const [selected_type, set_type] = useState('')
-    useEffect(() => {
-        if (!filters) return;
 
-        const fetchData = async () => {
-            const filtered_data = await fetch_filtered_peformances(filters);
-            set_ticker_peformance(filtered_data)
+
+
+    const [selected_type, set_type] = useState('')
+    // useEffect(() => {
+    //     if (!filters) return;
+
+    //     const fetchData = async () => {
+    //         set_loading(true)
+    //         const filtered_data = await fetch_filtered_peformances(filters);
+    //         set_ticker_peformance(filtered_data)
+  
+  
+    //         set_loading(false)
 
             
-        };
-        fetchData();
-    }, [filters]);
+    //     };
+    //     fetchData();
+    // }, [filters]);
 
     return(
          <div className='filter_settings'>

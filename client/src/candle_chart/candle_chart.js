@@ -20,6 +20,8 @@ export const Candle_Chart = (props) => {
         is_abcd_pattern
 
 	} = props
+
+    
     
     const canvas_dates = useRef()
     const canvas_price = useRef()
@@ -51,7 +53,7 @@ export const Candle_Chart = (props) => {
         exit_date: 0,
         result: 0
     })
-    let [ab, set_ab] = useState({
+    let [pattern_abcd, set_pattern_abcd] = useState({
 
     })
     const candleChartRef = useRef({})
@@ -62,6 +64,8 @@ export const Candle_Chart = (props) => {
         const resizeCanvas = () => {
 
             if (!canvas_chart.current || !canvas_price.current) return;
+
+
                 
                 const canvas = canvas_chart.current;
                 const ctx = canvas.getContext('2d');
@@ -210,6 +214,7 @@ export const Candle_Chart = (props) => {
                     
                 }   
                 candleChartRef.current = CandleChartTools.handle_BaselineY(candleChartRef)
+                
 
                 // Set Canvas Height to the Height of the Parent Div Container.
                 candleChartRef.current.height.startingBaselineY = canvas.offsetHeight
@@ -219,9 +224,11 @@ export const Candle_Chart = (props) => {
                 candleChartRef.current.height.prev_Y_OffSet =  candleChartRef.current.candles.starting_candle_Y - (candleChartRef.current.height.startingBaselineY / 2)
                 candleChartRef.current.height.currentBaselineY = candleChartRef.current.height.startingBaselineY + candleChartRef.current.height.current_Y_OffSet
                 candleChartRef.current.height.previousBaselineY = candleChartRef.current.height.startingBaselineY + candleChartRef.current.height.current_Y_OffSet
+
     
                 // Set Canvas Width to the Width of the Parent Div Container.
                 candleChartRef.current.width.grid_width = canvas.width
+                
 
                 // Set the Size of Price Unit.
                 candleChartRef.current.price.starting_price_unit_pixel_size  = canvas.offsetHeight / 10
@@ -231,11 +238,12 @@ export const Candle_Chart = (props) => {
                 candleChartRef.current.price.current_mid_price = selected_candles[0]?.candle_open 
                 candleChartRef.current.price.prev_mid_price = selected_candles[0]?.candle_open
                 candleChartRef.current.price.static_mid = selected_candles[0]?.candle_open 
+                
         
                 // ====== X-Origin
-                candleChartRef.current.width.current_X_origin = -(canvas.width/2) 
-                candleChartRef.current.width.prev_X_origin = -(canvas.width/2)
-
+                // candleChartRef.current.width.current_X_origin = -(canvas.width/2) 
+                // candleChartRef.current.width.prev_X_origin = -(canvas.width/2)
+                
         
                 candleChartRef.current.zoom.current = 0
                 candleChartRef.current.zoom.shrink_expand_height = 0
@@ -255,6 +263,9 @@ export const Candle_Chart = (props) => {
                 candleChartRef.current.grid_size_count = 0
 
                 candleChartRef.current.selected_candle = selected_candles[0]?.candle_open 
+                resize.reposition_candles(candleChartRef, selected_pattern, selected_candles, set_pattern_abcd)
+
+                
 
  
                 set_canvas_dimensions((prev)=> ({
@@ -267,7 +278,11 @@ export const Candle_Chart = (props) => {
         
         };
         // Run on mount
-        resizeCanvas();
+        
+        if (!selected_candles || !selected_pattern) return;
+        resizeCanvas()
+
+        
 
         
       
@@ -282,7 +297,10 @@ export const Candle_Chart = (props) => {
     // ===== Pattern Highlighter
     useEffect(()=>{
 
-         function findIndexByDate(candles, patternDate) {
+
+        if (!selected_candles || !selected_pattern) return;
+
+        function findIndexByDate(candles, patternDate) {
                 return candles.findIndex(obj => {
                     const candleDate = new Date(obj.date);
                     const pivotDate = new Date(patternDate);
@@ -308,6 +326,7 @@ export const Candle_Chart = (props) => {
     // ===== Canvas Move
     useEffect(() => {
         
+         if (!selected_candles || !selected_pattern) return;
 
         if (!canvas_chart.current) return;
         const { canvas, ctx } = CandleChartTools.reset_candle_canvas(canvas_chart);
@@ -514,9 +533,9 @@ export const Candle_Chart = (props) => {
             mouse.date_background(ctx_date, candle_width, canvas_date)
             mouse.mouse_date(canvas_date, ctx_date)
 
-            is_abcd_pattern && abcd_.abcd(ctx, ab, abcd)
-            is_retracement && abcd_.retracement(ctx, ab)
-            is_price_levels &&  abcd_.price_levels(ctx_price, ctx, canvas, ab)
+            is_abcd_pattern && abcd_.abcd(ctx, pattern_abcd, abcd)
+            is_retracement && abcd_.retracement(ctx, pattern_abcd)
+            is_price_levels &&  abcd_.price_levels(ctx_price, ctx, canvas, pattern_abcd)
 
         
        
@@ -557,188 +576,55 @@ export const Candle_Chart = (props) => {
             cp.removeEventListener('wheel', candle_height_zoom)
     
         };
-    }, [selected_candles, abcd, selected_pattern, ab, is_price_levels, is_retracement, is_abcd_pattern]);
+    }, [selected_candles, abcd, selected_pattern, pattern_abcd, is_price_levels, is_retracement, is_abcd_pattern]);
 
     // ===== Format Pattern
     useEffect(()=>{
-        if(selected_abcd){
+        // if(selected_abcd){
 
-            const get_formatted_date = (candle) => {
-                const date = new Date(candle.date);
-                return date.toISOString().split("T")[0];
-            }
+        //     const get_formatted_date = (candle) => {
+        //         const date = new Date(candle.date);
+        //         return date.toISOString().split("T")[0];
+        //     }
             
-            set_abcd(prev=> ({
-                ...prev,
-                a: get_formatted_date(selected_abcd['pattern_A_pivot_date']) + 1,
-                b: get_formatted_date(selected_abcd['pattern_B_pivot_date'])  + 1,
-                c: get_formatted_date(selected_abcd['pattern_C_pivot_date'])  + 1,
-                d: get_formatted_date(selected_abcd['trade_entered_date'])  + 1,
-                exit_date: get_formatted_date(selected_abcd['trade_exited_date']) + 1,
-                x_date: get_formatted_date(selected_abcd['x_pivot_date']) + 1,
-                x_price: parseFloat(selected_abcd['x_pivot_price']),
-                a_price: parseFloat(selected_abcd['pivot_A_price']),
-                b_price: parseFloat(selected_abcd['pivot_B_price']),
-                c_price: parseFloat(selected_abcd['pivot_C_price']),
-                d_price: parseFloat(selected_abcd['trade_entered_price']),
-                stop_loss: parseFloat(selected_abcd['trade_stop_loss']),
-                take_profit: parseFloat(selected_abcd['trade_exited_price']),
-                entered_price: parseFloat(selected_abcd['trade_entered_price']),
-                ab_price_length: parseFloat(selected_abcd['ab_price_length']),
-                exit_price: parseFloat(selected_abcd['trade_exited_price']),
-                result: selected_abcd['trade_result']
-            }))
-            
-
+        //     set_abcd(prev=> ({
+        //         ...prev,
+        //         a: get_formatted_date(selected_abcd['pattern_A_pivot_date']) + 1,
+        //         b: get_formatted_date(selected_abcd['pattern_B_pivot_date'])  + 1,
+        //         c: get_formatted_date(selected_abcd['pattern_C_pivot_date'])  + 1,
+        //         d: get_formatted_date(selected_abcd['trade_entered_date'])  + 1,
+        //         exit_date: get_formatted_date(selected_abcd['trade_exited_date']) + 1,
+        //         x_date: get_formatted_date(selected_abcd['x_pivot_date']) + 1,
+        //         x_price: parseFloat(selected_abcd['x_pivot_price']),
+        //         a_price: parseFloat(selected_abcd['pivot_A_price']),
+        //         b_price: parseFloat(selected_abcd['pivot_B_price']),
+        //         c_price: parseFloat(selected_abcd['pivot_C_price']),
+        //         d_price: parseFloat(selected_abcd['trade_entered_price']),
+        //         stop_loss: parseFloat(selected_abcd['trade_stop_loss']),
+        //         take_profit: parseFloat(selected_abcd['trade_exited_price']),
+        //         entered_price: parseFloat(selected_abcd['trade_entered_price']),
+        //         ab_price_length: parseFloat(selected_abcd['ab_price_length']),
+        //         exit_price: parseFloat(selected_abcd['trade_exited_price']),
+        //         result: selected_abcd['trade_result']
+        //     }))
             
 
+            
 
-        }
+
+        // }
 
         if(selected_pattern){
 
-
-            function normalizeDate(dateStr) {
-                if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
-                    const [mm, dd, yyyy] = dateStr.split("-");
-                    return `${yyyy}-${mm}-${dd}`;
-                }
-                return dateStr; 
-            }
-
-            function findIndexByDate(candles, patternDate) {
-                const pivotDate = new Date(normalizeDate(patternDate));
-                return candles.findIndex(obj => {
-                    const candleDate = new Date(normalizeDate(obj.date));
-                    return candleDate.toDateString() === pivotDate.toDateString();
-                }) + 1;
-            }
-
-            let index_A = findIndexByDate(selected_candles, selected_pattern?.pattern_A_pivot_date);
-            let index_B = findIndexByDate(selected_candles, selected_pattern?.pattern_B_pivot_date);
-            let index_C = findIndexByDate(selected_candles, selected_pattern?.pattern_C_pivot_date);
-            let index_D = findIndexByDate(selected_candles, selected_pattern?.trade_entered_date);
-            let exit = findIndexByDate(selected_candles, selected_pattern?.trade_exited_date);
-
-            set_ab(prev=> ({
-                ...prev,
-                a: index_A,
-                b: index_B,
-                c: index_C,
-                d: index_D,
-                a_price: parseFloat(selected_pattern.pattern_A_high),
-                b_price: parseFloat(selected_pattern.pattern_B_low),
-                c_price: parseFloat(selected_pattern.pattern_C_high),
-                d_price: parseFloat(selected_pattern.trade_entered_price),
-                stop_loss: parseFloat(selected_pattern['trade_stop_loss']),
-                take_profit: parseFloat(selected_pattern['trade_take_profit']),
-                entered_price: parseFloat(selected_pattern['trade_entered_price']),
-                exit_price: parseFloat(selected_pattern['trade_exited_price']),
-                exit_date: exit,
-            }))
-
-   
-            // X
-            
-            
-            // Grid Unit Height Adjuster
-            let x = false
-            let size = 1
-            while(x===false){
-                
-                let pattern_price_height = (parseFloat(selected_pattern.pattern_A_high) - parseFloat(selected_pattern['trade_stop_loss'])).toFixed(2)
-                let pattern_box_height = candleChartRef.current.canvas_height / 2
-
-                const one_dollar_pixel_size = candleChartRef.current.price.current_pixels_per_price_unit / size;
-                const price_pixel_location = pattern_price_height * one_dollar_pixel_size;
-      
-                if(price_pixel_location > pattern_box_height){
-                    size*=2
-                }
-                else if(price_pixel_location < pattern_box_height){
-                    
-                    x = true
-                    candleChartRef.current.unit_amount = size
-
-                    // Push Baseline-Y Down by Converted Price Amount
-                    candleChartRef.current.height.currentBaselineY = price_pixel_location;
-                    candleChartRef.current.height.previousBaselineY = price_pixel_location;
-                
-                    // Shift Baseline-Y to Center of Screen
-                    const half_screen_height = candleChartRef.current.height.startingBaselineY / 2;
-                    candleChartRef.current.height.currentBaselineY += half_screen_height;
-                    candleChartRef.current.height.previousBaselineY += half_screen_height;
-                
-                    const mid_price = utilites.get_mid_price(candleChartRef)
-                    candleChartRef.current.price.current_mid_price = mid_price
-                    candleChartRef.current.price.prev_mid_price = mid_price
-                    
-                }
-        
-          
-                
-            resize.push_price_to_middle_screen(candleChartRef, selected_pattern)
-
-
-
-            let y = false;
-
-            while (y === false) {
-                const candles = candleChartRef.current.candles;
-                const chart = candleChartRef.current;
-
-                // Always recalculate complete width as the sum of its parts
-                candles.complete_width = chart.current_candle_width + chart.current_pixels_between_candles;
-
-                let pattern_length = candles.complete_width * selected_pattern.pattern_ABCD_bar_length;
-                let pattern_box_width = (chart.canvas_width / 8) * 6;
-
-                if (pattern_length > pattern_box_width) {
-
-                    if (chart.current_pixels_between_candles > -0.25) {
-                        chart.current_pixels_between_candles -= 0.25;
-                    }
-                    if (chart.current_candle_width > -0.75) {
-                        chart.current_candle_width -= 0.75;
-                    }
-
-                    // Recalculate after adjustments
-                    candles.complete_width = chart.current_candle_width + chart.current_pixels_between_candles;
-                }
-                else if (pattern_length < pattern_box_width) {
-                    y = true;
-                }
-            }
-            
-            console.log('candle width:', candleChartRef.current.current_candle_width)
-            console.log('pxs between',candleChartRef.current.current_pixels_between_candles)
-            console.log('complete width:',candleChartRef.current.candles.complete_width)
-
-            candleChartRef.current.width.current_X_origin = -(candleChartRef.current.width.grid_width/8) - (candleChartRef.current.candles.complete_width * index_A) 
-            candleChartRef.current.width.prev_X_origin = -(candleChartRef.current.width.grid_width/8) - (candleChartRef.current.candles.complete_width * index_A) 
-            candleChartRef.current.selected_candle = parseFloat(selected_pattern.pattern_A_high)
+            resize.reposition_candles(candleChartRef, selected_pattern, selected_candles, set_pattern_abcd)
 
 
             
-            
-            
-
-                                
-    
-
-            }
-
-
-
-          
-
-
-
-   
-
-
         }
-    },[selected_abcd, selected_pattern])
+    },[selected_pattern])
+
+
+
 
     const handleMouseDown = () => {
         candleChartRef.current.mouse.isPressed = true;

@@ -102,7 +102,7 @@ export class Mouse {
         pixelStart = pixelStart - 2.5;
 
         // Get Hovered Candle Date
-        const hoveredCandle = this.candleChartRef.current.candles.candles[index]?.date;
+        const hoveredCandle = this.candleChartRef.current.candles.candles[index]?.candle_date;
 
         // ✅ Just strip time, keep full original string
         const finalFormat = hoveredCandle?.split(" 00:")[0] || "";
@@ -226,7 +226,7 @@ export class Chart {
             const x = Math.floor(startingX - this.candleChartRef.current.width.current_X_origin);
 
             // ✅ keep the full date string, but cut off the time part
-            const date = this.candleChartRef.current.candles.candles[candle_index]?.date.split(" 00:")[0];
+            const date = this.candleChartRef.current.candles.candles[candle_index]?.candle_date.split(" 00:")[0];
 
             const metrics = ctx_date.measureText(date);
             const textHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
@@ -284,15 +284,20 @@ export class Chart {
     
         // Get Candle Width
         const width = -candleChartRef.current.current_candle_width;
-    
+        
+        // let difference = item.close - item.open
+        // let color = 'green'
+        // if(difference < 0){
+        //     color = 'red'
+        // }
         // Add Color to Candle
-        ctx.fillStyle = item.color;
+        ctx.fillStyle = item.candle_close > item.candle_open ? '#26a69a' : '#ef5350';
     
         // Draw Candle
         ctx.fillRect(x, candle_open_pixel, width, candle_height);
     
         // Add Border
-        ctx.strokeStyle = "black";
+        ctx.strokeStyle = item.candle_close > item.candle_open ? '#26a69a' : '#ef5350';
         ctx.lineWidth = 2;
     
     }
@@ -317,12 +322,14 @@ export class ABCD {
         this.candleChartRef = candleChartRef
     }
     abcd = (ctx, ab, abcd) => {
-            
+ 
         // A
         let a_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.a_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
         let a_x_loc = -this.candleChartRef.current.candles.complete_width * ab.a;
         a_x_loc -= this.candleChartRef.current.width.current_X_origin;
         a_x_loc += this.candleChartRef.current.candles.complete_width / 2;
+
+
         
         // B
         let b_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.b_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))

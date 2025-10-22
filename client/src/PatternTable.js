@@ -8,7 +8,9 @@ const PatternTable = (props) => {
         selected_pattern_index,
         set_selected_pattern,
         set_selected_pattern_index,
-        abcd_patterns
+        abcd_patterns,
+        is_loading_patterns,
+   
 
 
     } = props
@@ -18,6 +20,12 @@ const PatternTable = (props) => {
     return(
     
         <div className='patterns_table_main'>
+
+              {is_loading_patterns && <div className='overlay'>
+                      <div className='loading_container'>Loading...</div>
+    
+
+                    </div>}
 
             <div className='peformance_table_header'>
                 <div className='ticker_column'>Result</div>

@@ -14,7 +14,12 @@ const PerformanceTable = (props) => {
         set_ticker_symbol,
         set_abcd_patterns,
         set_table,
-        filters
+        filters,
+        is_loading_patterns,
+        set_loading_patterns,
+        selected_peformance_index,
+        set_peformance_index,
+        set_selected_pattern
 
 
     } = props
@@ -52,22 +57,44 @@ const PerformanceTable = (props) => {
                 return(
                 <div 
                     key={key}
-                    onClick={()=>{
-                        
-                        const fetch = async () => {   
-                            set_ticker_symbol(ticker.ticker)
-                            const candles = await route.get_candles(ticker.ticker)
-                            set_candles(candles)
-                            set_selected_peformance(ticker.ticker)
+                    onClick={() => {
+                        const fetchData = async () => {
+                            try {
+                                set_loading_patterns(true);
+                                set_ticker_symbol(ticker.ticker);
+                                set_selected_peformance(ticker.ticker);
+                                set_peformance_index(key);
 
-                            const abcd_patterns = await route.get_abcd_candles(ticker.ticker,filters)
-                            set_abcd_patterns(abcd_patterns)
-                            set_table(abcd_patterns)          
-                        }
-                      
-                        fetch()
-                    }} 
+                                // Run both requests in parallel and return results
+                                const [candles, abcd_patterns] = await Promise.all([
+                                    route.get_candles(ticker.ticker),
+                                    route.get_abcd_candles(ticker.ticker, filters)
+                                ]);
+
+                                candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+
+                                return { candles, abcd_patterns };
+                            } catch (error) {
+                                console.error('Error fetching data:', error);
+                                return { candles: [], abcd_patterns: [] };
+                            } finally {
+                                set_loading_patterns(false);
+                            }
+                        };
+
+                        
+
+                        fetchData().then(({ candles, abcd_patterns }) => {
+                            // Set all state values at once
+                            console.log(candles.length)
+                            set_candles(candles);
+                            set_abcd_patterns(abcd_patterns);
+                            set_table(abcd_patterns);
+                            set_selected_pattern(abcd_patterns[0])
+                        });
+                    }}
                     
+                    // className={selected_peformance_index === key ? 'ticker_row_selected' : 'ticker_row'}>
                     className={selected_peformance === ticker.ticker ? 'ticker_row_selected' : 'ticker_row'}>
                     
                     

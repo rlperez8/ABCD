@@ -17,7 +17,16 @@ import PatternTable from './PatternTable.js';
 const App = () => {
 
   const chart_container = useRef(null)
-  const [selected_peformance, set_selected_peformance] = useState('AAON')
+
+  // Peformance
+  const [selected_peformance_index, set_peformance_index] = useState(0)
+
+  // Pattern
+  const [selected_pattern_index, set_selected_pattern_index] = useState(0)
+
+  const [is_loading, set_loading] = useState(false)
+  const [is_loading_patterns, set_loading_patterns] = useState(false)
+  const [selected_peformance, set_selected_peformance] = useState('')
   const [ticker_performance, set_ticker_peformance] = useState([])
   const [ab_candles, set_ab_candles] = useState([])
   const [abc_patterns, set_abc_patterns] = useState([])
@@ -64,8 +73,69 @@ const App = () => {
     } catch (error) {
       console.error("Error during fetch:", error);
   }}
-  const [selected_pattern_index, set_selected_pattern_index] = useState(1)
+  
   const [table, set_table] = useState([])
+
+  // Mount
+  useEffect(()=>{
+
+    
+    const inital_load_data = async () => {
+      try {
+
+        // Update filtered peformances
+        const filtered_peformances = await route.fetch_filtered_peformances(filters);
+        set_ticker_peformance(filtered_peformances)
+
+        // Update selected data if symbol is no longer in filtered peformances
+        const first_peformance_symbol = filtered_peformances[0].ticker
+        const has_symbol = filtered_peformances.some(item=>item.ticker===selected_peformance)
+
+        if(!has_symbol){
+
+              set_selected_peformance(first_peformance_symbol)
+
+              // Updated filtered abcd patterns
+              let filtered_patterns = await route.get_abcd_candles(first_peformance_symbol, filters)
+              filtered_patterns = filtered_patterns.map(item => {
+                const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
+
+                return {
+                  ...item,
+                  pattern_A_pivot_date: toISO(item.pattern_A_pivot_date),
+                };
+              });
+              set_abcd_patterns(filtered_patterns)
+              set_table(filtered_patterns)
+
+              // Update filtered_peformances[0] candles
+              let candles = await route.get_candles(first_peformance_symbol)
+              candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+              candles = candles.map(item => {
+                const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
+
+                return {
+                  ...item,
+                  candle_date: toISO(item.candle_date),
+                };
+              });
+              set_candles(candles)
+
+            
+              set_selected_pattern(filtered_patterns[0]);  
+              // // set_selected_pattern_index(0)
+
+            }
+
+            set_loading(false)
+
+      } catch (err) {
+        console.error('Error fetching candles:', err);
+      }
+    };
+    inital_load_data();
+  
+  }, []) 
 
   const get_abcd_of_selected_symbol = async (symbol) => {
     try {
@@ -118,31 +188,7 @@ const App = () => {
 
     }
   }, []);
-  // Format Candles To Canvas Dimensions
-  useEffect(()=>{
-
-      let new_candles = candles.reverse().map((item)=> ({
-          ...item,
-          date: item.candle_date,
-          high: item.candle_high,
-          open: Math.min(item.candle_open, item.candle_close),
-          close: Math.max(item.candle_open, item.candle_close),
-          low: item.candle_low,
-          prev_high : 0,
-          prev_height : 0,
-          prev_bottom : 0,
-          prev_low : 0,
-          current_high : 0,
-          current_height : 0,
-          current_bottom : 0,
-          current_low : 0,
-          color: item.candle_open > item.candle_close ? '#ef5350' : '#26a69a',
-
-      }))
-
-      set_formatted_candles(new_candles)
-
-  }, [candles])
+  
    
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -172,62 +218,78 @@ const App = () => {
   }, [ab_candles, selected_pattern_index]);
   
 
-  useEffect(()=>{
+  useEffect(() => {
+    const fetch_new_patterns = async () => {
+      try {
+        set_loading(true);
+
+        // Fetch performances
+        const filtered_peformances = await route.fetch_filtered_peformances(filters);
+
+        // Check if current selected peformance is in the new filtered peformances and if not then update it to the first peformance in the new peformances
+        const first_symbol = filtered_peformances[0]?.ticker;
+        const has_symbol = filtered_peformances.some(item => item.ticker === selected_peformance);
+        const target_symbol = has_symbol ? selected_peformance : first_symbol;
+
+        if (!target_symbol) return null;
 
     
-    const inital_load_data = async () => {
-      try {
-        // Get Candles
-        const candles = await route.get_candles(ticker_symbol);
+        // Fetch both patterns & candles in parallel
+        let [filtered_patterns, candles] = await Promise.all([
+          route.get_abcd_candles(target_symbol, filters),
+          route.get_candles(target_symbol)
+        ]);
+
+        // Update filtered_peformances[0] candles
+   
+        candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+        candles = candles.map(item => {
+          const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
+
+          return {
+            ...item,
+            candle_date: toISO(item.candle_date),
+          };
+        });
         set_candles(candles)
 
-        // Get Peformances
-        const filter = {
-          'bc_retracement_greater': '0', 
-          'bc_retracement_less': 5000, 
-          'cd_retracement_greater': 0, 
-          'cd_retracement_less': 5000, 
-          'ab_leg_greater': 0, 
-          'ab_leg_less': 5000, 
-          'bc_leg_greater': 0, 
-          'bc_leg_less': 5000, 
-          'cd_leg_greater': 0, 
-          'cd_leg_less': 5000
-        }
-        const peformances = await route.fetch_filtered_peformances(filter)
-        set_ticker_peformance(peformances)
 
-        // Get ABCD Patterns
-        // const abcd_patterns = await route.get_abcd_candles('AAON')
-        // set_abcd_patterns(abcd_patterns)
-        // set_table(abcd_patterns)
+
+
+        // Return everything together
+        return {
+          filtered_peformances,
+          filtered_patterns,
+          candles,
+          selected_symbol: target_symbol
+        };
+
       } catch (err) {
-        console.error('Error fetching candles:', err);
+        console.error("Error fetching:", err);
+        return null;
       }
     };
-    inital_load_data();
-  
-  }, []) 
 
+    const update_state = async () => {
+      const result = await fetch_new_patterns();
+      if (!result) return;
 
-  useEffect(()=>{
+      // Set all at once
+      set_ticker_peformance(result.filtered_peformances);
+      set_abcd_patterns(result.filtered_patterns);
+      set_table(result.filtered_patterns);
+      set_candles(result.candles);
+      set_formatted_candles(result.formatted_candles);
+      set_selected_peformance(result.selected_symbol);
+      set_selected_pattern(result.filtered_patterns[0]);
+      set_selected_pattern_index(0);
 
-    const fetch_new_patterns = async ()=>{
-      try {
-        console.log(filters)
-        const filter = await route.get_abcd_candles('AAON', filters)
-        console.log(filter)
-        set_abcd_patterns(filter)
-        set_table(filter)
-       } catch (err) {
-        console.error('Error fetching candles:', err);
-      }
+      set_loading(false);
+    };
 
-    }
-
-    fetch_new_patterns()
-  },[filters])
-
+    update_state();
+  }, [filters]);
+    
 
   return (
 
@@ -235,7 +297,7 @@ const App = () => {
 
         {true && <>
   
-          {
+          {/* {
             is_listing_status && (
               <div className='overlay'>
                 <div className='ticker_selection_container'>
@@ -314,27 +376,31 @@ const App = () => {
               </div>
 
             )
-          }
+          } */}
 
           <div className='main'>
 
+            
             <ChartMain
               abcd={abcd}
-            prices={prices}
-            retracement={retracement}
-            candles_={candles_}
-            formatted_candles={formatted_candles}
-            chart_height={chart_height}
-            Candle_Chart={Candle_Chart}
-            is_listing_status={is_listing_status}
-            set_is_listing_status={set_is_listing_status}
-            ticker_symbol={ticker_symbol}
-            set_canvas_dimensions={set_canvas_dimensions}
+              prices={prices}
+              retracement={retracement}
+              candles_={candles_}
+              formatted_candles={candles}
+              chart_height={chart_height}
+              Candle_Chart={Candle_Chart}
+              is_listing_status={is_listing_status}
+              set_is_listing_status={set_is_listing_status}
+              ticker_symbol={ticker_symbol}
+              set_canvas_dimensions={set_canvas_dimensions}
               selected_pattern={selected_pattern}
+              is_loading_patterns={is_loading_patterns}
               
             />
-
+            
             <div className='x'>
+
+          
 
              
 
@@ -344,7 +410,20 @@ const App = () => {
                 set_filters={set_filters}
                 fetch_filtered_peformances={route.fetch_filtered_peformances}
                 set_ticker_peformance={set_ticker_peformance}
+                is_loading={is_loading}
+                set_loading={set_loading}
+                
               />
+
+              <div className='tables'>
+
+                {is_loading && <div className='overlay'>
+                      <div className='loading_container'>Loading...</div>
+    
+
+                    </div>}
+
+                    
 
               <PerformanceTable
                 set_ticker_peformance={set_ticker_peformance}
@@ -357,6 +436,11 @@ const App = () => {
                 set_abcd_patterns={set_abcd_patterns}
                 set_table={set_table}   
                 filters={filters}
+                is_loading_patterns={is_loading_patterns}
+                set_loading_patterns={set_loading_patterns}
+                selected_peformance_index={selected_peformance_index}
+                set_peformance_index={set_peformance_index}
+                set_selected_pattern={set_selected_pattern}
               />
 
               <PatternTable
@@ -365,8 +449,10 @@ const App = () => {
                 set_selected_pattern={set_selected_pattern}
                 set_selected_pattern_index={set_selected_pattern_index}
                 abcd_patterns={abcd_patterns}
+                is_loading_patterns={is_loading_patterns}
               />
 
+                </div>
             </div>
             
             </div>
