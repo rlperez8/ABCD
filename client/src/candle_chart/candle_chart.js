@@ -521,9 +521,9 @@ export const Candle_Chart = (props) => {
             
             chart.candles(ctx);
             chart.prices(ctx_price, cp);
-            // chart.grid_X(ctx, canvas)
+            chart.grid_X(ctx, canvas)
             chart.grid_Y(ctx, canvas)
-            chart.pattern_center(ctx, canvas)
+            // chart.pattern_center(ctx, canvas)
 
             ctx_date.clearRect(0, 0, canvas_date.width, canvas_date.height);
             mouse.mouse_Y(canvas, ctx)
@@ -535,7 +535,7 @@ export const Candle_Chart = (props) => {
 
             is_abcd_pattern && abcd_.abcd(ctx, pattern_abcd, abcd)
             is_retracement && abcd_.retracement(ctx, pattern_abcd)
-            is_price_levels &&  abcd_.price_levels(ctx_price, ctx, canvas, pattern_abcd)
+            // is_price_levels &&  abcd_.price_levels(ctx_price, ctx, canvas, pattern_abcd)
 
         
        

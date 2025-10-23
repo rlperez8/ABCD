@@ -59,7 +59,7 @@ export const push_price_to_middle_screen = (candleChartRef,selected_pattern, siz
     candleChartRef.current.height.previousBaselineY = price_pixel_location;
 
     // Shift Baseline-Y to Center of Screen
-    const half_screen_height = candleChartRef.current.height.startingBaselineY / 4;
+    const half_screen_height = candleChartRef.current.height.startingBaselineY / 2.8;
     candleChartRef.current.height.currentBaselineY += half_screen_height;
     candleChartRef.current.height.previousBaselineY += half_screen_height;
 
@@ -192,9 +192,10 @@ export const reposition_candles = (candleChartRef, selected_pattern, selected_ca
     let x = false
     let size = 1
     while(x===false){
+    
         
-        let pattern_price_height = (parseFloat(selected_pattern.pattern_A_high) - parseFloat(selected_pattern['trade_stop_loss'])).toFixed(2)
-        let pattern_box_height = candleChartRef.current.canvas_height / 2
+        let pattern_price_height = (parseFloat(selected_pattern.pattern_A_high) - parseFloat(selected_pattern['trade_entered_price'])).toFixed(2)
+        let pattern_box_height = candleChartRef.current.canvas_height / 2.8
 
         const one_dollar_pixel_size = candleChartRef.current.price.current_pixels_per_price_unit / size;
         const price_pixel_location = pattern_price_height * one_dollar_pixel_size;
@@ -234,7 +235,7 @@ export const reposition_candles = (candleChartRef, selected_pattern, selected_ca
         candles.complete_width = chart.current_candle_width + chart.current_pixels_between_candles;
 
         let pattern_length = candles.complete_width * selected_pattern.pattern_ABCD_bar_length;
-        let pattern_box_width = (chart.canvas_width / 8) * 6;
+        let pattern_box_width = (chart.canvas_width / 2.8) * 1;
 
         if (pattern_length > pattern_box_width) {
 
@@ -253,8 +254,8 @@ export const reposition_candles = (candleChartRef, selected_pattern, selected_ca
         }
     }
 
-    candleChartRef.current.width.current_X_origin = -(candleChartRef.current.width.grid_width/8) - (candleChartRef.current.candles.complete_width * index_A) 
-    candleChartRef.current.width.prev_X_origin = -(candleChartRef.current.width.grid_width/8) - (candleChartRef.current.candles.complete_width * index_A) 
+    candleChartRef.current.width.current_X_origin = -(candleChartRef.current.width.grid_width/2.8) - (candleChartRef.current.candles.complete_width * index_A) 
+    candleChartRef.current.width.prev_X_origin = -(candleChartRef.current.width.grid_width/2.8) - (candleChartRef.current.candles.complete_width * index_A) 
     
     candleChartRef.current.selected_candle = parseFloat(selected_pattern.pattern_A_high)
     

@@ -48,26 +48,33 @@ const Table = (props) => {
 
         // Selected Row
         
-        const selected_row = rowIndex === hovered_row_index || rowIndex === selected_pattern_index ? 'truncate_active' : 'truncate';
+        const selected_row = rowIndex === hovered_row_index || rowIndex === selected_pattern_index ? 'ticker_row_selected' 
+                : rowIndex % 2 === 0
+                ? 'ticker_row_even'
+                : 'ticker_row_odd';
+
+             
+                        
+                        
 
 
         let cellContent = content;
 
-        if (columnIndex === 0 && content === 'Win') {
-            cellContent = <div className="first_column_box">{content}</div>;
+        // if (columnIndex === 0 && content === 'Win') {
+        //     cellContent = <div className="first_column_box">{content}</div>;
 
-        } else if (columnIndex === 0 && content === 'Lost') {
-            cellContent = <div className="lost_column_box">{content}</div>;
+        // } else if (columnIndex === 0 && content === 'Lost') {
+        //     cellContent = <div className="lost_column_box">{content}</div>;
         
-        } else if (columnIndex === 0) {
-            cellContent = <div className="open_column_box">Open</div>;
+        // } else if (columnIndex === 0) {
+        //     cellContent = <div className="open_column_box">Open</div>;
         
-        }else if (columnIndex === 5 && Number(content) > 0) {
-            cellContent = <div className="positive_pnl">${content}</div>;
+        // }else if (columnIndex === 5 && Number(content) > 0) {
+        //     cellContent = <div className="positive_pnl">${content}</div>;
 
-        }else if (columnIndex === 5 && Number(content) <= 0) {
-            cellContent = <div className="negative_pnl">${content}</div>;
-        }
+        // }else if (columnIndex === 5 && Number(content) <= 0) {
+        //     cellContent = <div className="negative_pnl">${content}</div>;
+        // }
 
         
 

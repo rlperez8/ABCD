@@ -259,48 +259,40 @@ export class Chart {
             wick_X -= this.candleChartRef.current.current_candle_width + this.candleChartRef.current.current_pixels_between_candles;
     })};
     pattern_center = (ctx, canvas) => {
-        // ctx.fillStyle = 'red';      // Fill color
-        // ctx.strokeStyle = 'red';  // Border color
-        // ctx.lineWidth = 2;
-
-        // const x = canvas.width / 8;
-        // const y = canvas.height / 4;
-        // const width = canvas.width / 1.3;
-        // const height = canvas.height / 2; 
-
-        // ctx.strokeRect(x, y, width, height);
-    }
-    _draw_candle = (item, candleChartRef, ctx, x) =>{
-    
-        // Convert Open and Close Price into Pixels
-        let candle_open_pixel = utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_open);
-        const candle_close_pixel = utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_close);
-    
-        // Get Candle Height
-        let candle_height = candle_open_pixel - candle_close_pixel;
-    
-        // Get Price Location on Canvas
-        candle_open_pixel = Math.floor(candleChartRef.current.height.currentBaselineY - candle_open_pixel);    
-    
-        // Get Candle Width
-        const width = -candleChartRef.current.current_candle_width;
-        
-        // let difference = item.close - item.open
-        // let color = 'green'
-        // if(difference < 0){
-        //     color = 'red'
-        // }
-        // Add Color to Candle
-        ctx.fillStyle = item.candle_close > item.candle_open ? '#26a69a' : '#ef5350';
-    
-        // Draw Candle
-        ctx.fillRect(x, candle_open_pixel, width, candle_height);
-    
-        // Add Border
-        ctx.strokeStyle = item.candle_close > item.candle_open ? '#26a69a' : '#ef5350';
+        ctx.fillStyle = 'red';      // Fill color
+        ctx.strokeStyle = 'red';  // Border color
         ctx.lineWidth = 2;
-    
+
+        const x = canvas.width / 2.8;
+        const y = canvas.height / 2.8;
+        const width = canvas.width / 2.8;
+        const height = canvas.height / 2.8; 
+
+        ctx.strokeRect(x, y, width, height);
     }
+    _draw_candle = (item, candleChartRef, ctx, x) => {
+            // Convert Open and Close Price into Pixels
+            let candle_open_pixel = utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_open);
+            const candle_close_pixel = utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_close);
+
+            // Get Candle Height
+            let candle_height = candle_open_pixel - candle_close_pixel;
+
+            // Get Price Location on Canvas
+            candle_open_pixel = Math.floor(candleChartRef.current.height.currentBaselineY - candle_open_pixel);    
+
+            // Get Candle Width
+            const width = -candleChartRef.current.current_candle_width;
+
+            // Set Border Color
+            ctx.strokeStyle = item.candle_close > item.candle_open ? '#008080' : '#bf4240';
+            ctx.lineWidth = 2;
+
+            // Draw Only the Outline (no fill)
+            ctx.strokeRect(x, candle_open_pixel, width, candle_height);
+
+            // Optional: draw wicks separately if needed
+        }
     _draw_wick = (item, candleChartRef, ctx, x) => {
     
         const yHigh = Math.floor(candleChartRef.current.height.currentBaselineY - utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_high));
@@ -365,12 +357,12 @@ export class ABCD {
         ctx.lineTo(c_x_loc, c_y_loc);
         ctx.lineTo(d_x_loc, d_y_loc);
         ctx.lineTo(exit_x_loc, exit_y_loc);
-        ctx.strokeStyle = 'gray';
+        ctx.strokeStyle = 'rgb(48, 48, 48);';
         ctx.lineWidth = 5;
         ctx.stroke();
 
             // --- Optional stroke on top ---
-        ctx.strokeStyle = 'orange';
+        ctx.strokeStyle = '#303030';
         ctx.lineWidth = 2;
 
         ctx.stroke();
@@ -395,9 +387,9 @@ export class ABCD {
         ctx.beginPath();
         ctx.moveTo(d_x_loc, d_y_loc);
         ctx.lineTo(shortened_x, shortened_y);
-        ctx.strokeStyle = abcd.result === 'Win' ? 'teal' : 'orange';
+        ctx.strokeStyle = abcd.result === 'Win' ? '#303030' : '#303030';
         ctx.lineWidth = 3;
-        ctx.shadowColor = abcd.result === 'Win' ? 'teal' : 'orange'; // match line color
+        ctx.shadowColor = abcd.result === 'Win' ? '#303030' : '#303030'; // match line color
         ctx.shadowBlur = 25
         ctx.stroke();
 

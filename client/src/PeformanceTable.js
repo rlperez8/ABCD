@@ -38,8 +38,12 @@ const PerformanceTable = (props) => {
             
 
     return(
-
+     <div className="margin_container">
         <div className='peformance_table_main'>
+
+            <div className='table_header_main'>Peformance</div>
+
+            <div className='table_body_main'>
 
 
             <div className='peformance_table_header'>
@@ -93,17 +97,22 @@ const PerformanceTable = (props) => {
                             set_selected_pattern(abcd_patterns[0])
                         });
                     }}
-                    
-                    // className={selected_peformance_index === key ? 'ticker_row_selected' : 'ticker_row'}>
-                    className={selected_peformance === ticker.ticker ? 'ticker_row_selected' : 'ticker_row'}>
+        
+                    className={
+                        selected_peformance === ticker.ticker
+                            ? 'ticker_row_selected'
+                            : key % 2 === 0
+                            ? 'ticker_row_even'
+                            : 'ticker_row_odd'
+                        }>
                     
                     
                     <div className='ticker_column_symbol'>{ticker.ticker}</div>
-                    <div className='ticker_column' >{ticker.win_pct}%</div>
-                    <div className='ticker_column'>{ticker.count_total}</div>
-                    <div className='ticker_column'>{ticker.count_won}</div>
-                    <div className='ticker_column'>{ticker.count_lost}</div>
-                    <div className='ticker_column'>{ticker.count_open}</div>
+                    <div className='ticker_cell' >{ticker.win_pct}%</div>
+                    <div className='ticker_cell'>{ticker.count_total}</div>
+                    <div className='ticker_cell'>{ticker.count_won}</div>
+                    <div className='ticker_cell'>{ticker.count_lost}</div>
+                    <div className='ticker_cell'>{ticker.count_open}</div>
 
                 </div>
 
@@ -114,11 +123,14 @@ const PerformanceTable = (props) => {
             })}
 
             </div>
+        
 
+            </div>
             
 
             
         </div>
+    </div>
     )
 }
 

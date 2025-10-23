@@ -295,116 +295,68 @@ const App = () => {
 
       <div className='App' >
 
-        {true && <>
+
   
-          {/* {
-            is_listing_status && (
-              <div className='overlay'>
-                <div className='ticker_selection_container'>
-                  <div className='select_ticker_header'>
-                    <div className='select_ticker_text'>Select Ticker</div>
-                    <div className='X' onClick={()=>{set_is_listing_status(false)}}>X</div>
-                  </div>
-                  
-                  <div className='input_container'>
-              
-                  <div className='search_img_container'>
-                    <img className='search_img' src={search} />
-                    
-                  </div>
-              
-                  <input className='input_box' 
-                    defaultValue={searchValue}
-                    onChange={(e)=>{
-                      
-                      get_listed_tickers(e.target.value, asset_type)
-                      setSearchValue(e.target.value)
-
-                  }}
-                  
-                  />
-                  <div className='search_img_container'>
-                    
-                  </div>
-                    
-              
-              </div>
-
-            <div className='select_type'>
-                {asset_types.map((type, index) => (
-                  <div className={asset_type===type ? 'type_selected' :'type'} key={index} 
-                  onClick={()=>{
-                    set_asset_type(type);
-                    get_listed_tickers(searchValue,type);
-                    
-                  }}
-                  >{type}</div>
-                ))}
-                            
-          
-            </div>
-
-      
-            <div className='select_ticker'>
-                <div className='symbol_status1'>Ticker</div>
-                <div className='symbol_status2'>Security</div>
-                <div className='symbol_status3'>Exchange</div>
-                <div className='symbol_status3'>Type</div>
-            </div>
-            <div className='ticker_container'>
-            {listing_status.map((item, index) => {
-              return (
-                <div className={item.symbol === ticker_symbol ? 'symbol_status_selected' : 'symbol_status'} key={index} onClick={()=>{
-                  route.get_candles(item.symbol); 
-                  set_is_listing_status(!is_listing_status);
-                  set_ticker_symbol(item.symbol);
-                  get_abcd_of_selected_symbol(item.symbol)
-                  
-                  }}>
-            
-                  <div className='symbol_status1'>{item.symbol}</div>
-                  <div className='symbol_status2'>{item.name}</div>
-                  <div className='symbol_status3'>{item.exchange}</div>
-                  <div className='symbol_status3'>{item.assetType}</div>
-                </div>
-              );
-          })}
-                        
-
-            </div>
-            </div>
-              </div>
-
-            )
-          } */}
-
           <div className='main'>
 
+            <div className='main_left'>
+
             
-            <ChartMain
-              abcd={abcd}
-              prices={prices}
-              retracement={retracement}
-              candles_={candles_}
-              formatted_candles={candles}
-              chart_height={chart_height}
-              Candle_Chart={Candle_Chart}
-              is_listing_status={is_listing_status}
-              set_is_listing_status={set_is_listing_status}
-              ticker_symbol={ticker_symbol}
-              set_canvas_dimensions={set_canvas_dimensions}
-              selected_pattern={selected_pattern}
-              is_loading_patterns={is_loading_patterns}
-              
-            />
-            
+              <ChartMain
+                abcd={abcd}
+                prices={prices}
+                retracement={retracement}
+                candles_={candles_}
+                formatted_candles={candles}
+                chart_height={chart_height}
+                Candle_Chart={Candle_Chart}
+                is_listing_status={is_listing_status}
+                set_is_listing_status={set_is_listing_status}
+                ticker_symbol={ticker_symbol}
+                set_canvas_dimensions={set_canvas_dimensions}
+                selected_pattern={selected_pattern}
+                is_loading_patterns={is_loading_patterns}
+                
+              />
+
+              {/* <div className='info_margin_container'>
+                <div className="pattern_info_container">
+
+                  <div className="xyz_header">Details</div>
+                  
+                  <div className="xyz">
+
+                    <div className="patteren_single">
+                          <div className='patteren_info_box_header'>A</div>
+                          <div className='patteren_info_box'>{selected_pattern?.pattern_B_pivot_date}</div>
+                    </div>
+                    <div className="patteren_single">
+                          <div className='patteren_info_box_header'>B</div>
+                          <div className='patteren_info_box'>{selected_pattern?.pattern_B_pivot_date}</div>
+                    </div>
+                    <div className="patteren_single">
+                          <div className='patteren_info_box_header'>C</div>
+                          <div className='patteren_info_box'>{selected_pattern?.pattern_C_pivot_date}</div>
+                    </div>
+                    <div className="patteren_single">
+                          <div className='patteren_info_box_header'>D</div>
+                          <div className='patteren_info_box'>{selected_pattern?.trade_entered_date}</div>
+                    </div>
+                    <div className="patteren_single">
+                          <div className='patteren_info_box_header'>Exit</div>
+                          <div className='patteren_info_box'>{selected_pattern?.trade_exited_date}</div>
+                    </div>
+                    
+                  </div>
+                  
+                 </div>
+              </div> */}
+           
+
+            </div>
+          
             <div className='x'>
 
-          
-
-             
-
-              
               <Filter
                 filters={filters}
                 set_filters={set_filters}
@@ -452,14 +404,10 @@ const App = () => {
                 is_loading_patterns={is_loading_patterns}
               />
 
-                </div>
+              </div>
             </div>
-            
-            </div>
-
-
-        </>}
-        
+          
+          </div>
 
         
 			</div>
