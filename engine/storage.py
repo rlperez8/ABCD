@@ -2500,7 +2500,7 @@ class ABCD(bt.Strategy):
                 print(self.datas[0].datetime.date(ago=0),self.data_close[0])
 
                 one+=1
-        printEachBarDate()
+        # printEachBarDate()
         
         if self.starting_line >= 3:
 

@@ -67,6 +67,7 @@ export const get_abcd_candles = async (symbol,filter) => {
       });
 
       const responseData = await res.json();
+      console.log(responseData.data)
     
       return responseData.data
 

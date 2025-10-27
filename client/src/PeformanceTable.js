@@ -1,6 +1,9 @@
 
 import * as route from './backend_routes.js';
-
+import settings from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/SETTINGS.png';
+import calendar from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/calendar2.png';
+import dropup from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/arrow_up.png';
+import dropdown from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/dropdown.png';
 import React, {useState} from 'react';
 const PerformanceTable = (props) => {
 
@@ -19,7 +22,8 @@ const PerformanceTable = (props) => {
         set_loading_patterns,
         selected_peformance_index,
         set_peformance_index,
-        set_selected_pattern
+        set_selected_pattern,
+        set_sorted_abcd_patterns
 
 
     } = props
@@ -35,18 +39,27 @@ const PerformanceTable = (props) => {
         set_ticker_peformance(sorted);
         set_win_sort_desc(!win_sort_desc);
     }
-            
+    
+    const [is_collapse, set_collapse] = useState(false)
 
     return(
-     <div className="margin_container">
-        <div className='peformance_table_main'>
 
-            <div className='table_header_main'>Peformance</div>
+        <div className={is_collapse ? 'patterns_table_main_expanded' : 'patterns_table_main' }>
 
-            <div className='table_body_main'>
+             <div className='table_header_main'>
+                            <div className='table_header_text'>Symbol Peformance</div>
+                            <div className='settings_icon' onClick={()=>{set_collapse(!is_collapse)}}>
+                           <img className='icon_img' src={is_collapse ? dropdown : dropup}/>
+                            </div>
+                        </div>
 
+             <div className='patterns_settings'>
+                <div className='peformance-date-icon'>
+                    <img className='' src={calendar}/>
+                </div>
+             </div>
 
-            <div className='peformance_table_header'>
+               <div className='peformance_table_header'>
                 <div className='ticker_column'>Symbol</div>
                 <div className='ticker_column' onClick={()=>{sort_by_win_pct()}}>Win Pct.</div>
                 <div className='ticker_column'>Total</div>
@@ -54,6 +67,11 @@ const PerformanceTable = (props) => {
                 <div className='ticker_column'>Lost</div>
                 <div className='ticker_column'>Open</div>
             </div>
+
+            <div className='table_body_main'>
+
+
+          
 
             <div className='peformance_table_body'>
                 {ticker_performance.map((ticker,key)=>{
@@ -89,11 +107,10 @@ const PerformanceTable = (props) => {
                         
 
                         fetchData().then(({ candles, abcd_patterns }) => {
-                            // Set all state values at once
-                            console.log(candles.length)
                             set_candles(candles);
                             set_abcd_patterns(abcd_patterns);
                             set_table(abcd_patterns);
+                            set_sorted_abcd_patterns(abcd_patterns)
                             set_selected_pattern(abcd_patterns[0])
                         });
                     }}
@@ -109,7 +126,7 @@ const PerformanceTable = (props) => {
                     
                     <div className='ticker_column_symbol'>{ticker.ticker}</div>
                     <div className='ticker_cell' >{ticker.win_pct}%</div>
-                    <div className='ticker_cell'>{ticker.count_total}</div>
+                    <div className='ticker_cell'>{ticker['count_total']}</div>
                     <div className='ticker_cell'>{ticker.count_won}</div>
                     <div className='ticker_cell'>{ticker.count_lost}</div>
                     <div className='ticker_cell'>{ticker.count_open}</div>
@@ -130,7 +147,7 @@ const PerformanceTable = (props) => {
 
             
         </div>
-    </div>
+
     )
 }
 

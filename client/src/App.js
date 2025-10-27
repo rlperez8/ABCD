@@ -12,6 +12,7 @@ import ChartMain from './candle_chart/chart_main';
 import * as route from './backend_routes.js';
 import PerformanceTable from './PeformanceTable.js';
 import PatternTable from './PatternTable.js';
+import Section from './Section.js';
 
 
 const App = () => {
@@ -30,7 +31,7 @@ const App = () => {
   const [ticker_performance, set_ticker_peformance] = useState([])
   const [ab_candles, set_ab_candles] = useState([])
   const [abc_patterns, set_abc_patterns] = useState([])
-  const [abcd_patterns, set_abcd_patterns] = useState([])
+  
   const [selected_pattern, set_selected_pattern] = useState()
   const [candles, set_candles] = useState([])
   let [chart_height, set_chart_height] = useState(0)
@@ -73,8 +74,13 @@ const App = () => {
     } catch (error) {
       console.error("Error during fetch:", error);
   }}
-  
+
+
+  const [abcd_patterns, set_abcd_patterns] = useState([])
   const [table, set_table] = useState([])
+  const [sorted_abcd_patterns, set_sorted_abcd_patterns] = useState()
+  
+  
 
   // Mount
   useEffect(()=>{
@@ -107,6 +113,7 @@ const App = () => {
               });
               set_abcd_patterns(filtered_patterns)
               set_table(filtered_patterns)
+              set_sorted_abcd_patterns(filtered_patterns)
 
               // Update filtered_peformances[0] candles
               let candles = await route.get_candles(first_peformance_symbol)
@@ -121,13 +128,15 @@ const App = () => {
               });
               set_candles(candles)
 
+              const candleDates = Object.values(candles).map(c => c.candle_date);
+          
             
               set_selected_pattern(filtered_patterns[0]);  
               // // set_selected_pattern_index(0)
 
-            }
+        }
 
-            set_loading(false)
+        set_loading(false)
 
       } catch (err) {
         console.error('Error fetching candles:', err);
@@ -278,6 +287,7 @@ const App = () => {
       set_ticker_peformance(result.filtered_peformances);
       set_abcd_patterns(result.filtered_patterns);
       set_table(result.filtered_patterns);
+      set_sorted_abcd_patterns(result.filtered_patterns)
       set_candles(result.candles);
       set_formatted_candles(result.formatted_candles);
       set_selected_peformance(result.selected_symbol);
@@ -289,7 +299,17 @@ const App = () => {
 
     update_state();
   }, [filters]);
+  
+  // Pattern Data Sorting
+  const sort_patterns = (result) => {
     
+    const wonRows = table.filter(row => row.trade_result === result);
+    set_sorted_abcd_patterns(wonRows)
+    // set_table(wonRows)
+    // set_abcd_patterns(wonRows)
+
+  }
+  
 
   return (
 
@@ -299,62 +319,8 @@ const App = () => {
   
           <div className='main'>
 
-            <div className='main_left'>
 
-            
-              <ChartMain
-                abcd={abcd}
-                prices={prices}
-                retracement={retracement}
-                candles_={candles_}
-                formatted_candles={candles}
-                chart_height={chart_height}
-                Candle_Chart={Candle_Chart}
-                is_listing_status={is_listing_status}
-                set_is_listing_status={set_is_listing_status}
-                ticker_symbol={ticker_symbol}
-                set_canvas_dimensions={set_canvas_dimensions}
-                selected_pattern={selected_pattern}
-                is_loading_patterns={is_loading_patterns}
-                
-              />
 
-              {/* <div className='info_margin_container'>
-                <div className="pattern_info_container">
-
-                  <div className="xyz_header">Details</div>
-                  
-                  <div className="xyz">
-
-                    <div className="patteren_single">
-                          <div className='patteren_info_box_header'>A</div>
-                          <div className='patteren_info_box'>{selected_pattern?.pattern_B_pivot_date}</div>
-                    </div>
-                    <div className="patteren_single">
-                          <div className='patteren_info_box_header'>B</div>
-                          <div className='patteren_info_box'>{selected_pattern?.pattern_B_pivot_date}</div>
-                    </div>
-                    <div className="patteren_single">
-                          <div className='patteren_info_box_header'>C</div>
-                          <div className='patteren_info_box'>{selected_pattern?.pattern_C_pivot_date}</div>
-                    </div>
-                    <div className="patteren_single">
-                          <div className='patteren_info_box_header'>D</div>
-                          <div className='patteren_info_box'>{selected_pattern?.trade_entered_date}</div>
-                    </div>
-                    <div className="patteren_single">
-                          <div className='patteren_info_box_header'>Exit</div>
-                          <div className='patteren_info_box'>{selected_pattern?.trade_exited_date}</div>
-                    </div>
-                    
-                  </div>
-                  
-                 </div>
-              </div> */}
-           
-
-            </div>
-          
             <div className='x'>
 
               <Filter
@@ -367,7 +333,7 @@ const App = () => {
                 
               />
 
-              <div className='tables'>
+           
 
                 {is_loading && <div className='overlay'>
                       <div className='loading_container'>Loading...</div>
@@ -393,6 +359,7 @@ const App = () => {
                 selected_peformance_index={selected_peformance_index}
                 set_peformance_index={set_peformance_index}
                 set_selected_pattern={set_selected_pattern}
+                set_sorted_abcd_patterns={set_sorted_abcd_patterns}
               />
 
               <PatternTable
@@ -400,12 +367,44 @@ const App = () => {
                 selected_pattern_index={selected_pattern_index}
                 set_selected_pattern={set_selected_pattern}
                 set_selected_pattern_index={set_selected_pattern_index}
-                abcd_patterns={abcd_patterns}
+                abcd_patterns={table}
                 is_loading_patterns={is_loading_patterns}
+                sort_patterns={sort_patterns}
+                set_sorted_abcd_patterns={set_sorted_abcd_patterns}
+                sorted_abcd_patterns={sorted_abcd_patterns}
+              />
+              
+              <Section/>
+              </div>
+
+              
+         
+
+            <div className='main_left'>
+
+            
+              <ChartMain
+                abcd={abcd}
+                prices={prices}
+                retracement={retracement}
+                candles_={candles_}
+                formatted_candles={candles}
+                chart_height={chart_height}
+                Candle_Chart={Candle_Chart}
+                is_listing_status={is_listing_status}
+                set_is_listing_status={set_is_listing_status}
+                ticker_symbol={ticker_symbol}
+                set_canvas_dimensions={set_canvas_dimensions}
+                selected_pattern={selected_pattern}
+                is_loading_patterns={is_loading_patterns}
+                
               />
 
-              </div>
+           
+
             </div>
+          
+            
           
           </div>
 

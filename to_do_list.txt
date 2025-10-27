@@ -1,0 +1,3 @@
+Look at ACLX pivot A date 8-1-2022. Check if a C pivot can be part of a B.
+
+Check for duplicate patterns in a symbol

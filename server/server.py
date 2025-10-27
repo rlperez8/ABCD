@@ -264,7 +264,8 @@ def filtered_patterns():
 
         df = pd.read_sql_query(query, engine, params=params)
         df = df.replace({np.nan: None})
-        print(df)
+        print(df['pattern_A_pivot_date'])
+        df['pattern_A_pivot_date'] = df['pattern_A_pivot_date'].astype(str)
 
         return jsonify({
             "status": "success",

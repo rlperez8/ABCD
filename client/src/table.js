@@ -35,7 +35,8 @@ const Table = (props) => {
 
     const [hovered_row_index, set_hovered_index] = useState(0)
 
-    const columns = ['trade_result', 'trade_entered_date','trade_entered_price','trade_exited_price','trade_pnl','trade_return_percentage','pattern_ABCD_bar_length']
+    // const columns = ['trade_result', 'trade_entered_date','trade_entered_price','trade_exited_price','trade_pnl','trade_return_percentage','pattern_ABCD_bar_length']
+    const columns = ['trade_result', 'trade_entered_date','pattern_A_pivot_date','pattern_B_pivot_date','pattern_C_pivot_date','trade_entered_date','trade_exited_date']
 
     const CellComponent = ({ columnIndex, rowIndex, style, table }) => {
      
@@ -60,21 +61,21 @@ const Table = (props) => {
 
         let cellContent = content;
 
-        // if (columnIndex === 0 && content === 'Win') {
-        //     cellContent = <div className="first_column_box">{content}</div>;
+        if (columnIndex === 0 && content === 'Win') {
+            cellContent = <div className="first_column_box">{content}</div>;
 
-        // } else if (columnIndex === 0 && content === 'Lost') {
-        //     cellContent = <div className="lost_column_box">{content}</div>;
+        } else if (columnIndex === 0 && content === 'Lost') {
+            cellContent = <div className="lost_column_box">{content}</div>;
         
-        // } else if (columnIndex === 0) {
-        //     cellContent = <div className="open_column_box">Open</div>;
+        } else if (columnIndex === 0) {
+            cellContent = <div className="open_column_box">Open</div>;
         
-        // }else if (columnIndex === 5 && Number(content) > 0) {
-        //     cellContent = <div className="positive_pnl">${content}</div>;
+        }else if (columnIndex === 5 && Number(content) > 0) {
+            cellContent = <div className="positive_pnl">${content}</div>;
 
-        // }else if (columnIndex === 5 && Number(content) <= 0) {
-        //     cellContent = <div className="negative_pnl">${content}</div>;
-        // }
+        }else if (columnIndex === 5 && Number(content) <= 0) {
+            cellContent = <div className="negative_pnl">${content}</div>;
+        }
 
         
 

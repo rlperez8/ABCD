@@ -37,18 +37,24 @@ def main():
     db = DataBase()
 
     # # Get Tickers
-    # tickers = alpha.get_listing_status()['symbol'].to_list()[61:100]
+    tickers = alpha.get_listing_status()['symbol'].to_list()[105:]
+    # print(tickers)
 
-    # # Load Candles
-    # for ticker in tickers:
-    #     alpha.load_single_symbol_candle_data('full', ticker)
+    # # # Load Candles
+    for ticker in tickers:
+        try:
+            alpha.load_single_symbol_candle_data('full', ticker)
+            run_strategy(ticker)
+            print('Scanning ',ticker)
+        except: 
+            pass
 
 
-    # Pull Loaded Candle Tickers
-    my_tickers = db.get_distinct_symbols('candles','symbol')['symbol'].to_list()[70:100]
-    # Run Strategy
-    for symbol in my_tickers:
-        run_strategy(symbol)
+    # # Pull Loaded Candle Tickers
+    # my_tickers = db.get_distinct_symbols('candles','symbol')['symbol'].to_list()[70:100]
+    # # Run Strategy
+    # for symbol in my_tickers:
+    #     run_strategy(symbol)
 
 
 
