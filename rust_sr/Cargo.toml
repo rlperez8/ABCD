@@ -1,0 +1,8 @@
+[package]
+name = "rust_sr"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mysql = "26.0"
+chrono = "0.4"

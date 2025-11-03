@@ -7,52 +7,32 @@ import * as utilites from './utilities.js'
 export const Candle_Chart = (props) => {
 
     const {
-		selected_candles,
-        set_is_listing_status,
-        is_listing_status,
-        ticker_symbol,
-        set_canvas_dimensions,
-        selected_abcd,
-        selected_ab,
-        selected_pattern,
+		chart_data,
         is_price_levels,
         is_retracement,
         is_abcd_pattern
 
 	} = props
 
-    
-    
     const canvas_dates = useRef()
     const canvas_price = useRef()
     const canvas_chart = useRef()
-    const [candle_high, set_candle_high] = useState(0)
-    const [candle_close, set_candle_close] = useState(0)
-    const [candle_open, set_candle_open] = useState(0)
-    const [candle_low, set_candle_low] = useState(0)
-    const [candle_color, set_candle_color] = useState('')
+
+    const [hovered_candle, set_hovered_candle] = useState({
+        high: 0,
+        close: 0,
+        open: 0,
+        low: 0,
+        color: 'white'
+    })
+
     let mouse = null
     let chart = null
     let abcd_ = null
-    let mouseEvents = null
 
     const current_hovered_candle_index = useRef(0)
     const candle_width = useRef(10)
-    let [abcd, set_abcd] = useState({
-        a: 0,
-        b: 0,
-        c: 0,
-        d: 0,
-        a_price: 0,
-        b_price: 0,
-        c_price: 0,
-        d_price: 0,
-        x_date: 0,
-        x_price: 0,
-        exit_price: 0,
-        exit_date: 0,
-        result: 0
-    })
+
     let [pattern_abcd, set_pattern_abcd] = useState({
 
     })
@@ -66,7 +46,6 @@ export const Candle_Chart = (props) => {
             if (!canvas_chart.current || !canvas_price.current) return;
 
 
-                
                 const canvas = canvas_chart.current;
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return;
@@ -146,9 +125,9 @@ export const Candle_Chart = (props) => {
                             total: 0
                         },
 
-                        candles: selected_candles,
-                        starting_candle_Y: selected_candles[0]?.open * (canvas.height / PRICE_UNIT_DIVISOR),
-                        complete_width: selected_pattern?.pattern_B_end_date
+                        candles: chart_data.candles,
+                        starting_candle_Y: chart_data.candles[0]?.open * (canvas.height / PRICE_UNIT_DIVISOR),
+                        complete_width: chart_data.abcd_pattern?.pattern_B_end_date
                     },
                     price: {
                         unit: {
@@ -202,7 +181,7 @@ export const Candle_Chart = (props) => {
                             previous: canvas.width / 2,
                             
                         },
-                        length: selected_pattern?.pattern_AB_bar_duration
+                        length: chart_data.abcd_pattern?.pattern_AB_bar_duration
                     },
              
                     unit_amount: 0,
@@ -218,8 +197,8 @@ export const Candle_Chart = (props) => {
 
                 // Set Canvas Height to the Height of the Parent Div Container.
                 candleChartRef.current.height.startingBaselineY = canvas.offsetHeight
-                candleChartRef.current.candles.candles = selected_candles
-                candleChartRef.current.candles.starting_candle_Y = selected_candles[0]?.candle_open * (canvas.height  / 10)   
+                candleChartRef.current.candles.candles = chart_data.candles
+                candleChartRef.current.candles.starting_candle_Y = chart_data.candles[0]?.candle_open * (canvas.height  / 10)   
                 candleChartRef.current.height.current_Y_OffSet =  candleChartRef.current.candles.starting_candle_Y - (candleChartRef.current.height.startingBaselineY / 2)
                 candleChartRef.current.height.prev_Y_OffSet =  candleChartRef.current.candles.starting_candle_Y - (candleChartRef.current.height.startingBaselineY / 2)
                 candleChartRef.current.height.currentBaselineY = candleChartRef.current.height.startingBaselineY + candleChartRef.current.height.current_Y_OffSet
@@ -235,9 +214,9 @@ export const Candle_Chart = (props) => {
                 candleChartRef.current.price.current_price_unit_pixel_size = canvas.offsetHeight / 10
                 candleChartRef.current.price.prev_pixels_per_price_unit = canvas.offsetHeight/ 10
                 candleChartRef.current.price.current_pixels_per_price_unit = canvas.offsetHeight / 10
-                candleChartRef.current.price.current_mid_price = selected_candles[0]?.candle_open 
-                candleChartRef.current.price.prev_mid_price = selected_candles[0]?.candle_open
-                candleChartRef.current.price.static_mid = selected_candles[0]?.candle_open 
+                candleChartRef.current.price.current_mid_price = chart_data.candles[0]?.candle_open 
+                candleChartRef.current.price.prev_mid_price = chart_data.candles[0]?.candle_open
+                candleChartRef.current.price.static_mid = chart_data.candles[0]?.candle_open 
                 
         
                 // ====== X-Origin
@@ -262,43 +241,29 @@ export const Candle_Chart = (props) => {
                 candleChartRef.current.x_grid_width = full_width * 10
                 candleChartRef.current.grid_size_count = 0
 
-                candleChartRef.current.selected_candle = selected_candles[0]?.candle_open 
-                resize.reposition_candles(candleChartRef, selected_pattern, selected_candles, set_pattern_abcd)
+                candleChartRef.current.selected_candle = chart_data.candles[0]?.candle_open 
+                resize.reposition_candles(candleChartRef, chart_data.abcd_pattern)
 
-                
-
- 
-                set_canvas_dimensions((prev)=> ({
-                    ...prev,
-                    chart_height: canvas.height,
-                    price_height: canvas_.height,
-                    date_height: canvas_date.height
-                }))
-                
         
         };
         // Run on mount
         
-        if (!selected_candles || !selected_pattern) return;
+        if (!chart_data.candles || !chart_data.abcd_pattern) return;
         resizeCanvas()
-
-        
-
-        
-      
+  
         // Re-run on window resize
         window.addEventListener('resize', resizeCanvas);
       
         return () => {
           window.removeEventListener('resize', resizeCanvas);
         };
-    }, [selected_candles]);
+    }, [chart_data]);
    
     // ===== Pattern Highlighter
     useEffect(()=>{
 
 
-        if (!selected_candles || !selected_pattern) return;
+        if (!chart_data.candles || !chart_data.abcd_pattern) return;
 
         function findIndexByDate(candles, patternDate) {
                 return candles.findIndex(obj => {
@@ -310,23 +275,23 @@ export const Candle_Chart = (props) => {
                 }) + 1; // add 1 directly here
                 }
 
-        let matchIndex = findIndexByDate(selected_candles, selected_pattern?.pattern_A_start_date);
-        // let matchIndex = selected_candles.findIndex(obj => obj.date === selected_pattern?.pattern_A_start_date);
+        let matchIndex = findIndexByDate(chart_data.candles, chart_data.abcd_pattern?.pattern_A_start_date);
+        // let matchIndex = chart_data.candles.findIndex(obj => obj.date === chart_data.abcd_pattern?.pattern_A_start_date);
         // matchIndex = matchIndex + 1
         let y = candleChartRef.current.candles.complete_width * matchIndex
 
-        candleChartRef.current.pattern.length = selected_pattern?.pattern_ABCD_bar_length
+        candleChartRef.current.pattern.length = chart_data.abcd_pattern?.pattern_ABCD_bar_length
         candleChartRef.current.pattern.highlighter.x_orgin = -(candleChartRef.current.width.current_X_origin + y)
         candleChartRef.current.pattern.highlighter.previous = -(candleChartRef.current.width.current_X_origin + y)
 
 
 
-    },[selected_pattern])
+    },[chart_data])
     
     // ===== Canvas Move
     useEffect(() => {
         
-         if (!selected_candles || !selected_pattern) return;
+         if (!chart_data.candles || !chart_data.abcd_pattern) return;
 
         if (!canvas_chart.current) return;
         const { canvas, ctx } = CandleChartTools.reset_candle_canvas(canvas_chart);
@@ -432,7 +397,7 @@ export const Candle_Chart = (props) => {
                 candleChartRef.current.width.prev_X_origin -= offset
 
                 // Adjust Pattern Highlight Position
-                let matchIndex = selected_candles.findIndex(obj => obj.date === selected_pattern?.pattern_A_start_date);
+                let matchIndex = chart_data.candles.findIndex(obj => obj.date === chart_data.abcd_pattern?.pattern_A_start_date);
                 matchIndex = matchIndex + 1
                 let diff = current_hovered_candle_index.current - (matchIndex+1)
                 let X = 2 * diff
@@ -475,7 +440,7 @@ export const Candle_Chart = (props) => {
         
 
                     // Adjust Pattern Highlight Position
-                    let matchIndex = selected_candles.findIndex(obj => obj.date === selected_pattern?.pattern_A_start_date);
+                    let matchIndex = chart_data.candles.findIndex(obj => obj.date === chart_data.abcd_pattern?.pattern_A_start_date);
                     matchIndex = matchIndex + 1
                     let diff = current_hovered_candle_index.current - (matchIndex+1)
                     let X = 2 * diff
@@ -513,7 +478,7 @@ export const Candle_Chart = (props) => {
         }
         
         const draw = () => {
-
+     
            
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.beginPath();
@@ -527,29 +492,44 @@ export const Candle_Chart = (props) => {
 
             ctx_date.clearRect(0, 0, canvas_date.width, canvas_date.height);
             mouse.mouse_Y(canvas, ctx)
-            mouse.mouse_X(canvas, ctx, set_candle_high, set_candle_close, set_candle_open, set_candle_low, current_hovered_candle_index, set_candle_color)
+            mouse.mouse_X(canvas, ctx, current_hovered_candle_index, set_hovered_candle)
             mouse.price_background(canvas, ctx_price)
             mouse.mouse_price(cp, ctx_price)
             mouse.date_background(ctx_date, candle_width, canvas_date)
             mouse.mouse_date(canvas_date, ctx_date)
 
-            is_abcd_pattern && abcd_.abcd(ctx, pattern_abcd, abcd)
-            is_retracement && abcd_.retracement(ctx, pattern_abcd)
-            // is_price_levels &&  abcd_.price_levels(ctx_price, ctx, canvas, pattern_abcd)
+            is_abcd_pattern && abcd_.abcd(ctx, chart_data.abcd_pattern)
+            is_retracement && abcd_.retracement(ctx, chart_data.abcd_pattern)
+            abcd_.price_levels(ctx_price, ctx, canvas, chart_data.abcd_pattern)
+
+
+          const snr_lines = (canvas, ctx, chart_data) => {
+
+                console.log(chart_data.snr_lines[0].price)
+                const y_stop_loss = candleChartRef.current.height.currentBaselineY - (chart_data.snr_lines[0].price  * (candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.unit_amount))
+                ctx.strokeStyle = 'orange';
+                ctx.setLineDash([5, 5]); 
+
+                ctx.moveTo(0, y_stop_loss);              
+                ctx.lineTo(canvas.width, y_stop_loss); 
+
+
+                ctx.stroke();
+                ctx.setLineDash([]); // reset dash style if needed
+            }
+            snr_lines(canvas, ctx,  chart_data);
 
         
        
-            // CandleChartTools.highlight_selected_pattern(candleChartRef, ctx, canvas)
+            // CandleChartTools.highlight_chart_data.abcd_pattern(candleChartRef, ctx, canvas)
             // CandleChartTools.display_mid_point(canvas, ctx, ctx_price, candleChartRef)
 
             animationFrameId = null;
         };
         
         canvas.addEventListener('mousemove', handleMouseMove);
-
         canvas.addEventListener('mouseup', handleMouseUpPrices);
         canvas.addEventListener('mousedown', handleMouseDownPrices);
-
         canvas.addEventListener('resize', handleResize);
         canvas.addEventListener('wheel', candle_width_zoom)
         cp.addEventListener('mouseup', handleMouseUpPrices);
@@ -576,52 +556,15 @@ export const Candle_Chart = (props) => {
             cp.removeEventListener('wheel', candle_height_zoom)
     
         };
-    }, [selected_candles, abcd, selected_pattern, pattern_abcd, is_price_levels, is_retracement, is_abcd_pattern]);
+    }, [chart_data, pattern_abcd, is_price_levels, is_retracement, is_abcd_pattern]);
 
-    // ===== Format Pattern
+    // // ===== Format Pattern
     useEffect(()=>{
-        // if(selected_abcd){
 
-        //     const get_formatted_date = (candle) => {
-        //         const date = new Date(candle.date);
-        //         return date.toISOString().split("T")[0];
-        //     }
-            
-        //     set_abcd(prev=> ({
-        //         ...prev,
-        //         a: get_formatted_date(selected_abcd['pattern_A_pivot_date']) + 1,
-        //         b: get_formatted_date(selected_abcd['pattern_B_pivot_date'])  + 1,
-        //         c: get_formatted_date(selected_abcd['pattern_C_pivot_date'])  + 1,
-        //         d: get_formatted_date(selected_abcd['trade_entered_date'])  + 1,
-        //         exit_date: get_formatted_date(selected_abcd['trade_exited_date']) + 1,
-        //         x_date: get_formatted_date(selected_abcd['x_pivot_date']) + 1,
-        //         x_price: parseFloat(selected_abcd['x_pivot_price']),
-        //         a_price: parseFloat(selected_abcd['pivot_A_price']),
-        //         b_price: parseFloat(selected_abcd['pivot_B_price']),
-        //         c_price: parseFloat(selected_abcd['pivot_C_price']),
-        //         d_price: parseFloat(selected_abcd['trade_entered_price']),
-        //         stop_loss: parseFloat(selected_abcd['trade_stop_loss']),
-        //         take_profit: parseFloat(selected_abcd['trade_exited_price']),
-        //         entered_price: parseFloat(selected_abcd['trade_entered_price']),
-        //         ab_price_length: parseFloat(selected_abcd['ab_price_length']),
-        //         exit_price: parseFloat(selected_abcd['trade_exited_price']),
-        //         result: selected_abcd['trade_result']
-        //     }))
-            
-
-            
-
-
-        // }
-
-        if(selected_pattern){
-
-            resize.reposition_candles(candleChartRef, selected_pattern, selected_candles, set_pattern_abcd)
-
-
-            
+        if(chart_data.abcd_pattern){
+            resize.reposition_candles(candleChartRef, chart_data.abcd_pattern)
         }
-    },[selected_pattern])
+    },[chart_data])
 
 
 
@@ -673,8 +616,7 @@ export const Candle_Chart = (props) => {
       
     };
 
-
-
+    
     return(
         <div className='candle_chart_container'>
          
@@ -683,22 +625,30 @@ export const Candle_Chart = (props) => {
 
                     <div className='header-bar'>
     
-                        <div className='header_slot' onClick={()=>{set_is_listing_status(!is_listing_status)}}>{ticker_symbol}</div>
+                        <div className='header_slot' >{chart_data?.abcd_pattern.symbol}</div>
                             <div className='header_slot'>
                                 <div className='header_one'>H</div>
-                                <div className='header_two' style={{color: candle_color}}>{candle_high}</div>
+                                <div className='header_two' style={{color: hovered_candle.color}}>
+                                    {hovered_candle.high}
+                                </div>
                             </div>
                             <div className='header_slot'>
                                 <div className='header_one'>C</div>
-                                <div className='header_two' style={{color: candle_color}}>{candle_close}</div>
+                               <div className='header_two' style={{color: hovered_candle.color}}>
+                                    {hovered_candle.close}
+                                </div>
                             </div>
                             <div className='header_slot'>
                                 <div className='header_one'>O</div>
-                                <div className='header_two' style={{color: candle_color}}>{candle_open}</div>
+                                <div className='header_two' style={{color: hovered_candle.color}}>
+                                    {hovered_candle.open}
+                                </div>
                             </div>
                             <div className='header_slot'>
                                 <div className='header_one'>L</div>
-                                <div className='header_two' style={{color: candle_color}}>{candle_low}</div>
+                                <div className='header_two' style={{color: hovered_candle.color}}>
+                                    {hovered_candle.low}
+                                </div>
                             </div>
                     </div>
     

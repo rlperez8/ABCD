@@ -105,6 +105,7 @@ const PatternTable = (props) => {
 
             <div className='table_header_main'>
                 <div className='table_header_text'>Patterns</div>
+                 <div className='settings_icon'># {sorted_abcd_patterns?.length}</div>
                 <div className='settings_icon' onClick={()=>{set_collapse(!is_collapse)}}>
                     <img className='icon_img' src={is_collapse ? dropdown : dropup}/>
                 </div>
@@ -186,7 +187,6 @@ const PatternTable = (props) => {
                   <div className='peformance_table_header'>
                     <div className='ticker_column' >Result</div>
                     <div className='ticker_column'>Enter Date.</div>
-        
                     <div className='ticker_column'>Enter Price</div>
                     <div className='ticker_column'>Exit Price</div>
                     <div className='ticker_column'>PNL</div>

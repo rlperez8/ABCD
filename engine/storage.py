@@ -363,9 +363,14 @@ class AlphaVantage:
                 '4. close': 'close',
                 '5. volume': 'volume'
             })
+
+
+        
+        
+
+        return df
+       
             
-            print(df)
-            DataBase().insert_data(df, 'candles')
 
     def get_all_symbol_candle_data_batch(self, output_size, tickers, max_workers=5):
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -469,7 +474,7 @@ class Backtrader:
         data = bt.feeds.YahooFinanceCSVData(
             dataname=datapath,
             fromdate=datetime.datetime(int(startYear),int(startMonth), int(startDays)),
-            todate=datetime.datetime(int(endingYear), int(endingMonth), int(endingDays)),
+            todate=datetime.datetime(int(endingYear), int(endingMonth), int(endingDays)) + datetime.timedelta(days=1),
             adjclose=False)
         
         # with open(datapath, 'r') as f:
@@ -614,7 +619,7 @@ class StrategyTools:
         for each in abcd_patterns:
        
             abcd = {
-                # 'symbol':stockName,
+                'id': uuid.uuid4(),
                 'pattern_A_start_date': each.pattern_A_start_date,
                 'pattern_A_pivot_date': each.pattern_A_pivot_date,
                 'pattern_A_end_date': each.pattern_A_end_date,
@@ -685,7 +690,14 @@ class StrategyTools:
                 'valid': each.valid,
                 'x_pivot_price': each.x_pivot_price,
                 'x_pivot_date': each.x_pivot_date,
-                'd_x_retracement': each.d_x_retracement
+                'd_x_retracement': each.d_x_retracement,
+                'today_price': each.today_price,
+                'yesterday_price': each.yesterday_price,
+                'today_volume': each.today_volume,
+                'price_change': each.price_change,
+                'price_change_pct': each.price_change_pct,
+                'unrealized_pnl': each.unrealized_pnl,
+                'unrealized_pnl_pct': each.unrealized_pnl_pct
             }
             all.append(abcd)
         df = pd.DataFrame(all)
@@ -859,17 +871,28 @@ class StrategyTools:
             
         return i
 
-    def check_bar_length(self, date, start_date):
+    def check_bar_length(self, date, start_date, pattern_ABC):
 
         try: 
             duration = 0
             while date(ago=-duration) >= start_date:
                 duration +=1
+             
             return duration
         
         except Exception as e:
-            print(f'check_bar_length {e}')
-
+            # print(type(pattern_ABC))
+            # print(dir(pattern_ABC))
+            for attr in dir(pattern_ABC):
+            # Skip built-in attributes
+                if not attr.startswith("__"):
+                    value = getattr(pattern_ABC, attr)
+                    print(f"{attr}: {value}")
+            
+          
+            print(f'check_bar_length {e}, {duration},{date(ago=0)}, {start_date}', type(start_date))
+            sys.exit()
+    
     def setDateTestingCanStart(self, counter, dateTracker, length, date):
   
         if counter == 0:
@@ -2226,9 +2249,9 @@ class Core:
                 ab_length = candle_A_top - candle_B_bot
                 bc_length = candle_C_top - candle_B_bot
                 cd_length = candle_C_top - candle_D_bot
-
-                c_to_d_bar_length = StrategyTools().check_bar_length(date, pattern_ABC.pattern_C_pivot_date) - 1
-                abcd_bar_length = StrategyTools().check_bar_length(date, pattern_ABC.pattern_A_start_date)
+                
+                c_to_d_bar_length = StrategyTools().check_bar_length(date, pattern_ABC.pattern_C_pivot_date, pattern_ABC) - 1
+                abcd_bar_length = StrategyTools().check_bar_length(date, pattern_ABC.pattern_A_start_date, pattern_ABC)
 
                 # C high and D low
                 # c_position = D().get_c_position(market, c_to_d_bar_length, pattern_ABC, pattern_ABC.pattern_C_high, pattern_ABC.pattern_C)
@@ -2334,13 +2357,12 @@ class Core:
         except Exception as e:
             print(f'check_for_pivot_D {e}')
 
-    def enter_trade(self,pattern_abcd, date, volume, market,data_low, data_high, rrr):
+    def enter_trade(self,pattern_abcd, date, volume, market,data_low, data_high, rrr, data_close):
         
         try:
                 
             for abcdID, abcd in enumerate(pattern_abcd):
             
-
                 if abcd.trade_created == False:
                     abcd.trade_created = True
                     abcd.trade_is_open = True
@@ -2349,21 +2371,43 @@ class Core:
                     abcd.trade_is_closed = False
                     abcd.trade_entered_date = date(ago=-1)
                     abcd.trade_entered_price = data_low[-1]
-                    # abcd.risk, abcd.reward = get_risk_and_reward(market, abcd, abcd.trade_entered_price, abcd.rrr)
-                    abcd.trade_reward = float(abcd.pivot_C_price) - float(abcd.pivot_D_price) 
-                    abcd.trade_risk = float(abcd.pivot_C_price) - float(abcd.pivot_D_price) 
-                    abcd.trade_take_profit = float(abcd.trade_entered_price + (float(abcd.pattern_C_high) - float(data_low[-1])))
-                    abcd.trade_stop_loss = float(abcd.trade_entered_price - (float(abcd.pattern_C_high) - float(data_low[-1])))
-                    abcd.d_dropped_below_b = date(ago=-1)
+             
+                    # abcd.trade_reward = float(abcd.pivot_C_price) - float(abcd.pivot_D_price) 
+                    # abcd.trade_risk = (float(abcd.pivot_C_price) - float(abcd.pivot_D_price) ) / 2
 
+                    # abcd.trade_take_profit = float(abcd.trade_entered_price + (float(abcd.pattern_C_high) - float(data_low[-1])))
+                    # abcd.trade_stop_loss = float(data_low[-1]) - ((float(abcd.pivot_C_price) - float(abcd.pivot_D_price) ) / 2)
+                    abcd.d_dropped_below_b = date(ago=-1)
+                    # Set trade entry one candle ago
+                    abcd.trade_entered_date = date(ago=-1)
+
+                    # Determine entry price: use last candle's low (assuming a long trade)
+                    entry_price = float(data_low[-1])
+                    abcd.trade_entered_price = entry_price
+
+                    # Calculate reward and risk (reward-to-risk ratio is 2:1)
+                    reward = float(abcd.pivot_C_price) - float(abcd.pivot_D_price)
+                    risk = reward / 2  # 2:1 RR
+
+                    abcd.trade_reward = round(reward, 4)
+                    abcd.trade_risk = round(risk, 4)
+
+                    # Calculate take profit and stop loss
+                    take_profit = entry_price + (float(abcd.pattern_C_high) - entry_price)  # Target near C high
+                    stop_loss = entry_price - risk  # Stop loss half of reward below entry
+
+                    abcd.trade_take_profit = round(take_profit, 4)
+                    abcd.trade_stop_loss = round(stop_loss, 4)
                     abcd.trade_result = 'Open'
+
+                  
                     
                 
         
         except Exception as e:
             print(f'enter trade {e}')
                 
-    def exit_trade(self,pattern_abcd, data_open, data_close, date, data, ids, trade_symbol):
+    def exit_trade(self,pattern_abcd, data_open, data_close, date, data, ids, trade_symbol, volume):
 
         try:
             for each in pattern_abcd:
@@ -2403,6 +2447,17 @@ class Core:
                     # GATHER CANDLE IDS OF ABCD PATTERN
                     current_index = len(data) - 1
                     length = (each.pattern_ABCD_bar_length + each.trade_duration_bars) - 1
+
+                    each.today_price = data_close[0]
+                    each.yesterday_price = data_close[-1]
+
+                    each.price_change = data_close[0] - data_close[-1]
+                    each.price_change_pct = (data_close[0] - data_close[-1]) / data_close[0] * 100
+                    each.today_volume = volume[0]
+
+                    each.unrealized_pnl = data_close[0] - each.trade_entered_price
+                    each.unrealized_pnl_pct = (data_close[0] - each.trade_entered_price) / each.trade_entered_price * 100
+
 
                     if take_profit_market_hit or stop_loss_market_hit:
 
@@ -2494,15 +2549,16 @@ class ABCD(bt.Strategy):
     
     def next(self) -> None:
 
+     
         def printEachBarDate():
             one = 0
             if(one == 0):
-                print(self.datas[0].datetime.date(ago=0),self.data_close[0])
+                print(self.datas[0].datetime.date(0), self.data_close[0], self.data_volume[0])
 
                 one+=1
         # printEachBarDate()
         
-        if self.starting_line >= 3:
+        if self.starting_line >= 4:
 
             Core().check_for_pivot_A(
                 self.datas[0].datetime.date,
@@ -2569,6 +2625,7 @@ class ABCD(bt.Strategy):
                 self.data_low,
                 self.data_high,
                 self.settings['rrr'],
+                self.data_close
             
                 )
 
@@ -2579,7 +2636,8 @@ class ABCD(bt.Strategy):
                 self.datas[0].datetime.date,
                 self.data,
                 'setting1',
-                self.trade_symbol
+                self.trade_symbol,
+                self.datas[0].volume,
 
 
                 )
@@ -2952,3 +3010,9 @@ class Pattern_ABCD():
         self.trade_symbol = trade_symbol
 
         self.valid = False
+
+
+        self.today_price = 0
+        self.yesterday_price = 0
+        self.unrealized_pnl = 0
+        self.unrealized_pnl_pct = 0

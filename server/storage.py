@@ -281,6 +281,9 @@ class DataBase:
             AND pattern_AB_bar_length BETWEEN %s AND %s
             AND pattern_BC_bar_length BETWEEN %s AND %s
             AND pattern_CD_bar_length BETWEEN %s AND %s
+            AND pattern_BC_bar_length BETWEEN 0.38 * pattern_AB_bar_length AND 0.62 * pattern_AB_bar_length
+            AND pattern_CD_bar_length BETWEEN 1.0 * pattern_AB_bar_length AND 1.27 * pattern_AB_bar_length
+
             GROUP BY symbol
             ORDER BY symbol;
         '''
@@ -301,8 +304,24 @@ class DataBase:
         df = pd.read_sql_query(query, self.engine, params=params)
         return df
 
+    def get_ticker_average_volume(self):
+        query = '''
+            SELECT
+                symbol,
+                AVG(volume) AS avg_volume
+            FROM
+                candles
+            GROUP BY
+                symbol
+            ORDER BY
+                avg_volume DESC
+        '''
 
-    
+        # Execute the query and load into a DataFrame
+        df = pd.read_sql_query(query, self.engine) 
+        df['avg_volume'] = df['avg_volume'].astype(int)
+
+        return df
 
     def get_ticker_peformance(self,patterns):
 

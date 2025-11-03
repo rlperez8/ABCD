@@ -1,0 +1,14 @@
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\deps\thiserror-b088532188f81b2a.d: C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\lib.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\aserror.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\display.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\var.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\private.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\thiserror-13197be51d99b4de\out/private.rs
+
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\deps\libthiserror-b088532188f81b2a.rlib: C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\lib.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\aserror.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\display.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\var.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\private.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\thiserror-13197be51d99b4de\out/private.rs
+
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\deps\libthiserror-b088532188f81b2a.rmeta: C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\lib.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\aserror.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\display.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\var.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\private.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\thiserror-13197be51d99b4de\out/private.rs
+
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\lib.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\aserror.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\display.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\var.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.17\src\private.rs:
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\thiserror-13197be51d99b4de\out/private.rs:
+
+# env-dep:OUT_DIR=C:\\Users\\rpere\\Desktop\\abcd_local_v3\\rust_sr\\target\\debug\\build\\thiserror-13197be51d99b4de\\out

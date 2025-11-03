@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Grid  } from 'react-window';
-
-
+import * as route from './backend_routes.js';
 const Table = (props) => {
 
     const {
@@ -11,6 +10,9 @@ const Table = (props) => {
         set_selected_pattern_index,
         table,
         abcd_patterns,
+        set_candles,
+        set_chart_data,
+ 
     } = props
 
     const containerRef = useRef(null);
@@ -36,7 +38,7 @@ const Table = (props) => {
     const [hovered_row_index, set_hovered_index] = useState(0)
 
     // const columns = ['trade_result', 'trade_entered_date','trade_entered_price','trade_exited_price','trade_pnl','trade_return_percentage','pattern_ABCD_bar_length']
-    const columns = ['trade_result', 'trade_entered_date','pattern_A_pivot_date','pattern_B_pivot_date','pattern_C_pivot_date','trade_entered_date','trade_exited_date']
+    const columns = ['trade_result', 'symbol','pattern_AB_bar_length','pattern_BC_bar_length','pattern_CD_bar_length','trade_entered_date','trade_duration_bars']
 
     const CellComponent = ({ columnIndex, rowIndex, style, table }) => {
      
@@ -55,7 +57,7 @@ const Table = (props) => {
                 : 'ticker_row_odd';
 
              
-                        
+        
                         
 
 
@@ -82,9 +84,41 @@ const Table = (props) => {
         return (
             <div className={selected_row}
                 onClick={() => {
-         
-                    set_selected_pattern(abcd_patterns[rowIndex]);  
-                    set_selected_pattern_index(rowIndex)
+
+                    const fetchData = async () => {
+                        try {
+                      
+                            // set_ticker_symbol(table[rowIndex].symbol);
+              
+                      
+                            const [candles] = await Promise.all([
+                                route.get_candles(table[rowIndex].symbol),
+                
+                            ]);
+
+                            candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+
+                            return { candles };
+                        } catch (error) {
+                            console.error('Error fetching data:', error);
+                            return { candles: [], abcd_patterns: [] };
+                        } 
+                    };
+                      fetchData().then(({ candles }) => {
+
+                            set_candles(candles);
+                            set_selected_pattern(abcd_patterns[rowIndex]);  
+                            set_selected_pattern_index(rowIndex);
+                            set_chart_data({
+                            abcd_pattern: abcd_patterns[rowIndex],
+                            candles: candles,
+                            });
+                     
+              
+                        });
+
+                   
+        
                 }}
                 style={style}
                 onMouseEnter={() => {
@@ -101,16 +135,17 @@ const Table = (props) => {
         <div className='table_container' ref={containerRef}>
         
             <Grid
-                className="my-grid"
-                cellComponent={CellComponent}
-                cellProps={{ table }}
-                // columnCount={table.length > 0 ? Object.keys(table[0]).length : 0}
-                columnCount={7}
-                columnWidth={containerWidth/7}
-                rowCount={table?.length}
-                rowHeight={40}
-                style={{ overflowX: 'none' }} 
-            />
+                    className="my-grid"
+                    cellComponent={CellComponent}
+                    cellProps={{ table }}
+                    columnCount={7}
+                    columnWidth={(containerWidth || 700) / 7} // default width in px if not set
+                    rowCount={table?.length || 0}
+                    rowHeight={40}
+                    width={containerWidth || 700} // default width if containerWidth is 0
+                    height={Math.min((table?.length || 0) * 40, 600)} // default 0 rows
+                    style={{ overflowX: 'hidden' }}
+                    />
         </div>
     )
 }

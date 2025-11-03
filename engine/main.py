@@ -1,6 +1,6 @@
 from storage import *
 import traceback
-
+import sys
 
 
 def run_strategy(ticker):
@@ -10,7 +10,7 @@ def run_strategy(ticker):
        
         candles = candles[['date','open','high','low','close','volume']]
         candles['date'] = pd.to_datetime(candles['date']).dt.date
-        # candles = candles[candles['date']>= pd.to_datetime('2020-01-01').date()]
+        candles = candles[candles['date']>= pd.to_datetime('2024-12-01').date()]
         candles.insert(5, 'adj_close', candles['close'])
         candles.to_csv("data.csv",index=False)
         btFeed = Backtrader().prepareDataForStrategy(candles, 'data.csv')
@@ -32,29 +32,42 @@ def run_strategy(ticker):
         pass
 
 def main():
-
     alpha = AlphaVantage()
     db = DataBase()
 
-    # # Get Tickers
-    tickers = alpha.get_listing_status()['symbol'].to_list()[105:]
-    # print(tickers)
+    df = alpha.load_single_symbol_candle_data('full', 'ABUS')
+    df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
+    avg_volume = df['volume'].mean()
+    print(df)
+    run_strategy('ABUS')
+    sys.exit()
 
-    # # # Load Candles
-    for ticker in tickers:
+    # Get tickers (first 100)
+    tickers = alpha.get_listing_status()['symbol'].to_list()[7975:]
+
+    
+    for index, ticker in enumerate(tickers):
         try:
-            alpha.load_single_symbol_candle_data('full', ticker)
+            df = alpha.load_single_symbol_candle_data('full', ticker)
+            df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
+            avg_volume = df['volume'].mean()
+
+            print(f"Ticker: {ticker}, Avg Volume: {avg_volume:.0f}", 'Index: ', index + 7975 )
+
+            # Skip illiquid stocks
+            if avg_volume < 500_000:
+                continue
+            
+            try:
+                db.insert_data(df, 'candles')
+            except: 
+                pass
             run_strategy(ticker)
-            print('Scanning ',ticker)
-        except: 
-            pass
+                
+        except Exception as e: 
+            print(f"Error processing {ticker}: {e}")
 
-
-    # # Pull Loaded Candle Tickers
-    # my_tickers = db.get_distinct_symbols('candles','symbol')['symbol'].to_list()[70:100]
-    # # Run Strategy
-    # for symbol in my_tickers:
-    #     run_strategy(symbol)
+            sys.exit()
 
 
 

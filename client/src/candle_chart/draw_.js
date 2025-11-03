@@ -18,7 +18,7 @@ export class Mouse {
         ctx.stroke();
         ctx.restore();
     };
-    mouse_X = (canvas, ctx, set_candle_high, set_candle_close, set_candle_open, set_candle_low, current_hovered_candle_index, set_candle_color) => {
+    mouse_X = (canvas, ctx, current_hovered_candle_index, set_hovered_candle) => {
 
         ctx.save()
 
@@ -41,12 +41,17 @@ export class Mouse {
 
         // Set Hovered Candle Data
         const hoveredCandle = this.candleChartRef.current.candles.candles[index-1];
-        set_candle_high(hoveredCandle?.candle_high)
-        set_candle_close(hoveredCandle?.candle_close)
-        set_candle_open(hoveredCandle?.candle_open)
-        set_candle_low( hoveredCandle?.candle_low)
-        set_candle_color(hoveredCandle?.candle_open > hoveredCandle?.candle_close ? '#ef5350' : hoveredCandle?.candle_open < hoveredCandle?.candle_close ? '#26a69a' : '')
+
+        set_hovered_candle(prev => ({
+            ...prev,
+            high: hoveredCandle?.candle_high,
+            close: hoveredCandle?.candle_close,
+            open: hoveredCandle?.candle_open,
+            low: hoveredCandle?.candle_low,
+            color: hoveredCandle?.candle_open > hoveredCandle?.candle_close ? '#ef5350' : hoveredCandle?.candle_open < hoveredCandle?.candle_close ? '#26a69a' : ''
+        }));
  
+  
     }
     mouse_price = (canvas, ctx_price) => {
         ctx_price.save();
@@ -243,6 +248,8 @@ export class Chart {
         });
     }; 
     candles = (ctx) => {
+
+  
     
         let candle_X = -(this.candleChartRef.current.current_pixels_between_candles / 2);
         candle_X = Math.floor(candle_X - this.candleChartRef.current.width.current_X_origin);
@@ -263,10 +270,10 @@ export class Chart {
         ctx.strokeStyle = 'red';  // Border color
         ctx.lineWidth = 2;
 
-        const x = canvas.width / 2.8;
-        const y = canvas.height / 2.8;
-        const width = canvas.width / 2.8;
-        const height = canvas.height / 2.8; 
+        const x = (canvas.width/ 10) * 8;
+        const y =  (canvas.height/ 10) * 3.5;
+        const width = canvas.width /10 
+        const height = (canvas.height/ 10) * 3.5;
 
         ctx.strokeRect(x, y, width, height);
     }
@@ -285,7 +292,7 @@ export class Chart {
             const width = -candleChartRef.current.current_candle_width;
 
             // Set Border Color
-            ctx.strokeStyle = item.candle_close > item.candle_open ? '#008080' : '#bf4240';
+            ctx.strokeStyle = item.candle_close > item.candle_open ? '#1e9ca2ff' : '#bf4240';
             ctx.lineWidth = 2;
 
             // Draw Only the Outline (no fill)
@@ -313,8 +320,8 @@ export class ABCD {
     constructor(candleChartRef){
         this.candleChartRef = candleChartRef
     }
-    abcd = (ctx, ab, abcd) => {
- 
+    abcd = (ctx, ab) => {
+
         // A
         let a_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.a_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
         let a_x_loc = -this.candleChartRef.current.candles.complete_width * ab.a;
@@ -384,13 +391,13 @@ export class ABCD {
         const shortened_y = exit_y_loc - arrowLength * Math.sin(angle);
 
         // --- Draw line (stops before arrowhead) ---
-        ctx.beginPath();
-        ctx.moveTo(d_x_loc, d_y_loc);
-        ctx.lineTo(shortened_x, shortened_y);
-        ctx.strokeStyle = abcd.result === 'Win' ? '#303030' : '#303030';
-        ctx.lineWidth = 3;
-        ctx.shadowColor = abcd.result === 'Win' ? '#303030' : '#303030'; // match line color
-        ctx.shadowBlur = 25
+        // ctx.beginPath();
+        // ctx.moveTo(d_x_loc, d_y_loc);
+        // ctx.lineTo(shortened_x, shortened_y);
+        // ctx.strokeStyle = abcd.result === 'Win' ? '#303030' : '#303030';
+        // ctx.lineWidth = 3;
+        // ctx.shadowColor = abcd.result === 'Win' ? '#303030' : '#303030'; // match line color
+        // ctx.shadowBlur = 25
         ctx.stroke();
 
         // --- Draw Arrowhead ---
@@ -467,6 +474,8 @@ export class ABCD {
 
     }
     price_levels = (ctx_price, ctx, canvas, ab) => {
+
+ 
                 ctx.save();
 
                 // // Calculate all y positions

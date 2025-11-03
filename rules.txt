@@ -1,0 +1,38 @@
+=====Goose=====
+
+ABCD: 
+- D must be touching or near a clear trend line.
+Trend Line:
+- Must touch at least 3 seperate candle wicks.
+
+
+
+Top Goose → a reversal from resistance (market high)
+- A high must be all time candle high.
+
+
+
+Bottom Goose → a reversal from support (market low or ongoing trend support)
+
+Q: Is Goose the high of all candles? 
+A: No
+
+Q: Is Goose the high of past year candles? 
+A: No
+
+Q: Is Goose support line bottom or top of previous candles?
+A: Bottom
+
+
+
+
+
+
+
+
+
+
+
+
+
+

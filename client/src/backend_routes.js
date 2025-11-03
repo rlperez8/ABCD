@@ -1,7 +1,7 @@
 export const get_candles = async (symbol) => {
 
     try{
-      const res = await fetch('http://localhost:8000/get_selected_ticker', 
+      const res = await fetch('http://localhost:8000/get_candles', 
         {
           method: "POST", 
           headers: {"Content-Type": "application/json",}, 
@@ -13,8 +13,9 @@ export const get_candles = async (symbol) => {
         throw new Error("Request failed");
       }
       const responseData = await res.json();
+
       
-    //   console.log(responseData)
+
       return responseData.data
     } catch(error) {
       console.error(error)
@@ -67,8 +68,7 @@ export const get_abcd_candles = async (symbol,filter) => {
       });
 
       const responseData = await res.json();
-      console.log(responseData.data)
-    
+
       return responseData.data
 
 
@@ -76,6 +76,174 @@ export const get_abcd_candles = async (symbol,filter) => {
     console.log(error);
 }
 };
+export const get_recent_patterns = async (filters) => {
+
+  try {
+
+    const res = await fetch ('http://localhost:8000/recent_patterns', {
+      method: "POST",
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        bc_retracement_greater: filters.bc_retracement_greater,
+        bc_retracement_less: filters.bc_retracement_less,
+        cd_retracement_greater: filters.cd_retracement_greater,
+        cd_retracement_less: filters.cd_retracement_less,
+      })
+    })
+
+    const responseData = await res.json();
+
+ 
+    return responseData.data
+
+  }
+  catch (error) {
+    console.log(error)
+  }
+
+
+}
+export const add_watchlist = async (wl_name) => {
+
+  try{
+    const res = await fetch ('http://localhost:8000/add_watchlist', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        wl_name: wl_name
+      })
+    })
+
+  }
+  catch(error){
+
+  }
+}
+export const get_all_watchlist = async () => {
+
+  try{
+    const res = await fetch ('http://localhost:8000/get_all_watchlist', {
+      method: 'GET',
+      headers: {'Content-Type': 'application/json'},
+  
+    })
+    const responseData = await res.json()
+    return responseData.data
+  }
+  catch(error){
+
+  }
+}
+export const delete_watchlist = async (wl_name) => {
+
+  try{
+    const res = await fetch ('http://localhost:8000/delete_watchlist', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        wl_name: wl_name
+      })
+  
+    })
+    const responseData = await res.json()
+ 
+    return responseData.data
+  }
+  catch(error){
+
+  }
+}
+export const add_pattern_to_a_watchlist = async (wl_name, pattern_id) => {
+
+
+  try{
+    const res = await fetch ('http://localhost:8000/add_pattern_to_a_watchlist', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        wl_name: wl_name,
+        pattern_id: pattern_id,
+        // change: change,
+        // pctChange: pctChange,
+        // volume: volume,
+        // price: price
+      })
+  
+    })
+    const responseData = await res.json()
+    return responseData.data
+  }
+  catch(error){
+
+  }
+}
+export const get_all_patterns_in_watchlist = async () => {
+
+  try{
+    const res = await fetch ('http://localhost:8000/get_all_patterns_in_watchlist', {
+      method: 'GET',
+      headers: {'Content-Type': 'application/json'},
+
+  
+    })
+    const responseData = await res.json()
+
+  
+
+    return responseData.data
+  }
+  catch(error){
+
+  }
+}
+export const get_monthly_peformance = async (filters) => {
+
+  try{
+     const res = await fetch ('http://localhost:8000/monthly_peformance', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+        bc_retracement_greater: filters.bc_retracement_greater,
+        bc_retracement_less: filters.bc_retracement_less,
+        cd_retracement_greater: filters.cd_retracement_greater,
+        cd_retracement_less: filters.cd_retracement_less,
+      })
+
+  
+    })
+    const responseData = await res.json()
+
+    return responseData.data
+
+  } catch(error){
+
+  }
+}
+export const get_support_resistance_lines = async (symbol) => {
+
+  try{
+         const res = await fetch("http://localhost:8000/get_support_resistance_lines", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            'symbol':symbol,
+          })
+      });
+
+      const responseData = await res.json();
+
+      return responseData.data
+
+
+  } catch (error) {
+
+  }
+}
+ 
+ 
+
+
+
 
 
 
