@@ -307,16 +307,22 @@ def recent_patterns():
         cd_retracement_less = data['cd_retracement_less']
 
         query = '''
-SELECT p.*
-FROM pattern_abcd p
-JOIN support_and_resistance s
-    ON p.symbol = s.symbol
-    AND p.trade_entered_price BETWEEN 0.99 * s.price AND 1.01 * s.price
-WHERE p.trade_entered_date >= %s
-    AND p.pattern_C_price_retracement BETWEEN %s AND %s
-    AND p.pattern_D_price_retracement BETWEEN %s AND %s
+            SELECT p.*
+            FROM pattern_abcd p
+            WHERE p.trade_entered_date >= %s
+                AND p.pattern_BC_bar_length BETWEEN 0.38 * p.pattern_AB_bar_length AND 0.62 * p.pattern_AB_bar_length
+                AND p.pattern_CD_bar_length BETWEEN 1.0 * p.pattern_AB_bar_length AND 1.27 * p.pattern_AB_bar_length
+                AND p.pattern_C_price_retracement BETWEEN %s AND %s
+                AND p.pattern_D_price_retracement BETWEEN %s AND %s
+                AND EXISTS (
+                    SELECT 1
+                    FROM support_and_resistance s
+                    WHERE s.symbol = p.symbol
+                        AND (
+                            p.trade_entered_price BETWEEN 0.99 * s.price AND 1.01 * s.price
+                        )
+                )
         '''
-
 
   
 

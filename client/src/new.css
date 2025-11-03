@@ -242,7 +242,7 @@
 }
 .candle_chart_container{
     box-sizing: border-box; 
-    height: 100%;
+    height: 95%;
     cursor:crosshair;
     width: 100%;
     display: flex;
@@ -750,13 +750,16 @@ input:focus {
     background-color: #202020;;
 }
 .chart_tool_header{
-    width: 100%;
-    height: 5%;
+    width: 50%;
+    height: 100%;
     /* border-bottom: 1px solid rgb(90, 90, 90); */
     background-color: #202020;
     /* border: 1px solid teal; */
     box-sizing: border-box;
     display: flex;
+    justify-content: right;
+    align-items: center;
+
     
 }
 .chart-header-stat-wrapper{
@@ -765,7 +768,8 @@ input:focus {
     /* border: 1px solid yellow; */
     box-sizing: border-box;
     display: flex;
-    border-right: 1px solid rgb(81, 78, 78);
+    border: 1px solid rgb(81, 78, 78);
+        font-family: monospace
 }
 .stat-key{
     width: 65%;
@@ -834,22 +838,33 @@ input:focus {
     width: 100%;
     height: 95%;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     box-sizing: border-box;
     overflow: hidden;
     position: relative;
 
 }
-.chart_button{
-    width: 2%;
-    min-width: 75px;
-    height: 100%;
+.chart-header-wrapper{
+    width: 100%;
+    height: 5%;
+    /* max-height: 300px; */
+
     /* border-right: 1px solid rgb(111, 106, 106); */
     background-color: #202020;
+    display: flex;
+    flex-direction: row;
+}
+.header-buttons-wrapper{
+    width: 50%;
+    min-width: 50%;
+    height: 100%;
+    display: flex;
+    /* border: 1px solid white; */
 }
 .chart_icon_{
-    width: 100%;
-    height: 60px;
+    width: 50px;
+    max-width: 50px;
+    height: 100%;
     /* border: 1px solid yellow; */
     display: flex;
     justify-content: center;
@@ -858,17 +873,17 @@ input:focus {
     position: relative;
 }
 .chart_icon_active{
-    width: 100%;
-    height: 60px;
+    width: 50px;
+    height: 100%;
     /* border: 1px solid yellow; */
     display: flex;
     justify-content: center;
     align-items: center;
     box-sizing: border-box;
-    background-color: rgb(31, 30, 30);
+    background-color: rgb(78, 79, 79);
 }
 .abcd_img{
-    width: 35px;
+    width: 25px;
     filter: brightness(0) saturate(100%) invert(47%) sepia(18%) saturate(715%) hue-rotate(129deg) brightness(94%) contrast(94%);
      /* filter: brightness(0) saturate(100%) invert(84%) sepia(8%) saturate(1390%) hue-rotate(182deg) brightness(104%) contrast(97%); */
      filter: brightness(2) saturate(150%) invert(47%) sepia(18%) 
