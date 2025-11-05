@@ -76,7 +76,7 @@ export const get_abcd_candles = async (symbol,filter) => {
     console.log(error);
 }
 };
-export const get_recent_patterns = async (filters) => {
+export const get_recent_patterns = async (filters, month) => {
 
   try {
 
@@ -84,6 +84,7 @@ export const get_recent_patterns = async (filters) => {
       method: "POST",
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
+        month: month,
         bc_retracement_greater: filters.bc_retracement_greater,
         bc_retracement_less: filters.bc_retracement_less,
         cd_retracement_greater: filters.cd_retracement_greater,
@@ -93,7 +94,7 @@ export const get_recent_patterns = async (filters) => {
 
     const responseData = await res.json();
 
- 
+    console.log(responseData)
     return responseData.data
 
   }
@@ -196,13 +197,14 @@ export const get_all_patterns_in_watchlist = async () => {
 
   }
 }
-export const get_monthly_peformance = async (filters) => {
+export const get_monthly_peformance = async (filters, month) => {
 
   try{
      const res = await fetch ('http://localhost:8000/monthly_peformance', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
+        month: month,
         bc_retracement_greater: filters.bc_retracement_greater,
         bc_retracement_less: filters.bc_retracement_less,
         cd_retracement_greater: filters.cd_retracement_greater,

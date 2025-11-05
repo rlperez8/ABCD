@@ -24,6 +24,7 @@ import WatchList from './WatchList.js';
 const App = () => {
 
   const [chart_data, set_chart_data] = useState({candles: [], abcd_pattern: []})
+  const [selected_month, set_selected_month] = useState('1')
   const [is_sections_expanded, set_sections_expanded] = useState(true)
   const [selected_row_index, set_selected_row_index] = useState(0)
   const [monthly_performance, set_monthly_peformance] = useState([])
@@ -107,11 +108,11 @@ const App = () => {
 
     const fetch = async () => {
       
-      const monthly_peformance = await route.get_monthly_peformance(filters)
-      set_monthly_peformance(monthly_peformance)
+      // const monthly_peformance = await route.get_monthly_peformance(filters, selected_month)
+      // set_monthly_peformance(monthly_peformance)
   
 
-      const recent_patterns = await route.get_recent_patterns(filters)
+      const recent_patterns = await route.get_recent_patterns(filters,selected_month)
       // const selected_pattern = recent_patterns[0]
       set_recent_patterns(recent_patterns)
 
@@ -147,13 +148,15 @@ const App = () => {
   
   },[])
 
-  const handle_updated_recent_patterns = async () => {
+  const handle_updated_recent_patterns = async (month) => {
     
     set_loading(true)
-    const recent_patterns = await route.get_recent_patterns(filters)
+   
+    const recent_patterns = await route.get_recent_patterns(filters, month)
     const selected_pattern = recent_patterns[0]
     const sorted = recent_patterns.sort((a, b) => a.symbol.localeCompare(b.symbol));
     set_recent_patterns(sorted)
+    console.log(recent_patterns)
 
 
     // let candles = await route.get_candles(recent_patterns[0]?.symbol)
@@ -171,13 +174,12 @@ const App = () => {
 
     // // const wl_patterns = await route.get_all_patterns_in_watchlist()
     // // set_wl_patterns(wl_patterns)
-
-
-    const monthly_peformance = await route.get_monthly_peformance(filters)
-    set_monthly_peformance(monthly_peformance)
+ 
+    // const monthly_peformance = await route.get_monthly_peformance(filters, month)
+    // set_monthly_peformance(monthly_peformance)
     set_loading(false)
   }
-  
+
   return (
 
       <div className='App' >
@@ -190,19 +192,22 @@ const App = () => {
             }
 
             <div className='monthly_peformance_wrapper'>
-              {months.map((monthName, index) => {
-                const monthData = monthly_performance[index];
+             {months.map((monthName, index) => {
+                // Find the data for this month
+                const monthData = monthly_performance.find(m => m.month === monthName);
                 const pct = monthData?.win_pct || 0;
+                const count_total = monthData?.count_total || 0;
 
                 const r = 0;
-                const g = Math.round(128 * (pct / 100)); 
-                const b = Math.round(128 * (pct / 100)); 
-                const fillColor = `rgba(${r}, ${g}, ${b}, 0.8)`; 
+                const g = Math.round(128 * (pct / 100));
+                const b = Math.round(128 * (pct / 100));
+                const fillColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
 
                 return (
                   <div
-                    key={index}
-                    className="month-wrapper"
+                    key={monthName}
+                    className={selected_month === monthName ? 'month-wrapper-active' : 'month-wrapper'}
+                    onClick={() => handle_updated_recent_patterns(monthly_performance[index].month_num)}
                     style={{
                       position: "relative",
                       borderRadius: "4px",
@@ -228,12 +233,12 @@ const App = () => {
                         transform: "translate(-50%, -50%)",
                         fontWeight: "bold",
                         color: "#fff",
+                        textAlign: "center",
                       }}
                     >
-                       <div className='row__'> {monthName}</div>
-                       <div className='row__'> {monthly_performance[index]?.count_total}</div>
-                      <div className='row__'> {pct}%</div>
-                     
+                      <div className='row__'>{monthName}</div>
+                      <div className='row__'>{count_total}</div>
+                      <div className='row__'>{pct}%</div>
                     </span>
                   </div>
                 );

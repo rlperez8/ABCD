@@ -28,6 +28,7 @@ const InfiniteTable = (props) => {
         'price_change_pct', 
         'unrealized_pnl',
         'unrealized_pnl_pct',
+        'pct_diff_from_snr'
     
     ]
     const [containerWidth, setContainerWidth] = useState(0);
@@ -63,6 +64,11 @@ const InfiniteTable = (props) => {
 
                 
             let cellContent = content;
+
+            if (columnKey === 'pct_diff_from_snr' && content !== null && content !== undefined) {
+                cellContent = Number(content).toFixed(2);
+            }
+
 
             if (columnIndex === 0 && content === 'Win') {
                 cellContent = <div className="first_column_box">{cellContent}</div>;
@@ -128,6 +134,8 @@ const InfiniteTable = (props) => {
                 <div className='ticker_column'>Change %</div>
                 <div className='ticker_column'>UNR-PNL</div>
                 <div className='ticker_column'>UNR-PNL %</div>
+                <div className='ticker_column'>S&R</div>
+              
               
        
             </div>
@@ -136,8 +144,8 @@ const InfiniteTable = (props) => {
                 className="my-grid"
                 cellComponent={CellComponent}
                 cellProps={{ sorted }}
-                columnCount={9}
-                columnWidth={(containerWidth || 700) / 9} 
+                columnCount={10}
+                columnWidth={(containerWidth || 700) / 10} 
                 rowCount={sorted?.length || 0}
                 rowHeight={40}
                 width={containerWidth || 700} 
