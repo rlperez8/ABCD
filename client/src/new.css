@@ -1,23 +1,27 @@
 .App{
-    background-color: rgb(0, 0, 0);
-    /* background-color: rgb(33, 35, 35); */
     width: 100%;
     height: 100vh;
     box-sizing: border-box;
-  
     overflow: hidden;
     display: flex;
-    /* position: relative; */
     flex-direction: row;
     color: black;
-    /* padding: 15px; */
     justify-content: center;
     align-items: center;
-    background-color: rgb(77, 77, 77);
+    /* background: linear-gradient(135deg, #161e2f, #444a5b, #2b2837); */
+    /* background: linear-gradient(135deg, #282d2d, #7e7e7e, #272929); */
+    background: linear-gradient(to bottom, #0a0d0f, #0f1416, #132022, #173035);
+
 }
 .main_left{
     width: 100%;
     height: 100%;
+    /* border: 7px solid orange; */
+    box-sizing: border-box;
+    padding: 5px;
+    display: flex;
+
+
   
 }
 .overlay{
@@ -26,7 +30,6 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgb(202, 202, 202); 
     display: flex;
     justify-content: center;
     align-items: center;
@@ -246,9 +249,8 @@
     cursor:crosshair;
     width: 100%;
     display: flex;
-    flex-direction: row;
-     /* background-color: #121212; */
-     /* border: 1px solid gray; */
+
+
 }
 .candle_chart_container_2{
     display: flex;
@@ -267,21 +269,13 @@
 }
 .canvas{
     width: 100%;
-    /* max-height: 94%;
-    min-height: 94%; */
     height: 96%;
     display: block;
     border-left: none;
     box-sizing: border-box;
-
-    background-color: #151c20e0;
     position: relative;
-    /* background: linear-gradient(to left, rgb(8, 20, 36), rgb(3, 22, 31), rgb(8, 20, 36), rgb(4, 5, 7)); */
-    /* background-color: rgb(241, 231, 231); */
-    /* border-radius: 10px; */
     border: 1px solid rgb(33, 33, 32);
-    background-color:  #1a1a1a;
-    background-color: rgb(23, 23, 23);;
+
 }
 .canvas_dates{
     /* min-height: 5%;
@@ -727,27 +721,24 @@ input:focus {
     align-items: center;
 }
 .main{
-    /* width: 50%; */
-  
     max-width: 100%;
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: row;
     box-sizing: border-box;
-    /* border: 2px solid rgb(33, 33, 32); */
     flex-direction: row;
     border-radius: 10px;
-
+    /* border: 5px solid orange; */
+    
 }
 .chart_container{
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
-     /* border: 1px solid rgb(80, 78, 78); */
-    background-color: #202020;;
-    background-color: #202020;;
+    /* border: 5px solid red; */
+    box-sizing: border-box;
 }
 .chart_tool_header{
     width: 50%;
@@ -836,7 +827,7 @@ input:focus {
 .data_{
     
     width: 100%;
-    height: 95%;
+    height: 100%;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -952,14 +943,9 @@ input:focus {
 .filter_box{
   display: flex;
   align-items: center;
-  /* gap: 6px; */
-  /* padding: 6px 10px; */
-  /* border-radius: 8px; */
-  background-color: #191919;
   color: white;
   width: 100%;
   border: 1px solid rgb(52, 52, 52);
-  /* border-radius: 5px; */
 }
 .filter_box_key{
     width: 50%;
@@ -1002,15 +988,16 @@ input:focus {
     height: 30px;
     min-height: 30px;
     max-height: 30px;
-    /* height: 30%; */
-    background-color: rgb(30, 30, 30);
+
     color: white;
     font-weight: 900;
     font-size: 120%;
     color: teal;
      text-align: center;  
     border: none;
-        font-family: 'JetBrains Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace;
+    font-family: 'JetBrains Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace;
+    background-color: rgb(44, 44, 44);
+    border: 1px solid rgb(72, 72, 72);
 }
 .input_style:focus {
     width: 80%;
@@ -1034,7 +1021,6 @@ input:focus {
     height: 100%;
     display: flex;
     flex-direction: column;
-    background-color: #191919;
     overflow-y: scroll;
 
 
@@ -1085,6 +1071,7 @@ input:focus {
     /* height: 500px; */
 }
 .filts{
+ 
     width: 100%;
     height: 100%;
     display: flex;
@@ -1092,8 +1079,6 @@ input:focus {
     /* border: 1px solid orange; */
     box-sizing: border-box;
     overflow: hidden;
-    background-color: rgb(23, 23, 23);
-    background-color: #202020
 }
 
 
@@ -1201,13 +1186,12 @@ input:focus {
 }
 
 .chart_margin_container{
-    /* padding:  10px; */
     width: 100%;
     height: 100%;
-    /* border: 1px solid orange; */
-    box-sizing: border-box;
-    /* border: 1px solid white; */
-    
+    box-sizing: border-box; 
+    display: flex;
+    justify-content: center;
+    align-items: center ;
 }
 .info_margin_container{
     padding:  10px;
@@ -1240,7 +1224,7 @@ input:focus {
     -ms-overflow-style: none;  
     scrollbar-width: none;    
     overflow: hidden;
-background-color: #202020;
+/* background-color: #202020; */
     /* border: 2px solid orange; */
 }
 .table_container::-webkit-scrollbar {
@@ -1376,12 +1360,18 @@ background-color: #202020;
 /* DATA=================== */
 .sections-wrapper-expanded {
   width: 40%;
+  min-width: 900px;
+  max-width: 900px;
   overflow: hidden;
   height: 100%;
   display: flex;
   flex-direction: column;
-  transition: width 0.1s ease-in-out;
-      background-color: rgb(23, 23, 23);
+  transition: width 0.1s ease-in-out;   
+  /* border: 5px solid red; */
+  box-sizing: border-box;
+  padding: 5px;
+  /* padding-left: 2.5px; */
+  padding-right: 2.5px;
 }
 
 .sections-wrapper-minimized {
@@ -1405,20 +1395,43 @@ background-color: #202020;
 
   
 }
+.margin-{
+    width: 100%;
+    height: 100%;
+    border-radius: 5px;
+    /* border: 1px solid rgb(64, 62, 62); */
+    box-sizing: border-box;
+    overflow: hidden;
+     /* background: linear-gradient(135deg, #3a3a3a, #141515, #262828); */
+     background: linear-gradient(
+    135deg,
+   
+    rgba(20, 21, 21),  /* 50% transparent */
+    rgb(43, 54, 54)     /* Fully transparent */
+    );
+    background: linear-gradient(
+    to right,
+    rgba(31, 31, 31, 0.7),   /* #111111 with 20% opacity */
+    rgba(40, 40, 40, 0.7)    /* #282828 with 20% opacity */
+);
+}
 .patterns_table_main{
     display: flex;
     
-    width: 100%;
-    height: 45px;
+    width: 100%;   
+    height: auto;
+    max-height: 45px;
     min-height: 45px;
-    /* max-height: 45px; */
     flex-direction: column;
     box-sizing: border-box;
     /* border: 1px solid rgb(94, 94, 94); */
     /* border: 2px solid orange; */
     overflow: hidden;
-    background-color: #202020;
+    /* background-color: #202020; */
     transition: height 0.5s ease-in-out;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 .patterns_table_main_expanded{
     display: flex;
@@ -1427,8 +1440,9 @@ background-color: #202020;
     height: 100%;
     flex-direction: column;
     box-sizing: border-box;
-    /* border: 1px solid rgb(94, 94, 94); */
-    /* border: 2px solid orange; */
+    display: flex;
+    justify-content: center;
+    align-items: center;
     overflow: hidden;
     background-color: #202020;
     transition: height 0.5s ease-in-out;
@@ -1443,7 +1457,7 @@ background-color: #202020;
     display: flex;
     flex-direction: row;
     font-weight: 500;
-    /* background-color: #202020; */
+    background-color: #202020;
     box-sizing: border-box;
     overflow: hidden;
     /* border: 1px solid orange; */
@@ -1458,6 +1472,7 @@ background-color: #202020;
     padding-left: 10px;
     /* border: 1px solid orange; */
     box-sizing: border-box;
+    color:  gray;
 }
 .table_header_count{
     width: 20%;
@@ -1478,7 +1493,6 @@ background-color: #202020;
     box-sizing: border-box;
     display: flex;
     flex-direction: row;
-    background-color: #202020;
 }
 .peformance-date-icon{
     width: 10%;
@@ -1622,7 +1636,7 @@ background-color: #202020;
 }
 .table_body_main{
     width: 100%;
-    height: 100%;
+    height: 85%;
     box-sizing: border-box;
     overflow: scroll;
       -ms-overflow-style: none;  
@@ -1640,9 +1654,7 @@ background-color: #202020;
     max-height: 50px;
     display: flex;
     flex-direction: row;
-    background-color: rgb(3, 22, 31);
     font-weight: 700;
-   
     box-sizing: border-box;
 }
 .peformance_table_body{
@@ -1660,7 +1672,7 @@ background-color: #202020;
     /* border: 2px solid rgb(182, 184, 186); */
     border-radius: 5px;
     font-weight: 600;
-     color: rgb(203, 217, 52);
+   color: rgba(0, 180, 180, 1)
 }
 .lost_column_box{
     /* background-color: rgb(84, 37, 37); */
@@ -1672,7 +1684,7 @@ background-color: #202020;
     /* border: 2px solid rgb(117, 34, 34); */
     border-radius: 5px;
     font-weight: 600;
-    color: rgb(225, 47, 47); 
+    color: rgb(182, 102, 102); 
 }
 .open_column_box{
     /* background-color: rgb(132, 132, 137); */
@@ -1690,15 +1702,15 @@ background-color: #202020;
     display: flex;
     justify-content: center;
     align-items: center;
-    color: rgb(203, 217, 52);
+    color: rgba(0, 180, 180, 1);
     font-weight: 500;
 }
 .positive_pnl{
-    color: rgb(203, 217, 52);
+      color: rgba(0, 180, 180, 1);
     font-weight: 500;
 }
 .negative_pnl{
-    color: rgb(225, 47, 47); 
+   color: rgb(182, 102, 102); 
 }
 
 /* SETTINGS */
@@ -1966,12 +1978,11 @@ background-color: #202020;
     width: 100%;
     height: 100%;
     color: rgb(160, 160, 160);
-    border-bottom: 1px solid rgb(71, 71, 71);
+    /* border-bottom: 1px solid rgb(67, 65, 65); */
     display: flex;
     justify-content: center;
     align-items: center;
-    border-left: 1px solid rgb(104, 103, 103);
-    background-color: #202020;;
+    /* border-left: 1px solid rgb(104, 103, 103); */
     font-weight: 600;
     font-size: 110%;
     font-family: monospace;
@@ -1987,7 +1998,7 @@ background-color: #202020;
     justify-content: center;
     align-items: center;
     box-sizing: border-box;
-    background-color: #1a1a1a;
+  
       font-family: 'JetBrains Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace;
 color: rgb(176, 176, 176);
     font-size: 14px;
@@ -2003,7 +2014,7 @@ color: rgb(176, 176, 176);
     justify-content: center;
     align-items: center;
     box-sizing: border-box;
-    background-color: #202020;
+  
       font-family: 'JetBrains Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace;
     /* color: #cccccc; */
     font-size: 14px;
@@ -2268,11 +2279,15 @@ color: rgb(176, 176, 176);
     color:  white;
 }
 .monthly_peformance_wrapper{
-    width: 200px;
-    height: 100%;
+    width: 325px;
+    height: 50%;
     display: flex;
     flex-direction: column;
-    background-color: rgb(23, 23, 23);
+     background: linear-gradient(
+    to right,
+    rgba(31, 31, 31, 0.7),   /* #111111 with 20% opacity */
+    rgba(40, 40, 40, 0.7)    /* #282828 with 20% opacity */
+);
 }
 .month-wrapper-active{
     width: 100%;
@@ -2285,7 +2300,32 @@ color: rgb(176, 176, 176);
     border-radius: 10px;
     color: white;
     overflow: hidden;
+    flex-direction: row;
+    border: 2PX SOLID orange;
+}
+.bp-section{
+    width: 100%;
+    height: 300px;
+    min-height: 300px;
+    max-height: 300px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    display: flex;
     flex-direction: column;
+    padding-bottom: 5px;
+}
+.rp-section{
+    width: 100%;
+    height: 100%;
+      display: flex;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 .month-wrapper{
     width: 100%;
@@ -2298,11 +2338,11 @@ color: rgb(176, 176, 176);
     border-radius: 10px;
     color: white;
     overflow: hidden;
-    flex-direction: column;
+    flex-direction: row;
+     /* border: 2PX SOLID orange; */
 }
 .win_pct_background{
     height: 100%;
-    background-color: rgb(154, 198, 201);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -2313,15 +2353,17 @@ color: rgb(176, 176, 176);
     display: flex;
     justify-content: center;
     align-items: center;
+    font-family: monospace;
+    color: rgb(212, 212, 212);
+
 }
 .save-filter-wrapper{
     width: 100%;
-    height: 10%;
+    height: 30%;
     display: flex;
     justify-content: center;
     align-items: center;
     color: white;
-    border: 1px solid gray;
+    /* border: 1px solid gray; */
     box-sizing: border-box;
-    background-color: rgb(38, 37, 37);
 }

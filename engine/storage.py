@@ -346,7 +346,7 @@ class AlphaVantage:
             print('=================') 
             print('Error',ticker) 
             DataBase().update_symbol_status('listing_status',ticker)
-            return pd.DataFrame() 
+            return pd.DataFrame([])
         
         else:
             data = data['Time Series (Daily)']
@@ -697,7 +697,13 @@ class StrategyTools:
                 'price_change': each.price_change,
                 'price_change_pct': each.price_change_pct,
                 'unrealized_pnl': each.unrealized_pnl,
-                'unrealized_pnl_pct': each.unrealized_pnl_pct
+                'unrealized_pnl_pct': each.unrealized_pnl_pct,
+                'average_candle_size': each.average_candle_size,
+                'year': each.year,
+                'month': each.month,
+                'day': each.day,
+                'tolerance': each.tolerance,
+                'num_tolerances': each.num_tolerances
             }
             all.append(abcd)
         df = pd.DataFrame(all)
@@ -891,7 +897,7 @@ class StrategyTools:
             
           
             print(f'check_bar_length {e}, {duration},{date(ago=0)}, {start_date}', type(start_date))
-            sys.exit()
+            # sys.exit()
     
     def setDateTestingCanStart(self, counter, dateTracker, length, date):
   
@@ -1919,7 +1925,7 @@ class D:
             # print(candle_C_top)
             # print(candle_B_bot)
             print(e)
-            sys.exit()
+            # sys.exit()
 
     def get_c_position(self,market, c_to_d_bar_length, pivotTrio, open, close):
 
@@ -2215,7 +2221,7 @@ class Core:
                 ab_pivotPairs.remove(pivotPair)
             except Exception as e:
                 print(f"Remove error: {e}")   
-                sys.exit()
+                # sys.exit()
 
     def check_for_pivot_D(
         self,
@@ -2350,7 +2356,7 @@ class Core:
                     abc_pivotTrios.remove(abc_pattern)
                 except Exception as e:
                     print(f"Remove error: {e}")   
-                    sys.exit()
+                    # sys.exit()
 
             
 
@@ -2387,7 +2393,8 @@ class Core:
 
                     # Calculate reward and risk (reward-to-risk ratio is 2:1)
                     reward = float(abcd.pivot_C_price) - float(abcd.pivot_D_price)
-                    risk = reward / 2  # 2:1 RR
+                    risk = reward 
+                    # / 2  # 2:1 RR
 
                     abcd.trade_reward = round(reward, 4)
                     abcd.trade_risk = round(risk, 4)
@@ -2407,7 +2414,7 @@ class Core:
         except Exception as e:
             print(f'enter trade {e}')
                 
-    def exit_trade(self,pattern_abcd, data_open, data_close, date, data, ids, trade_symbol, volume):
+    def exit_trade(self,pattern_abcd, data_open, data_close, date, data, ids, trade_symbol, volume, high, low, snr_price):
 
         try:
             for each in pattern_abcd:
@@ -2426,13 +2433,7 @@ class Core:
                     # ASSIGN DIFFERENCE TO PNL
                     each.trade_pnl = round(y if data_close[0] > each.trade_entered_price else z,2)
                     
-                    # TRACK LOWEST PRICE DROPPED
-                    # low = get_low_of_candle(data_open[0], data_close[0])
-                    
-                    # if low < float(each.tradeInfo['lowest_price_dropped']):
-                    #     each.tradeInfo['lowest_price_dropped'] = str(low)
-
-
+    
                     is_open_higher_than_take_profit = data_open[0] > each.trade_take_profit
                     is_close_higher_then_take_profit = data_close[0] > each.trade_take_profit
 
@@ -2444,10 +2445,6 @@ class Core:
 
                     each.trade_candle_ids = []
 
-                    # GATHER CANDLE IDS OF ABCD PATTERN
-                    current_index = len(data) - 1
-                    length = (each.pattern_ABCD_bar_length + each.trade_duration_bars) - 1
-
                     each.today_price = data_close[0]
                     each.yesterday_price = data_close[-1]
 
@@ -2457,6 +2454,35 @@ class Core:
 
                     each.unrealized_pnl = data_close[0] - each.trade_entered_price
                     each.unrealized_pnl_pct = (data_close[0] - each.trade_entered_price) / each.trade_entered_price * 100
+
+                    length = each.pattern_ABCD_bar_length - 2
+                
+                    date_str = str(each.trade_entered_date)
+                    year, month, day = date_str.split("-")
+                  
+                    each.year = year
+                    each.month = month
+                    each.day = day
+               
+                    sizes = []
+                    for i in range(length):
+                        diff = high[-i] - low[-i]
+                        sizes.append(diff)
+
+                    average_candle_size = sum(sizes) / len(sizes)
+                    each.average_candle_size = average_candle_size
+
+                    distance = abs(snr_price - each.trade_entered_price)
+
+                    # Tolerance is the average candle size (or a multiple)
+                    tolerance = each.average_candle_size
+                    each.tolerance = tolerance
+
+                    # num_tolerances = how many 'average candles' away
+                    each.num_tolerances = distance / tolerance
+
+                                        
+
 
 
                     if take_profit_market_hit or stop_loss_market_hit:
@@ -2491,7 +2517,7 @@ class Core:
         except Exception as e:
             import sys
             print(f'check for exit {e}')
-            sys.exit()
+            # sys.exit()
       
 class ABCD(bt.Strategy):
 
@@ -2503,6 +2529,7 @@ class ABCD(bt.Strategy):
         pattern_ABCD = None,
         stockName = None,
         candle_ids=None,
+        snr_price= None
     )
     
     def __init__(self) -> None:      
@@ -2532,6 +2559,7 @@ class ABCD(bt.Strategy):
         self.abc_pivotTrios= self.params.pattern_ABC
         self.pattern_abcd = list = self.params.pattern_ABCD
         self.trade_symbol: str  = self.params.stockName
+        self.snr_price = self.params.snr_price
         self.settings: dict = {
             'candle_ids': self.params.candle_ids,
             'market': 'Bull',
@@ -2558,6 +2586,7 @@ class ABCD(bt.Strategy):
                 one+=1
         # printEachBarDate()
         
+       
         if self.starting_line >= 4:
 
             Core().check_for_pivot_A(
@@ -2638,7 +2667,9 @@ class ABCD(bt.Strategy):
                 'setting1',
                 self.trade_symbol,
                 self.datas[0].volume,
-
+                self.data_high, 
+                self.data_low,
+                self.snr_price
 
                 )
 
@@ -3016,3 +3047,11 @@ class Pattern_ABCD():
         self.yesterday_price = 0
         self.unrealized_pnl = 0
         self.unrealized_pnl_pct = 0
+        self.average_candle_size = 0
+
+        self.year = 0
+        self.month = 0
+        self.day = 0
+
+        self.tolerance = 0
+        self.num_tolerances = 0

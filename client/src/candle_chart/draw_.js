@@ -264,7 +264,12 @@ export class Chart {
 
             candle_X -= this.candleChartRef.current.current_candle_width + this.candleChartRef.current.current_pixels_between_candles;
             wick_X -= this.candleChartRef.current.current_candle_width + this.candleChartRef.current.current_pixels_between_candles;
-    })};
+    })
+
+};
+
+
+
     pattern_center = (ctx, canvas) => {
         ctx.fillStyle = 'red';      // Fill color
         ctx.strokeStyle = 'red';  // Border color
@@ -292,26 +297,62 @@ export class Chart {
             const width = -candleChartRef.current.current_candle_width;
 
             // Set Border Color
-            ctx.strokeStyle = item.candle_close > item.candle_open ? '#1e9ca2ff' : '#bf4240';
+            ctx.strokeStyle = item.candle_close > item.candle_open 
+    ? 'rgba(0, 180, 180, 1)'// bright teal
+
+// Bearish (dark grayish teal)
+    : 'rgb(182, 102, 102)';  // darker muted teal/gray
+
+
+
+    
             ctx.lineWidth = 2;
 
             // Draw Only the Outline (no fill)
             ctx.strokeRect(x, candle_open_pixel, width, candle_height);
 
-            // Optional: draw wicks separately if needed
+        
         }
     _draw_wick = (item, candleChartRef, ctx, x) => {
-    
-        const yHigh = Math.floor(candleChartRef.current.height.currentBaselineY - utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_high));
-        const yLow = Math.floor(candleChartRef.current.height.currentBaselineY - utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_low));
-        ctx.save()
-        ctx.beginPath(); // start fresh path per wick
-        ctx.strokeStyle = item.color;
-        ctx.lineWidth = 1;
+            const yHigh = Math.floor(candleChartRef.current.height.currentBaselineY - utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_high));
+    const yLow = Math.floor(candleChartRef.current.height.currentBaselineY - utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_low));
+
+    // Candle top and bottom
+    let candleTop = Math.floor(candleChartRef.current.height.currentBaselineY - utilites.get_pixel_location_of_a_price(candleChartRef, Math.max(item.candle_open, item.candle_close)));
+    let candleBottom = Math.floor(candleChartRef.current.height.currentBaselineY - utilites.get_pixel_location_of_a_price(candleChartRef, Math.min(item.candle_open, item.candle_close)));
+
+    ctx.save();
+    ctx.strokeStyle = item.color;
+    ctx.lineWidth = 1;
+
+    // Draw top wick
+    if (yHigh < candleTop) { // Only draw if wick extends above candle
+        ctx.beginPath();
         ctx.moveTo(x, yHigh);
+        ctx.lineTo(x, candleTop);
+        ctx.stroke();
+    }
+
+    // Draw bottom wick
+    if (yLow > candleBottom) { // Only draw if wick extends below candle
+        ctx.beginPath();
+        ctx.moveTo(x, candleBottom);
         ctx.lineTo(x, yLow);
         ctx.stroke();
-        ctx.restore();
+    }
+
+    ctx.restore();
+    
+        // const yHigh = Math.floor(candleChartRef.current.height.currentBaselineY - utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_high));
+        // const yLow = Math.floor(candleChartRef.current.height.currentBaselineY - utilites.get_pixel_location_of_a_price(candleChartRef, item.candle_low));
+        // ctx.save()
+        // ctx.beginPath(); // start fresh path per wick
+        // ctx.strokeStyle = item.color;
+        // ctx.lineWidth = 1;
+        // ctx.moveTo(x, yHigh);
+        // ctx.lineTo(x, yLow);
+        // ctx.stroke();
+        // ctx.restore();
     }
 
 }

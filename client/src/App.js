@@ -36,9 +36,9 @@ const App = () => {
   const [recent_patterns, set_recent_patterns] = useState([])
   const [filters, set_filters] = useState({
     bc_retracement_greater: 0,
-    bc_retracement_less: 5000,
+    bc_retracement_less: 101,
     cd_retracement_greater: 0,
-    cd_retracement_less: 5000,
+    cd_retracement_less: 1000,
     ab_leg_greater: 0,
     ab_leg_less: 5000,
     bc_leg_greater: 0,
@@ -108,38 +108,36 @@ const App = () => {
 
     const fetch = async () => {
       
-      // const monthly_peformance = await route.get_monthly_peformance(filters, selected_month)
-      // set_monthly_peformance(monthly_peformance)
+      // MONTHLY PEFORMANCE
+      const monthly_peformance = await route.get_monthly_peformance(filters, selected_month)
+      set_monthly_peformance(monthly_peformance)
   
-
-      const recent_patterns = await route.get_recent_patterns(filters,selected_month)
-      // const selected_pattern = recent_patterns[0]
+      // RECENT PATTERNS
+      let recent_patterns = await route.get_recent_patterns(filters,selected_month)
+      
+      recent_patterns = recent_patterns.sort((a, b) => a.symbol.localeCompare(b.symbol));
       set_recent_patterns(recent_patterns)
 
+      // CANDLES
+      const selected_pattern = recent_patterns[0]
+      let candles = await route.get_candles(recent_patterns[0]?.symbol)
+      candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+      candles = candles?.map(item => {
+        const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
 
-      // let candles = await route.get_candles(recent_patterns[0]?.symbol)
-      // candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
-      // candles = candles?.map(item => {
-      //   const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
-
-      //   return {
-      //     ...item,
-      //     candle_date: toISO(item.candle_date),
-      //   };
-      // });
+        return {
+          ...item,
+          candle_date: toISO(item.candle_date),
+        };
+      });
       
-      // const sorted = recent_patterns.sort((a, b) => a.symbol.localeCompare(b.symbol));
-  
-      // set_recent_patterns(sorted)
+      // SUPPORT & RESISTANCE
+      const snr_lines = await route.get_support_resistance_lines(recent_patterns[0]?.symbol)
+      tools.format_pattern(candles, selected_pattern, snr_lines, set_chart_data)
 
-      // tools.format_pattern(candles, selected_pattern, set_chart_data)
-
+      // WATCHLIST
       // const wl_patterns = await route.get_all_patterns_in_watchlist()
-
       // set_wl_patterns(wl_patterns)
-
-   
-
     
     }
     fetch()
@@ -156,7 +154,7 @@ const App = () => {
     const selected_pattern = recent_patterns[0]
     const sorted = recent_patterns.sort((a, b) => a.symbol.localeCompare(b.symbol));
     set_recent_patterns(sorted)
-    console.log(recent_patterns)
+
 
 
     // let candles = await route.get_candles(recent_patterns[0]?.symbol)
@@ -192,9 +190,13 @@ const App = () => {
             }
 
             <div className='monthly_peformance_wrapper'>
-             {months.map((monthName, index) => {
-                // Find the data for this month
-                const monthData = monthly_performance.find(m => m.month === monthName);
+                 <div className='table_header_text'>
+                  Peformance
+            
+                </div>
+              {months.map((monthName, index) => {
+         
+                const monthData = monthly_performance.find(m => m.month_name === monthName);
                 const pct = monthData?.win_pct || 0;
                 const count_total = monthData?.count_total || 0;
 
@@ -206,7 +208,7 @@ const App = () => {
                 return (
                   <div
                     key={monthName}
-                    className={selected_month === monthName ? 'month-wrapper-active' : 'month-wrapper'}
+                    className={selected_month === months[index].month_name ? 'month-wrapper-active' : 'month-wrapper'}
                     onClick={() => handle_updated_recent_patterns(monthly_performance[index].month_num)}
                     style={{
                       position: "relative",
@@ -219,13 +221,13 @@ const App = () => {
                       className="win_pct_background"
                       style={{
                         width: `${pct}%`,
-                        backgroundColor: fillColor,
+                        backgroundColor: 'rgba(201, 201, 201, 0.2)' ,
                         transition: "width 0.3s ease",
                       }}
                     />
 
                     {/* Centered text */}
-                    <span
+                    <div
                       style={{
                         position: "absolute",
                         left: "50%",
@@ -234,15 +236,22 @@ const App = () => {
                         fontWeight: "bold",
                         color: "#fff",
                         textAlign: "center",
+                        display: 'flex',
+                        width: '100%'
+                        
                       }}
                     >
-                      <div className='row__'>{monthName}</div>
+                      <div className='row__'>{monthName.slice(0, 3)}</div>
                       <div className='row__'>{count_total}</div>
-                      <div className='row__'>{pct}%</div>
-                    </span>
+                      <div className='row__'>{pct.toFixed(0)}%</div>
+                    </div>
                   </div>
                 );
               })}
+
+                 <div className='table_header_main'>
+            
+            </div>
 
             </div>
 

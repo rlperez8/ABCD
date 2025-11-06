@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 
 from storage import *
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -297,59 +298,54 @@ def filtered_peformances():
     except Exception as e:
         print("Error:", e)
         return jsonify({'error': str(e)}), 500
+
 @app.route('/recent_patterns', methods=['POST'])
 def recent_patterns():
+    start_time = time.time()  # Start the timer
+    
     try:
         data = request.get_json()
+    
         bc_retracement_greater = data['bc_retracement_greater']
         bc_retracement_less = data['bc_retracement_less']
         cd_retracement_greater = data['cd_retracement_greater']
         cd_retracement_less = data['cd_retracement_less']
+            #  AND pattern_BC_bar_length BETWEEN 0.38 * pattern_AB_bar_length AND 0.62 * pattern_AB_bar_length
+            # AND pattern_CD_bar_length BETWEEN 1.0 * pattern_AB_bar_length AND 1.27 * pattern_AB_bar_length
 
         query = '''
-            SELECT p.*
-            FROM pattern_abcd p
-            WHERE p.trade_entered_date >= %s
-                AND p.pattern_BC_bar_length BETWEEN 0.38 * p.pattern_AB_bar_length AND 0.62 * p.pattern_AB_bar_length
-                AND p.pattern_CD_bar_length BETWEEN 1.0 * p.pattern_AB_bar_length AND 1.27 * p.pattern_AB_bar_length
-                AND p.pattern_C_price_retracement BETWEEN %s AND %s
-                AND p.pattern_D_price_retracement BETWEEN %s AND %s
-                AND EXISTS (
-                    SELECT 1
-                    FROM support_and_resistance s
-                    WHERE s.symbol = p.symbol
-                        AND (
-                            p.trade_entered_price BETWEEN 0.99 * s.price AND 1.01 * s.price
-                        )
-                )
+            SELECT *
+            FROM pattern_abcd
+            WHERE num_tolerances <= 0.1
+            AND year = 2025
+            AND month = 11
+            AND pattern_C_price_retracement BETWEEN %s AND %s
+            AND pattern_D_price_retracement BETWEEN %s AND %s
         '''
 
-  
-
         params = (
-            "2025-10-01",
             bc_retracement_greater,
             bc_retracement_less,
             cd_retracement_greater,
             cd_retracement_less
         )
 
-        with engine.connect() as conn:
-            df = pd.read_sql_query(query, conn, params=params)
+
+        df = pd.read_sql_query(query, engine, params=params)
+        print(df)
 
         df = df.replace({np.nan: None})
+        
+        end_time = time.time()  # End the timer
+        execution_time = end_time - start_time
+
+        print(execution_time)
 
         return jsonify({
             'status': 'success',
+            'execution_time_seconds': round(execution_time, 3),
             'data': df.to_dict(orient='records')
         })
-
-    except Exception as e:
-        print(e)
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
 
     except Exception as e:
         print(e)
@@ -517,10 +513,12 @@ def monthly_peformance():
         bc_retracement_less = data['bc_retracement_less']
         cd_retracement_greater = data['cd_retracement_greater']
         cd_retracement_less = data['cd_retracement_less']
+        import calendar
         query = '''
             SELECT 
-                EXTRACT(YEAR FROM trade_entered_date) AS year,
-                EXTRACT(MONTH FROM trade_entered_date) AS month,
+                year,
+                month,
+         
                 COUNT(*) AS count_total,
                 SUM(CASE WHEN trade_result = 'Win' THEN 1 ELSE 0 END) AS count_won,
                 SUM(CASE WHEN trade_result = 'Lost' THEN 1 ELSE 0 END) AS count_lost,
@@ -536,36 +534,26 @@ def monthly_peformance():
                     2
                 ) AS win_pct
             FROM pattern_abcd p
-            WHERE 
-                EXTRACT(YEAR FROM p.trade_entered_date) = 2025
-                AND EXTRACT(MONTH FROM p.trade_entered_date) >= 10
-                AND p.pattern_BC_bar_length BETWEEN 0.38 * p.pattern_AB_bar_length AND 0.62 * p.pattern_AB_bar_length
-                AND p.pattern_CD_bar_length BETWEEN 1.0 * p.pattern_AB_bar_length AND 1.27 * p.pattern_AB_bar_length
-                AND p.pattern_C_price_retracement BETWEEN %s AND %s
-                AND p.pattern_D_price_retracement BETWEEN %s AND %s
-                AND EXISTS (
-                    SELECT 1
-                    FROM support_and_resistance s
-                    WHERE s.symbol = p.symbol
-                        AND (
-                            p.trade_entered_price BETWEEN 0.99 * s.price AND 1.01 * s.price
-                         
-                        )
-                )
+            WHERE year = 2025
+            AND num_tolerances <= 0.1
             GROUP BY year, month
-            ORDER BY year, month;
+            ORDER BY month;
+
         '''
 
-
-
         params = (
-            bc_retracement_greater,
-            bc_retracement_less,
-            cd_retracement_greater,
-            cd_retracement_less,
+            # bc_retracement_greater,
+            # bc_retracement_less,
+            # cd_retracement_greater,
+            # cd_retracement_less,
         )
 
         df = pd.read_sql_query(query, engine, params=params)
+        
+        # df['month_name'] = df['month'].apply(lambda x: calendar.month_name[x])
+        df['month_name'] = df['month'].astype(int).apply(lambda x: calendar.month_name[x])
+        print(df)
+
 
         return jsonify({
             "status": "success",

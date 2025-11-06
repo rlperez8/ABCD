@@ -168,7 +168,7 @@ const Filter = (props) => {
         }
 
     return(
-        <div className='table_body_main'>
+        <div className='table_body_main' >
             <div className="filts">
 
                 <div className="filter_left">
@@ -189,6 +189,8 @@ const Filter = (props) => {
                         })}
 
                     </div>
+
+                    <div className="save-filter-wrapper" onClick={()=>{handle_updated_recent_patterns()}}>Save</div>
 
                 </div>
 
@@ -300,7 +302,7 @@ const Filter = (props) => {
                     
                     </div>
                 </div>
-                <div className="save-filter-wrapper" onClick={()=>{handle_updated_recent_patterns()}}>Save</div>
+                
 
                 </div>
 

@@ -12,8 +12,21 @@ const Section = (props) => {
 
     const [is_collapse, set_collapse] = useState(false)
 
+    const get_css = () => {
+
+        if(title === 'Build Pattern'){
+            return 'bp-section'
+        }
+        if(title === 'Recent Patterns'){
+            return 'rp-section'
+        }
+
+    }
+
     return(
-        <div className={is_collapse ? 'patterns_table_main_expanded' : 'patterns_table_main' }>
+        <div className={is_collapse ? 'patterns_table_main' : get_css() }>
+
+            <div className="margin-">
     
             <div className='table_header_main'>
                 <div className='table_header_text'>{title}</div>
@@ -31,7 +44,11 @@ const Section = (props) => {
             <div className='table_body_main'>
                 {body}
             </div>
-                        
+
+             <div className='table_header_main'>
+            
+            </div>
+        </div>
         </div>
     )
 }

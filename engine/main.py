@@ -4,15 +4,33 @@ import sys
 
 
 def run_strategy(ticker):
-    try: 
-        
+    try:
         candles = DataBase().get_stored_candles('candles', ticker)
-       
+
+        # If not enough candles, exit this function
+        if candles.shape[0] < 365:
+            return
+        
+        db_url = "mysql+pymysql://rperezkc:Nar8uto!@localhost:3306/abcd"
+        engine = create_engine(db_url)
+
+        query = '''
+                select * 
+                from support_and_resistance
+                where symbol = %s
+            '''
+        df = pd.read_sql_query(query, engine, params=(ticker,))
+        snr_price = df.iloc[0].price
+
         candles = candles[['date','open','high','low','close','volume']]
         candles['date'] = pd.to_datetime(candles['date']).dt.date
-        candles = candles[candles['date']>= pd.to_datetime('2024-12-01').date()]
+        candles = candles[candles['date'] >= pd.to_datetime('2024-12-01').date()]
         candles.insert(5, 'adj_close', candles['close'])
-        candles.to_csv("data.csv",index=False)
+
+        if candles.empty:
+            return
+
+        candles.to_csv("data.csv", index=False)
         btFeed = Backtrader().prepareDataForStrategy(candles, 'data.csv')
         cerebro = bt.Cerebro(writer=False)
         cerebro.adddata(btFeed)
@@ -22,53 +40,81 @@ def run_strategy(ticker):
                 pattern_ABC = [],
                 pattern_ABCD = [],
                 stockName=ticker, 
+                snr_price=snr_price
             )
         cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="ta")
         cerebro.addanalyzer(bt.analyzers.SQN, _name="sqn")
         cerebro.run()
-    except Exception as e: 
-        print('Failed:', e)
-        traceback.print_exc()  
-        pass
 
-def main():
-    alpha = AlphaVantage()
+    except Exception as e:
+        print('Failed:', e)
+        traceback.print_exc()
+        sys.exit()  # exits the entire program if an exception occurs
+
+
+def abcd_patterns():
     db = DataBase()
 
-    df = alpha.load_single_symbol_candle_data('full', 'ABUS')
-    df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
-    avg_volume = df['volume'].mean()
-    print(df)
-    run_strategy('ABUS')
-    sys.exit()
+    pattern_abcd_symbols =  db.get_distinct_symbols('pattern_abcd','symbol')['symbol'].tolist()
+    candles_symbols =  db.get_distinct_symbols('candles','symbol')['symbol'].tolist()
 
-    # Get tickers (first 100)
-    tickers = alpha.get_listing_status()['symbol'].to_list()[7975:]
+    missing_symbols = list(set(candles_symbols) - set(pattern_abcd_symbols))
 
-    
-    for index, ticker in enumerate(tickers):
+    for index, ticker in enumerate(missing_symbols):
         try:
-            df = alpha.load_single_symbol_candle_data('full', ticker)
-            df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
-            avg_volume = df['volume'].mean()
-
-            print(f"Ticker: {ticker}, Avg Volume: {avg_volume:.0f}", 'Index: ', index + 7975 )
-
-            # Skip illiquid stocks
-            if avg_volume < 500_000:
-                continue
-            
-            try:
-                db.insert_data(df, 'candles')
-            except: 
-                pass
+            print(index, len(missing_symbols),ticker)
             run_strategy(ticker)
                 
         except Exception as e: 
             print(f"Error processing {ticker}: {e}")
+            pass
 
-            sys.exit()
+
+    print('snr_symbols:', len(pattern_abcd_symbols))
+    print('candles_symbols:', len(candles_symbols))
+
+def load_candles():
+
+    alpha = AlphaVantage()
+    tickers = alpha.get_listing_status()['symbol'].to_list()[2300:]
+    db = DataBase()
+
+    for index, ticker in enumerate(tickers):
+        try:
+            df = alpha.load_single_symbol_candle_data('full', ticker)
+
+            if not df.empty:
+            
+                df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
+                avg_volume = df['volume'].mean()
+
+                # Skip illiquid stocks
+                if avg_volume < 500_000:
+                    continue
+        
+            try:
+                db.insert_data(df, 'candles')
+                print(f"Ticker: {ticker}, Avg Volume: {avg_volume:.0f}", 'Index: ', index + 2300 )
+            except: 
+                pass
+         
+        except Exception as e: 
+            print(f"Error processing {ticker}: {e}")
 
 
+def main():
+    abcd_patterns()
+    # db = DataBase()
+    # tickers =  db.get_distinct_symbols('candles','symbol')['symbol'].tolist()[2300:]
+    # for index, ticker in enumerate(tickers):
+    #     try:
+    
+    #         print(index + 2300, ticker)
+    #         run_strategy(ticker)
+                
+    #     except Exception as e: 
+    #         print(f"Error processing {ticker}: {e}")
+
+    #     sys.exit()
 
 main()

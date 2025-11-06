@@ -31,132 +31,134 @@ const ChartMain = (props) => {
     return(
 
       <div className="chart_margin_container">
-        
-      <div className='chart_container'>
-        
-  
+        <div className="margin-">
+          
+          <div className='chart_container'>
+            
+      
 
-        <div className='data_'>
+            <div className='data_'>
 
-          <div className='chart-header-wrapper'>
+              <div className='chart-header-wrapper'>
 
-            <div className="header-buttons-wrapper">
+                <div className="header-buttons-wrapper">
 
-              <div className={is_abcd_pattern ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
-                
-                set_abcd_pattern(!is_abcd_pattern)}}>
-
-                <img className='abcd_img' src={abcd}></img>
-              </div>
-
-              <div className={is_price_levels ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
-                
-                set_price_levels(!is_price_levels)}}>
-
-                <img className='abcd_img' src={prices}></img>
-              </div>
-
-              <div className={is_retracement ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
-                
-                set_retracement(!is_retracement)}}>
-
-                <img className='abcd_img' src={retracement}></img>
-              </div>
-
-              <div className='chart_icon_' onClick={()=>{set_add_wl(!is_add_wl)}}>
-
-                <img className='abcd_img' src={add}></img>
-
-                {is_add_wl && <div className="wl-options-wrapper">
-
-                  {all_watchlists.map(item=>{
-                    return(
-                    <div className="wl-row" onClick={()=>{
-                      
+                  <div className={is_abcd_pattern ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
                     
-                      // const closeNew = chart_data.candles[0].candle_close;
-                      // const closeOld = chart_data.candles[1].candle_close;
-                      // const pctChange = ((closeNew - closeOld) / closeOld) * 100;
-                      // const change = closeNew - closeOld
-                      // const volume = chart_data.candles[1].volume
+                    set_abcd_pattern(!is_abcd_pattern)}}>
 
-                  
-                      route.add_pattern_to_a_watchlist(
-                        item.wl_name, 
-                        chart_data.abcd_pattern.id,            
-                      )
+                    <img className='abcd_img' src={abcd}></img>
+                  </div>
+
+                  <div className={is_price_levels ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
+                    
+                    set_price_levels(!is_price_levels)}}>
+
+                    <img className='abcd_img' src={prices}></img>
+                  </div>
+
+                  <div className={is_retracement ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
+                    
+                    set_retracement(!is_retracement)}}>
+
+                    <img className='abcd_img' src={retracement}></img>
+                  </div>
+
+                  <div className='chart_icon_' onClick={()=>{set_add_wl(!is_add_wl)}}>
+
+                    <img className='abcd_img' src={add}></img>
+
+                    {is_add_wl && <div className="wl-options-wrapper">
+
+                      {all_watchlists.map(item=>{
+                        return(
+                        <div className="wl-row" onClick={()=>{
+                          
+                        
+                          // const closeNew = chart_data.candles[0].candle_close;
+                          // const closeOld = chart_data.candles[1].candle_close;
+                          // const pctChange = ((closeNew - closeOld) / closeOld) * 100;
+                          // const change = closeNew - closeOld
+                          // const volume = chart_data.candles[1].volume
+
                       
-                    }}>{item.wl_name}</div>
-                    )
-                  })}
+                          route.add_pattern_to_a_watchlist(
+                            item.wl_name, 
+                            chart_data.abcd_pattern.id,            
+                          )
+                          
+                        }}>{item.wl_name}</div>
+                        )
+                      })}
+                    </div>
+      }
+                    
+                    
+                  </div>
+
+                  <div className={false ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
+                    
+                    set_sections_expanded(!is_sections_expanded)
+                    
+                    }}>
+
+                    <img className='abcd_img' src={menu}></img>
+                  </div>
                 </div>
-  }
-                
-                
+
+                <div className='chart_tool_header'>
+
+                    <div className="chart-header-stat-wrapper">
+                      <div className="stat-key">C Retracement</div>
+                      <div className="stat-value">{chart_data.abcd_pattern?.pattern_C_price_retracement}</div>
+                    </div>
+                    
+                    <div className="chart-header-stat-wrapper">
+                      <div className="stat-key">D Retracement</div>
+                      <div className="stat-value">{chart_data.abcd_pattern?.pattern_D_price_retracement + 100}</div>
+                    </div>
+
+                    <div className="chart-header-stat-wrapper">
+                      <div className="stat-key">BC Length</div>
+                      <div className="stat-value">{parseFloat(bc_pct.toFixed(2))}%</div>
+                    </div>
+
+                    <div className="chart-header-stat-wrapper">
+                      <div className="stat-key">CD Length</div>
+                      <div className="stat-value">{parseFloat(cd_pct.toFixed(2))}%</div>
+                    </div>
+
+                </div>
+
               </div>
 
-              <div className={false ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
-                
-                set_sections_expanded(!is_sections_expanded)
-                
-                }}>
+          
+                {is_loading_patterns &&
+                  <div className="overlay">
+                            <div className='loading_container'>Loading...</div>
+                  </div>
+                }
 
-                <img className='abcd_img' src={menu}></img>
-              </div>
+                
+                {chart_data.candles.length > 0 && 
+
+                  <Candle_Chart 
+                  chart_data={chart_data}
+                  is_price_levels={is_price_levels}
+                  is_retracement={is_retracement}
+                  is_abcd_pattern={is_abcd_pattern}
+          
+                />
+    }
+        
+
+      
             </div>
-
-            <div className='chart_tool_header'>
-
-                <div className="chart-header-stat-wrapper">
-                  <div className="stat-key">C Retracement</div>
-                  <div className="stat-value">{chart_data.abcd_pattern?.pattern_C_price_retracement}</div>
-                </div>
-                
-                <div className="chart-header-stat-wrapper">
-                  <div className="stat-key">D Retracement</div>
-                  <div className="stat-value">{chart_data.abcd_pattern?.pattern_D_price_retracement + 100}</div>
-                </div>
-
-                <div className="chart-header-stat-wrapper">
-                  <div className="stat-key">BC Length</div>
-                  <div className="stat-value">{parseFloat(bc_pct.toFixed(2))}%</div>
-                </div>
-
-                <div className="chart-header-stat-wrapper">
-                  <div className="stat-key">CD Length</div>
-                  <div className="stat-value">{parseFloat(cd_pct.toFixed(2))}%</div>
-                </div>
-
-            </div>
-
+            
           </div>
 
-       
-            {is_loading_patterns &&
-              <div className="overlay">
-                        <div className='loading_container'>Loading...</div>
-              </div>
-            }
-
-            
-            {chart_data.candles.length > 0 && 
-
-              <Candle_Chart 
-              chart_data={chart_data}
-              is_price_levels={is_price_levels}
-              is_retracement={is_retracement}
-              is_abcd_pattern={is_abcd_pattern}
-      
-            />
-}
-    
-
-  
-        </div>
+        </div>        
         
-      </div>
-
-      
       </div>
     )
 }
