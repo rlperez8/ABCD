@@ -9,8 +9,9 @@
     justify-content: center;
     align-items: center;
     /* background: linear-gradient(135deg, #161e2f, #444a5b, #2b2837); */
-    /* background: linear-gradient(135deg, #282d2d, #7e7e7e, #272929); */
-    background: linear-gradient(to bottom, #0a0d0f, #0f1416, #132022, #173035);
+    background: linear-gradient(135deg, #282d2d, #7e7e7e, #272929);
+    /* background: linear-gradient(to top, #0a0d0f, #0f1416, #132022, #173035); */
+    /* background-color: rgb(12, 12, 12); */
 
 }
 .main_left{
@@ -278,18 +279,9 @@
 
 }
 .canvas_dates{
-    /* min-height: 5%;
-    max-height: 5%; */
     height: 4%;
     width: 100%;
-    /* background-color: black; */
-  
-    /* border: 1px solid rgb(74, 13, 13); */
     box-sizing: border-box;
-    /* background: linear-gradient(to right, rgb(8, 20, 36), rgb(3, 22, 31), rgb(8, 20, 36), rgb(4, 5, 7)); */
-    background-color: #0e0e0e;
-     /* background-color: #151c20e0; */
-     background-color: #202020;
     display: flex;
 
 }
@@ -298,17 +290,17 @@
     width: 70px;
     /* border: 3px solid rgb(26, 24, 24); */
     /* max-width: 25px; */
-    background: linear-gradient(to right, rgb(8, 20, 36), rgb(3, 22, 31), rgb(8, 20, 36), rgb(4, 5, 7));
+    /* background: linear-gradient(to right, rgb(8, 20, 36), rgb(3, 22, 31), rgb(8, 20, 36), rgb(4, 5, 7)); */
     height: 96%;
     display: flex;
     flex-direction: column;
-    background: #111111;
+    /* background: #111111;
     background: #6a6969;
     background-color: #000000e0;
-     /* background-color: #fefdfd; */
+     background-color: #fefdfd;
     background-color: #202020
     
-    
+     */
 
     
 }
@@ -316,7 +308,6 @@
     width: 100px;
     color: white;
     display: flex;
-    border: 1px solid rgb(75, 75, 75);
     justify-content: center;
     align-items: center;
 
@@ -347,17 +338,17 @@
     color: 'green'
 }
 .pricesb{
-    width: 100%;
+    /* width: 100%;
     max-width: 100%;
     max-height: 100%;
-    min-height: 100%;
+    min-height: 100%; */
     height: 100%;
-    border-top: none;
-    border-bottom: none;
-    margin: auto;
+    /* border-top: none;
+    border-bottom: none; */
+    /* margin: auto; */
     /* border: 1px solid white; */
-    justify-content: center;
-    align-items: center;
+    /* justify-content: center;
+    align-items: center; */
     
 
 }
@@ -743,9 +734,6 @@ input:focus {
 .chart_tool_header{
     width: 50%;
     height: 100%;
-    /* border-bottom: 1px solid rgb(90, 90, 90); */
-    background-color: #202020;
-    /* border: 1px solid teal; */
     box-sizing: border-box;
     display: flex;
     justify-content: right;
@@ -759,7 +747,7 @@ input:focus {
     /* border: 1px solid yellow; */
     box-sizing: border-box;
     display: flex;
-    border: 1px solid rgb(81, 78, 78);
+    /* border: 1px solid rgb(81, 78, 78); */
         font-family: monospace
 }
 .stat-key{
@@ -838,10 +826,6 @@ input:focus {
 .chart-header-wrapper{
     width: 100%;
     height: 5%;
-    /* max-height: 300px; */
-
-    /* border-right: 1px solid rgb(111, 106, 106); */
-    background-color: #202020;
     display: flex;
     flex-direction: row;
 }
@@ -1399,20 +1383,25 @@ input:focus {
     width: 100%;
     height: 100%;
     border-radius: 5px;
-    /* border: 1px solid rgb(64, 62, 62); */
+    border: 2px solid rgb(33, 46, 46);
     box-sizing: border-box;
     overflow: hidden;
      /* background: linear-gradient(135deg, #3a3a3a, #141515, #262828); */
-     background: linear-gradient(
+     /* background: linear-gradient(
     135deg,
    
-    rgba(20, 21, 21),  /* 50% transparent */
-    rgb(43, 54, 54)     /* Fully transparent */
+    rgba(20, 21, 21), 
+    rgb(43, 54, 54)     
     );
     background: linear-gradient(
     to right,
-    rgba(31, 31, 31, 0.7),   /* #111111 with 20% opacity */
-    rgba(40, 40, 40, 0.7)    /* #282828 with 20% opacity */
+    rgba(31, 31, 31, 0.7),   
+    rgba(40, 40, 40, 0.7)    
+); */
+  background: linear-gradient(
+    to right,
+    rgba(31, 31, 31, 0.7),   
+    rgba(40, 40, 40, 0.7)    
 );
 }
 .patterns_table_main{
@@ -1457,7 +1446,7 @@ input:focus {
     display: flex;
     flex-direction: row;
     font-weight: 500;
-    background-color: #202020;
+    /* background-color: #202020; */
     box-sizing: border-box;
     overflow: hidden;
     /* border: 1px solid orange; */
@@ -2285,8 +2274,8 @@ color: rgb(176, 176, 176);
     flex-direction: column;
      background: linear-gradient(
     to right,
-    rgba(31, 31, 31, 0.7),   /* #111111 with 20% opacity */
-    rgba(40, 40, 40, 0.7)    /* #282828 with 20% opacity */
+    rgba(31, 31, 31, 0.7),   
+    rgba(40, 40, 40, 0.7)    
 );
 }
 .month-wrapper-active{

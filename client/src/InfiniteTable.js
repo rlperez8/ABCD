@@ -27,8 +27,8 @@ const InfiniteTable = (props) => {
         'price_change',
         'price_change_pct', 
         'unrealized_pnl',
-        'unrealized_pnl_pct',
-        'pct_diff_from_snr'
+        // 'unrealized_pnl_pct',
+        'pattern_A_pivot_date'
     
     ]
     const [containerWidth, setContainerWidth] = useState(0);
@@ -85,6 +85,22 @@ const InfiniteTable = (props) => {
             }else if ((columnIndex === 7 || columnIndex === 8)  && Number(content) <= 0) {
                 cellContent = <div className="negative_pnl">${cellContent}</div>;
             }
+          else if (columnIndex === 7 || columnIndex === 8) {
+            const date = new Date(cellContent);
+
+            // Add 1 day (in milliseconds)
+            date.setDate(date.getDate() + 1);
+
+            const formattedDate = date
+                .toLocaleDateString("en-US", {
+                    year: "2-digit",
+                    month: "2-digit",
+                    day: "2-digit",
+                })
+                .replace(/\//g, "-"); // Replace slashes with dashes
+
+            cellContent = <div className="negative_pnl">{formattedDate}</div>;
+        }
 
 
             return (

@@ -115,7 +115,9 @@ const App = () => {
       // RECENT PATTERNS
       let recent_patterns = await route.get_recent_patterns(filters,selected_month)
       
-      recent_patterns = recent_patterns.sort((a, b) => a.symbol.localeCompare(b.symbol));
+      // recent_patterns = recent_patterns.sort((a, b) => a.symbol.localeCompare(b.symbol));
+      recent_patterns = recent_patterns.sort((a, b) => new Date(a.pattern_A_pivot_date) - new Date(b.pattern_A_pivot_date));
+// 
       set_recent_patterns(recent_patterns)
 
       // CANDLES
@@ -221,8 +223,12 @@ const App = () => {
                       className="win_pct_background"
                       style={{
                         width: `${pct}%`,
-                        backgroundColor: 'rgba(201, 201, 201, 0.2)' ,
+                        // backgroundColor: 'rgba(201, 201, 201, 0.2)' ,
                         transition: "width 0.3s ease",
+                        border: '2px solid rgba(75, 214, 226, 0.36)',
+                        height: '100%',
+                        boxSizing: 'border-box'
+
                       }}
                     />
 

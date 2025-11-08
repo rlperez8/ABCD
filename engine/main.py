@@ -9,8 +9,11 @@ def run_strategy(ticker):
 
         # If not enough candles, exit this function
         if candles.shape[0] < 365:
+            print('candles.shape[0] < 365')
+            with open('empty_symbols.txt', 'a') as f:
+                f.write(ticker + '\n')
             return
-        
+     
         db_url = "mysql+pymysql://rperezkc:Nar8uto!@localhost:3306/abcd"
         engine = create_engine(db_url)
 
@@ -24,11 +27,15 @@ def run_strategy(ticker):
 
         candles = candles[['date','open','high','low','close','volume']]
         candles['date'] = pd.to_datetime(candles['date']).dt.date
-        candles = candles[candles['date'] >= pd.to_datetime('2024-12-01').date()]
+        # candles = candles[candles['date'] >= pd.to_datetime('2024-12-01').date()]
         candles.insert(5, 'adj_close', candles['close'])
 
         if candles.empty:
+            print('candles.empty:')
+            with open('candles df empty.txt', 'a') as f:
+                f.write(ticker + '\n')
             return
+      
 
         candles.to_csv("data.csv", index=False)
         btFeed = Backtrader().prepareDataForStrategy(candles, 'data.csv')
@@ -44,13 +51,14 @@ def run_strategy(ticker):
             )
         cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="ta")
         cerebro.addanalyzer(bt.analyzers.SQN, _name="sqn")
+
+        print('candle df size',len(candles))
         cerebro.run()
 
     except Exception as e:
         print('Failed:', e)
         traceback.print_exc()
         sys.exit()  # exits the entire program if an exception occurs
-
 
 def abcd_patterns():
     db = DataBase()
@@ -60,10 +68,12 @@ def abcd_patterns():
 
     missing_symbols = list(set(candles_symbols) - set(pattern_abcd_symbols))
 
-    for index, ticker in enumerate(missing_symbols):
+    for index, ticker in enumerate(candles_symbols):
         try:
-            print(index, len(missing_symbols),ticker)
-            run_strategy(ticker)
+            print('============================')
+            print(index, len(candles_symbols),ticker)
+            run_strategy("A")
+            sys.exit()
                 
         except Exception as e: 
             print(f"Error processing {ticker}: {e}")
@@ -101,20 +111,12 @@ def load_candles():
         except Exception as e: 
             print(f"Error processing {ticker}: {e}")
 
-
 def main():
     abcd_patterns()
-    # db = DataBase()
-    # tickers =  db.get_distinct_symbols('candles','symbol')['symbol'].tolist()[2300:]
-    # for index, ticker in enumerate(tickers):
-    #     try:
-    
-    #         print(index + 2300, ticker)
-    #         run_strategy(ticker)
-                
-    #     except Exception as e: 
-    #         print(f"Error processing {ticker}: {e}")
 
-    #     sys.exit()
 
 main()
+
+# OTC
+# CAUD
+# CUBT EFTR
