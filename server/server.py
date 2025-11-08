@@ -312,22 +312,23 @@ def recent_patterns():
         cd_retracement_less = data['cd_retracement_less']
             #  AND pattern_BC_bar_length BETWEEN 0.38 * pattern_AB_bar_length AND 0.62 * pattern_AB_bar_length
             # AND pattern_CD_bar_length BETWEEN 1.0 * pattern_AB_bar_length AND 1.27 * pattern_AB_bar_length
-
+#   AND year = 2025
+#             AND month >= 10
+#             AND day >= 20
+#             AND pattern_C_price_retracement BETWEEN %s AND %s
+#             AND pattern_D_price_retracement BETWEEN %s AND %s
         query = '''
             SELECT *
             FROM pattern_abcd
-            WHERE num_tolerances <= 0.1
-            AND year = 2025
-            AND month = 11
-            AND pattern_C_price_retracement BETWEEN %s AND %s
-            AND pattern_D_price_retracement BETWEEN %s AND %s
+            
+          
         '''
 
         params = (
-            bc_retracement_greater,
-            bc_retracement_less,
-            cd_retracement_greater,
-            cd_retracement_less
+            # bc_retracement_greater,
+            # bc_retracement_less,
+            # cd_retracement_greater,
+            # cd_retracement_less
         )
 
 

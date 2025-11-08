@@ -2584,101 +2584,106 @@ class ABCD(bt.Strategy):
                 print(self.datas[0].datetime.date(0), self.data_close[0], self.data_volume[0])
 
                 one+=1
-        # printEachBarDate()
+        printEachBarDate()
         
-       
-        if self.starting_line >= 4:
+        try: 
+            if self.starting_line >= 4:
 
-            Core().check_for_pivot_A(
-                self.datas[0].datetime.date,
-                self.data_close,
-                self.data_open,
-                1,
-                self.settings['market'],
-                self.a_pivots,
-                self.data_high,
-                self.data_low,
-                self.trade_symbol,
-                self.data_volume,
-            )
- 
-            Core().check_for_pivot_B(
-                self.a_pivots,
-                self.datas[0].datetime.date,
-                self.settings['market'],
-                self.data_close,
-                self.data_open,
-                1,
-                self.data_low,
-                self.data_high,
-                self.matched_pivot_ones,
-                self.ab_pivotPairs,
-                self.failed_AB_patterns,
-                self.trade_symbol,
-                self.data_volume,
-            )
-                
-            Core().check_for_pivot_C(
-                self.ab_pivotPairs,
-                self.datas[0].datetime.date,
-                self.data_close,
-                self.data_open,
-                1,
-                self.settings,
-                self.data_high,
-                self.data_low,
-                self.settings['market'],
-                self.abc_pivotTrios,
-                self.trade_symbol,
-                self.data_volume
-            
-            )
-                
-            Core().check_for_pivot_D(
-                self.abc_pivotTrios,
-                self.settings['market'],
-                self.data_low,
-                self.data_high,
-                self.datas[0].datetime.date,
-                self.data_open,
-                self.data_close,
-                self.pattern_abcd,
-                self.trade_symbol    
-            )
-                
-            Core().enter_trade(
-                self.pattern_abcd,
-                self.datas[0].datetime.date,
-                self.datas[0].volume,
-                self.settings['market'],
-                self.data_low,
-                self.data_high,
-                self.settings['rrr'],
-                self.data_close
-            
+                Core().check_for_pivot_A(
+                    self.datas[0].datetime.date,
+                    self.data_close,
+                    self.data_open,
+                    1,
+                    self.settings['market'],
+                    self.a_pivots,
+                    self.data_high,
+                    self.data_low,
+                    self.trade_symbol,
+                    self.data_volume,
                 )
-
-            Core().exit_trade(
-                self.pattern_abcd,
-                self.data_open,
-                self.data_close,
-                self.datas[0].datetime.date,
-                self.data,
-                'setting1',
-                self.trade_symbol,
-                self.datas[0].volume,
-                self.data_high, 
-                self.data_low,
-                self.snr_price
-
+    
+                Core().check_for_pivot_B(
+                    self.a_pivots,
+                    self.datas[0].datetime.date,
+                    self.settings['market'],
+                    self.data_close,
+                    self.data_open,
+                    1,
+                    self.data_low,
+                    self.data_high,
+                    self.matched_pivot_ones,
+                    self.ab_pivotPairs,
+                    self.failed_AB_patterns,
+                    self.trade_symbol,
+                    self.data_volume,
                 )
+                    
+                Core().check_for_pivot_C(
+                    self.ab_pivotPairs,
+                    self.datas[0].datetime.date,
+                    self.data_close,
+                    self.data_open,
+                    1,
+                    self.settings,
+                    self.data_high,
+                    self.data_low,
+                    self.settings['market'],
+                    self.abc_pivotTrios,
+                    self.trade_symbol,
+                    self.data_volume
+                
+                )
+                    
+                Core().check_for_pivot_D(
+                    self.abc_pivotTrios,
+                    self.settings['market'],
+                    self.data_low,
+                    self.data_high,
+                    self.datas[0].datetime.date,
+                    self.data_open,
+                    self.data_close,
+                    self.pattern_abcd,
+                    self.trade_symbol    
+                )
+                    
+                Core().enter_trade(
+                    self.pattern_abcd,
+                    self.datas[0].datetime.date,
+                    self.datas[0].volume,
+                    self.settings['market'],
+                    self.data_low,
+                    self.data_high,
+                    self.settings['rrr'],
+                    self.data_close
+                
+                    )
 
+                Core().exit_trade(
+                    self.pattern_abcd,
+                    self.data_open,
+                    self.data_close,
+                    self.datas[0].datetime.date,
+                    self.data,
+                    'setting1',
+                    self.trade_symbol,
+                    self.datas[0].volume,
+                    self.data_high, 
+                    self.data_low,
+                    self.snr_price
+
+                    )
+        
+        except Exception as e:
+            print(e)
+            print('Script Failed')
+            sys.exit()
         self.starting_line+=1
 
     def stop(self):
        
         merged_patterns = StrategyTools().merge_patterns(self.pattern_abcd)    
         sorted_objects = sorted(merged_patterns, key=lambda x: x.pattern_A_pivot_date)
+        print('patterns found: ', len(self.pattern_abcd))
 
         # DataBase().delete_data('pattern_a')
         # DataBase().delete_data('pattern_ab')

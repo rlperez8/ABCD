@@ -1,0 +1,12 @@
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\deps\sha2-436124a3fb4d73a2.d: C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\lib.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\consts.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha256.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha256_utils.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha512.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha512_utils.rs
+
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\deps\libsha2-436124a3fb4d73a2.rlib: C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\lib.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\consts.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha256.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha256_utils.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha512.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha512_utils.rs
+
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\deps\libsha2-436124a3fb4d73a2.rmeta: C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\lib.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\consts.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha256.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha256_utils.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha512.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha512_utils.rs
+
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\lib.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\consts.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha256.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha256_utils.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha512.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\sha2-0.8.2\src\sha512_utils.rs:
