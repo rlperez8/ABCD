@@ -1,0 +1,2 @@
+fn(Query<FilterParams>) -> impl std::future::Future<Output = impl Responder> {fetch_patterns}
+fn(Query<FilterParams>) -> impl std::future::Future<Output = impl Responder> {fetch_patterns}: HttpServiceFactory

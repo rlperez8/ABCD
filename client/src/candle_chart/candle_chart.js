@@ -14,6 +14,8 @@ export const Candle_Chart = (props) => {
 
 	} = props
 
+    
+    
     const canvas_dates = useRef()
     const canvas_price = useRef()
     const canvas_chart = useRef()
@@ -40,11 +42,10 @@ export const Candle_Chart = (props) => {
 
     // ===== Canvas Mount
     useEffect(() => {
-
+ 
         const resizeCanvas = () => {
 
             if (!canvas_chart.current || !canvas_price.current) return;
-
 
                 const canvas = canvas_chart.current;
                 const ctx = canvas.getContext('2d');
@@ -69,7 +70,8 @@ export const Candle_Chart = (props) => {
                 canvas_date.style.height = '100%';
                 canvas_date.height = canvas_date.offsetHeight;
                 canvas_date.width = canvas_date.offsetWidth;
-                
+
+
             
                 const PRICE_UNIT_DIVISOR = 10;
               
@@ -127,7 +129,7 @@ export const Candle_Chart = (props) => {
 
                         candles: chart_data.candles,
                         starting_candle_Y: chart_data.candles[0]?.open * (canvas.height / PRICE_UNIT_DIVISOR),
-                        complete_width: chart_data.abcd_pattern?.pattern_B_end_date
+                      
                     },
                     price: {
                         unit: {
@@ -181,7 +183,7 @@ export const Candle_Chart = (props) => {
                             previous: canvas.width / 2,
                             
                         },
-                        length: chart_data.abcd_pattern?.pattern_AB_bar_duration
+                 
                     },
              
                     unit_amount: 0,
@@ -242,13 +244,13 @@ export const Candle_Chart = (props) => {
                 candleChartRef.current.grid_size_count = 0
 
                 candleChartRef.current.selected_candle = chart_data.candles[0]?.candle_open 
-                resize.reposition_candles(candleChartRef, chart_data.abcd_pattern)
+                resize.reposition_candles(candleChartRef, chart_data.rust_patterns)
 
         
         };
         // Run on mount
         
-        if (!chart_data.candles || !chart_data.abcd_pattern) return;
+        if (!chart_data.candles || !chart_data.rust_patterns) return;
         resizeCanvas()
   
         // Re-run on window resize
@@ -263,7 +265,7 @@ export const Candle_Chart = (props) => {
     useEffect(()=>{
 
 
-        if (!chart_data.candles || !chart_data.abcd_pattern) return;
+        if (!chart_data.candles || !chart_data.rust_patterns) return;
 
         function findIndexByDate(candles, patternDate) {
                 return candles.findIndex(obj => {
@@ -275,12 +277,12 @@ export const Candle_Chart = (props) => {
                 }) + 1; // add 1 directly here
                 }
 
-        let matchIndex = findIndexByDate(chart_data.candles, chart_data.abcd_pattern?.pattern_A_start_date);
+        let matchIndex = findIndexByDate(chart_data.candles, chart_data.rust_patterns?.a_date);
         // let matchIndex = chart_data.candles.findIndex(obj => obj.date === chart_data.abcd_pattern?.pattern_A_start_date);
         // matchIndex = matchIndex + 1
         let y = candleChartRef.current.candles.complete_width * matchIndex
 
-        candleChartRef.current.pattern.length = chart_data.abcd_pattern?.pattern_ABCD_bar_length
+        candleChartRef.current.pattern.length = chart_data.rust_patterns?.pattern_ABCD_bar_length
         candleChartRef.current.pattern.highlighter.x_orgin = -(candleChartRef.current.width.current_X_origin + y)
         candleChartRef.current.pattern.highlighter.previous = -(candleChartRef.current.width.current_X_origin + y)
 
@@ -291,7 +293,13 @@ export const Candle_Chart = (props) => {
     // ===== Canvas Move
     useEffect(() => {
         
-         if (!chart_data.candles || !chart_data.abcd_pattern) return;
+        // console.log('a:', chart_data.rust_patterns.a_length)
+        // console.log('b:', chart_data.rust_patterns.b_length)
+        // console.log('c:', chart_data.rust_patterns.c_length)
+        // console.log('d:', chart_data.rust_patterns.d_length)
+        // console.log('trade:', chart_data.rust_patterns.trade_length)
+        if (!chart_data.candles || !chart_data?.rust_patterns) return;
+
 
         if (!canvas_chart.current) return;
         const { canvas, ctx } = CandleChartTools.reset_candle_canvas(canvas_chart);
@@ -498,15 +506,14 @@ export const Candle_Chart = (props) => {
             mouse.date_background(ctx_date, candle_width, canvas_date)
             mouse.mouse_date(canvas_date, ctx_date)
 
-            is_abcd_pattern && abcd_.abcd(ctx, chart_data.abcd_pattern)
-            is_retracement && abcd_.retracement(ctx, chart_data.abcd_pattern)
-            abcd_.price_levels(ctx_price, ctx, canvas, chart_data.abcd_pattern)
+            is_abcd_pattern && abcd_.abcd(ctx, chart_data.rust_patterns)
+            is_retracement && abcd_.retracement(ctx, chart_data.rust_patterns)
+            abcd_.price_levels(ctx_price, ctx, canvas, chart_data.rust_patterns)
 
 
           const snr_lines = (canvas, ctx, chart_data) => {
 
-                console.log(chart_data.snr_lines[0].price)
-                const y_stop_loss = candleChartRef.current.height.currentBaselineY - (chart_data.snr_lines[0].price  * (candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.unit_amount))
+                const y_stop_loss = candleChartRef.current.height.currentBaselineY - (chart_data.rust_patterns.trade_snr * (candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.unit_amount))
                 ctx.strokeStyle = 'orange';
                 ctx.setLineDash([5, 5]); 
 
@@ -561,8 +568,9 @@ export const Candle_Chart = (props) => {
     // // ===== Format Pattern
     useEffect(()=>{
 
-        if(chart_data.abcd_pattern){
-            resize.reposition_candles(candleChartRef, chart_data.abcd_pattern)
+        if(chart_data.rust_patterns){
+            // resize.reposition_candles(candleChartRef, chart_data.abcd_pattern, chart_data.rust_patterns)
+            resize.reposition_candles(candleChartRef, chart_data.rust_patterns)
         }
     },[chart_data])
 
@@ -625,7 +633,7 @@ export const Candle_Chart = (props) => {
 
                     <div className='header-bar'>
     
-                        <div className='header_slot' >{chart_data?.abcd_pattern.symbol}</div>
+                        <div className='header_slot' >{chart_data?.rust_patterns.symbol}</div>
                             <div className='header_slot'>
                                 <div className='header_one'>H</div>
                                 <div className='header_two' style={{color: hovered_candle.color}}>

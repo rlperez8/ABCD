@@ -16,8 +16,6 @@ const Filter = (props) => {
     } = props
     
 
-
-
     const [selected_type, set_type] = useState('')
     const [scale, set_scale] = useState('')
     useEffect(() => {
@@ -137,9 +135,11 @@ const Filter = (props) => {
         // 'Cypher',
         // '5-0',
         // 'Three Drives'
-        ];
+    ];
 
     const handle_ = (selectedType) => {
+
+    
 
         const pattern = abcd_types_.find(p => p.type === selectedType);
 
@@ -149,10 +149,12 @@ const Filter = (props) => {
             ...filters,
             ...pattern.ratios
         };
-
         set_type(selectedType);
-        set_filters(updatedFilters);
+  
+        return updatedFilters
+       
     };
+
 
     function updateLegFilters(selectedScale) {
         const scale = abcd_scale_types.find(s => s.scale === selectedScale);
@@ -165,13 +167,13 @@ const Filter = (props) => {
 
         set_scale(selectedScale);
         set_filters(updatedFilters);
-        }
+    }
 
     return(
         <div className='table_body_main' >
             <div className="filts">
 
-                <div className="filter_left">
+                {/* <div className="filter_left">
 
                     <div className='abcd_types_filter_container'>
 
@@ -188,11 +190,13 @@ const Filter = (props) => {
                             )
                         })}
 
+                        <div className="save-filter-wrapper" onClick={()=>{set_filters(handle_(selected_type))}}>Build</div>
+
                     </div>
 
-                    <div className="save-filter-wrapper" onClick={()=>{handle_updated_recent_patterns()}}>Save</div>
+                 
 
-                </div>
+                </div> */}
 
                 {/* <div className="filter_left">
 
@@ -216,95 +220,386 @@ const Filter = (props) => {
              */}
                 <div className="filter_right">
 
-                <div className='filter_box'>
-                    <div className='filter_box_key'>BC Retracement  &gt;</div>
-                    <div className='filter_box_val'>
-            
-                        <input
-                        className="input_style"
-                        value={filters.bc_retracement_greater}
-                    
-                        onChange={(e) => {
-                            const updatedFilters = {
-                            ...filters,
-                            bc_retracement_greater: e.target.value
-                            };
-                            set_filters(updatedFilters);  
-                            
-                        }}
-                        />
-                    
-                    </div>
-                    
-                </div>
-
-                <div className='filter_box'>
-                    <div className='filter_box_key'>BC Retracement  &lt;</div>
-                    <div className='filter_box_val'>
-            
-                        <input
-                        className="input_style"
-                        value={filters.bc_retracement_less}
-                        onChange={(e) => {
-                            const updatedFilters = {
-                            ...filters,
-                            bc_retracement_less: e.target.value
-                            };
-
-                            set_filters(updatedFilters);  
-                 
-                        }}
-                        />
-                    
-                    </div>
-                    
-                </div>
-        
-                <div className='filter_box'>
-                    <div className='filter_box_key'>CD Retracement &gt;</div>
-                    <div className='filter_box_val'>
-            
-                        <input
-                        className="input_style"
-                        value={filters.cd_retracement_greater}
-                        onChange={(e) => {
-                            const updatedFilters = {
-                            ...filters,
-                            cd_retracement_greater: e.target.value
-                            };
-
-                            set_filters(updatedFilters);  
-                
-                        }}
-                        />
-                    
-                    </div>
-                </div>
-                
-                <div className='filter_box'>
-                    <div className='filter_box_key'>CD Retracement &lt;</div>
-                    <div className='filter_box_val'>
-            
-                        <input
-                        className="input_style"
-                        value={filters.cd_retracement_less}
-                        onChange={(e) => {
-                            const updatedFilters = {
-                            ...filters,
-                            cd_retracement_less: e.target.value
-                            };
-                            set_filters(updatedFilters);  
-
-             
-              
-                        }}
-                        />
-                    
-                    </div>
-                </div>
+                    <div className="filter-box-header">Price Retracement</div>
                 
 
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>BC  &gt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.bc_retracement_greater}
+                        
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                bc_retracement_greater: e.target.value
+                                };
+                                set_filters(updatedFilters);  
+                                
+                            }}
+                            />
+                        
+                        </div>
+                        
+                    </div>
+
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>BC  &lt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.bc_retracement_less}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                bc_retracement_less: e.target.value
+                                };
+
+                                set_filters(updatedFilters);  
+                    
+                            }}
+                            />
+                        
+                        </div>
+                        
+                    </div>
+            
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>CD &gt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.cd_retracement_greater}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                cd_retracement_greater: e.target.value
+                                };
+
+                                set_filters(updatedFilters);  
+                    
+                            }}
+                            />
+                        
+                        </div>
+                    </div>
+                    
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>CD &lt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.cd_retracement_less}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                cd_retracement_less: e.target.value
+                                };
+                                set_filters(updatedFilters);  
+
+                
+                
+                            }}
+                            />
+                        
+                        </div>
+                    </div>
+                    
+
                 </div>
+
+                <div className="filter_right">
+
+                    <div className="filter-box-header">Leg Length</div>
+                
+
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>BC &gt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.bc_retracement_greater}
+                        
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                bc_retracement_greater: e.target.value
+                                };
+                                set_filters(updatedFilters);  
+                                
+                            }}
+                            />
+                        
+                        </div>
+                        
+                    </div>
+
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>BC  &lt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.bc_retracement_less}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                bc_retracement_less: e.target.value
+                                };
+
+                                set_filters(updatedFilters);  
+                    
+                            }}
+                            />
+                        
+                        </div>
+                        
+                    </div>
+            
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>CD &gt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.cd_retracement_greater}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                cd_retracement_greater: e.target.value
+                                };
+
+                                set_filters(updatedFilters);  
+                    
+                            }}
+                            />
+                        
+                        </div>
+                    </div>
+                    
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>CD &lt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.cd_retracement_less}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                cd_retracement_less: e.target.value
+                                };
+                                set_filters(updatedFilters);  
+
+                
+                
+                            }}
+                            />
+                        
+                        </div>
+                    </div>
+                    
+
+                </div>
+
+                <div className="filter_right">
+
+                    <div className="filter-box-header">Leg Length</div>
+                
+
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>BC &gt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.bc_retracement_greater}
+                        
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                bc_retracement_greater: e.target.value
+                                };
+                                set_filters(updatedFilters);  
+                                
+                            }}
+                            />
+                        
+                        </div>
+                        
+                    </div>
+
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>BC  &lt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.bc_retracement_less}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                bc_retracement_less: e.target.value
+                                };
+
+                                set_filters(updatedFilters);  
+                    
+                            }}
+                            />
+                        
+                        </div>
+                        
+                    </div>
+            
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>CD &gt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.cd_retracement_greater}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                cd_retracement_greater: e.target.value
+                                };
+
+                                set_filters(updatedFilters);  
+                    
+                            }}
+                            />
+                        
+                        </div>
+                    </div>
+                    
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>CD &lt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.cd_retracement_less}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                cd_retracement_less: e.target.value
+                                };
+                                set_filters(updatedFilters);  
+
+                
+                
+                            }}
+                            />
+                        
+                        </div>
+                    </div>
+                    
+
+                </div>
+
+                <div className="filter_right">
+
+                    <div className="filter-box-header">Leg Length</div>
+                
+
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>BC &gt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.bc_retracement_greater}
+                        
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                bc_retracement_greater: e.target.value
+                                };
+                                set_filters(updatedFilters);  
+                                
+                            }}
+                            />
+                        
+                        </div>
+                        
+                    </div>
+
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>BC  &lt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.bc_retracement_less}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                bc_retracement_less: e.target.value
+                                };
+
+                                set_filters(updatedFilters);  
+                    
+                            }}
+                            />
+                        
+                        </div>
+                        
+                    </div>
+            
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>CD &gt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.cd_retracement_greater}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                cd_retracement_greater: e.target.value
+                                };
+
+                                set_filters(updatedFilters);  
+                    
+                            }}
+                            />
+                        
+                        </div>
+                    </div>
+                    
+                    <div className='filter_box'>
+                        <div className='filter_box_key'>CD &lt;</div>
+                        <div className='filter_box_val'>
+                
+                            <input
+                            className="input_style"
+                            value={filters.cd_retracement_less}
+                            onChange={(e) => {
+                                const updatedFilters = {
+                                ...filters,
+                                cd_retracement_less: e.target.value
+                                };
+                                set_filters(updatedFilters);  
+
+                
+                
+                            }}
+                            />
+                        
+                        </div>
+                    </div>
+                    
+
+                </div>
+                
+                
+                
 
             </div>
         </div>

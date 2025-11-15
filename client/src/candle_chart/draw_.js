@@ -514,22 +514,22 @@ export class ABCD {
         ctx.restore()
 
     }
-    price_levels = (ctx_price, ctx, canvas, ab) => {
+    price_levels = (ctx_price, ctx, canvas, rust_pattern) => {
 
- 
+  
                 ctx.save();
 
                 // // Calculate all y positions
-                const y_stop_loss = this.candleChartRef.current.height.currentBaselineY - (ab.stop_loss  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
-                const y_take_profit = this.candleChartRef.current.height.currentBaselineY - (ab.take_profit  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
-                const y_entered_price = this.candleChartRef.current.height.currentBaselineY - (ab.entered_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+                const y_stop_loss = this.candleChartRef.current.height.currentBaselineY - (rust_pattern?.trade_risk_exit_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+                const y_take_profit = this.candleChartRef.current.height.currentBaselineY - (rust_pattern?.trade_reward_exit_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+                const y_entered_price = this.candleChartRef.current.height.currentBaselineY - (rust_pattern?.trade_enter_price * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
 
                 // Calculate horizontal start and end positions
-                let x_start = -this.candleChartRef.current.candles.complete_width * ab.d;
+                let x_start = -this.candleChartRef.current.candles.complete_width * rust_pattern.d;
                 x_start -= this.candleChartRef.current.width.current_X_origin;
                 x_start += this.candleChartRef.current.candles.complete_width / 2;
 
-                let x_end = -this.candleChartRef.current.candles.complete_width * ab.exit_date;
+                let x_end = -this.candleChartRef.current.candles.complete_width * rust_pattern.exit_date;
                 x_end -= this.candleChartRef.current.width.current_X_origin;
                 x_end += this.candleChartRef.current.candles.complete_width / 2;
                 
@@ -581,41 +581,41 @@ export class ABCD {
                 // ================================================
 
                 // DRAW DASHED PRICE LINE
-                let starting_ = -this.candleChartRef.current.candles.complete_width * ab.exit_date;
-                starting_ -= this.candleChartRef.current.width.current_X_origin;
-                starting_ += this.candleChartRef.current.candles.complete_width / 2;
-                let end_ = this.candleChartRef.current.width.grid_width
-                ctx.beginPath();
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 1;
-                ctx.setLineDash([5, 5]);   
-                ctx.moveTo(starting_, y_entered_price);
-                ctx.lineTo(end_, y_entered_price);
-                ctx.stroke();
-                ctx.setLineDash([]);
+                // let starting_ = -this.candleChartRef.current.candles.complete_width * ab.exit_date;
+                // starting_ -= this.candleChartRef.current.width.current_X_origin;
+                // starting_ += this.candleChartRef.current.candles.complete_width / 2;
+                // let end_ = this.candleChartRef.current.width.grid_width
+                // ctx.beginPath();
+                // ctx.strokeStyle = 'white';
+                // ctx.lineWidth = 1;
+                // ctx.setLineDash([5, 5]);   
+                // ctx.moveTo(starting_, y_entered_price);
+                // ctx.lineTo(end_, y_entered_price);
+                // ctx.stroke();
+                // ctx.setLineDash([]);
 
-                let profit_starting_ = -this.candleChartRef.current.candles.complete_width * ab.exit_date;
-                profit_starting_ -= this.candleChartRef.current.width.current_X_origin;
-                profit_starting_ += this.candleChartRef.current.candles.complete_width / 2;
-                let profit_end_ = this.candleChartRef.current.width.grid_width
-                ctx.beginPath();
-                ctx.strokeStyle = 'teal';
-                ctx.lineWidth = 3;
-                ctx.setLineDash([5, 5]);   
-                ctx.moveTo(profit_starting_, y_take_profit);
-                ctx.lineTo(profit_end_, y_take_profit);
-                ctx.stroke();
-                ctx.setLineDash([]);
+                // let profit_starting_ = -this.candleChartRef.current.candles.complete_width * ab.exit_date;
+                // profit_starting_ -= this.candleChartRef.current.width.current_X_origin;
+                // profit_starting_ += this.candleChartRef.current.candles.complete_width / 2;
+                // let profit_end_ = this.candleChartRef.current.width.grid_width
+                // ctx.beginPath();
+                // ctx.strokeStyle = 'teal';
+                // ctx.lineWidth = 3;
+                // ctx.setLineDash([5, 5]);   
+                // ctx.moveTo(profit_starting_, y_take_profit);
+                // ctx.lineTo(profit_end_, y_take_profit);
+                // ctx.stroke();
+                // ctx.setLineDash([]);
 
 
-                ctx.beginPath();
-                ctx.strokeStyle = 'red';
-                ctx.lineWidth = 3;
-                ctx.setLineDash([5, 5]);;   
-                ctx.moveTo(profit_starting_, y_stop_loss);
-                ctx.lineTo(profit_end_, y_stop_loss);
-                ctx.stroke();
-                ctx.setLineDash([]);
+                // ctx.beginPath();
+                // ctx.strokeStyle = 'red';
+                // ctx.lineWidth = 3;
+                // ctx.setLineDash([5, 5]);;   
+                // ctx.moveTo(profit_starting_, y_stop_loss);
+                // ctx.lineTo(profit_end_, y_stop_loss);
+                // ctx.stroke();
+                // ctx.setLineDash([]);
 
 
                 ctx.restore();
@@ -642,37 +642,37 @@ export class ABCD {
 
                 // =================================================
 
-                // Stop Loss Rectangle + Text
-                ctx_price.fillStyle = "black";          
-                ctx_price.fillRect(x, y_stop_loss - (height/2), width, height);
-                // ctx_price.strokeStyle = "white";              
-                ctx_price.strokeRect(x, y_stop_loss - (height/2), width, height);
+                // // Stop Loss Rectangle + Text
+                // ctx_price.fillStyle = "black";          
+                // ctx_price.fillRect(x, y_stop_loss - (height/2), width, height);
+                // // ctx_price.strokeStyle = "white";              
+                // ctx_price.strokeRect(x, y_stop_loss - (height/2), width, height);
 
-                ctx_price.fillStyle = "red";                 
-                ctx_price.font = '20px Source Sans Pro';
-                ctx_price.fillText(ab.stop_loss, 20, y_stop_loss + height/4); 
+                // ctx_price.fillStyle = "red";                 
+                // ctx_price.font = '20px Source Sans Pro';
+                // ctx_price.fillText(ab.stop_loss, 20, y_stop_loss + height/4); 
              
 
-                // Entered Price Rectangle + Text
-                ctx_price.fillStyle = "black";      
-                ctx_price.fillRect(x, y_entered_price - (height/2), width, height);
-                // ctx_price.strokeStyle = "white";
-                ctx_price.strokeRect(x, y_entered_price - (height/2), width, height);
+                // // Entered Price Rectangle + Text
+                // ctx_price.fillStyle = "black";      
+                // ctx_price.fillRect(x, y_entered_price - (height/2), width, height);
+                // // ctx_price.strokeStyle = "white";
+                // ctx_price.strokeRect(x, y_entered_price - (height/2), width, height);
 
-                ctx_price.fillStyle = "gray";
-                ctx_price.font = '20px Source Sans Pro';
-                ctx_price.fillText(ab.entered_price, 20, y_entered_price + height/4);
+                // ctx_price.fillStyle = "gray";
+                // ctx_price.font = '20px Source Sans Pro';
+                // ctx_price.fillText(ab.entered_price, 20, y_entered_price + height/4);
           
 
-                // Entered Price Rectangle + Take Profit
-                ctx_price.fillStyle = "black";          
-                ctx_price.fillRect(x, y_take_profit - (height/2), width, height);
-                // ctx_price.strokeStyle = "white";
-                ctx_price.strokeRect(x, y_take_profit - (height/2), width, height);
+                // // Entered Price Rectangle + Take Profit
+                // ctx_price.fillStyle = "black";          
+                // ctx_price.fillRect(x, y_take_profit - (height/2), width, height);
+                // // ctx_price.strokeStyle = "white";
+                // ctx_price.strokeRect(x, y_take_profit - (height/2), width, height);
 
-                ctx_price.fillStyle = "teal";
-                ctx_price.font = '20px Source Sans Pro';
-                ctx_price.fillText(ab.take_profit, 20, y_take_profit + height/4);
+                // ctx_price.fillStyle = "teal";
+                // ctx_price.font = '20px Source Sans Pro';
+                // ctx_price.fillText(ab.take_profit, 20, y_take_profit + height/4);
          
     }
 
