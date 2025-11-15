@@ -49,10 +49,11 @@ export const chart_Y_movement = (candleChartRef) => {
  * // After execution, the chart will center around selected_pattern.pattern_A_high
  * // and candleChartRef.current.price.current_mid_price will reflect that value.
  */
-export const push_price_to_middle_screen = (candleChartRef,selected_pattern, size) => {
+export const push_price_to_middle_screen = (candleChartRef, rust_pattern) => {
 
     // Convert target price into pixel location
-    const price_pixel_location = utilites.get_pixel_location_of_a_price(candleChartRef, parseFloat(selected_pattern.pattern_A_high), size);
+    // const price_pixel_location = utilites.get_pixel_location_of_a_price(candleChartRef, parseFloat(selected_pattern.pattern_A_high));
+    const price_pixel_location = utilites.get_pixel_location_of_a_price(candleChartRef, parseFloat(rust_pattern?.a_high));
 
     // Push Baseline-Y Down by Converted Price Amount
     candleChartRef.current.height.currentBaselineY = price_pixel_location;
@@ -129,11 +130,13 @@ export const chart_zoom_in = (candleChartRef, threshold) => {
 
 
 
-export const reposition_candles = (candleChartRef, selected_pattern) => {
+export const reposition_candles = (candleChartRef, rust_pattern) => {
 
     let size = 1
     let loop = true
-    let pattern_price_height = (parseFloat(selected_pattern.pattern_A_high) - parseFloat(selected_pattern['trade_entered_price'])).toFixed(2)
+    // let pattern_price_height = (parseFloat(selected_pattern.pattern_A_high) - parseFloat(selected_pattern['trade_entered_price'])).toFixed(2)
+
+    let pattern_price_height = rust_pattern?.a_high.toFixed(2) - rust_pattern?.trade_enter_price.toFixed(2)
     let pattern_box_height = candleChartRef.current.canvas_height / 10 * 3.5
 
     while (loop === true) {
@@ -174,7 +177,8 @@ export const reposition_candles = (candleChartRef, selected_pattern) => {
             break
         }
 
-        push_price_to_middle_screen(candleChartRef, selected_pattern)
+        // push_price_to_middle_screen(candleChartRef, selected_pattern, rust_pattern)
+        push_price_to_middle_screen(candleChartRef, rust_pattern)
 
         let y = false;
 
@@ -185,7 +189,7 @@ export const reposition_candles = (candleChartRef, selected_pattern) => {
             // Always recalculate complete width as the sum of its parts
             candles.complete_width = chart.current_candle_width + chart.current_pixels_between_candles;
 
-            let pattern_length = candles.complete_width * selected_pattern.pattern_ABCD_bar_length;
+            let pattern_length = candles.complete_width * rust_pattern.pattern_ABCD_bar_length;
             let pattern_box_width = (chart.canvas_width / 10);
 
             if (pattern_length > pattern_box_width) {
@@ -205,10 +209,14 @@ export const reposition_candles = (candleChartRef, selected_pattern) => {
             }
         }
 
-        candleChartRef.current.width.current_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * selected_pattern.a) 
-        candleChartRef.current.width.prev_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * selected_pattern.a) 
+        // candleChartRef.current.width.current_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * selected_pattern.a) 
+        // candleChartRef.current.width.prev_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * selected_pattern.a) 
+
+          candleChartRef.current.width.current_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * rust_pattern.a) 
+        candleChartRef.current.width.prev_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * rust_pattern.a) 
         
-        candleChartRef.current.selected_candle = parseFloat(selected_pattern.pattern_A_high)
+        // candleChartRef.current.selected_candle = parseFloat(selected_pattern.pattern_A_high)
+        candleChartRef.current.selected_candle = rust_pattern?.trade_enter_price.toFixed(2)
 
     }
 

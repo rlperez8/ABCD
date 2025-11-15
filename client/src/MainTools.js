@@ -30,33 +30,54 @@ function findIndexByDate(candles, patternDate) {
     );
     }
 
-export const format_pattern = (candles, pattern, snr_lines, set_chart_data) => {
+export const format_pattern = (candles, rust_patterns, snr_lines, set_chart_data) => {
 
-    let index_A = findIndexByDate(candles, pattern?.pattern_A_pivot_date);
-    let index_B = findIndexByDate(candles, pattern?.pattern_B_pivot_date);
-    let index_C = findIndexByDate(candles, pattern?.pattern_C_pivot_date);
-    let index_D = findIndexByDate(candles, pattern?.trade_entered_date);
-    let exit = findIndexByDate(candles, pattern?.trade_exited_date);
+    let index_A = findIndexByDate(candles, rust_patterns?.a_date);
+    let index_B = findIndexByDate(candles, rust_patterns?.b_date);
+    let index_C = findIndexByDate(candles, rust_patterns?.c_date);
+    let index_D = findIndexByDate(candles, rust_patterns?.d_date);
+    let exit = findIndexByDate(candles, rust_patterns?.trade_date);
 
     set_chart_data({
-        abcd_pattern: {
-            ...pattern,
-            a: index_A,
-            b: index_B,
-            c: index_C,
-            d: index_D,
-            a_price: parseFloat(pattern.pattern_A_high),
-            b_price: parseFloat(pattern.pattern_B_low),
-            c_price: parseFloat(pattern.pattern_C_high),
-            d_price: parseFloat(pattern.trade_entered_price),
-            stop_loss: parseFloat(pattern.trade_stop_loss),
-            take_profit: parseFloat(pattern.trade_take_profit),
-            entered_price: parseFloat(pattern.trade_entered_price),
-            exit_price: parseFloat(pattern.trade_exited_price),
-            exit_date: exit,
+        // abcd_pattern: {
+        //     ...pattern,
+        //     a: index_A,
+        //     b: index_B,
+        //     c: index_C,
+        //     d: index_D,
+        //     a_price: parseFloat(rust_patterns.a_high),
+        //     b_price: parseFloat(rust_patterns.b_low),
+        //     c_price: parseFloat(rust_patterns.c_high),
+        //     d_price: parseFloat(rust_patterns.d_low),
+        //     stop_loss: parseFloat(rust_patterns.trade_stop_ltrade_risk_exit_priceoss),
+        //     take_profit: parseFloat(rust_patterns.trade_reward_exit_price),
+        //     entered_price: parseFloat(rust_patterns.d_low),
+        //     exit_price: parseFloat(rust_patterns.trade_current_price),
+        //     exit_date: exit,
             
-        },
+        // },
         candles: candles,
-        snr_lines: snr_lines
+        snr_lines: snr_lines,
+        rust_patterns: {
+            
+            ...rust_patterns, 
+                symbol: rust_patterns.symbol,
+                pattern_ABCD_bar_length: rust_patterns.trade_length,
+                a: index_A,
+                b: index_B,
+                c: index_C,
+                d: index_D,
+                a_price: parseFloat(rust_patterns.a_high),
+                b_price: parseFloat(rust_patterns.b_low),
+                c_price: parseFloat(rust_patterns.c_high),
+                d_price: parseFloat(rust_patterns.d_low),
+                stop_loss: parseFloat(rust_patterns.trade_stop_ltrade_risk_exit_priceoss),
+                take_profit: parseFloat(rust_patterns.trade_reward_exit_price),
+                entered_price: parseFloat(rust_patterns.d_low),
+                exit_price: parseFloat(rust_patterns.trade_current_price),
+                exit_date: exit,
+            
+        }
+
     });
 }

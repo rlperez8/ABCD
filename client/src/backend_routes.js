@@ -14,8 +14,6 @@ export const get_candles = async (symbol) => {
       }
       const responseData = await res.json();
 
-      
-
       return responseData.data
     } catch(error) {
       console.error(error)
@@ -92,9 +90,9 @@ export const get_recent_patterns = async (filters, month) => {
       })
     })
 
+    
     const responseData = await res.json();
-
-    console.log(responseData)
+ 
     return responseData.data
 
   }
@@ -241,9 +239,39 @@ export const get_support_resistance_lines = async (symbol) => {
 
   }
 }
- 
- 
+export const fetch_abcd_patterns = async (filters) => {
 
+
+  const filter = {
+    bc_greater: filters.bc_retracement_greater,
+    bc_less: filters.bc_retracement_less,
+    cd_greater: filters.cd_retracement_greater,
+    cd_less: filters.cd_retracement_less
+  };
+
+  try {
+    const res = await fetch("http://localhost:8080", {
+    method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+       body: JSON.stringify(filter)
+    });
+
+    if (!res.ok) {
+      console.error(`Server Error: ${res.status} - ${res.statusText}`);
+      throw new Error("Request failed");
+    }
+
+    const data = await res.json(); 
+
+    // console.log(data)
+    return data;
+
+  } catch (e) {
+    console.error(e);
+  }
+};
 
 
 

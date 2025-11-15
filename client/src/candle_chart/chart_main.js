@@ -17,6 +17,8 @@ const ChartMain = (props) => {
         set_sections_expanded
     } = props 
 
+    console.log(is_loading_patterns)
+
 
 
     const [is_abcd_pattern, set_abcd_pattern] = useState(true)
@@ -110,12 +112,12 @@ const ChartMain = (props) => {
 
                     <div className="chart-header-stat-wrapper">
                       <div className="stat-key">C Retracement</div>
-                      <div className="stat-value">{chart_data.abcd_pattern?.pattern_C_price_retracement}</div>
+                      <div className="stat-value">{chart_data.rust_patterns?.trade_bc_price_retracement.toFixed(2)}</div>
                     </div>
                     
                     <div className="chart-header-stat-wrapper">
                       <div className="stat-key">D Retracement</div>
-                      <div className="stat-value">{chart_data.abcd_pattern?.pattern_D_price_retracement + 100}</div>
+                              <div className="stat-value">{chart_data.rust_patterns?.trade_cd_price_retracement.toFixed(2)}</div>
                     </div>
 
                     <div className="chart-header-stat-wrapper">
@@ -133,11 +135,11 @@ const ChartMain = (props) => {
               </div>
 
           
-                {is_loading_patterns &&
+                {/* {is_loading_patterns &&
                   <div className="overlay">
                             <div className='loading_container'>Loading...</div>
                   </div>
-                }
+                } */}
 
                 
                 {chart_data.candles.length > 0 && 

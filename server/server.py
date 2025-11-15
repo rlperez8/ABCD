@@ -320,11 +320,13 @@ def recent_patterns():
         query = '''
             SELECT *
             FROM pattern_abcd
+  
             
           
         '''
 
         params = (
+       
             # bc_retracement_greater,
             # bc_retracement_less,
             # cd_retracement_greater,

@@ -25,6 +25,7 @@ const Section = (props) => {
 
     return(
         <div className={is_collapse ? 'patterns_table_main' : get_css() }>
+            
 
             <div className="margin-">
     

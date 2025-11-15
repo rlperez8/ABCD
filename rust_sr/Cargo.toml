@@ -1,11 +1,4 @@
-[package]
-name = "rust_sr"
-version = "0.1.0"
-edition = "2024"
 
-[dependencies]
-mysql = "20"         
-chrono = "0.4"
-tabled = "0.7"
-csv = "1.4.0"
-serde = { version = "1.0.228", features = ["derive"] }
+[workspace]
+resolver = "2"
+members = ["abcd", "server", "tools"]

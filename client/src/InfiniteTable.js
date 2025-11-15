@@ -21,14 +21,16 @@ const InfiniteTable = (props) => {
     const columns = [
         'trade_result', 
         'symbol',
-        'trade_entered_date', 
-        'trade_entered_price',
-        'today_price',
-        'price_change',
-        'price_change_pct', 
-        'unrealized_pnl',
-        // 'unrealized_pnl_pct',
-        'pattern_A_pivot_date'
+        'trade_date', 
+        'trade_enter_price',
+        // 'trade_current_price',
+        // 'price_change',
+        // 'price_change_pct', 
+        'trade_pnl',
+        'trade_pnl_pct',
+        'trade_bc_price_retracement',
+        'trade_cd_price_retracement',
+        // 'pattern_A_pivot_date'
     
     ]
     const [containerWidth, setContainerWidth] = useState(0);
@@ -49,8 +51,7 @@ const InfiniteTable = (props) => {
     }, []);
 
     const CellComponent = ({ columnIndex, rowIndex, style, sorted }) => {
-         
-           
+
             const row = sorted[rowIndex];  
             if (!row) return <div style={style}></div>;
             const keys = Object.keys(row);
@@ -70,19 +71,21 @@ const InfiniteTable = (props) => {
             }
 
 
-            if (columnIndex === 0 && content === 'Win') {
-                cellContent = <div className="first_column_box">{cellContent}</div>;
+            if (columnIndex === 0 && content === 'true') {
+                cellContent = <div className="first_column_box">Won</div>;
 
-            } else if (columnIndex === 0 && content === 'Lost') {
-                cellContent = <div className="lost_column_box">{cellContent}</div>;
+            } else if (columnIndex === 0 && content === 'false') {
+                cellContent = <div className="lost_column_box">Lost</div>;
             
             } else if (columnIndex === 0) {
                 cellContent = <div className="open_column_box">Open</div>;
             
-            }else if ((columnIndex === 7 || columnIndex === 8) && Number(cellContent) > 0) {
-                cellContent = <div className="positive_pnl">${cellContent}</div>;
+            }
+            else if ((columnIndex === 7 || columnIndex === 8) && Number(cellContent) > 0) {
+                cellContent = <div className="number">{cellContent.toFixed(2)}</div>;
 
-            }else if ((columnIndex === 7 || columnIndex === 8)  && Number(content) <= 0) {
+            }
+            else if ((columnIndex === 7 || columnIndex === 8)  && Number(content) <= 0) {
                 cellContent = <div className="negative_pnl">${cellContent}</div>;
             }
           else if (columnIndex === 7 || columnIndex === 8) {
@@ -116,6 +119,7 @@ const InfiniteTable = (props) => {
                                 route.get_support_resistance_lines(selected.symbol)
                             ]);
                             candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+                   
                      
                             tools.format_pattern(candles, sorted[rowIndex], snr_lines, set_chart_data)
                             
@@ -132,7 +136,10 @@ const InfiniteTable = (props) => {
                         set_hovered_index(rowIndex);
                         }}
                 >
-                    <div>{cellContent}</div>
+                 <div>
+                    {typeof cellContent === 'number' ? cellContent.toFixed(2) : cellContent}
+                    </div>
+
                 </div>
             );
     };
@@ -140,17 +147,21 @@ const InfiniteTable = (props) => {
     return(
         <div className='table_container' ref={containerRef}>
 
+            
+
             <div className='peformance_table_header'>
                 <div className='ticker_column'>Result</div>
                 <div className='ticker_column'>Symbol</div>
                 <div className='ticker_column'>Enter Date</div>
                 <div className='ticker_column'>Enter Price</div>
-                <div className='ticker_column'>Price</div>
+                {/* <div className='ticker_column'>Price</div>
                 <div className='ticker_column'>Change</div>
-                <div className='ticker_column'>Change %</div>
+                <div className='ticker_column'>Change %</div> */}
                 <div className='ticker_column'>UNR-PNL</div>
                 <div className='ticker_column'>UNR-PNL %</div>
-                <div className='ticker_column'>S&R</div>
+                <div className='ticker_column'>BC</div>
+                <div className='ticker_column'>CD</div>
+              
               
               
        
@@ -160,8 +171,8 @@ const InfiniteTable = (props) => {
                 className="my-grid"
                 cellComponent={CellComponent}
                 cellProps={{ sorted }}
-                columnCount={10}
-                columnWidth={(containerWidth || 700) / 10} 
+                columnCount={8}
+                columnWidth={(containerWidth || 700) / 8} 
                 rowCount={sorted?.length || 0}
                 rowHeight={40}
                 width={containerWidth || 700} 

@@ -1,0 +1,14 @@
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\deps\clang_sys-b811b48a6bdddfa5.d: C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\lib.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\support.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\link.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/macros.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/common.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/dynamic.rs
+
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\deps\libclang_sys-b811b48a6bdddfa5.rlib: C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\lib.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\support.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\link.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/macros.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/common.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/dynamic.rs
+
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\deps\libclang_sys-b811b48a6bdddfa5.rmeta: C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\lib.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\support.rs C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\link.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/macros.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/common.rs C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/dynamic.rs
+
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\lib.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\support.rs:
+C:\Users\rpere\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\link.rs:
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/macros.rs:
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/common.rs:
+C:\Users\rpere\Desktop\abcd_local_v3\rust_sr\target\debug\build\clang-sys-31e4301494dfebf0\out/dynamic.rs:
+
+# env-dep:OUT_DIR=C:\\Users\\rpere\\Desktop\\abcd_local_v3\\rust_sr\\target\\debug\\build\\clang-sys-31e4301494dfebf0\\out

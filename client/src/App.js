@@ -49,7 +49,7 @@ const App = () => {
   const months = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
-];
+  ];
 
   // useEffect(() => {
  
@@ -107,22 +107,37 @@ const App = () => {
   useEffect(()=>{
 
     const fetch = async () => {
+
+      set_loading(true);
+      set_loading_patterns(true)
+
+
+      const data = await route.fetch_abcd_patterns(filters)
+      const rust_patterns = data.patterns
+
+      let rust_statistics = data.monthly_stats
+     
+      rust_statistics.sort((a, b) => a.month - b.month);
+      
       
       // MONTHLY PEFORMANCE
-      const monthly_peformance = await route.get_monthly_peformance(filters, selected_month)
-      set_monthly_peformance(monthly_peformance)
+      // const monthly_peformance = await route.get_monthly_peformance(filters, selected_month)
+      // const stats2025 = rust_statistics
+      // .filter(entry => entry.year === 2025)       // keep only year 2025
+      // .sort((a, b) => a[1] - b[1]);   
+      // console.log(stats2025)
+      set_monthly_peformance(rust_statistics)
   
       // RECENT PATTERNS
       let recent_patterns = await route.get_recent_patterns(filters,selected_month)
-      
       // recent_patterns = recent_patterns.sort((a, b) => a.symbol.localeCompare(b.symbol));
       recent_patterns = recent_patterns.sort((a, b) => new Date(a.pattern_A_pivot_date) - new Date(b.pattern_A_pivot_date));
-// 
-      set_recent_patterns(recent_patterns)
+      set_recent_patterns(rust_patterns)
+      set_filtered_patterns(rust_patterns)
 
       // CANDLES
       const selected_pattern = recent_patterns[0]
-      let candles = await route.get_candles(recent_patterns[0]?.symbol)
+      let candles = await route.get_candles(rust_patterns[0]?.symbol)
       candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
       candles = candles?.map(item => {
         const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
@@ -132,53 +147,43 @@ const App = () => {
           candle_date: toISO(item.candle_date),
         };
       });
+
+
       
-      // SUPPORT & RESISTANCE
+//       // SUPPORT & RESISTANCE
       const snr_lines = await route.get_support_resistance_lines(recent_patterns[0]?.symbol)
-      tools.format_pattern(candles, selected_pattern, snr_lines, set_chart_data)
+      // tools.format_pattern(candles, selected_pattern, snr_lines, set_chart_data, rust_patterns[0])
+      tools.format_pattern(candles, rust_patterns[0], snr_lines, set_chart_data)
 
       // WATCHLIST
       // const wl_patterns = await route.get_all_patterns_in_watchlist()
       // set_wl_patterns(wl_patterns)
+
+      set_loading(false);
+      set_loading_patterns(false)
     
     }
     fetch()
 
     
   
-  },[])
+  },[filters])
 
+  const [filtered_patterns, set_filtered_patterns] = useState()
+  
   const handle_updated_recent_patterns = async (month) => {
+
+  
+      const filtered_patterns = recent_patterns.filter(
+          p => Number(p.trade_month) === Number(month) + 1
+      );
+
+      set_filtered_patterns(filtered_patterns);
+      set_selected_month(Number(month) + 1)
+      // set_loading(false);
     
-    set_loading(true)
-   
-    const recent_patterns = await route.get_recent_patterns(filters, month)
-    const selected_pattern = recent_patterns[0]
-    const sorted = recent_patterns.sort((a, b) => a.symbol.localeCompare(b.symbol));
-    set_recent_patterns(sorted)
-
-
-
-    // let candles = await route.get_candles(recent_patterns[0]?.symbol)
-    // candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
-    // candles = candles?.map(item => {
-    //   const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
-
-    //   return {
-    //     ...item,
-    //     candle_date: toISO(item.candle_date),
-    //   };
-    // });
-    // tools.format_pattern(candles, selected_pattern, set_chart_data)
-
-
-    // // const wl_patterns = await route.get_all_patterns_in_watchlist()
-    // // set_wl_patterns(wl_patterns)
- 
-    // const monthly_peformance = await route.get_monthly_peformance(filters, month)
-    // set_monthly_peformance(monthly_peformance)
-    set_loading(false)
   }
+  
 
   return (
 
@@ -192,78 +197,77 @@ const App = () => {
             }
 
             <div className='monthly_peformance_wrapper'>
-                 <div className='table_header_text'>
+
+                <div className='table_header_text'>
                   Peformance
-            
+
                 </div>
-              {months.map((monthName, index) => {
-         
-                const monthData = monthly_performance.find(m => m.month_name === monthName);
-                const pct = monthData?.win_pct || 0;
-                const count_total = monthData?.count_total || 0;
 
-                const r = 0;
-                const g = Math.round(128 * (pct / 100));
-                const b = Math.round(128 * (pct / 100));
-                const fillColor = `rgba(${r}, ${g}, ${b}, 0.8)`;
+                {Object.keys(monthly_performance).map((key, index)=>{
 
-                return (
-                  <div
-                    key={monthName}
-                    className={selected_month === months[index].month_name ? 'month-wrapper-active' : 'month-wrapper'}
-                    onClick={() => handle_updated_recent_patterns(monthly_performance[index].month_num)}
-                    style={{
-                      position: "relative",
-                      borderRadius: "4px",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {/* Background fill */}
+        
+                  
+                  const pct = monthly_performance[key]?.win_pct || 0;
+                  const count_total = monthly_performance[key]?.closed || 0;
+
+                  return (
                     <div
-                      className="win_pct_background"
+                      key={index}
+                      className={selected_month === Number(key) + 1 ? 'month-wrapper-active' : 'month-wrapper'}
+                      onClick={() => handle_updated_recent_patterns(key)}
                       style={{
-                        width: `${pct}%`,
-                        // backgroundColor: 'rgba(201, 201, 201, 0.2)' ,
-                        transition: "width 0.3s ease",
-                        border: '2px solid rgba(75, 214, 226, 0.36)',
-                        height: '100%',
-                        boxSizing: 'border-box'
-
-                      }}
-                    />
-
-                    {/* Centered text */}
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: "50%",
-                        top: "50%",
-                        transform: "translate(-50%, -50%)",
-                        fontWeight: "bold",
-                        color: "#fff",
-                        textAlign: "center",
-                        display: 'flex',
-                        width: '100%'
-                        
+                        position: "relative",
+                        borderRadius: "4px",
+                        overflow: "hidden",
                       }}
                     >
-                      <div className='row__'>{monthName.slice(0, 3)}</div>
-                      <div className='row__'>{count_total}</div>
-                      <div className='row__'>{pct.toFixed(0)}%</div>
-                    </div>
-                  </div>
-                );
-              })}
+                
+                      <div
+                        className="win_pct_background"
+                        style={{
+                          width: `${pct}%`,
+                        
+                          transition: "width 0.3s ease",
+                          border: '2px solid rgba(75, 214, 226, 0.36)',
+                          height: '100%',
+                          boxSizing: 'border-box'
 
-                 <div className='table_header_main'>
+                        }}
+                      />
+
+                  
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: "50%",
+                          top: "50%",
+                          transform: "translate(-50%, -50%)",
+                          fontWeight: "bold",
+                          color: "#fff",
+                          textAlign: "center",
+                          display: 'flex',
+                          width: '100%'
+                          
+                        }}
+                      >
+                        <div className='row__'>{key}</div>
+                        <div className='row__'>{count_total}</div>
+                        <div className='row__'>{pct.toFixed(0)}%</div>
+                      </div>
+                    </div>
+                    );
+                  })}
+
+                <div className='table_header_main'>
             
-            </div>
+                </div>
 
             </div>
 
             <div className={is_sections_expanded ? 'sections-wrapper-expanded':'sections-wrapper-minimized'}>
 
-              <Section title={'Build Pattern'} body={<Filter
+         
+              {/* <Section title={'Build Pattern'} body={<Filter
                 filters={filters}
                 set_filters={set_filters}
                 fetch_filtered_peformances={route.fetch_filtered_peformances}
@@ -273,8 +277,7 @@ const App = () => {
                 handle_updated_recent_patterns={handle_updated_recent_patterns}
            
                 
-              />}/>
-
+              />}/>  */}
               {/* <Section title={'Watchlist'} body={<WatchList
                 
                 all_watchlists={all_watchlists}
@@ -284,7 +287,7 @@ const App = () => {
               />}/> */}
 
               <Section title={'Recent Patterns'} length={recent_patterns?.length}body={<InfiniteTable
-                recent_patterns={recent_patterns}
+                recent_patterns={filtered_patterns}
                 set_loading_patterns={set_loading_patterns}
                 set_chart_data={set_chart_data}
                 selected_row_index={selected_row_index}
@@ -301,13 +304,30 @@ const App = () => {
                 is_loading_patterns={is_loading_patterns}
                 all_watchlists={all_watchlists}
                 is_sections_expanded={is_sections_expanded}
-              set_sections_expanded={set_sections_expanded}
+                set_sections_expanded={set_sections_expanded}
 
               />
 
            
 
             </div>
+            
+            <div className='pattern-builder-wrapper'>
+                          <Filter
+                filters={filters}
+                set_filters={set_filters}
+                fetch_filtered_peformances={route.fetch_filtered_peformances}
+                set_ticker_peformance={set_ticker_peformance}
+                is_loading={is_loading}
+                set_loading={set_loading}
+                handle_updated_recent_patterns={handle_updated_recent_patterns}
+           
+                
+              />
+
+            </div>
+
+     
           
           </div>
 
