@@ -48,7 +48,9 @@ export class Mouse {
             close: hoveredCandle?.candle_close,
             open: hoveredCandle?.candle_open,
             low: hoveredCandle?.candle_low,
-            color: hoveredCandle?.candle_open > hoveredCandle?.candle_close ? '#ef5350' : hoveredCandle?.candle_open < hoveredCandle?.candle_close ? '#26a69a' : ''
+            color: hoveredCandle?.candle_open > hoveredCandle?.candle_close ? '#ef5350' : hoveredCandle?.candle_open < hoveredCandle?.candle_close ? '#26a69a' : '',
+            volume: hoveredCandle?.volume
+       
         }));
  
   
@@ -275,7 +277,7 @@ export class Chart {
         ctx.strokeStyle = 'red';  // Border color
         ctx.lineWidth = 2;
 
-        const x = (canvas.width/ 10) * 8;
+        const x = (canvas.width/ 10) * 4;
         const y =  (canvas.height/ 10) * 3.5;
         const width = canvas.width /10 
         const height = (canvas.height/ 10) * 3.5;
@@ -361,16 +363,21 @@ export class ABCD {
     constructor(candleChartRef){
         this.candleChartRef = candleChartRef
     }
-    abcd = (ctx, ab) => {
+    bull_abcd = (ctx, ab) => {
+
+        // x
+        let x_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.x_low  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+        let x_x_loc = -this.candleChartRef.current.candles.complete_width * ab.x;
+        x_x_loc -= this.candleChartRef.current.width.current_X_origin;
+        x_x_loc += this.candleChartRef.current.candles.complete_width / 2;
+      
 
         // A
         let a_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.a_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
         let a_x_loc = -this.candleChartRef.current.candles.complete_width * ab.a;
         a_x_loc -= this.candleChartRef.current.width.current_X_origin;
         a_x_loc += this.candleChartRef.current.candles.complete_width / 2;
-
-
-        
+ 
         // B
         let b_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.b_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
         let b_x_loc = -this.candleChartRef.current.candles.complete_width * ab.b;
@@ -385,6 +392,117 @@ export class ABCD {
 
         // D
         let d_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.d_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+        let d_x_loc = -this.candleChartRef.current.candles.complete_width * ab.d;
+        d_x_loc -= this.candleChartRef.current.width.current_X_origin;
+        d_x_loc += this.candleChartRef.current.candles.complete_width / 2;
+
+        // Exit
+        let exit_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.exit_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+
+    
+        let exit_x_loc = -this.candleChartRef.current.candles.complete_width * ab.exit_date;
+        exit_x_loc -= this.candleChartRef.current.width.current_X_origin;
+        exit_x_loc += this.candleChartRef.current.candles.complete_width / 2;
+
+        ctx.save()
+        // --- FILL XAB --- 
+        ctx.beginPath();
+        ctx.moveTo(x_x_loc, x_y_loc);
+        ctx.lineTo(a_x_loc, a_y_loc);
+        ctx.lineTo(b_x_loc, b_y_loc);
+      
+        ctx.closePath();
+        ctx.fillStyle = "rgba(193, 99, 32, 0.30)";
+        ctx.fill();
+
+        // --- FILL BCD ---
+        ctx.beginPath();
+        ctx.moveTo(b_x_loc, b_y_loc);
+        ctx.lineTo(c_x_loc, c_y_loc);
+        ctx.lineTo(d_x_loc, d_y_loc);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(193, 99, 32, 0.30)";
+        ctx.fill();
+
+                
+        
+        
+        ctx.beginPath();
+        ctx.lineTo(x_x_loc, x_y_loc);
+        ctx.lineTo(a_x_loc, a_y_loc);
+        ctx.lineTo(b_x_loc, b_y_loc);
+        ctx.lineTo(c_x_loc, c_y_loc);
+        ctx.lineTo(d_x_loc, d_y_loc);
+        ctx.lineTo(exit_x_loc, exit_y_loc);
+      
+        
+        ctx.strokeStyle = 'rgba(166, 176, 186, 1)'; 
+        ctx.lineWidth = 5;
+        ctx.stroke();
+
+        ctx.restore()
+
+        
+
+        // ctx.strokeStyle = '#303030';
+        // ctx.lineWidth = 2;
+
+        // ctx.stroke();
+        // ctx.restore()
+
+        // ctx.save();
+
+ 
+        // const arrowLength = 20;
+        // const arrowAngle = Math.PI / 6;
+
+        // // --- Calculate angle of the line ---
+        // const angle = Math.atan2(exit_y_loc - d_y_loc, exit_x_loc - d_x_loc);
+
+
+        // ctx.stroke();
+
+        // // --- Draw Arrowhead ---
+        // ctx.beginPath();
+        // ctx.moveTo(exit_x_loc, exit_y_loc);
+        // ctx.lineTo(
+        // exit_x_loc - arrowLength * Math.cos(angle - arrowAngle),
+        // exit_y_loc - arrowLength * Math.sin(angle - arrowAngle)
+        // );
+        // ctx.lineTo(
+        // exit_x_loc - arrowLength * Math.cos(angle + arrowAngle),
+        // exit_y_loc - arrowLength * Math.sin(angle + arrowAngle)
+        // );
+        // ctx.lineTo(exit_x_loc, exit_y_loc); 
+        // ctx.closePath();
+        // ctx.fillStyle = 'white';
+        // ctx.fill();
+        // ctx.restore();
+        
+    }
+    abcd = (ctx, ab) => {
+
+      
+        // A
+        let a_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.a_low  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+        let a_x_loc = -this.candleChartRef.current.candles.complete_width * ab.a;
+        a_x_loc -= this.candleChartRef.current.width.current_X_origin;
+        a_x_loc += this.candleChartRef.current.candles.complete_width / 2;
+ 
+        // B
+        let b_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.b_high  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+        let b_x_loc = -this.candleChartRef.current.candles.complete_width * ab.b;
+        b_x_loc -= this.candleChartRef.current.width.current_X_origin;
+        b_x_loc += this.candleChartRef.current.candles.complete_width / 2;
+
+        // C
+        let c_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.c_low  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+        let c_x_loc = -this.candleChartRef.current.candles.complete_width * ab.c;
+        c_x_loc -= this.candleChartRef.current.width.current_X_origin;
+        c_x_loc += this.candleChartRef.current.candles.complete_width / 2;
+
+        // D
+        let d_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.d_high  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
         let d_x_loc = -this.candleChartRef.current.candles.complete_width * ab.d;
         d_x_loc -= this.candleChartRef.current.width.current_X_origin;
         d_x_loc += this.candleChartRef.current.candles.complete_width / 2;
@@ -462,58 +580,62 @@ export class ABCD {
         
     }
     retracement = (ctx, ab) => {
-                
-        ctx.save()
-        // --- A Coordinates ---
-        let a_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.a_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+        ctx.save();
 
-        let a_x_loc = -this.candleChartRef.current.candles.complete_width * ab.a;
-        a_x_loc -= this.candleChartRef.current.width.current_X_origin;
-        a_x_loc += this.candleChartRef.current.candles.complete_width / 2;
+        // --- Helpers ---
+        const get_coords = (price, index) => {
+            let y = this.candleChartRef.current.height.currentBaselineY -
+                (price * (this.candleChartRef.current.price.current_pixels_per_price_unit /
+                            this.candleChartRef.current.unit_amount));
 
-        // --- B Coordinates ---
-        let b_y_loc = this.candleChartRef.current.height.currentBaselineY - (ab.b_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
+            let x = -this.candleChartRef.current.candles.complete_width * index;
+            x -= this.candleChartRef.current.width.current_X_origin;
+            x += this.candleChartRef.current.candles.complete_width / 2;
 
-        let b_x_loc = -this.candleChartRef.current.candles.complete_width * ab.b;
-        b_x_loc -= this.candleChartRef.current.width.current_X_origin;
-        b_x_loc += this.candleChartRef.current.candles.complete_width / 2;
+            return {y:y, x:x}
+        };
 
-        // --- C Coordinates ---
-        let c_y_loc = this.candleChartRef.current.height.currentBaselineY - (ab.c_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
-
-        let c_x_loc = -this.candleChartRef.current.candles.complete_width * ab.c;
-        c_x_loc -= this.candleChartRef.current.width.current_X_origin;
-        c_x_loc += this.candleChartRef.current.candles.complete_width / 2;
-
-        // --- D Coordinates ---
-        let d_y_loc = this.candleChartRef.current.height.currentBaselineY - (ab.d_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
-
-        let d_x_loc = -this.candleChartRef.current.candles.complete_width * ab.d;
-        d_x_loc -= this.candleChartRef.current.width.current_X_origin;
-        d_x_loc += this.candleChartRef.current.candles.complete_width / 2;
-
+        let x = get_coords(ab.x_low, ab.x)
+        let a = get_coords(ab.a_price, ab.a)
+        let b = get_coords(ab.b_price, ab.b)
+        let c = get_coords(ab.c_price, ab.c)
+        let d = get_coords(ab.d_price, ab.d)
+        
         // --- Draw Lines ---
         ctx.beginPath();
-        ctx.strokeStyle = 'yellow';
-        ctx.lineWidth = 3
-        ctx.setLineDash([5, 5]); 
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
 
-        // AB
-        ctx.moveTo(a_x_loc, a_y_loc);
-        ctx.lineTo(c_x_loc, c_y_loc);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(c.x, c.y);
 
-        ctx.moveTo(b_x_loc, b_y_loc);
-        ctx.lineTo(d_x_loc, d_y_loc);
+        ctx.moveTo(x.x, x.y);
+        ctx.lineTo(b.x, b.y);
 
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(d.x, d.y);
 
-        // --- Optional stroke on top ---
-        ctx.strokeStyle = 'gray';
-        // ctx.lineWidth = 7;
+        ctx.moveTo(x.x, x.y);
+        ctx.lineTo(d.x, d.y);
+
 
         ctx.stroke();
-        ctx.restore()
 
-    }
+        this.drawLabel(ctx, "A", a);   // label A near point A
+        this.drawLabel(ctx, "B", b);   // label B near point B
+        this.drawLabel(ctx, "C", c);   // label C near point C
+        this.drawLabel(ctx, "D", d);   // label D near point D
+        this.drawLabel(ctx, "X", x);   
+
+        this.drawLabelMid(ctx, "AC", a, c);
+        this.drawLabelMid(ctx, "XB", x, b);
+        this.drawLabelMid(ctx, "BD", b, d);
+        this.drawLabelMid(ctx, "XD", x, d);
+        
+        ctx.restore();
+    };  
+        
     price_levels = (ctx_price, ctx, canvas, rust_pattern) => {
 
   
@@ -675,6 +797,45 @@ export class ABCD {
                 // ctx_price.fillText(ab.take_profit, 20, y_take_profit + height/4);
          
     }
+    drawLabelMid = (ctx, label, point1, point2, offsetX = 0, offsetY = -5) => {
+        // Calculate midpoint
+        const midX = (point1.x + point2.x) / 2;
+        const midY = (point1.y + point2.y) / 2;
+
+        ctx.save();
+        ctx.font = "12px Arial";
+        
+        // Draw small box behind text
+        const textWidth = ctx.measureText(label).width;
+        const textHeight = 12; // approx
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.fillRect(midX + offsetX - 2, midY + offsetY - textHeight + 2, textWidth + 4, textHeight + 4);
+
+        // Draw text
+        ctx.fillStyle = "black";
+        ctx.fillText(label, midX + offsetX, midY + offsetY);
+        ctx.restore();
+    };
+    drawLabel = (ctx, label, point, offsetX = -10, offsetY = -15) => {
+        ctx.save();
+        ctx.font = "20px Arial";
+        ctx.fillStyle = "white";       
+        ctx.strokeStyle = "white";       
+        ctx.lineWidth = 1;
+
+        // Draw a small rectangle behind the text
+        const textWidth = ctx.measureText(label).width;
+        const textHeight = 20; // approximate
+        ctx.fillStyle = "teal";
+        ctx.fillRect(point.x + offsetX - 2, point.y + offsetY - textHeight + 2, textWidth + 4, textHeight + 4);
+
+        // Draw the letter on top
+        ctx.fillStyle = "white";
+        ctx.fillText(label, point.x + offsetX, point.y + offsetY);
+        ctx.restore();
+    };
+        
+
 
       
 

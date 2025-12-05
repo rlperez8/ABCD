@@ -5,6 +5,13 @@ use std::collections::HashMap;
 
 pub struct Pattern {
     pub symbol: String,
+    pub x_date: String,
+    pub x_open: f64,
+    pub x_high: f64,
+    pub x_low: f64,
+    pub x_close: f64,
+    pub x_length: f64,
+    pub x_min_max: f64,
     pub a_date: String,
     pub a_open: f64,
     pub a_high: f64,
@@ -42,12 +49,19 @@ pub struct Pattern {
     pub trade_pnl: f64,
     pub trade_result: String,
     pub trade_date: String,
+    pub trade_ab_price_retracement: f64,
     pub trade_bc_price_retracement: f64,
+    pub trade_cd_bc_price_retracement: f64,
     pub trade_cd_price_retracement: f64,
+    pub trade_cd_xa_price_retracement: f64,
+    pub trade_bc_bar_retracement: f64,
+    pub trade_cd_bar_retracement: f64,
     pub trade_snr: f64,
     pub trade_year: f64,
     pub trade_month: f64,
     pub trade_day: f64,
+    pub reversalType: Option<String>,
+    pub market: String,
 }
 
 impl Pattern {

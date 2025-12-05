@@ -31,6 +31,7 @@ pub struct FilterParams {
     bc_less: f64,
     cd_greater: Option<f64>,
     cd_less: Option<f64>,
+    market: String
 }
 #[post("/")]
 async fn fetch_patterns(filter: web::Json<FilterParams>) -> impl Responder {
@@ -38,20 +39,42 @@ async fn fetch_patterns(filter: web::Json<FilterParams>) -> impl Responder {
     let patterns = load_patterns().await;
 
     // Extract parameters from the JSON body
+    let market = &filter.market;
     let bc_min = filter.bc_greater;
     let bc_max = filter.bc_less;
     let cd_min = filter.cd_greater.unwrap_or(0.0); 
     let cd_max = filter.cd_less.unwrap_or(f64::MAX);
 
-    println!("{:?}", filter);
 
     // === Filter based on request parameters ===
     let patterns_2025: Vec<Pattern> = patterns
         .iter()
         .filter(|p| {
-            p.trade_year == 2025.0 &&
-            (bc_min..=bc_max).contains(&p.trade_bc_price_retracement) &&
-            (cd_min..=cd_max).contains(&p.trade_cd_price_retracement)
+          
+            // p.market == market.as_str()
+            p.trade_year == 2025.0 
+            && p.trade_month == 12.0
+            // // && p.trade_day >= 28.0
+            // && p.trade_open == "true"
+     
+          
+
+            // && (bc_min..=bc_max).contains(&p.trade_bc_price_retracement)
+            // && (cd_min..=cd_max).contains(&p.trade_cd_price_retracement)
+
+       
+            // && p.trade_bc_price_retracement >= 38.0
+            // && p.trade_bc_price_retracement <= 88.6
+
+            // && p.trade_cd_bc_price_retracement >= 161.8
+            // && p.trade_cd_bc_price_retracement <= 261.8
+
+            // && p.trade_cd_xa_price_retracement >= 127.0
+            // && p.trade_cd_xa_price_retracement <= 161.8
+            // && p.trade_cd_bar_retracement >= 100.00
+            // && p.trade_cd_bar_retracement <= 168.00
+        
+         
         })
         .cloned()
         .collect();

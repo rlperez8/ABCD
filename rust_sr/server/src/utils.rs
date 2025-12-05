@@ -12,8 +12,6 @@ pub struct YearlySummary {
     wins: i32,
     win_pct: i32,
 }
-
-
 pub fn read_csv_top10_yext(path: &str) -> Result<Vec<Pattern>, Box<dyn Error>> {
    let file = std::fs::File::open(path)?;
     let mut rdr = ReaderBuilder::new()
@@ -28,12 +26,11 @@ pub fn read_csv_top10_yext(path: &str) -> Result<Vec<Pattern>, Box<dyn Error>> {
 
     Ok(all_patterns)
 }
-
 pub async fn load_patterns() -> Vec<Pattern> {
 
     tokio::task::spawn_blocking(|| {
         
-        match read_csv_top10_yext("patterns_all.csv") {
+        match read_csv_top10_yext("../../../patterns_all.csv") {
             Ok(rows) => rows,
             Err(e) => {
                 println!("Error reading CSV: {}", e);

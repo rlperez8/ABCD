@@ -1,0 +1,18 @@
+[package]
+name = "old_abcd"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tools = { path = "../tools" }  
+mysql = "25.0"
+chrono = "0.4"
+tabled = "0.7"
+csv = "1.4.0"
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+axum = "0.6"
+
+[lib]
+name = "old_abcd"
+path = "src/lib.rs"

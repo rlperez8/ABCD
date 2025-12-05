@@ -69,7 +69,6 @@ export const push_price_to_middle_screen = (candleChartRef, rust_pattern) => {
     candleChartRef.current.price.prev_mid_price = mid_price
 
 };
-
 export const chart_zoom_out = (candleChartRef, threshold) => {
 
     // Decrease Unit Size
@@ -125,11 +124,6 @@ export const chart_zoom_in = (candleChartRef, threshold) => {
 
     }
 };
-
-
-
-
-
 export const reposition_candles = (candleChartRef, rust_pattern) => {
 
     let size = 1
@@ -177,7 +171,7 @@ export const reposition_candles = (candleChartRef, rust_pattern) => {
             break
         }
 
-        // push_price_to_middle_screen(candleChartRef, selected_pattern, rust_pattern)
+
         push_price_to_middle_screen(candleChartRef, rust_pattern)
 
         let y = false;
@@ -189,8 +183,11 @@ export const reposition_candles = (candleChartRef, rust_pattern) => {
             // Always recalculate complete width as the sum of its parts
             candles.complete_width = chart.current_candle_width + chart.current_pixels_between_candles;
 
-            let pattern_length = candles.complete_width * rust_pattern.pattern_ABCD_bar_length;
+            // let pattern_length = candles.complete_width * rust_pattern.pattern_ABCD_bar_length;
             let pattern_box_width = (chart.canvas_width / 10);
+            let full_width = rust_pattern.a_length + rust_pattern.b_length + rust_pattern.c_length + rust_pattern.d_length
+            let pattern_length = full_width * candleChartRef.current.current_candle_width
+        
 
             if (pattern_length > pattern_box_width) {
 
@@ -209,11 +206,9 @@ export const reposition_candles = (candleChartRef, rust_pattern) => {
             }
         }
 
-        // candleChartRef.current.width.current_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * selected_pattern.a) 
-        // candleChartRef.current.width.prev_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * selected_pattern.a) 
-
-          candleChartRef.current.width.current_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * rust_pattern.a) 
-        candleChartRef.current.width.prev_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 8) - (candleChartRef.current.candles.complete_width * rust_pattern.a) 
+    
+        candleChartRef.current.width.current_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 4) - (candleChartRef.current.candles.complete_width * rust_pattern.a) 
+        candleChartRef.current.width.prev_X_origin = -(candleChartRef.current.width.grid_width/ 10 * 4) - (candleChartRef.current.candles.complete_width * rust_pattern.a) 
         
         // candleChartRef.current.selected_candle = parseFloat(selected_pattern.pattern_A_high)
         candleChartRef.current.selected_candle = rust_pattern?.trade_enter_price.toFixed(2)

@@ -173,7 +173,7 @@ const Filter = (props) => {
         <div className='table_body_main' >
             <div className="filts">
 
-                {/* <div className="filter_left">
+                <div className="filter_left">
 
                     <div className='abcd_types_filter_container'>
 
@@ -190,13 +190,13 @@ const Filter = (props) => {
                             )
                         })}
 
-                        <div className="save-filter-wrapper" onClick={()=>{set_filters(handle_(selected_type))}}>Build</div>
+                     
 
                     </div>
 
                  
 
-                </div> */}
+                </div>
 
                 {/* <div className="filter_left">
 
@@ -598,7 +598,7 @@ const Filter = (props) => {
 
                 </div>
                 
-                
+                <div className="save-filter-wrapper" onClick={()=>{set_filters(handle_(selected_type))}}>Build</div>
                 
 
             </div>

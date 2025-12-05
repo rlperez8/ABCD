@@ -1,3 +1,10 @@
 Look at ACLX pivot A date 8-1-2022. Check if a C pivot can be part of a B.
 
 Check for duplicate patterns in a symbol
+
+
+Ideas ===
+
+PTEN 2008-11-14
+ASM 2019-07-08 BC is same candle
+Put volume on candle
