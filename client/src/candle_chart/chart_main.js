@@ -14,13 +14,11 @@ const ChartMain = (props) => {
         is_loading_patterns,
         all_watchlists,
         is_sections_expanded,
-        set_sections_expanded
+        set_sections_expanded,
+        market
     } = props 
 
-    console.log(is_loading_patterns)
-
-
-
+   
     const [is_abcd_pattern, set_abcd_pattern] = useState(true)
     const [is_price_levels, set_price_levels] = useState(true)
     const [is_retracement, set_retracement] = useState(true)
@@ -149,6 +147,7 @@ const ChartMain = (props) => {
                   is_price_levels={is_price_levels}
                   is_retracement={is_retracement}
                   is_abcd_pattern={is_abcd_pattern}
+                  market={market}
           
                 />
     }

@@ -1,64 +1,64 @@
-use mysql::*;
-use mysql::prelude::*;
-use chrono::NaiveDate;
-use std::time::Instant;
+// use mysql::*;
+// use mysql::prelude::*;
+// use chrono::NaiveDate;
+// use std::time::Instant;
 
-#[derive(Debug, Clone)]
-pub struct Candle {
-    pub symbol: String,
-    pub date: NaiveDate,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub close: f64,
-    pub volume: u64,
-}
-pub struct Database {
-    pub conn: PooledConn,
-}
-impl Database {
+// #[derive(Debug, Clone)]
+// pub struct Candle {
+//     pub symbol: String,
+//     pub date: NaiveDate,
+//     pub open: f64,
+//     pub high: f64,
+//     pub low: f64,
+//     pub close: f64,
+//     pub volume: u64,
+// }
+// pub struct Database {
+//     pub conn: PooledConn,
+// }
+// impl Database {
 
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let url = "mysql://rperezkc:Nar8uto!@localhost:3306/abcd";
-        let pool = Pool::new(url)?;        
-        let conn = pool.get_conn()?;       
-        Ok(Self { conn })                
-    }
+//     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+//         let url = "mysql://rperezkc:Nar8uto!@localhost:3306/abcd";
+//         let pool = Pool::new(url)?;        
+//         let conn = pool.get_conn()?;       
+//         Ok(Self { conn })                
+//     }
 
-    pub fn get_distinct_symbols(&mut self) -> mysql::Result<Vec<String>> {
-        let query = r#"
-            SELECT DISTINCT symbol
-            FROM abcd.candles
-            ORDER BY symbol
-        "#;
+//     pub fn get_distinct_symbols(&mut self) -> mysql::Result<Vec<String>> {
+//         let query = r#"
+//             SELECT DISTINCT symbol
+//             FROM abcd.candles
+//             ORDER BY symbol
+//         "#;
 
-        let symbols: Vec<String> = self.conn.query_map(query, |symbol: String| symbol)?;
-        Ok(symbols)
-    }
+//         let symbols: Vec<String> = self.conn.query_map(query, |symbol: String| symbol)?;
+//         Ok(symbols)
+//     }
 
-    pub fn get_stored_candles(&mut self, symbol: &str) -> mysql::Result<Vec<Candle>> {
-        let query = r#"
-            SELECT symbol,
-                   DATE_FORMAT(date, '%Y-%m-%d') AS date_str,
-                   open, high, low, close, volume
-            FROM abcd.candles
-            WHERE symbol = :symbol
-            ORDER BY date DESC
-            LIMIT 365
-        "#;
+//     pub fn get_stored_candles(&mut self, symbol: &str) -> mysql::Result<Vec<Candle>> {
+//         let query = r#"
+//             SELECT symbol,
+//                    DATE_FORMAT(date, '%Y-%m-%d') AS date_str,
+//                    open, high, low, close, volume
+//             FROM abcd.candles
+//             WHERE symbol = :symbol
+//             ORDER BY date DESC
+//             LIMIT 365
+//         "#;
 
-        let params = params! { "symbol" => symbol };
+//         let params = params! { "symbol" => symbol };
 
-        let candles: Vec<Candle> = self.conn.exec_map(
-            query,
-            params,
-            |(symbol, date_str, open, high, low, close, volume): (String, String, f64, f64, f64, f64, u64)| {
-                let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
-                    .expect("Failed to parse date");
-                Candle { symbol, date, open, high, low, close, volume }
-            },
-        )?;
+//         let candles: Vec<Candle> = self.conn.exec_map(
+//             query,
+//             params,
+//             |(symbol, date_str, open, high, low, close, volume): (String, String, f64, f64, f64, f64, u64)| {
+//                 let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
+//                     .expect("Failed to parse date");
+//                 Candle { symbol, date, open, high, low, close, volume }
+//             },
+//         )?;
 
-        Ok(candles)
-    }
-}
+//         Ok(candles)
+//     }
+// }

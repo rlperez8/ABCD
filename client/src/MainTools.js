@@ -32,6 +32,7 @@ function findIndexByDate(candles, patternDate) {
 
 export const format_pattern = (candles, rust_patterns, snr_lines, set_chart_data) => {
 
+    let index_X = findIndexByDate(candles, rust_patterns?.x_date);
     let index_A = findIndexByDate(candles, rust_patterns?.a_date);
     let index_B = findIndexByDate(candles, rust_patterns?.b_date);
     let index_C = findIndexByDate(candles, rust_patterns?.c_date);
@@ -39,23 +40,7 @@ export const format_pattern = (candles, rust_patterns, snr_lines, set_chart_data
     let exit = findIndexByDate(candles, rust_patterns?.trade_date);
 
     set_chart_data({
-        // abcd_pattern: {
-        //     ...pattern,
-        //     a: index_A,
-        //     b: index_B,
-        //     c: index_C,
-        //     d: index_D,
-        //     a_price: parseFloat(rust_patterns.a_high),
-        //     b_price: parseFloat(rust_patterns.b_low),
-        //     c_price: parseFloat(rust_patterns.c_high),
-        //     d_price: parseFloat(rust_patterns.d_low),
-        //     stop_loss: parseFloat(rust_patterns.trade_stop_ltrade_risk_exit_priceoss),
-        //     take_profit: parseFloat(rust_patterns.trade_reward_exit_price),
-        //     entered_price: parseFloat(rust_patterns.d_low),
-        //     exit_price: parseFloat(rust_patterns.trade_current_price),
-        //     exit_date: exit,
-            
-        // },
+   
         candles: candles,
         snr_lines: snr_lines,
         rust_patterns: {
@@ -63,10 +48,12 @@ export const format_pattern = (candles, rust_patterns, snr_lines, set_chart_data
             ...rust_patterns, 
                 symbol: rust_patterns.symbol,
                 pattern_ABCD_bar_length: rust_patterns.trade_length,
+                x: index_X,
                 a: index_A,
                 b: index_B,
                 c: index_C,
                 d: index_D,
+                x_price: parseFloat(rust_patterns.a_low),
                 a_price: parseFloat(rust_patterns.a_high),
                 b_price: parseFloat(rust_patterns.b_low),
                 c_price: parseFloat(rust_patterns.c_high),

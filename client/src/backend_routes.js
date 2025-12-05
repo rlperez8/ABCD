@@ -239,10 +239,11 @@ export const get_support_resistance_lines = async (symbol) => {
 
   }
 }
-export const fetch_abcd_patterns = async (filters) => {
+export const fetch_abcd_patterns = async (market, filters) => {
 
 
   const filter = {
+    market: market, 
     bc_greater: filters.bc_retracement_greater,
     bc_less: filters.bc_retracement_less,
     cd_greater: filters.cd_retracement_greater,
@@ -265,7 +266,7 @@ export const fetch_abcd_patterns = async (filters) => {
 
     const data = await res.json(); 
 
-    // console.log(data)
+
     return data;
 
   } catch (e) {

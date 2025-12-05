@@ -86,13 +86,15 @@ def abcd_patterns():
 def load_candles():
 
     alpha = AlphaVantage()
-    tickers = alpha.get_listing_status()['symbol'].to_list()[2300:]
+    tickers = alpha.get_listing_status()['symbol'].to_list()
     db = DataBase()
 
     for index, ticker in enumerate(tickers):
         try:
             df = alpha.load_single_symbol_candle_data('full', ticker)
-
+            df['date'] = pd.to_datetime(df['date'])
+            df = df[df['date'] >= '2025-01-01']
+   
             if not df.empty:
             
                 df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
@@ -112,7 +114,7 @@ def load_candles():
             print(f"Error processing {ticker}: {e}")
 
 def main():
-    abcd_patterns()
+    load_candles()
 
 
 main()

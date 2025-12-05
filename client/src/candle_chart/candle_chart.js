@@ -10,16 +10,14 @@ export const Candle_Chart = (props) => {
 		chart_data,
         is_price_levels,
         is_retracement,
-        is_abcd_pattern
+        is_abcd_pattern,
+        market,
 
 	} = props
-
-    
-    
+ 
     const canvas_dates = useRef()
     const canvas_price = useRef()
     const canvas_chart = useRef()
-
     const [hovered_candle, set_hovered_candle] = useState({
         high: 0,
         close: 0,
@@ -506,7 +504,13 @@ export const Candle_Chart = (props) => {
             mouse.date_background(ctx_date, candle_width, canvas_date)
             mouse.mouse_date(canvas_date, ctx_date)
 
-            is_abcd_pattern && abcd_.abcd(ctx, chart_data.rust_patterns)
+            if (market === "Bullish") {
+                is_abcd_pattern && abcd_.bull_abcd(ctx, chart_data.rust_patterns)
+            }
+            else if (market === "Bearish") {
+                is_abcd_pattern && abcd_.abcd(ctx, chart_data.rust_patterns)
+            }
+            
             is_retracement && abcd_.retracement(ctx, chart_data.rust_patterns)
             abcd_.price_levels(ctx_price, ctx, canvas, chart_data.rust_patterns)
 
@@ -624,7 +628,7 @@ export const Candle_Chart = (props) => {
       
     };
 
-    
+
     return(
         <div className='candle_chart_container'>
          
@@ -656,6 +660,13 @@ export const Candle_Chart = (props) => {
                                 <div className='header_one'>L</div>
                                 <div className='header_two' style={{color: hovered_candle.color}}>
                                     {hovered_candle.low}
+                                </div>
+                            </div>
+
+                            <div className='header_slot'>
+                                <div className='header_one'>L</div>
+                                <div className='header_two' style={{color: hovered_candle.color}}>
+                                    {hovered_candle.volume}
                                 </div>
                             </div>
                     </div>

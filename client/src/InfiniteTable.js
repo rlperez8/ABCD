@@ -166,6 +166,8 @@ const InfiniteTable = (props) => {
               
        
             </div>
+
+            {recent_patterns?.length > 0 ? (
         
             <Grid
                 className="my-grid"
@@ -178,7 +180,7 @@ const InfiniteTable = (props) => {
                 width={containerWidth || 700} 
                 height={Math.min((recent_patterns?.length || 0) * 40, 600)} 
                 style={{ overflowX: 'hidden' }}
-            />
+            />) : ""}
 
         </div>
     )

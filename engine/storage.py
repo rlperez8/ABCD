@@ -356,7 +356,6 @@ class AlphaVantage:
             df['date'] = pd.to_datetime(df['date'])
             df['symbol'] = ticker
             df = df.rename(columns={
-
                 '1. open': 'open',
                 '2. high': 'high',
                 '3. low': 'low',
