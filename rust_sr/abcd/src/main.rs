@@ -10,15 +10,75 @@ use crate::models::database::Database;
 use crate::models::*;
 
 
-#[derive(Debug, Clone)]
-pub struct SRLine {
-    pub price: f64,
-    pub score: f64,
-    pub lower: f64,
-    pub upper: f64,
+#[derive(Clone, Debug)]
+struct SRLine {
+    price: f64,
+    score: f64,
 }
 
-fn is_morning_star(c1: &Candle, c2: &Candle, c3: &Candle) -> bool {
+pub fn create_support_resistance(candles: &[Candle]) -> Vec<SRLine> {
+        let decay_per_tick = 0.01;       
+        let range_pct = 0.05;            
+        let reaction_tolerance = 0.01;   
+
+        // === FIND RANGE ===
+        let min_price = candles.iter()
+            .flat_map(|c| vec![c.open, c.high, c.low, c.close])
+            .fold(f64::INFINITY, |a, b| a.min(b));
+        let max_price = candles.iter()
+            .flat_map(|c| vec![c.open, c.high, c.low, c.close])
+            .fold(f64::NEG_INFINITY, |a, b| a.max(b));
+        let price_range = max_price - min_price;
+
+        // === INITIALIZE TICKS ===
+        let tick_interval = (price_range * 0.001).max(0.01);
+        let mut ticks = vec![];
+        let mut current = min_price;
+        while current <= max_price {
+            ticks.push(current);
+            current += tick_interval;
+        }
+
+        // --- Initialize scores ---
+        let mut scores = vec![0.0; ticks.len()];
+
+        // --- Reaction-only scoring ---
+        for (i, &tick) in ticks.iter().enumerate() {
+            for candle in candles {
+                if candle.low >= tick - reaction_tolerance && candle.low <= tick + reaction_tolerance {
+                    let tick_dist = (tick - candle.low).abs() / tick_interval;
+                    scores[i] += (1.0 - tick_dist * decay_per_tick).max(0.0);
+                }
+            }
+        }
+
+        // --- Pick top SR lines with ±range_pct removal ---
+        let mut sr_lines = vec![];
+        let mut remaining: Vec<(f64, f64)> = ticks.iter().copied().zip(scores.iter().copied()).collect();
+
+        for _ in 0..1 {
+            if remaining.is_empty() { break; }
+
+            let (top_idx, &(price, score)) = remaining.iter().enumerate()
+                .max_by(|a, b| a.1.1.partial_cmp(&b.1.1).unwrap())
+                .unwrap();
+
+            sr_lines.push(SRLine {
+                price:  truncate_to_2_decimals(price),
+                score,
+            });
+
+            // let lower = price * (1.0 - range_pct);
+            // let upper = price * (1.0 + range_pct);
+            // remaining.retain(|&(p, _)| p < lower || p > upper);
+        }
+
+        sr_lines
+    }
+
+
+
+    fn is_morning_star(c1: &Candle, c2: &Candle, c3: &Candle) -> bool {
     let body1 = (c1.close - c1.open).abs();
     let body2 = (c2.close - c2.open).abs();
     let body3 = (c3.close - c3.open).abs();
@@ -66,69 +126,7 @@ pub fn truncate_to_2_decimals(value: f64) -> f64 {
     (value * 100.0).trunc() / 100.0
 }
 
-pub fn create_support_resistance(candles: &[Candle]) -> Vec<SRLine> {
-        let decay_per_tick = 0.01;       // points lost per tick away
-        let range_pct = 0.05;            // ±5% range for top SR selection
-        let reaction_tolerance = 0.01;   // how close candle must touch/reverse
 
-        // --- Adaptive tick levels ---
-        let min_price = candles.iter()
-            .flat_map(|c| vec![c.open, c.high, c.low, c.close])
-            .fold(f64::INFINITY, |a, b| a.min(b));
-        let max_price = candles.iter()
-            .flat_map(|c| vec![c.open, c.high, c.low, c.close])
-            .fold(f64::NEG_INFINITY, |a, b| a.max(b));
-        let price_range = max_price - min_price;
-
-        let tick_interval = (price_range * 0.001).max(0.01);
-
-        let mut ticks = vec![];
-        let mut current = min_price;
-        while current <= max_price {
-            ticks.push(current);
-            current += tick_interval;
-        }
-
-        // --- Initialize scores ---
-        let mut scores = vec![0.0; ticks.len()];
-
-        // --- Reaction-only scoring ---
-        for (i, &tick) in ticks.iter().enumerate() {
-            for candle in candles {
-                if candle.low >= tick - reaction_tolerance && candle.low <= tick + reaction_tolerance {
-                    if candle.close > candle.low {
-                        let tick_dist = (tick - candle.low).abs() / tick_interval;
-                        scores[i] += (1.0 - tick_dist * decay_per_tick).max(0.0);
-                    }
-                }
-            }
-        }
-
-        // --- Pick top SR lines with ±range_pct removal ---
-        let mut sr_lines = vec![];
-        let mut remaining: Vec<(f64, f64)> = ticks.iter().copied().zip(scores.iter().copied()).collect();
-
-        for _ in 0..1 {
-            if remaining.is_empty() { break; }
-
-            let (top_idx, &(price, score)) = remaining.iter().enumerate()
-                .max_by(|a, b| a.1.1.partial_cmp(&b.1.1).unwrap())
-                .unwrap();
-
-            sr_lines.push(SRLine {
-                price:  truncate_to_2_decimals(price),
-                score,
-                lower:  truncate_to_2_decimals(price * (1.0 - range_pct)),
-                upper: truncate_to_2_decimals(price * (1.0 + range_pct)), 
-            });
-
-            let lower = price * (1.0 - range_pct);
-            let upper = price * (1.0 + range_pct);
-            remaining.retain(|&(p, _)| p < lower || p > upper);
-        }
-
-        sr_lines
-    }
 // === Pivot check function ===
 fn check_for_pivot(current: &Candle, prev1: &Candle, prev2: &Candle, pivot_type: PivotType) -> bool {
     match pivot_type {
@@ -157,13 +155,15 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     // === Symbols ===
     for symbol in &symbols {
-    // for symbol in ["ABR".to_string()] {
+    // for symbol in symbols.iter().take(1) {
+    // for symbol in ["ACB".to_string()].iter() {
 
         // === Candles ===
         let mut candles = db.get_stored_candles(&symbol)?;
      
-
-        let support_and_resitance = create_support_resistance(&candles);
+        //  // === Calculate Heatmap / SR Zones ===
+        let support_and_resistance = create_support_resistance(&candles);
+        println!("{:?}", support_and_resistance);
 
         // === Pattern storage ===
         let mut pattern_x: Vec<PatternX> = Vec::new();
@@ -348,8 +348,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 };
 
                 // === SUPPORT & RESISTANCE ===
-                let level = support_and_resitance[0].price;
-                let snr_line = match pattern.c.type_ {
+                let level = support_and_resistance[0].price;
+           
+                let three_month = match pattern.c.type_ {
                     PivotType::Low => {
                         let touched = prev1.high == level;
                         touched
@@ -386,8 +387,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                         &pattern.b,
                         &pattern.c,
                         &prev1, 
-                        support_and_resitance[0].price,
-                        ReversalType::None   
+                        support_and_resistance[0].price,
+                        ReversalType::None,
                     );
           
                     pattern_xabcd.push(PatternXABCD {
@@ -400,6 +401,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                         market,
                         abcd_type: ABCDType::Standard,
                         trade,
+                        three_month: Some(three_month),
+                        six_month: Some(false),
+                        twelve_month: Some(false)
                     });
                 
                         

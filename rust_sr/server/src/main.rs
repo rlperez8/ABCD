@@ -3,7 +3,7 @@ use actix_web::{post, get, web, App, HttpServer, Responder, HttpResponse};
 use std::collections::HashMap;
 use actix_cors::Cors;
 use serde::{Serialize, Deserialize};
-
+use chrono::NaiveDate;
 mod utils;
 mod peformance;
 use crate::utils::{load_patterns};
@@ -46,35 +46,14 @@ async fn fetch_patterns(filter: web::Json<FilterParams>) -> impl Responder {
     let cd_max = filter.cd_less.unwrap_or(f64::MAX);
 
 
-    // === Filter based on request parameters ===
+    let cutoff = NaiveDate::from_ymd_opt(2025, 12, 30).unwrap();
+
     let patterns_2025: Vec<Pattern> = patterns
         .iter()
         .filter(|p| {
-          
-            // p.market == market.as_str()
-            p.trade_year == 2025.0 
-            && p.trade_month == 12.0
-            // // && p.trade_day >= 28.0
-            // && p.trade_open == "true"
-     
-          
-
-            // && (bc_min..=bc_max).contains(&p.trade_bc_price_retracement)
-            // && (cd_min..=cd_max).contains(&p.trade_cd_price_retracement)
-
-       
-            // && p.trade_bc_price_retracement >= 38.0
-            // && p.trade_bc_price_retracement <= 88.6
-
-            // && p.trade_cd_bc_price_retracement >= 161.8
-            // && p.trade_cd_bc_price_retracement <= 261.8
-
-            // && p.trade_cd_xa_price_retracement >= 127.0
-            // && p.trade_cd_xa_price_retracement <= 161.8
-            // && p.trade_cd_bar_retracement >= 100.00
-            // && p.trade_cd_bar_retracement <= 168.00
-        
-         
+            p.trade_year == 2026.0 
+            // && p.trade_month == 12.0
+            // && NaiveDate::parse_from_str(&p.d_date, "%Y-%m-%d").unwrap() >= cutoff
         })
         .cloned()
         .collect();

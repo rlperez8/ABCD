@@ -27,6 +27,8 @@ impl Database {
     }
 
     pub fn get_stored_candles(&mut self, symbol: &str) -> mysql::Result<Vec<Candle>> {
+
+            
         let query = r#"
             SELECT symbol,
                    DATE_FORMAT(date, '%Y-%m-%d') AS date_str,
@@ -35,6 +37,7 @@ impl Database {
             WHERE symbol = :symbol
             ORDER BY date DESC
             LIMIT 90
+    
         "#;
 
         let params = params! { "symbol" => symbol };

@@ -5,6 +5,31 @@ import * as route from './backend_routes.js';
 import Section from './Section.js';
 import InfiniteTable from './InfiniteTable.js';
 import * as tools from './MainTools.js'
+import { Listbox } from "@headlessui/react";
+import MarketDropdown from './Dropdown.js';
+import FilterDropDown from './FilterDropDown.js';
+
+const update_selected_pattern = async (selected_pattern, set_chart_data) => {
+
+  // === SELECTED PATTERN CANDLES ===
+  let candles = await route.get_candles(selected_pattern?.symbol)
+  candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+  candles = candles?.map(item => {
+    const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
+
+    return {
+      ...item,
+      candle_date: toISO(item.candle_date),
+    };
+  });
+
+  // === SUPPORT & RESISTANCE ===
+  const snr_lines = await route.get_support_resistance_lines(selected_pattern?.symbol)
+
+  // === FORMAT PATTERN FOR CANVAS ===
+  tools.format_pattern(candles, selected_pattern, snr_lines, set_chart_data)
+
+}
 
 
 const App = () => {
@@ -53,6 +78,18 @@ const App = () => {
       active: false,
       filter: null,
     },
+    snr: {
+      active: false,
+      filter: null,
+    },
+    date: {
+      active: false,
+      filter: null,
+    },
+    symbol: {
+      active: false,
+      filter: null,
+    },
   });
 
   const filter_stacker = (patterns) => {
@@ -71,24 +108,44 @@ const App = () => {
       }
       
     }
-
     if(activeFilters.retracement.active){
-      
+     
       result = result.filter(p =>
-        p.trade_ab_price_retracement >= activeFilters.retracement.filter.ratios.ab_xa_gr &&
-        p.trade_ab_price_retracement <= activeFilters.retracement.filter.ratios.ab_xa_lt &&
+        p.trade_ab_price_retracement >= activeFilters.retracement.filter.ab_xa_gr &&
+        p.trade_ab_price_retracement <= activeFilters.retracement.filter.ab_xa_lt &&
 
-        p.trade_bc_price_retracement >= activeFilters.retracement.filter.ratios.bc_ab_gr &&
-        p.trade_bc_price_retracement <= activeFilters.retracement.filter.ratios.bc_ab_lt &&
+        p.trade_bc_price_retracement >= activeFilters.retracement.filter.bc_ab_gr &&
+        p.trade_bc_price_retracement <= activeFilters.retracement.filter.bc_ab_lt &&
 
-        p.trade_cd_bc_price_retracement >= activeFilters.retracement.filter.ratios.cd_bc_gr &&
-        p.trade_cd_bc_price_retracement <= activeFilters.retracement.filter.ratios.cd_bc_lt &&
+        p.trade_cd_bc_price_retracement >= activeFilters.retracement.filter.cd_bc_gr &&
+        p.trade_cd_bc_price_retracement <= activeFilters.retracement.filter.cd_bc_lt &&
 
-        p.trade_cd_xa_price_retracement >= activeFilters.retracement.filter.ratios.cd_xa_gr &&
-        p.trade_cd_xa_price_retracement <= activeFilters.retracement.filter.ratios.cd_xa_lt
+        p.trade_cd_xa_price_retracement >= activeFilters.retracement.filter.cd_xa_gr &&
+        p.trade_cd_xa_price_retracement <= activeFilters.retracement.filter.cd_xa_lt
       );
     
     }
+    if(activeFilters.date.active){
+      result =  result.filter(p=>p.d_date===activeFilters.date.filter)
+    }
+    if(activeFilters.symbol.active){
+      result =  result.filter(p=>p.symbol===activeFilters.symbol.filter)
+    }
+    if(activeFilters.snr.active){
+
+      if(activeFilters.snr.filter === 3){
+        result = result.filter(p=>p.three_month === "true")
+      }
+      if(activeFilters.snr.filter === 6){
+        result = result.filter(p=>p.six_month === "true")
+      }
+      if(activeFilters.snr.filter === 12){
+        result = result.filter(p=>p.twelve_month === "true")
+      }
+      
+   
+    }
+
  
      return result
   }
@@ -106,7 +163,7 @@ const App = () => {
   })
   const harmonic_patterns = [
   {
-    type: "AB=CD Standard",
+    type: "Standard",
     ratios: {
       ab_xa_gr: 0,  
       ab_xa_lt: 100,
@@ -119,7 +176,7 @@ const App = () => {
     }
   },
   {
-    type: "AB=CD Alternate",
+    type: "Alternate",
     ratios: {
       ab_xa_gr: 0,
       ab_xa_lt: 100,
@@ -132,7 +189,7 @@ const App = () => {
     }
   },
   {
-    type: "AB=CD Deep",
+    type: "Deep",
     ratios: {
       ab_xa_gr: 0,
       ab_xa_lt: 100,
@@ -145,7 +202,7 @@ const App = () => {
     }
   },
   {
-    type: "AB=CD Extended",
+    type: "Extended",
     ratios: {
       ab_xa_gr: 0,
       ab_xa_lt: 100,
@@ -298,13 +355,53 @@ const App = () => {
 
   };
 
-  useEffect(()=>{
-    const rust_patterns = filter_stacker(recent_patterns)
-    set_filtered_patterns(rust_patterns)
+  useEffect(() => {
+    let isMounted = true;
 
-  },[activeFilters])
+    
 
-  // ===============
+    const loadPattern = async () => {
+      try {
+        set_loading(true);
+
+        const rust_patterns = filter_stacker(recent_patterns);
+        set_filtered_patterns(rust_patterns.sort((a,b)=> a.trade_enter_price - b.trade_enter_price));
+        // const uniqueDates = [...new Set(rust_patterns.map(item => item.d_date))];
+        // set_unique_d_dates(uniqueDates)
+        // const uniqueSymbols = [...new Set(rust_patterns.map(item => item.symbol))];
+        // set_unique_symbols(uniqueSymbols)
+
+        if (!rust_patterns?.length) {
+          set_chart_data({ selected: null, candles: [] });
+          return;
+        }
+
+        await update_selected_pattern(rust_patterns[0], (data) => {
+          if (isMounted) set_chart_data(data);
+        });
+
+      } catch (err) {
+        console.error("Pattern load failed:", err);
+        if (isMounted) {
+          set_chart_data({ selected: null, candles: [] });
+        }
+      } finally {
+        if (isMounted) set_loading(false);
+      }
+    };
+
+    loadPattern();
+
+    set_selected_row_index(0)
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeFilters, recent_patterns]);
+
+  
+  const [unique_d_dates, set_unique_d_dates] = useState([])
+  const [unique_symbols, set_unique_symbols] = useState([])
 
   useEffect(()=>{
 
@@ -314,55 +411,37 @@ const App = () => {
       set_loading(true);
       set_loading_patterns(true)
 
-
-
       // === FETCH  DATA === 
       const data = await route.fetch_abcd_patterns(market, filters)
 
-      // === ALL PATTERNS ===
+      // === PATTERNS ===
       const rust_patterns = data.patterns
-
-      set_filtered_patterns(filter_stacker(data.patterns))
+      const filtered_patterns = filter_stacker(data.patterns)
+      set_filtered_patterns(filtered_patterns)
       set_recent_patterns(data.patterns)
-      
+      const uniqueDates = [...new Set(filtered_patterns.map(item => item.d_date))];
+      set_unique_d_dates(uniqueDates)
+      const uniqueSymbols = [...new Set(filtered_patterns.map(item => item.symbol))];
+      set_unique_symbols(uniqueSymbols)
+    
       // === MONTNLY PEFORMANCE ===
       let rust_statistics = data.monthly_stats
-
-      
-      
-
       rust_statistics.sort((a, b) => a.month - b.month);
       set_monthly_peformance(rust_statistics)
 
-      // CANDLES
-      let candles = await route.get_candles(rust_patterns[0]?.symbol)
-      candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
-      candles = candles?.map(item => {
-        const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
+      
+      let selected_pattern = rust_patterns[0]
+      update_selected_pattern(selected_pattern, set_chart_data)
+          
 
-        return {
-          ...item,
-          candle_date: toISO(item.candle_date),
-        };
-      });
-
-
-      // SUPPORT & RESISTANCE
-      const snr_lines = await route.get_support_resistance_lines(recent_patterns[0]?.symbol)
-      // tools.format_pattern(candles, selected_pattern, snr_lines, set_chart_data, rust_patterns[0])
-      tools.format_pattern(candles, rust_patterns[0], snr_lines, set_chart_data)
-
-      // WATCHLIST
-      // const wl_patterns = await route.get_all_patterns_in_watchlist()
-      // set_wl_patterns(wl_patterns)
-
+      // === LOADING ===
       set_loading(false);
       set_loading_patterns(false)
     
     }
     fetch()
 
-  },[filters, market])
+  },[])
 
   const [filtered_patterns, set_filtered_patterns] = useState()
   
@@ -402,12 +481,70 @@ const App = () => {
 
 
   }
+
+
+  const options4 = [ "Standard",
+        "Alternate",
+        "Deep",
+        "Extended",
+        "Gartley",
+        "Bat",
+        "Butterfly",
+        "Crab",
+        "Deep Crab",
+        "Shark",
+        "Cypher",
+        "Three-Drive"];
+
+
+  const activateMarket = value => {
+        setActiveFilters(prev => ({
+            ...prev,
+            market: { active: true, filter: value }
+        }));
+  };
+  const activateResult = value => {
+
+    let val = value === 'Open' ? "Open" : value === 'Won' ? 'true' : 'false'
+        setActiveFilters(prev => ({
+            ...prev,
+            result: { active: true, filter: val }
+        }));
+  };
+  const activateRetracement = value => {
   
+    let val = harmonic_patterns.find(p => p.type === value)?.ratios || null;
+
+
+    setActiveFilters(prev => ({
+        ...prev,
+        retracement: { 
+            active: true, 
+            filter: val 
+        }
+    }));
+  };
+  const activateDate = value => {
+        setActiveFilters(prev => ({
+            ...prev,
+            date: { active: true, filter: value }
+        }));
+  };
+  const activateSymbol = value => {
+        setActiveFilters(prev => ({
+            ...prev,
+            symbol: { active: true, filter: value }
+        }));
+  };
+
+  const [selected_filter, set_selected_filter] = useState('')
 
   return (
 
       <div className='App' >
-  
+
+        <div className='app-inner'>
+
           <div className='main'>
             {is_loading && 
               <div className='overlay'>
@@ -415,7 +552,159 @@ const App = () => {
               </div>
             }
 
-            <div className='monthly_peformance_wrapper'>
+            <div className='app-header'>
+
+              <FilterDropDown
+                name={"Market"}
+                activateMarket={activateMarket}
+                options = {["Bullish", "Bearish", "Both"]}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter==="Market" ? true : false}
+              />
+
+              <FilterDropDown
+                name={"Status"}
+                activateMarket={activateResult}
+                options = {["Open", "Won", "Lost"]}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter==="Status" ? true : false}
+              />
+
+              <FilterDropDown
+                name={"Pattern"}
+                activateMarket={activateRetracement}
+                options = {options4}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter==="Pattern" ? true : false}
+              />
+
+              <FilterDropDown
+                name={"Date"}
+                activateMarket={activateDate}
+                options = {unique_d_dates}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter==="Date" ? true : false}
+              />
+
+              <FilterDropDown
+                name={"Symbol"}
+                activateMarket={activateSymbol}
+                options = {unique_symbols}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter==="Symbol" ? true : false}
+              />
+
+              {/* <FilterDropDown
+                name={"S&R"}
+                activateMarket={activateResult}
+                options = {["3", "6", "12"]}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter==="S&R" ? true : false}
+              /> */}
+{/* 
+            
+              <div className="setting-container">
+                <div className="setting-key">Pattern:</div>
+
+                <div
+                  className="setting-value-outer"
+                  onClick={() => setOpen4(!open4)}
+                >
+                  <div className="setting-value-inner">
+                    {value4}
+                  </div>
+
+                  {open4 && (
+                    <div className="setting-dropdown">
+                      {options4.map(opt => (
+                        <div
+                          key={opt}
+                          className="setting-dropdown-item"
+                          onClick={() => {
+                            setValue4(opt);
+                            // activateResult(opt === 'Open' ? "Open" : opt === 'Won' ? 'true' : 'false');
+                            setOpen4(false);
+                          }}
+                        >
+                          {opt}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="setting-container">
+                <div className="setting-key">Price &lt;:</div>
+
+                <div
+                  className="setting-value-outer"
+                  onClick={() => setOpen5(!open5)}
+                >
+                  <div className="setting-value-inner">
+                    {value5}
+                  </div>
+
+                  {open5 && (
+                    <div className="setting-dropdown">
+                      {options5.map(opt => (
+                        <div
+                          key={opt}
+                          className="setting-dropdown-item"
+                          onClick={() => {
+                            setValue5(opt);
+                            // activateResult(opt === 'Open' ? "Open" : opt === 'Won' ? 'true' : 'false');
+                            setOpen5(false);
+                          }}
+                        >
+                          {opt}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="setting-container">
+                <div className="setting-key">Symbol:</div>
+
+                <div
+                  className="setting-value-outer"
+                  onClick={() => setOpen5(!open5)}
+                >
+                  <div className="setting-value-inner">
+                    {value5}
+                  </div>
+
+                  {open5 && (
+                    <div className="setting-dropdown">
+                      {options5.map(opt => (
+                        <div
+                          key={opt}
+                          className="setting-dropdown-item"
+                          onClick={() => {
+                            setValue5(opt);
+                            // activateResult(opt === 'Open' ? "Open" : opt === 'Won' ? 'true' : 'false');
+                            setOpen5(false);
+                          }}
+                        >
+                          {opt}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+ 
+
+              {/* <div className='monthly_peformance_wrapper'>
 
                 <div className='table_header_text'>
                   Peformance
@@ -481,6 +770,10 @@ const App = () => {
             
                 </div>
 
+            </div> */}
+
+
+
             </div>
 
             <div className={is_sections_expanded ? 'sections-wrapper-expanded':'sections-wrapper-minimized'}>
@@ -518,15 +811,16 @@ const App = () => {
                 setActiveFilters={setActiveFilters}
                 body={<InfiniteTable
                   recent_patterns={filtered_patterns}
-                  set_loading_patterns={set_loading_patterns}
+                  set_loading_patterns={set_loading}
                   set_chart_data={set_chart_data}
                   selected_row_index={selected_row_index}
                   set_selected_row_index={set_selected_row_index}
+                  update_selected_pattern={update_selected_pattern}
                 />}
               />
 
             </div>
-
+{/* // */}
             <div className='main_left'>
 
                   
@@ -547,6 +841,7 @@ const App = () => {
      
           
           </div>
+        </div>
 
 			</div>
   );

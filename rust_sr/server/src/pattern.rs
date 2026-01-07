@@ -62,6 +62,10 @@ pub struct Pattern {
     pub trade_day: f64,
     pub reversalType: Option<String>,
     pub market: String,
+    pub three_month: String,
+    pub six_month: String,
+    pub twelve_month: String,
+
 }
 
 impl Pattern {

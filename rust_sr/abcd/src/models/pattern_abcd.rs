@@ -15,5 +15,9 @@ pub struct PatternXABCD {
     pub market: Market,
     pub abcd_type: ABCDType,
     pub trade: Trade,
+    pub three_month: Option<bool>,
+    pub six_month: Option<bool>,
+    pub twelve_month: Option<bool>,
+
 }
 
