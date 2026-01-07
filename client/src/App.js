@@ -1,12 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import './new.css'
 import ChartMain from './candle_chart/chart_main';
 import * as route from './backend_routes.js';
 import Section from './Section.js';
 import InfiniteTable from './InfiniteTable.js';
 import * as tools from './MainTools.js'
-import { Listbox } from "@headlessui/react";
-import MarketDropdown from './Dropdown.js';
+
 import FilterDropDown from './FilterDropDown.js';
 
 const update_selected_pattern = async (selected_pattern, set_chart_data) => {
@@ -37,7 +36,7 @@ const App = () => {
   const [market, set_market] = useState("Bullish")
   const [table_result, set_table_result] = useState('Won')
   const [chart_data, set_chart_data] = useState({candles: [], abcd_pattern: []})
-  const [selected_month, set_selected_month] = useState('1')
+
   const [is_sections_expanded, set_sections_expanded] = useState(true)
   const [selected_row_index, set_selected_row_index] = useState(0)
   const [monthly_performance, set_monthly_peformance] = useState([])
@@ -445,15 +444,7 @@ const App = () => {
 
   const [filtered_patterns, set_filtered_patterns] = useState()
   
-  const handle_updated_recent_patterns = async (month) => {
 
-      const filtered_patterns = recent_patterns.filter(
-          p => Number(p.trade_month) === Number(month) + 1
-      );
-
-      set_filtered_patterns(filtered_patterns);
-      set_selected_month(Number(month) + 1)  
-  }
   const sort_by_result = async (result) => {
 
     if(result==="Open"){
