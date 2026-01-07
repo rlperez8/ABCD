@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import dropdown from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/dropdown.png';
+
 
 const FilterDropDown = (props) => {
 
@@ -26,7 +26,7 @@ return(
 
                 <div className="value-name"> {value} </div>
                 <div className="value-arrow">
-                    <img className='value-arrow-img'src={dropdown}></img>
+                    <img className='value-arrow-img'src="/images/dropdown.png"></img>
                 </div>
     
 

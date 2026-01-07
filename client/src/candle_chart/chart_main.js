@@ -1,10 +1,6 @@
 import { useState } from "react"
 import { Candle_Chart } from './candle_chart';
-import abcd from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/abcd.png';
-import prices from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/prices.png';
-import retracement from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/retracement.png';
-import add from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/add.png';
-import menu from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/menu.png';
+
 import * as route from '../backend_routes.js';
 
 const ChartMain = (props) => {
@@ -47,26 +43,26 @@ const ChartMain = (props) => {
                     
                     set_abcd_pattern(!is_abcd_pattern)}}>
 
-                    <img className='abcd_img' src={abcd}></img>
+                    <img className='abcd_img' src="/images/dropdown.png"></img>
                   </div>
 
                   <div className={is_price_levels ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
                     
                     set_price_levels(!is_price_levels)}}>
 
-                    <img className='abcd_img' src={prices}></img>
+                    <img className='abcd_img' src="/images/prices.png"></img>
                   </div>
 
                   <div className={is_retracement ? 'chart_icon_active' : 'chart_icon_'} onClick={()=> {
                     
                     set_retracement(!is_retracement)}}>
 
-                    <img className='abcd_img' src={retracement}></img>
+                    <img className='abcd_img' src="/images/retracement.png"></img>
                   </div>
 
                   <div className='chart_icon_' onClick={()=>{set_add_wl(!is_add_wl)}}>
 
-                    <img className='abcd_img' src={add}></img>
+                    <img className='abcd_img' src="/images/add.png"></img>
 
                     {is_add_wl && <div className="wl-options-wrapper">
 
@@ -102,7 +98,7 @@ const ChartMain = (props) => {
                     
                     }}>
 
-                    <img className='abcd_img' src={menu}></img>
+                    <img className='abcd_img' src="/images/abcd.png"></img>
                   </div>
                 </div>
 {/* 

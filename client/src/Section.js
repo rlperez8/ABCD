@@ -1,8 +1,5 @@
 import React, {useState} from "react"
-import dropup from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/arrow_up.png';
-import dropdown from 'C:/Users/rpere/Desktop/abcd_local_v3/client/src/images/dropdown.png';
-import InfiniteTable from "./InfiniteTable";
-import PatternFiltering from "./filter/pattern_filtering";
+
 
 const Section = (props) => {
 
