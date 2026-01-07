@@ -218,7 +218,11 @@ impl ABCD {
             trade_year: p.trade.year,
             trade_month: p.trade.month,
             trade_day: p.trade.day,
-            reversalType: p.trade.reversalType.clone()
+            reversalType: p.trade.reversalType.clone(),
+            three_month: p.three_month,
+            six_month: p.six_month,
+            twelve_month: p.twelve_month,
+            
         }).collect();
 
         let file = File::create(filename)?;

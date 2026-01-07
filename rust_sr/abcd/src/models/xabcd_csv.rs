@@ -147,6 +147,10 @@ pub struct XABCD_CSV {
 
     reversal_type: ReversalType,
     market: Market,
+    three_month: Option<bool>,
+    six_month: Option<bool>,
+    twelve_month: Option<bool>,
+
 }
 
 impl XABCD_CSV {
@@ -212,7 +216,10 @@ impl XABCD_CSV {
             trade_month: p.trade.month,
             trade_day: p.trade.day,
             reversal_type: p.trade.reversal_type.clone(),
-            market: p.market
+            market: p.market,
+            three_month: p.three_month,
+            six_month: p.six_month,
+            twelve_month: p.twelve_month
         }).collect();
 
         let file = File::create(filename)?;

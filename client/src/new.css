@@ -4,31 +4,160 @@
     box-sizing: border-box;
     overflow: hidden;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     color: black;
     justify-content: center;
     align-items: center;
+    box-sizing: border-box;
+    /* padding: 10px;    */
+    background-color: rgb(68, 68, 69);
+    /* background-color: rgb(84 84 84); */
+    
+}
+.app-inner{
+    width: 100%;
+    height: 100%;
+    /* border: 2px solid green; */
+    box-sizing: border-box;
+    padding: 15px
+}
+.app-header {
+    width: 20%;
+    max-width: 250px;
+    height: 100%;
+    /* padding-top: 5px; */
+    /* padding-bottom: 5px; */
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    margin: 5px;
 
-/* 
-    background: linear-gradient(to top, #0a0d0f, #0f1416, #132022, #173035);
-    background: linear-gradient(135deg, #282d2d, #7e7e7e, #272929);
-    background: linear-gradient(135deg, #3a3a3a, #141515, #262828);
-    background: linear-gradient(135deg,rgba(20, 21, 21),rgb(43, 54, 54));
+    /* background-color: rgb(5, 2, 35); */
+    /* border: 3px solid rgb(10, 39, 63);
+    border: 2px solid rgb(47, 65, 81); */
+    border-radius: 5px;
+    box-sizing: border-box;
+
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+    margin-top: 5px;
+    background-color: rgb(84 84 84);
+}
+.setting-container{
+    width: 100%;
+    height: 3%;
+    display: flex;
+    flex-direction: row;
+    color: rgb(185, 183, 183);
+    font-weight: 400;
+    font-family: monospace;
+    font-size: 110%;
+    border-radius: 2px;
+    margin-top: 5px;
+    background-color: rgb(36 44 51);
+}
+.setting-key{
+    width: 45%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     
-    background: linear-gradient(to top, #040607, #0a0a0a, #2e3333, #393b3c);
-  */
-    background-color: rgb(1, 1, 1);
     
-    background: linear-gradient(to top, #0a0d0f, #0f1416, #070a0b, #000000);
-    
+}
+.setting-value-outer{
+    position: relative; 
+    width: 55%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+}
+.setting-value-inner{
+     
+    width: 100%;
+  
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #1d1d1e;
+    /* border: 1px solid rgb(97, 97, 97); */
+    border-radius: 5px;
+    height: 90%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.value-name{
+    width: 75%;
+    min-width: 75%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.value-arrow-img{
+    width: 100%;
+    height: 100%;
+}
+.value-arrow{
+    width: 25%;
+    height: 100%;
+}
+.setting-dropdown {
+  position: absolute;
+  top: calc(100% + 0px);
+  left: 0;
+  width: 100%;
+  background-color: #151515;
+  
+  align-items: center;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+  z-index: 100;
+  overflow: hidden;
+}
+.setting-dropdown-item {
+
+  font-size: 14px;
+  color: rgb(185, 183, 183);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 50px;
+}
+
+.setting-dropdown-item:hover {
+  background: #1e293b;
+}
+.main{
+    max-width: 100%;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    box-sizing: border-box;
+    flex-direction: row;
+    border-radius: 10px;
+    /* padding: 5px; */
 }
 .main_left{
     width: 100%;
     height: 100%;
-    /* border: 7px solid orange; */
+    /* border: 3px solid rgb(10, 39, 63);
+    border: 2px solid rgb(66, 80, 92); */
+    border-radius: 5px;
+    box-sizing: border-box;
+    margin: 5px;
+    margin-right: 0px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
     box-sizing: border-box;
     /* padding: 5px; */
     display: flex;
+    background-color: rgb(84 84 84);
 
 
   
@@ -283,8 +412,9 @@
     border-left: none;
     box-sizing: border-box;
     position: relative;
-    border: 1px solid rgb(33, 33, 32);
-
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+    background-color: rgb(15, 15, 15);
 }
 .canvas_dates{
     height: 4%;
@@ -719,18 +849,7 @@ input:focus {
     justify-content: center;
     align-items: center;
 }
-.main{
-    max-width: 100%;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: row;
-    box-sizing: border-box;
-    flex-direction: row;
-    border-radius: 10px;
-    /* border: 5px solid orange; */
-    
-}
+
 .chart_container{
     width: 100%;
     height: 100%;
@@ -1180,7 +1299,7 @@ input:focus {
     -ms-overflow-style: none;  
     scrollbar-width: none;    
     overflow: hidden;
-/* background-color: #434343; */
+    /* background-color: #212123; */
     /* border: 2px solid orange; */
 }
 .table_container::-webkit-scrollbar {
@@ -1315,18 +1434,21 @@ input:focus {
 
 /* DATA=================== */
 .sections-wrapper-expanded {
-  width: 40%;
-  min-width: 900px;
-  max-width: 900px;
-  overflow: hidden;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  transition: width 0.1s ease-in-out;   
-  /* border: 5px solid red; */
-  box-sizing: border-box;
-  /* padding: 5px; */
-  /* padding-right: 2.5px; */
+    width: 20%;
+    /* min-width: 900px;
+    max-width: 900px; */
+    overflow: hidden;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    /* transition: width 0.1s ease-in-out;    */
+    /* border: 5px solid red; */
+    box-sizing: border-box;
+    margin-top: 5px;
+    background-color: rgb(84 84 84);
+
+    border-radius: 5px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 .sections-wrapper-minimized {
@@ -1335,7 +1457,7 @@ input:focus {
   height: 100%;
   display: flex;
   flex-direction: column;
-  transition: width 0.1s ease-in-out;
+  /* transition: width 0.1s ease-in-out; */
 }
 
 /* Pattern */
@@ -1353,27 +1475,12 @@ input:focus {
 .margin-{
     width: 100%;
     height: 100%;
-    /* border-radius: 5px;
-    border: 2px solid rgb(33, 46, 46); */
+
     box-sizing: border-box;
     overflow: hidden;
-     background: linear-gradient(135deg, #3a3a3a, #141515, #262828);
-     /* background: linear-gradient(
-    135deg,
-   
-    rgba(20, 21, 21), 
-    rgb(43, 54, 54)     
-    );
-    background: linear-gradient(
-    to right,
-    rgba(31, 31, 31, 0.7),   
-    rgba(40, 40, 40, 0.7)    
-); */
-  /* background: linear-gradient(
-    to right,
-    rgba(31, 31, 31, 0.7),   
-    rgba(40, 40, 40, 0.7)    
-); */
+     /* background: linear-gradient(135deg, #3a3a3a, #141515, #262828); */
+    /* background-color: #1e1f1f; */
+
 }
 .patterns_table_main{
     display: flex;
@@ -1447,16 +1554,14 @@ input:focus {
 }
 .patterns_settings{
     width: 100%;
-    height: 50px;
-    min-height: 50px;
-    /* max-height: 50px; */
+    /* height: 25%; */
     box-sizing: border-box;
     display: flex;
     flex-direction: row;
-    /* background-color: rgb(66, 66, 66); */
+
 }
 .patterns_settings_2{
-    width: 40%;
+    width: 50%;
     height: 300px;
 
     box-sizing: border-box;
@@ -1468,6 +1573,8 @@ input:focus {
 .retracement-header{
     width: 100%;
     height: 15%;
+    min-height: 45px;
+    max-height: 45px;
     display: flex;
     flex-direction: row;
     justify-content: center;
@@ -1690,7 +1797,7 @@ input:focus {
 }
 .table_body_main{
     width: 100%;
-    height: 85%;
+    height: 100%;
     box-sizing: border-box;
     overflow: scroll;
       -ms-overflow-style: none;  
@@ -1710,6 +1817,8 @@ input:focus {
     flex-direction: row;
     font-weight: 700;
     box-sizing: border-box;
+    color: rgb(251, 251, 251);
+    /* background-color: rgb(128, 127, 127); */
 }
 .peformance_table_body{
     width: 100%;
@@ -2031,7 +2140,7 @@ input:focus {
 .ticker_column{
     width: 100%;
     height: 100%;
-    color: rgb(160, 160, 160);
+    color: rgb(171, 169, 169);
     /* border-bottom: 1px solid rgb(67, 65, 65); */
     display: flex;
     justify-content: center;
@@ -2046,7 +2155,7 @@ input:focus {
     height: 40px;
     min-height: 40px;
      /* border-bottom: 1px solid rgb(44, 44, 46); */
-    color: white;
+     color: ghostwhite;
     display: flex;
     flex-direction: row;
     justify-content: center;
@@ -2054,7 +2163,7 @@ input:focus {
     box-sizing: border-box;
   
       font-family: 'JetBrains Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace;
-color: rgb(176, 176, 176);
+
     font-size: 14px;
 }
 .ticker_row_odd {
@@ -2062,7 +2171,7 @@ color: rgb(176, 176, 176);
     height: 40px;
     min-height: 40px;
      /* border-bottom: 1px solid rgb(44, 44, 46); */
-   color: rgb(176, 176, 176);
+   color: ghostwhite;
     display: flex;
     flex-direction: row;
     justify-content: center;
@@ -2078,7 +2187,7 @@ color: rgb(176, 176, 176);
     height: 40px;
     min-height: 40px;
      border-bottom: 1px solid rgb(44, 44, 46);
-    color: white;
+     color: ghostwhite;
     display: flex;
     flex-direction: row;
     justify-content: center;
@@ -2090,7 +2199,7 @@ color: rgb(176, 176, 176);
     height: 40px;
     min-height: 40px;
     /* border-bottom: 1px solid rgb(66, 66, 68); */
-    color: rgb(255, 254, 254);
+     color: ghostwhite;
     display: flex;
     flex-direction: row;
     justify-content: center;
@@ -2102,7 +2211,7 @@ color: rgb(176, 176, 176);
     height: 40px;
     min-height: 40px;
      /* border-bottom: 1px solid rgb(44, 44, 46); */
-   color: rgb(249, 245, 245);
+   color: rgb(0, 0, 0);
     display: flex;
     flex-direction: row;
     justify-content: center;
@@ -2333,7 +2442,7 @@ color: rgb(176, 176, 176);
     color:  white;
 }
 .monthly_peformance_wrapper{
-    width: 400px;
+    /* width: 400px; */
     height: 50%;
     display: flex;
     flex-direction: column;
@@ -2492,15 +2601,17 @@ color: rgb(176, 176, 176);
 }
 .market-wrapper{
     width: 25%;
-    height: 100%;
-    border: 1px solid gray;
+    height: 50%;
+    border: 1px solid rgb(12, 33, 139);
+    padding: 5px;
     box-sizing: border-box;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
 }
 .market-{
-    width: 50%;
-    height: 100%;
+    width: 100%;
+    height: 50px;
+    min-height: 50px;
     border: 1px solid rgb(55, 53, 53);
     box-sizing: border-box;
     display: flex;
@@ -2509,8 +2620,9 @@ color: rgb(176, 176, 176);
     color: whitesmoke;
 }
 .market-selected{
-    width: 50%;
-    height: 100%;
+    width: 100%;
+    height: 50px;
+    min-height: 50px;
     border: 1px solid rgb(55, 53, 53);
     box-sizing: border-box;
     display: flex;

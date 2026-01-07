@@ -12,9 +12,11 @@ export const Candle_Chart = (props) => {
         is_retracement,
         is_abcd_pattern,
         market,
+        is_sections_expanded
 
 	} = props
- 
+    
+    
     const canvas_dates = useRef()
     const canvas_price = useRef()
     const canvas_chart = useRef()
@@ -42,7 +44,7 @@ export const Candle_Chart = (props) => {
     useEffect(() => {
  
         const resizeCanvas = () => {
-
+ 
             if (!canvas_chart.current || !canvas_price.current) return;
 
                 const canvas = canvas_chart.current;
@@ -243,10 +245,11 @@ export const Candle_Chart = (props) => {
 
                 candleChartRef.current.selected_candle = chart_data.candles[0]?.candle_open 
                 resize.reposition_candles(candleChartRef, chart_data.rust_patterns)
-
+                
+               
         
         };
-        // Run on mount
+      
         
         if (!chart_data.candles || !chart_data.rust_patterns) return;
         resizeCanvas()
@@ -257,7 +260,7 @@ export const Candle_Chart = (props) => {
         return () => {
           window.removeEventListener('resize', resizeCanvas);
         };
-    }, [chart_data]);
+    }, [chart_data, is_sections_expanded]);
    
     // ===== Pattern Highlighter
     useEffect(()=>{
@@ -290,14 +293,8 @@ export const Candle_Chart = (props) => {
     
     // ===== Canvas Move
     useEffect(() => {
-        
-        // console.log('a:', chart_data.rust_patterns.a_length)
-        // console.log('b:', chart_data.rust_patterns.b_length)
-        // console.log('c:', chart_data.rust_patterns.c_length)
-        // console.log('d:', chart_data.rust_patterns.d_length)
-        // console.log('trade:', chart_data.rust_patterns.trade_length)
-        if (!chart_data.candles || !chart_data?.rust_patterns) return;
 
+        if (!chart_data.candles || !chart_data?.rust_patterns) return;
 
         if (!canvas_chart.current) return;
         const { canvas, ctx } = CandleChartTools.reset_candle_canvas(canvas_chart);
@@ -482,7 +479,6 @@ export const Candle_Chart = (props) => {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             animationFrameId = requestAnimationFrame(draw); 
         }
-        
         const draw = () => {
      
            
@@ -537,6 +533,8 @@ export const Candle_Chart = (props) => {
 
             animationFrameId = null;
         };
+
+        
         
         canvas.addEventListener('mousemove', handleMouseMove);
         canvas.addEventListener('mouseup', handleMouseUpPrices);
@@ -548,8 +546,15 @@ export const Candle_Chart = (props) => {
         cp.addEventListener('resize', handleResize_price);
         cp.addEventListener('wheel', candle_height_zoom)
 
+
+
+        window.addEventListener('resize', () => {
+            handleResize();
+            handleResize_price();
+        });
+
         draw();
-        
+  
 
         return () => {
             cancelAnimationFrame(animationFrameId);
@@ -567,7 +572,7 @@ export const Candle_Chart = (props) => {
             cp.removeEventListener('wheel', candle_height_zoom)
     
         };
-    }, [chart_data, pattern_abcd, is_price_levels, is_retracement, is_abcd_pattern]);
+    }, [chart_data, pattern_abcd, is_price_levels, is_retracement, is_abcd_pattern, is_sections_expanded]);
 
     // // ===== Format Pattern
     useEffect(()=>{

@@ -105,7 +105,7 @@ const ChartMain = (props) => {
                     <img className='abcd_img' src={menu}></img>
                   </div>
                 </div>
-
+{/* 
                 <div className='chart_tool_header'>
 
                     <div className="chart-header-stat-wrapper">
@@ -128,7 +128,7 @@ const ChartMain = (props) => {
                       <div className="stat-value">{parseFloat(cd_pct.toFixed(2))}%</div>
                     </div>
 
-                </div>
+                </div> */}
 
               </div>
 
@@ -148,6 +148,7 @@ const ChartMain = (props) => {
                   is_retracement={is_retracement}
                   is_abcd_pattern={is_abcd_pattern}
                   market={market}
+                  is_sections_expanded={is_sections_expanded}
           
                 />
     }

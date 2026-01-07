@@ -10,7 +10,8 @@ const InfiniteTable = (props) => {
         set_loading_patterns,
         set_chart_data,
         selected_row_index,
-        set_selected_row_index
+        set_selected_row_index,
+        update_selected_pattern
     } = props
     
 
@@ -21,15 +22,15 @@ const InfiniteTable = (props) => {
     const columns = [
         'trade_result', 
         'symbol',
-        'trade_date', 
+        'd_date', 
         'trade_enter_price',
         // 'trade_current_price',
         // 'price_change',
         // 'price_change_pct', 
-        'trade_pnl',
-        'trade_pnl_pct',
-        'trade_bc_price_retracement',
-        'trade_cd_price_retracement',
+        // 'trade_pnl',
+        // 'trade_pnl_pct',
+        // 'trade_bc_price_retracement',
+        // 'trade_cd_price_retracement',
         // 'pattern_A_pivot_date'
     
     ]
@@ -109,27 +110,22 @@ const InfiniteTable = (props) => {
             return (
                 <div className={selected_row}
                     onClick={async () => {
-                        set_loading_patterns(true);
-                        set_selected_row_index(rowIndex)
-                        const selected = sorted[rowIndex];
-
                         try {
-                            const [candles, snr_lines] = await Promise.all([
-                                route.get_candles(selected.symbol),
-                                route.get_support_resistance_lines(selected.symbol)
-                            ]);
-                            candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
-                   
-                     
-                            tools.format_pattern(candles, sorted[rowIndex], snr_lines, set_chart_data)
-                            
+                            set_loading_patterns(true);
+                            set_selected_row_index(rowIndex);
+
+                            const selected = sorted?.[rowIndex];
+                            if (!selected) throw new Error("Selected row not found");
+
+                            await update_selected_pattern(selected, set_chart_data);
+
                         } catch (error) {
-                            console.error('Error fetching data:', error);
+                            console.error("Error fetching data:", error);
                             set_chart_data({ selected: null, candles: [] });
                         } finally {
                             set_loading_patterns(false);
                         }
-                    }}
+                        }}
 
                     style={style}
                     onMouseEnter={() => {
@@ -157,11 +153,11 @@ const InfiniteTable = (props) => {
                 {/* <div className='ticker_column'>Price</div>
                 <div className='ticker_column'>Change</div>
                 <div className='ticker_column'>Change %</div> */}
-                <div className='ticker_column'>UNR-PNL</div>
+                {/* <div className='ticker_column'>UNR-PNL</div>
                 <div className='ticker_column'>UNR-PNL %</div>
                 <div className='ticker_column'>BC</div>
                 <div className='ticker_column'>CD</div>
-              
+               */}
               
               
        
@@ -173,8 +169,8 @@ const InfiniteTable = (props) => {
                 className="my-grid"
                 cellComponent={CellComponent}
                 cellProps={{ sorted }}
-                columnCount={8}
-                columnWidth={(containerWidth || 700) / 8} 
+                columnCount={4}
+                columnWidth={(containerWidth || 700) / 4} 
                 rowCount={sorted?.length || 0}
                 rowHeight={40}
                 width={containerWidth || 700} 
