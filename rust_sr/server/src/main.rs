@@ -10,15 +10,11 @@ use crate::utils::{load_patterns};
 use crate::peformance::{YearlySummary, MonthlySummary};
 mod pattern;
 use crate::pattern::{Pattern};
+use actix_web::middleware::Logger;
+mod models; 
+use crate::models::*;
 
-#[derive(Serialize)]
-pub struct MonthlyStat {
-    pub year: i64,
-    pub month: u32,
-    pub total: usize,
-    pub wins: usize,
-    pub win_pct: f64,
-}
+
 #[derive(Serialize)]
 struct PatternsResponse {
     patterns: Vec<Pattern>,
@@ -33,62 +29,209 @@ pub struct FilterParams {
     cd_less: Option<f64>,
     market: String
 }
-#[post("/")]
-async fn fetch_patterns(filter: web::Json<FilterParams>) -> impl Responder {
-    // === Load CSV Data ===
-    let patterns = load_patterns().await;
 
-    // Extract parameters from the JSON body
-    let market = &filter.market;
-    let bc_min = filter.bc_greater;
-    let bc_max = filter.bc_less;
-    let cd_min = filter.cd_greater.unwrap_or(0.0); 
-    let cd_max = filter.cd_less.unwrap_or(f64::MAX);
+#[derive(Deserialize, Debug)]
+pub struct Params {
+    symbol: String,
+}
 
 
-    let cutoff = NaiveDate::from_ymd_opt(2025, 12, 30).unwrap();
+// #[actix_web::main]
+// async fn main() -> std::io::Result<()> {
+//     HttpServer::new(|| {
+//         App::new()
+//             .wrap(
+//                 Cors::default()
+//                     .allowed_origin("http://localhost:3000") // React frontend origin
+//                     .allowed_methods(vec!["GET", "POST"])
+//                     .allowed_headers(vec!["Content-Type"])
+//                     .max_age(3600),
+//             )
+//             .service(fetch_patterns)
+//             .service(fetch_candles)
+            
+//     })
+//     .bind(("127.0.0.1", 8080))?
+//     .run()
+//     .await
+// }
 
+// #[post("/")]
+// async fn fetch_patterns(filter: web::Json<FilterParams>) -> impl Responder {
+
+//     // === CONNECT TO DB ===
+//     let mut db = match Database::new_azure() {
+//         Ok(db) => db,
+//         Err(e) => {
+//             println!("Database connection failed: {}", e);
+//             return HttpResponse::InternalServerError().body("Database connection error");
+//         }
+//     };
+
+//     // === FETCH PATTERNS ===
+//     let patterns = match Database::fetch_all(&mut db.conn) {
+//         Ok(p) => p,
+//         Err(e) => {
+//             println!("Failed to fetch patterns: {}", e);
+//             return HttpResponse::InternalServerError().body("Failed to fetch patterns");
+//         }
+//     };
+
+//     // === FILTER PATTERNS ===
+//     let patterns_2025: Vec<Pattern> = patterns
+//         .iter()
+//         .filter(|p| {
+//             p.trade_year == 2026.0 
+//         })
+//         .cloned()
+//         .collect();
+
+
+//     // === GET MONTHLY SUMMARY ===
+//     let grouped_by_month = MonthlySummary::group_patterns_by_month(&patterns_2025);
+//     let monthly_stats = MonthlySummary::from_grouped_patterns(&grouped_by_month);
+
+//     // === GET YEARLY SUMMARY ===
+//     let grouped_by_year = YearlySummary::group_patterns_by_year(&patterns_2025);
+//     let yearly_summary = YearlySummary::get_yearly_summary(&grouped_by_year);
+
+//     // === RETURN RESPONSE ===
+//     let response = PatternsResponse {
+//         patterns: patterns_2025,
+//         monthly_stats,
+//         yearly_summary,
+//     };
+
+//     HttpResponse::Ok().json(response)
+// }
+
+// #[post("/candles")]
+// async fn fetch_candles(params: web::Json<Params>) -> impl Responder {
+
+//     println!("{:?}", params);
+
+//     // === CONNECT TO DB ===
+//     let mut db = match Database::new_azure() {
+//         Ok(db) => db,
+//         Err(e) => {
+//             println!("Database connection failed: {}", e);
+//             return HttpResponse::InternalServerError().body("Database connection error");
+//         }
+//     };
+
+//     // === FETCH CANDLES ===
+//     let candles = match Database::get_stored_candles(&params.symbol) {
+//         Ok(p) => p,
+//         Err(e) => {
+//             println!("Failed to fetch patterns: {}", e);
+//             return HttpResponse::InternalServerError().body("Failed to fetch patterns");
+//         }
+//     };
+
+//     // println!("{:?}", candles);
+
+//     // === RETURN RESPONSE ===
+//     HttpResponse::Ok().json(candles)
+// }
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    // === CREATE DATABASE POOL ONCE ===
+    let db = match Database::new_azure() {
+        Ok(db) => {
+            println!("✅ Successfully connected to Azure database!");
+            web::Data::new(db)
+        },
+        Err(e) => {
+            eprintln!("❌ Failed to create database pool: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    HttpServer::new(move || {
+        App::new()
+            .wrap(Logger::default())
+            .app_data(db.clone()) // share the pool with all handlers
+            .wrap(
+                Cors::default()
+                    .allowed_origin("http://localhost:3000")
+                    .allowed_origin("https://abcd-finder.vercel.app/")
+                    .allowed_methods(vec!["GET", "POST"])
+                    .allowed_headers(vec!["Content-Type"])
+                    .max_age(3600),
+            )
+            .service(fetch_patterns)
+            .service(fetch_candles)
+    })
+    // .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", 8080))?
+    .run()
+    .await
+}
+
+#[post("/candles")]
+async fn fetch_candles(
+    db: web::Data<Database>,
+    params: web::Json<Params>,
+    ) -> impl Responder {
+
+    println!("{:?}", params);
+
+    let candles = match db.get_stored_candles(&params.symbol) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("Failed to fetch candles: {}", e);
+            return HttpResponse::InternalServerError().body("Failed to fetch candles");
+        }
+    };
+
+    HttpResponse::Ok().json(candles)
+}
+
+#[post("/patterns")]
+async fn fetch_patterns(
+    db: web::Data<Database>,
+    filter: web::Json<FilterParams>,
+) -> impl Responder {
+
+    println!("📥 Filter params: {:?}", filter);
+
+    // === FETCH PATTERNS FROM DB USING POOL ===
+    println!("⏳ Fetching patterns from database...");
+    let patterns = match db.fetch_all() {
+        Ok(p) => {
+            println!("✅ Successfully fetched {} patterns", p.len());
+            p
+        },
+        Err(e) => {
+            eprintln!("❌ Failed to fetch patterns: {}", e);
+            return HttpResponse::InternalServerError().body("Failed to fetch patterns");
+        }
+    };
+
+    // === FILTER PATTERNS ===
     let patterns_2025: Vec<Pattern> = patterns
         .iter()
-        .filter(|p| {
-            p.trade_year == 2026.0 
-            // && p.trade_month == 12.0
-            // && NaiveDate::parse_from_str(&p.d_date, "%Y-%m-%d").unwrap() >= cutoff
-        })
+        .filter(|p| p.trade_year == 2026.0)
         .cloned()
         .collect();
+    println!("📊 Filtered down to {} patterns for 2026", patterns_2025.len());
 
-    // === Monthly Summary ===
+    // === GET MONTHLY SUMMARY ===
     let grouped_by_month = MonthlySummary::group_patterns_by_month(&patterns_2025);
     let monthly_stats = MonthlySummary::from_grouped_patterns(&grouped_by_month);
 
-    // === Yearly Summary ===
+    // === GET YEARLY SUMMARY ===
     let grouped_by_year = YearlySummary::group_patterns_by_year(&patterns_2025);
     let yearly_summary = YearlySummary::get_yearly_summary(&grouped_by_year);
 
-    // Return Pattern Data
+    // === RETURN RESPONSE ===
     let response = PatternsResponse {
         patterns: patterns_2025,
         monthly_stats,
         yearly_summary,
     };
 
+    println!("✅ Finished preparing PatternsResponse");
     HttpResponse::Ok().json(response)
-}
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
-        App::new()
-            .wrap(
-                Cors::default()
-                    .allowed_origin("http://localhost:3000") // React frontend origin
-                    .allowed_methods(vec!["GET", "POST"])
-                    .allowed_headers(vec!["Content-Type"])
-                    .max_age(3600),
-            )
-            .service(fetch_patterns)
-    })
-    .bind(("127.0.0.1", 8080))?
-    .run()
-    .await
 }

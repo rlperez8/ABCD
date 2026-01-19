@@ -5,6 +5,9 @@ use serde::ser::Serializer;
 use crate::models::reversal_type::ReversalType;
 use crate::models::pattern_abcd::PatternXABCD;
 use crate::models::market::Market;
+use sqlx::{MySqlPool, QueryBuilder};
+use mysql::*;
+use mysql::prelude::*;
 
 fn two_decimals<S>(val: &f64, s: S) -> Result<S::Ok, S::Error>
 where
@@ -154,7 +157,73 @@ pub struct XABCD_CSV {
 }
 
 impl XABCD_CSV {
-      pub fn write_patterns_to_csv(patterns: &[PatternXABCD], filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+     pub fn from_pattern(p: &PatternXABCD) -> Self {
+        XABCD_CSV {
+            symbol: p.symbol.clone(),
+            x_date: p.x.date.clone(),
+            x_open: p.x.open,
+            x_high: p.x.high,
+            x_low: p.x.low,
+            x_close: p.x.close,
+            x_length: p.x.length,
+            x_min_max: p.x.min_max,
+            a_date: p.a.date.clone(),
+            a_open: p.a.open,
+            a_high: p.a.high,
+            a_low: p.a.low,
+            a_close: p.a.close,
+            a_length: p.a.length,
+            a_min_max: p.a.min_max,
+            b_date: p.b.date.clone(),
+            b_open: p.b.open,
+            b_high: p.b.high,
+            b_low: p.b.low,
+            b_close: p.b.close,
+            b_length: p.b.length,
+            b_min_max: p.b.min_max,
+            c_date: p.c.date.clone(),
+            c_open: p.c.open,
+            c_high: p.c.high,
+            c_low: p.c.low,
+            c_close: p.c.close,
+            c_length: p.c.length,
+            c_min_max: p.c.min_max,
+            d_date: p.d.date.clone(),
+            d_open: p.d.open,
+            d_high: p.d.high,
+            d_low: p.d.low,
+            d_close: p.d.close,
+            d_length: p.d.length,
+            d_min_max: p.d.min_max,
+            trade_open: p.trade.open,
+            trade_risk_exit_price: p.trade.risk_exit_price,
+            trade_reward_exit_price: p.trade.reward_exit_price,
+            trade_enter_price: p.trade.enter_price,
+            trade_current_price: p.trade.current_price,
+            trade_length: p.trade.length,
+            trade_pnl: p.trade.pnl,
+            trade_result: p.trade.result,
+            trade_date: p.trade.date.clone(),
+            trade_symbol: p.trade.symbol.clone(),
+            trade_ab_price_retracement: p.trade.ab_price_retracement,
+            trade_bc_price_retracement: p.trade.bc_price_retracement,
+            trade_cd_xa_price_retracement: p.trade.cd_xa_price_retracement,
+            trade_cd_price_retracement: p.trade.cd_price_retracement,
+            trade_bc_bar_retracement: p.trade.bc_bar_retracement,
+            trade_cd_bar_retracement: p.trade.cd_bar_retracement,
+            trade_cd_bc_price_retracement: p.trade.cd_bc_price_retracement,
+            trade_snr: p.trade.snr,
+            trade_year: p.trade.year,
+            trade_month: p.trade.month,
+            trade_day: p.trade.day,
+            reversal_type: p.trade.reversal_type.clone(),
+            market: p.market,
+            three_month: p.three_month,
+            six_month: p.six_month,
+            twelve_month: p.twelve_month,
+        }
+    }
+    pub fn write_patterns_to_csv(patterns: &[PatternXABCD], filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         // Map nested structs into flat CSV structs
         let csv_patterns: Vec<XABCD_CSV> = patterns.iter().map(|p| XABCD_CSV {
             symbol: p.symbol.clone(),
@@ -230,6 +299,116 @@ impl XABCD_CSV {
         }
 
         writer.flush()?;
+        Ok(())
+    }
+    pub fn insert_patterns_into_db(
+        conn: &mut PooledConn,
+        patterns: &[PatternXABCD],   // <-- slice of PatternXABCD like your CSV function
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for p in patterns {
+            let csv = XABCD_CSV::from_pattern(p);  // convert one PatternXABCD -> XABCD_CSV
+
+            conn.exec_drop(
+                r"INSERT INTO xabcd_patterns (
+                    symbol, x_date, x_open, x_high, x_low, x_close, x_length, x_min_max,
+                    a_date, a_open, a_high, a_low, a_close, a_length, a_min_max,
+                    b_date, b_open, b_high, b_low, b_close, b_length, b_min_max,
+                    c_date, c_open, c_high, c_low, c_close, c_length, c_min_max,
+                    d_date, d_open, d_high, d_low, d_close, d_length, d_min_max,
+                    trade_open, trade_risk_exit_price, trade_reward_exit_price,
+                    trade_enter_price, trade_current_price, trade_length, trade_pnl,
+                    trade_result, trade_date, trade_symbol,
+                    trade_ab_price_retracement, trade_bc_price_retracement,
+                    trade_cd_xa_price_retracement, trade_cd_price_retracement,
+                    trade_bc_bar_retracement, trade_cd_bar_retracement,
+                    trade_cd_bc_price_retracement,
+                    trade_snr, trade_year, trade_month, trade_day,
+                    reversal_type, market,
+                    three_month, six_month, twelve_month
+                ) VALUES (
+                    :symbol, :x_date, :x_open, :x_high, :x_low, :x_close, :x_length, :x_min_max,
+                    :a_date, :a_open, :a_high, :a_low, :a_close, :a_length, :a_min_max,
+                    :b_date, :b_open, :b_high, :b_low, :b_close, :b_length, :b_min_max,
+                    :c_date, :c_open, :c_high, :c_low, :c_close, :c_length, :c_min_max,
+                    :d_date, :d_open, :d_high, :d_low, :d_close, :d_length, :d_min_max,
+                    :trade_open, :trade_risk_exit_price, :trade_reward_exit_price,
+                    :trade_enter_price, :trade_current_price, :trade_length, :trade_pnl,
+                    :trade_result, :trade_date, :trade_symbol,
+                    :trade_ab_price_retracement, :trade_bc_price_retracement,
+                    :trade_cd_xa_price_retracement, :trade_cd_price_retracement,
+                    :trade_bc_bar_retracement, :trade_cd_bar_retracement,
+                    :trade_cd_bc_price_retracement,
+                    :trade_snr, :trade_year, :trade_month, :trade_day,
+                    :reversal_type, :market,
+                    :three_month, :six_month, :twelve_month
+                )",
+                params! {
+                    "symbol" => &csv.symbol,
+                    "x_date" => &csv.x_date,
+                    "x_open" => csv.x_open,
+                    "x_high" => csv.x_high,
+                    "x_low" => csv.x_low,
+                    "x_close" => csv.x_close,
+                    "x_length" => csv.x_length,
+                    "x_min_max" => csv.x_min_max,
+                    "a_date" => &csv.a_date,
+                    "a_open" => csv.a_open,
+                    "a_high" => csv.a_high,
+                    "a_low" => csv.a_low,
+                    "a_close" => csv.a_close,
+                    "a_length" => csv.a_length,
+                    "a_min_max" => csv.a_min_max,
+                    "b_date" => &csv.b_date,
+                    "b_open" => csv.b_open,
+                    "b_high" => csv.b_high,
+                    "b_low" => csv.b_low,
+                    "b_close" => csv.b_close,
+                    "b_length" => csv.b_length,
+                    "b_min_max" => csv.b_min_max,
+                    "c_date" => &csv.c_date,
+                    "c_open" => csv.c_open,
+                    "c_high" => csv.c_high,
+                    "c_low" => csv.c_low,
+                    "c_close" => csv.c_close,
+                    "c_length" => csv.c_length,
+                    "c_min_max" => csv.c_min_max,
+                    "d_date" => &csv.d_date,
+                    "d_open" => csv.d_open,
+                    "d_high" => csv.d_high,
+                    "d_low" => csv.d_low,
+                    "d_close" => csv.d_close,
+                    "d_length" => csv.d_length,
+                    "d_min_max" => csv.d_min_max,
+                    "trade_open" => csv.trade_open,
+                    "trade_risk_exit_price" => csv.trade_risk_exit_price,
+                    "trade_reward_exit_price" => csv.trade_reward_exit_price,
+                    "trade_enter_price" => csv.trade_enter_price,
+                    "trade_current_price" => csv.trade_current_price,
+                    "trade_length" => csv.trade_length,
+                    "trade_pnl" => csv.trade_pnl,
+                    "trade_result" => csv.trade_result,
+                    "trade_date" => &csv.trade_date,
+                    "trade_symbol" => &csv.trade_symbol,
+                    "trade_ab_price_retracement" => csv.trade_ab_price_retracement,
+                    "trade_bc_price_retracement" => csv.trade_bc_price_retracement,
+                    "trade_cd_xa_price_retracement" => csv.trade_cd_xa_price_retracement,
+                    "trade_cd_price_retracement" => csv.trade_cd_price_retracement,
+                    "trade_bc_bar_retracement" => csv.trade_bc_bar_retracement,
+                    "trade_cd_bar_retracement" => csv.trade_cd_bar_retracement,
+                    "trade_cd_bc_price_retracement" => csv.trade_cd_bc_price_retracement,
+                    "trade_snr" => csv.trade_snr,
+                    "trade_year" => csv.trade_year,
+                    "trade_month" => csv.trade_month,
+                    "trade_day" => csv.trade_day,
+                    "reversal_type" => format!("{:?}", csv.reversal_type),
+                    "market" => format!("{:?}", csv.market),
+                    "three_month" => csv.three_month.unwrap_or(false),
+                    "six_month" => csv.six_month.unwrap_or(false),
+                    "twelve_month" => csv.twelve_month.unwrap_or(false)
+                }
+            )?;
+        }
+
         Ok(())
     }
 }

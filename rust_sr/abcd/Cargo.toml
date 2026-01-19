@@ -12,6 +12,7 @@ csv = "1.4.0"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 axum = "0.6"
+sqlx = { version = "0.7", features = ["mysql", "runtime-tokio-native-tls"] }
 
 [lib]
 name = "abcd"

@@ -10,9 +10,12 @@ import FilterDropDown from './FilterDropDown.js';
 
 const update_selected_pattern = async (selected_pattern, set_chart_data) => {
 
+  
   // === SELECTED PATTERN CANDLES ===
   let candles = await route.get_candles(selected_pattern?.symbol)
+  
   candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+  console.log(candles)
   candles = candles?.map(item => {
     const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
 
@@ -21,7 +24,7 @@ const update_selected_pattern = async (selected_pattern, set_chart_data) => {
       candle_date: toISO(item.candle_date),
     };
   });
-
+  console.log('after:',candles[0])
   // === SUPPORT & RESISTANCE ===
   const snr_lines = await route.get_support_resistance_lines(selected_pattern?.symbol)
 
@@ -100,7 +103,7 @@ const App = () => {
     }
     if(activeFilters.result.active){
       if(activeFilters.result.filter==="Open"){
-        result =  result.filter(p=>p.trade_open==="true")
+        result =  result.filter(p=>p.trade_open==="1")
       }
       else{
         result =  result.filter(p=>p.trade_result===activeFilters.result.filter)
@@ -354,93 +357,13 @@ const App = () => {
 
   };
 
-  useEffect(() => {
-    let isMounted = true;
-
-    
-
-    const loadPattern = async () => {
-      try {
-        set_loading(true);
-
-        const rust_patterns = filter_stacker(recent_patterns);
-        set_filtered_patterns(rust_patterns.sort((a,b)=> a.trade_enter_price - b.trade_enter_price));
-        // const uniqueDates = [...new Set(rust_patterns.map(item => item.d_date))];
-        // set_unique_d_dates(uniqueDates)
-        // const uniqueSymbols = [...new Set(rust_patterns.map(item => item.symbol))];
-        // set_unique_symbols(uniqueSymbols)
-
-        if (!rust_patterns?.length) {
-          set_chart_data({ selected: null, candles: [] });
-          return;
-        }
-
-        await update_selected_pattern(rust_patterns[0], (data) => {
-          if (isMounted) set_chart_data(data);
-        });
-
-      } catch (err) {
-        console.error("Pattern load failed:", err);
-        if (isMounted) {
-          set_chart_data({ selected: null, candles: [] });
-        }
-      } finally {
-        if (isMounted) set_loading(false);
-      }
-    };
-
-    loadPattern();
-
-    set_selected_row_index(0)
-
-    return () => {
-      isMounted = false;
-    };
-  }, [activeFilters, recent_patterns]);
+  
 
   
   const [unique_d_dates, set_unique_d_dates] = useState([])
   const [unique_symbols, set_unique_symbols] = useState([])
 
-  useEffect(()=>{
-
-    const fetch = async () => {
-
-      // === LOADING ===
-      set_loading(true);
-      set_loading_patterns(true)
-
-      // === FETCH  DATA === 
-      const data = await route.fetch_abcd_patterns(market, filters)
-
-      // === PATTERNS ===
-      const rust_patterns = data.patterns
-      const filtered_patterns = filter_stacker(data.patterns)
-      set_filtered_patterns(filtered_patterns)
-      set_recent_patterns(data.patterns)
-      const uniqueDates = [...new Set(filtered_patterns.map(item => item.d_date))];
-      set_unique_d_dates(uniqueDates)
-      const uniqueSymbols = [...new Set(filtered_patterns.map(item => item.symbol))];
-      set_unique_symbols(uniqueSymbols)
-    
-      // === MONTNLY PEFORMANCE ===
-      let rust_statistics = data.monthly_stats
-      rust_statistics.sort((a, b) => a.month - b.month);
-      set_monthly_peformance(rust_statistics)
-
-      
-      let selected_pattern = rust_patterns[0]
-      update_selected_pattern(selected_pattern, set_chart_data)
-          
-
-      // === LOADING ===
-      set_loading(false);
-      set_loading_patterns(false)
-    
-    }
-    fetch()
-
-  },[])
+  
 
   const [filtered_patterns, set_filtered_patterns] = useState()
   
@@ -496,7 +419,7 @@ const App = () => {
   };
   const activateResult = value => {
 
-    let val = value === 'Open' ? "Open" : value === 'Won' ? 'true' : 'false'
+    let val = value === 'Open' ? "Open" : value === 'Won' ? '1' : '0'
         setActiveFilters(prev => ({
             ...prev,
             result: { active: true, filter: val }
@@ -529,6 +452,91 @@ const App = () => {
   };
 
   const [selected_filter, set_selected_filter] = useState('')
+
+  // useEffect(() => {
+  //   let isMounted = true;
+
+    
+
+  //   const loadPattern = async () => {
+  //     try {
+  //       set_loading(true);
+
+  //       const rust_patterns = filter_stacker(recent_patterns);
+  //       set_filtered_patterns(rust_patterns.sort((a,b)=> a.trade_enter_price - b.trade_enter_price));
+  //       // const uniqueDates = [...new Set(rust_patterns.map(item => item.d_date))];
+  //       // set_unique_d_dates(uniqueDates)
+  //       // const uniqueSymbols = [...new Set(rust_patterns.map(item => item.symbol))];
+  //       // set_unique_symbols(uniqueSymbols)
+
+  //       if (!rust_patterns?.length) {
+  //         set_chart_data({ selected: null, candles: [] });
+  //         return;
+  //       }
+
+  //       await update_selected_pattern(rust_patterns[0], (data) => {
+  //         if (isMounted) set_chart_data(data);
+  //       });
+
+  //     } catch (err) {
+  //       console.error("Pattern load failed:", err);
+  //       if (isMounted) {
+  //         set_chart_data({ selected: null, candles: [] });
+  //       }
+  //     } finally {
+  //       if (isMounted) set_loading(false);
+  //     }
+  //   };
+
+  //   loadPattern();
+
+  //   set_selected_row_index(0)
+
+  //   return () => {
+  //     isMounted = false;
+  //   };
+  // }, [activeFilters, recent_patterns]);
+
+  useEffect(()=>{
+
+    const fetch = async () => {
+
+      // === LOADING ===
+      set_loading(true);
+      set_loading_patterns(true)
+
+      // === FETCH  DATA === 
+      const data = await route.fetch_abcd_patterns(market, filters)
+
+      // === PATTERNS ===
+      const rust_patterns = data.patterns
+      const filtered_patterns = filter_stacker(data.patterns)
+      set_filtered_patterns(filtered_patterns)
+      set_recent_patterns(data.patterns)
+      const uniqueDates = [...new Set(filtered_patterns.map(item => item.d_date))];
+      set_unique_d_dates(uniqueDates)
+      const uniqueSymbols = [...new Set(filtered_patterns.map(item => item.symbol))];
+      set_unique_symbols(uniqueSymbols)
+    
+      // === MONTNLY PEFORMANCE ===
+      // let rust_statistics = data.monthly_stats
+      // rust_statistics.sort((a, b) => a.month - b.month);
+      // set_monthly_peformance(rust_statistics)
+
+      
+      let selected_pattern = rust_patterns[0]
+      console.log('selected pattern:',selected_pattern)
+      update_selected_pattern(selected_pattern, set_chart_data)
+          
+
+      // === LOADING ===
+      set_loading(false);
+      set_loading_patterns(false)
+    
+    }
+    fetch()
+
+  },[])
 
   return (
 
