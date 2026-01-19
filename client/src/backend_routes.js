@@ -1,7 +1,33 @@
+// export const get_candles = async (symbol) => {
+
+//     try{
+//       const res = await fetch('http://localhost:8000/get_candles', 
+//         {
+//           method: "POST", 
+//           headers: {"Content-Type": "application/json",}, 
+//           body: JSON.stringify({'symbol':symbol})
+//         });
+
+//       if (!res.ok) {
+//         console.error(`Server Error: ${res.status} - ${res.statusText}`);
+//         throw new Error("Request failed");
+//       }
+//       const responseData = await res.json();
+
+//       console.log('before:',responseData.data[0])
+
+//       return responseData.data
+//     } catch(error) {
+//       console.error(error)
+//     }
+
+// }
+
 export const get_candles = async (symbol) => {
 
     try{
-      const res = await fetch('http://localhost:8000/get_candles', 
+      // const res = await fetch('http://localhost:8080/candles', 
+      const res = await fetch('https://client-server-app.proudsky-e2d2cbaf.centralus.azurecontainerapps.io/candles', 
         {
           method: "POST", 
           headers: {"Content-Type": "application/json",}, 
@@ -14,12 +40,30 @@ export const get_candles = async (symbol) => {
       }
       const responseData = await res.json();
 
-      return responseData.data
+      const renamedCandles = responseData.map(c => ({
+        avg_vol: null,
+        candle_close: c.close,
+        candle_date: new Date(c.date).toUTCString(),
+        candle_high: c.high,
+        candle_low: c.low,
+        candle_open: c.open,
+        volume: c.volume,
+        symbol: c.symbol
+      
+
+      }));
+
+
+      console.log('before:',renamedCandles[0])
+
+      return renamedCandles
     } catch(error) {
       console.error(error)
     }
 
 }
+
+
 export const fetch_filtered_peformances = async (value) => {
 
     try {
@@ -251,7 +295,8 @@ export const fetch_abcd_patterns = async (market, filters) => {
   };
 
   try {
-    const res = await fetch("http://localhost:8080", {
+    // const res = await fetch("http://localhost:8080/patterns", {
+      const res = await fetch("https://client-server-app.proudsky-e2d2cbaf.centralus.azurecontainerapps.io/patterns", {
     method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -265,6 +310,7 @@ export const fetch_abcd_patterns = async (market, filters) => {
     }
 
     const data = await res.json(); 
+
 
 
     return data;

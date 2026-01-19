@@ -119,10 +119,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
         // let candles = alpha.load_single_symbol_candle_data("full", item.symbol.as_str()).await?;
-        if let Some(last_candle) = candles.last() {
-            insert_candles(&pool, std::slice::from_ref(last_candle)).await?;
-            println!("Inserted last candle: {:?}", last_candle);
-        }
+        // if let Some(last_candle) = candles.last() {
+        //     insert_candles(&pool, std::slice::from_ref(last_candle)).await?;
+        //     println!("Inserted last candle: {:?}", last_candle);
+        // }
+        let last_n = candles.len().saturating_sub(3);
+        let last_three = &candles[last_n..];
+
+        insert_candles(&pool, last_three).await?;
+        println!("Inserted {} candles", last_three.len());
         // // ---- Calculate average volume ----
         // let mut total_volume: u64 = 0;
         // let mut count: usize = 0;
@@ -190,4 +195,3 @@ pub async fn insert_candles(pool: &sqlx::MySqlPool,candles: &[Candle],) -> Resul
 
     Ok(())
 }
-

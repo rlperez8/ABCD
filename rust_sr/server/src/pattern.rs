@@ -1,5 +1,13 @@
+
+use mysql::{Pool, PooledConn, params};
+use mysql::prelude::*; 
+use std::error::Error;
+use mysql::Row;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 
 
@@ -60,7 +68,7 @@ pub struct Pattern {
     pub trade_year: f64,
     pub trade_month: f64,
     pub trade_day: f64,
-    pub reversalType: Option<String>,
+    // pub reversalType: Option<String>,
     pub market: String,
     pub three_month: String,
     pub six_month: String,
@@ -105,7 +113,5 @@ impl Pattern {
         }
         grouped
     }
-
-
 
 }

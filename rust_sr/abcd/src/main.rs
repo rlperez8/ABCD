@@ -1,14 +1,9 @@
 use std::time::Instant;
-
 use chrono::NaiveDate;
-
 use chrono::Datelike;
-
 mod models; 
 use crate::models::database::Database;
-
 use crate::models::*;
-
 
 #[derive(Clone, Debug)]
 struct SRLine {
@@ -125,8 +120,6 @@ fn is_evening_star(c1: &Candle, c2: &Candle, c3: &Candle) -> bool {
 pub fn truncate_to_2_decimals(value: f64) -> f64 {
     (value * 100.0).trunc() / 100.0
 }
-
-
 // === Pivot check function ===
 fn check_for_pivot(current: &Candle, prev1: &Candle, prev2: &Candle, pivot_type: PivotType) -> bool {
     match pivot_type {
@@ -144,6 +137,7 @@ fn detect_pattern(c1: &Candle, c2: &Candle, c3: &Candle) -> ReversalType {
         ReversalType::None
     }
 }
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
 
@@ -155,15 +149,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     // === Symbols ===
     for symbol in &symbols {
-    // for symbol in symbols.iter().take(1) {
-    // for symbol in ["ACB".to_string()].iter() {
 
         // === Candles ===
         let mut candles = db.get_stored_candles(&symbol)?;
      
         //  // === Calculate Heatmap / SR Zones ===
         let support_and_resistance = create_support_resistance(&candles);
-        println!("{:?}", support_and_resistance);
+    
 
         // === Pattern storage ===
         let mut pattern_x: Vec<PatternX> = Vec::new();
@@ -532,11 +524,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .filter(|p| p.a.type_ == PivotType::High)
             .count();
 
+        
         let a_bear = pattern_xabcd
             .iter()
             .filter(|p| p.a.type_ == PivotType::Low)
             .count();
 
+        
         println!(
             "Symbol: {}, XABCD total: {}, Bear: {}, Bull: {}",
             symbol,
@@ -547,17 +541,22 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     }
 
-    XABCD_CSV::write_patterns_to_csv(&all_patterns, "../../patterns_all.csv")?;
+    // === WRITE TO CSV ===
+    // XABCD_CSV::write_patterns_to_csv(&all_patterns, "../../patterns_
+    XABCD_CSV::insert_patterns_into_db(&mut db.conn, &all_patterns)?;
 
+    // === DISPLAY BEAR AND BULL COUNTS ===
     let abcd_bear = all_patterns
             .iter()
             .filter(|p| p.market == market::Market::Bearish)
             .count();
 
+    
     let abcd_bull = all_patterns
         .iter()
         .filter(|p| p.market ==  market::Market::Bullish)
         .count();
+
     println!(
             "XABCD total: {}, Bear: {}, Bull: {}",
      

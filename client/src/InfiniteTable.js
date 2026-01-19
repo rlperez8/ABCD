@@ -72,10 +72,10 @@ const InfiniteTable = (props) => {
             }
 
 
-            if (columnIndex === 0 && content === 'true') {
+            if (columnIndex === 0 && content === '1') {
                 cellContent = <div className="first_column_box">Won</div>;
 
-            } else if (columnIndex === 0 && content === 'false') {
+            } else if (columnIndex === 0 && content === '0') {
                 cellContent = <div className="lost_column_box">Lost</div>;
             
             } else if (columnIndex === 0) {
