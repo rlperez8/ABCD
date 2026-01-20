@@ -13,7 +13,7 @@ use crate::pattern::{Pattern};
 use actix_web::middleware::Logger;
 mod models; 
 use crate::models::*;
-
+use actix_web::route;
 
 #[derive(Serialize)]
 struct PatternsResponse {
@@ -155,9 +155,14 @@ async fn main() -> std::io::Result<()> {
             .wrap(
                 Cors::default()
                     .allowed_origin("http://localhost:3000")
-                    .allowed_origin("https://abcd-finder.vercel.app/")
-                    .allowed_methods(vec!["GET", "POST"])
-                    .allowed_headers(vec!["Content-Type"])
+                    .allowed_origin("https://abcd-finder.vercel.app")
+                    .allowed_methods(vec!["GET", "POST", "OPTIONS"])
+                    .allowed_headers(vec![
+                        actix_web::http::header::CONTENT_TYPE,
+                        actix_web::http::header::ACCEPT,
+                    ])
+                    .allow_any_header()
+                    .supports_credentials()
                     .max_age(3600),
             )
             .service(fetch_patterns)
@@ -169,7 +174,7 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-#[post("/candles")]
+#[route("/candles", method = "GET", method = "POST")]
 async fn fetch_candles(
     db: web::Data<Database>,
     params: web::Json<Params>,
@@ -188,7 +193,7 @@ async fn fetch_candles(
     HttpResponse::Ok().json(candles)
 }
 
-#[post("/patterns")]
+#[route("/patterns", method = "GET", method = "POST")]
 async fn fetch_patterns(
     db: web::Data<Database>,
     filter: web::Json<FilterParams>,
