@@ -70,11 +70,12 @@ export class Mouse {
         const price = y_loc_price * this.candleChartRef.current.unit_amount;
 
         let font_size = Math.floor(canvas.width / 4)
+        let x = Math.floor(canvas.width / 2)
         // Draw the price value near the mouse cursor
         ctx_price.font = `${font_size}px Source Sans Pro`;
         ctx_price.fillStyle = "#FFFFFF"; 
         ctx_price.textBaseline = "middle";
-        ctx_price.fillText(price.toFixed(2), font_size, this.candleChartRef.current.mouse.pos.y);
+        ctx_price.fillText(price.toFixed(2), x, this.candleChartRef.current.mouse.pos.y);
 
         ctx_price.restore();
     };
@@ -208,21 +209,21 @@ export class Chart {
         ctx.restore()
     };
     prices = (ctx_price, cp) => {
-            
-        const start_pixel = this.candleChartRef.current.height.currentBaselineY
-        const font_size = Math.floor(cp.width / 4);
-        const x_position = cp.width / 4;
+    const start_pixel = this.candleChartRef.current.height.currentBaselineY;
+    const font_size = Math.floor(cp.width / 4);
+    const x_position = cp.width / 2;
 
-        ctx_price.font = `${font_size}px Source Sans Pro`;
-        ctx_price.fillStyle = 'gray';
-        
-        
-        let price = 0
-        for (let y = start_pixel; y >= 0; y -= this.candleChartRef.current.price.current_pixels_per_price_unit) {
-            ctx_price.fillText(price.toFixed(2), x_position, y + 8); 
-            price += this.candleChartRef.current.unit_amount;
-        }
+    ctx_price.font = `${font_size}px Source Sans Pro`;
+    ctx_price.font = `${font_size}px Roboto`;
+    ctx_price.fillStyle = 'gray';
+    ctx_price.textAlign = 'center'; // <-- key change
+
+    let price = 0;
+    for (let y = start_pixel; y >= 0; y -= this.candleChartRef.current.price.current_pixels_per_price_unit) {
+        ctx_price.fillText(price.toFixed(2), x_position, y + 4); 
+        price += this.candleChartRef.current.unit_amount;
     }
+}
     dates = (ctx_date,canvas_date) => {
 
         // REMOVE DRAW FOR THIS FUNCTION WHEN JUST MOUSE MOVES
@@ -412,7 +413,7 @@ export class ABCD {
         ctx.lineTo(b_x_loc, b_y_loc);
       
         ctx.closePath();
-        ctx.fillStyle = "rgba(193, 99, 32, 0.30)";
+        ctx.fillStyle = "rgba(136, 134, 134, 0.3)";
         ctx.fill();
 
         // --- FILL BCD ---
@@ -421,7 +422,7 @@ export class ABCD {
         ctx.lineTo(c_x_loc, c_y_loc);
         ctx.lineTo(d_x_loc, d_y_loc);
         ctx.closePath();
-        ctx.fillStyle = "rgba(193, 99, 32, 0.30)";
+         ctx.fillStyle = "rgba(136, 134, 134, 0.3)";
         ctx.fill();
 
                 
@@ -436,49 +437,13 @@ export class ABCD {
         ctx.lineTo(exit_x_loc, exit_y_loc);
       
         
-        ctx.strokeStyle = 'rgba(166, 176, 186, 1)'; 
+         ctx.fillStyle = "rgba(136, 134, 134, 0.3)";
         ctx.lineWidth = 5;
         ctx.stroke();
 
         ctx.restore()
 
-        
 
-        // ctx.strokeStyle = '#303030';
-        // ctx.lineWidth = 2;
-
-        // ctx.stroke();
-        // ctx.restore()
-
-        // ctx.save();
-
- 
-        // const arrowLength = 20;
-        // const arrowAngle = Math.PI / 6;
-
-        // // --- Calculate angle of the line ---
-        // const angle = Math.atan2(exit_y_loc - d_y_loc, exit_x_loc - d_x_loc);
-
-
-        // ctx.stroke();
-
-        // // --- Draw Arrowhead ---
-        // ctx.beginPath();
-        // ctx.moveTo(exit_x_loc, exit_y_loc);
-        // ctx.lineTo(
-        // exit_x_loc - arrowLength * Math.cos(angle - arrowAngle),
-        // exit_y_loc - arrowLength * Math.sin(angle - arrowAngle)
-        // );
-        // ctx.lineTo(
-        // exit_x_loc - arrowLength * Math.cos(angle + arrowAngle),
-        // exit_y_loc - arrowLength * Math.sin(angle + arrowAngle)
-        // );
-        // ctx.lineTo(exit_x_loc, exit_y_loc); 
-        // ctx.closePath();
-        // ctx.fillStyle = 'white';
-        // ctx.fill();
-        // ctx.restore();
-        
     }
     abcd = (ctx, ab) => {
 
@@ -545,18 +510,7 @@ export class ABCD {
         // --- Calculate angle of the line ---
         const angle = Math.atan2(exit_y_loc - d_y_loc, exit_x_loc - d_x_loc);
 
-        // --- Calculate shortened end point for line (before arrow) ---
-        // const shortened_x = exit_x_loc - arrowLength * Math.cos(angle);
-        // const shortened_y = exit_y_loc - arrowLength * Math.sin(angle);
 
-        // --- Draw line (stops before arrowhead) ---
-        // ctx.beginPath();
-        // ctx.moveTo(d_x_loc, d_y_loc);
-        // ctx.lineTo(shortened_x, shortened_y);
-        // ctx.strokeStyle = abcd.result === 'Win' ? '#303030' : '#303030';
-        // ctx.lineWidth = 3;
-        // ctx.shadowColor = abcd.result === 'Win' ? '#303030' : '#303030'; // match line color
-        // ctx.shadowBlur = 25
         ctx.stroke();
 
         // --- Draw Arrowhead ---
