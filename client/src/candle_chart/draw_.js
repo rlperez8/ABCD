@@ -117,7 +117,7 @@ export class Mouse {
         const metrics = ctx_date.measureText(finalFormat);
         const textHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
 
-        let y_text = 30;
+        // let y_text = 30;
         if (index >= 0) {
             ctx_date.beginPath();
             ctx_date.font = "16px Arial";
@@ -142,17 +142,17 @@ export class Mouse {
         // let full_candle_width = candleChartRef.current.current_candle_width + 5
         let full_candle_width = this.candleChartRef.current.candles.complete_width
         // Track X-Spacing
-        let spacing_in_candles = this.candleChartRef.current.width.current_X_origin / full_candle_width
+        // let spacing_in_candles = this.candleChartRef.current.width.current_X_origin / full_candle_width
         // Track Index
         let index = Math.floor(mouse_x_loc_with_x_spacing/full_candle_width)
         mouse_x_loc = (mouse_x_loc - this.candleChartRef.current.width.current_X_origin);
         mouse_x_loc = mouse_x_loc - (candle_width.current / 2);
         let pixelStart = (index * full_candle_width) + (full_candle_width/2)
         pixelStart = pixelStart - 2.5
-        let x_rect = this.candleChartRef.current.width.current_X_origin + (pixelStart - 75) - candle_width.current;
+        // let x_rect = this.candleChartRef.current.width.current_X_origin + (pixelStart - 75) - candle_width.current;
         let y_rect = 0;
         let width_rect = 150;
-        let height_rect = 40;
+        // let height_rect = 40;
         if(index>=0){
             ctx_date.beginPath();
             // ctx_date.fillStyle = "teal";
@@ -546,8 +546,8 @@ export class ABCD {
         const angle = Math.atan2(exit_y_loc - d_y_loc, exit_x_loc - d_x_loc);
 
         // --- Calculate shortened end point for line (before arrow) ---
-        const shortened_x = exit_x_loc - arrowLength * Math.cos(angle);
-        const shortened_y = exit_y_loc - arrowLength * Math.sin(angle);
+        // const shortened_x = exit_x_loc - arrowLength * Math.cos(angle);
+        // const shortened_y = exit_y_loc - arrowLength * Math.sin(angle);
 
         // --- Draw line (stops before arrowhead) ---
         // ctx.beginPath();
@@ -758,9 +758,9 @@ export class ABCD {
 
 
                 
-                let x = 0;
-                let width = canvas.width;
-                let height = 25;
+                // let x = 0;
+                // let width = canvas.width;
+                // let height = 25;
 
                 // =================================================
 

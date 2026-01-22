@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Candle_Chart } from './candle_chart';
+import { CandleChart } from './candle_chart';
 
 import * as route from '../backend_routes.js';
 
@@ -138,15 +138,14 @@ const ChartMain = (props) => {
                 
                 {chart_data.candles.length > 0 && 
 
-                  <Candle_Chart 
-                  chart_data={chart_data}
-                  is_price_levels={is_price_levels}
-                  is_retracement={is_retracement}
-                  is_abcd_pattern={is_abcd_pattern}
-                  market={market}
-                  is_sections_expanded={is_sections_expanded}
-          
-                />
+                  <CandleChart 
+                    chart_data={chart_data}
+                    is_price_levels={is_price_levels}
+                    is_retracement={is_retracement}
+                    is_abcd_pattern={is_abcd_pattern}
+                    market={market}
+                    is_sections_expanded={is_sections_expanded}
+                  />
     }
         
 

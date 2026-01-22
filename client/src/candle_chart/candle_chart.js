@@ -3,8 +3,7 @@ import '../new.css'
 import * as CandleChartTools from '../candle_chart_tools.js';
 import * as draw_ from './draw_.js'
 import * as resize from './resize.js'
-import * as utilites from './utilities.js'
-export const Candle_Chart = (props) => {
+export const CandleChart = (props) => {
 
     const {
 		chart_data,
@@ -35,9 +34,7 @@ export const Candle_Chart = (props) => {
     const current_hovered_candle_index = useRef(0)
     const candle_width = useRef(10)
 
-    let [pattern_abcd, set_pattern_abcd] = useState({
-
-    })
+ 
     const candleChartRef = useRef({})
 
     // ===== Canvas Mount
@@ -572,7 +569,7 @@ export const Candle_Chart = (props) => {
             cp.removeEventListener('wheel', candle_height_zoom)
     
         };
-    }, [chart_data, pattern_abcd, is_price_levels, is_retracement, is_abcd_pattern, is_sections_expanded]);
+    }, [chart_data, is_price_levels, is_retracement, is_abcd_pattern, is_sections_expanded]);
 
     // // ===== Format Pattern
     useEffect(()=>{
@@ -646,32 +643,32 @@ export const Candle_Chart = (props) => {
                             <div className='header_slot'>
                                 <div className='header_one'>H</div>
                                 <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.high}
+                                    {hovered_candle.high?.toFixed(2)}
                                 </div>
                             </div>
                             <div className='header_slot'>
                                 <div className='header_one'>C</div>
                                <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.close}
+                                    {hovered_candle.close?.toFixed(2)}
                                 </div>
                             </div>
                             <div className='header_slot'>
                                 <div className='header_one'>O</div>
                                 <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.open}
+                                    {hovered_candle.open?.toFixed(2)}
                                 </div>
                             </div>
                             <div className='header_slot'>
                                 <div className='header_one'>L</div>
                                 <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.low}
+                                    {hovered_candle.low?.toFixed(2)}
                                 </div>
                             </div>
 
                             <div className='header_slot'>
                                 <div className='header_one'>L</div>
                                 <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.volume}
+                                    {hovered_candle.volume?.toFixed(0)}
                                 </div>
                             </div>
                     </div>

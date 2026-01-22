@@ -42,12 +42,12 @@ const App = () => {
 
   const [is_sections_expanded, set_sections_expanded] = useState(true)
   const [selected_row_index, set_selected_row_index] = useState(0)
-  const [monthly_performance, set_monthly_peformance] = useState([])
-  const [all_watchlists, set_all_watchlist] = useState([])
-  const [all_wl_patterns, set_wl_patterns] = useState([])
+  // const [monthly_performance, set_monthly_peformance] = useState([])
+  // const [all_watchlists, set_all_watchlist] = useState([])
+  // const [all_wl_patterns, set_wl_patterns] = useState([])
   const [is_loading, set_loading] = useState(false)
   const [is_loading_patterns, set_loading_patterns] = useState(false)
-  const [ticker_performance, set_ticker_peformance] = useState([])
+  // const [ticker_performance, set_ticker_peformance] = useState([])
   const [recent_patterns, set_recent_patterns] = useState([])
   const [filters, set_filters] = useState({
     bc_retracement_greater: 0,
@@ -826,7 +826,7 @@ const App = () => {
               <ChartMain
                 chart_data={chart_data}
                 is_loading_patterns={is_loading_patterns}
-                all_watchlists={all_watchlists}
+                // all_watchlists={all_watchlists}
                 is_sections_expanded={is_sections_expanded}
                 set_sections_expanded={set_sections_expanded}
                 market={market}

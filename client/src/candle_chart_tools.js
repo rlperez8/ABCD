@@ -42,39 +42,39 @@ export const handle_BaselineY = (candleChartRef) => {
 
 
 
-const highlight_selected_pattern = (candleChartRef, ctx, canvas) => {
+// const highlight_selected_pattern = (candleChartRef, ctx, canvas) => {
 
-    const start = (candleChartRef.current.pattern.highlighter.x_orgin);
-    const end = (candleChartRef.current.pattern.highlighter.x_orgin) + (candleChartRef.current.candles.complete_width * (candleChartRef.current.pattern.length+2));
+//     const start = (candleChartRef.current.pattern.highlighter.x_orgin);
+//     const end = (candleChartRef.current.pattern.highlighter.x_orgin) + (candleChartRef.current.candles.complete_width * (candleChartRef.current.pattern.length+2));
 
-    // const end = (candleChartRef.current.pattern.highlighter.x_orgin) + (candleChartRef.current.candles.complete_width * 10);
+//     // const end = (candleChartRef.current.pattern.highlighter.x_orgin) + (candleChartRef.current.candles.complete_width * 10);
 
-    // --- fill background between lines ---
-    ctx.save();
-    ctx.fillStyle = "rgba(0, 128, 128, 0.2)";
-    ctx.fillRect(start, 0, end - start, canvas.height);
-    ctx.restore();
+//     // --- fill background between lines ---
+//     ctx.save();
+//     ctx.fillStyle = "rgba(0, 128, 128, 0.2)";
+//     ctx.fillRect(start, 0, end - start, canvas.height);
+//     ctx.restore();
 
-    // --- first line ---
-    ctx.save();
-    ctx.beginPath();
-    ctx.strokeStyle = "teal";
-    ctx.lineWidth = 1;
-    ctx.moveTo(start, 0);
-    ctx.lineTo(start, canvas.height);
-    ctx.stroke();
-    ctx.restore();
+//     // --- first line ---
+//     ctx.save();
+//     ctx.beginPath();
+//     ctx.strokeStyle = "teal";
+//     ctx.lineWidth = 1;
+//     ctx.moveTo(start, 0);
+//     ctx.lineTo(start, canvas.height);
+//     ctx.stroke();
+//     ctx.restore();
 
-    // --- second line ---
-    ctx.save();
-    ctx.beginPath();
-    ctx.strokeStyle = "teal";
-    ctx.lineWidth = 1;
-    ctx.moveTo(end, 0);
-    ctx.lineTo(end, canvas.height);
-    ctx.stroke();
-    ctx.restore();
-};
+//     // --- second line ---
+//     ctx.save();
+//     ctx.beginPath();
+//     ctx.strokeStyle = "teal";
+//     ctx.lineWidth = 1;
+//     ctx.moveTo(end, 0);
+//     ctx.lineTo(end, canvas.height);
+//     ctx.stroke();
+//     ctx.restore();
+// };
 export const display_mid_point = (canvas, ctx, ctx_price, candleChartRef) => {
 
     let num = (candleChartRef.current.height.currentBaselineY - (candleChartRef.current.height.startingBaselineY/2))/ (candleChartRef.current.price.current_pixels_per_price_unit/candleChartRef.current.unit_amount)
