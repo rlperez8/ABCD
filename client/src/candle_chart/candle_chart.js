@@ -508,7 +508,7 @@ export const CandleChart = (props) => {
             abcd_.price_levels(ctx_price, ctx, canvas, chart_data.rust_patterns)
 
 
-          const snr_lines = (canvas, ctx, chart_data) => {
+            const snr_lines = (canvas, ctx, chart_data) => {
 
                 const y_stop_loss = candleChartRef.current.height.currentBaselineY - (chart_data.rust_patterns.trade_snr * (candleChartRef.current.price.current_pixels_per_price_unit / candleChartRef.current.unit_amount))
                 ctx.strokeStyle = 'orange';
@@ -521,7 +521,7 @@ export const CandleChart = (props) => {
                 ctx.stroke();
                 ctx.setLineDash([]); // reset dash style if needed
             }
-            snr_lines(canvas, ctx,  chart_data);
+            // snr_lines(canvas, ctx,  chart_data);
 
         
        
