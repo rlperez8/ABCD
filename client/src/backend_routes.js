@@ -53,8 +53,9 @@ export const get_candles = async (symbol) => {
 
       }));
 
+      console.log(responseData)
 
-      console.log('before:',renamedCandles[0])
+
 
       return renamedCandles
     } catch(error) {
@@ -295,8 +296,8 @@ export const fetch_abcd_patterns = async (market, filters) => {
   };
 
   try {
-    // const res = await fetch("http://localhost:8080/patterns", {
-      const res = await fetch("https://client-server-app.proudsky-e2d2cbaf.centralus.azurecontainerapps.io/patterns", {
+    const res = await fetch("http://localhost:8080/patterns", {
+      // const res = await fetch("https://client-server-app.proudsky-e2d2cbaf.centralus.azurecontainerapps.io/patterns", {
     method: "POST",
       headers: {
         "Content-Type": "application/json",

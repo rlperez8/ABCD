@@ -11,9 +11,13 @@ const ChartMain = (props) => {
         all_watchlists,
         is_sections_expanded,
         set_sections_expanded,
-        market
+        market,
+        set_selected_xabcd,
+        is_selected_xabcd,
+        set_is_selected_xabcd
+        
     } = props 
-
+  
    
     const [is_abcd_pattern, set_abcd_pattern] = useState(true)
     const [is_price_levels, set_price_levels] = useState(true)
@@ -26,7 +30,8 @@ const ChartMain = (props) => {
 
     return(
 
-      <div className="chart_margin_container">
+      <div className={is_selected_xabcd ? "" : "charts_container"} onClick={()=>{set_selected_xabcd(chart_data); set_is_selected_xabcd(!is_selected_xabcd)}}>
+
         <div className="margin-">
           
           <div className='chart_container'>
@@ -35,7 +40,7 @@ const ChartMain = (props) => {
 
             <div className='data_'>
 
-              <div className='chart-header-wrapper'>
+              {/* <div className='chart-header-wrapper'>
 
                 <div className="header-buttons-wrapper">
 
@@ -69,15 +74,7 @@ const ChartMain = (props) => {
                       {all_watchlists.map(item=>{
                         return(
                         <div className="wl-row" onClick={()=>{
-                          
-                        
-                          // const closeNew = chart_data.candles[0].candle_close;
-                          // const closeOld = chart_data.candles[1].candle_close;
-                          // const pctChange = ((closeNew - closeOld) / closeOld) * 100;
-                          // const change = closeNew - closeOld
-                          // const volume = chart_data.candles[1].volume
 
-                      
                           route.add_pattern_to_a_watchlist(
                             item.wl_name, 
                             chart_data.abcd_pattern.id,            
@@ -101,32 +98,9 @@ const ChartMain = (props) => {
                     <img className='abcd_img' src="/images/abcd.png"></img>
                   </div>
                 </div>
-{/* 
-                <div className='chart_tool_header'>
 
-                    <div className="chart-header-stat-wrapper">
-                      <div className="stat-key">C Retracement</div>
-                      <div className="stat-value">{chart_data.rust_patterns?.trade_bc_price_retracement.toFixed(2)}</div>
-                    </div>
-                    
-                    <div className="chart-header-stat-wrapper">
-                      <div className="stat-key">D Retracement</div>
-                              <div className="stat-value">{chart_data.rust_patterns?.trade_cd_price_retracement.toFixed(2)}</div>
-                    </div>
 
-                    <div className="chart-header-stat-wrapper">
-                      <div className="stat-key">BC Length</div>
-                      <div className="stat-value">{parseFloat(bc_pct.toFixed(2))}%</div>
-                    </div>
-
-                    <div className="chart-header-stat-wrapper">
-                      <div className="stat-key">CD Length</div>
-                      <div className="stat-value">{parseFloat(cd_pct.toFixed(2))}%</div>
-                    </div>
-
-                </div> */}
-
-              </div>
+              </div> */}
 
           
                 {/* {is_loading_patterns &&
@@ -146,7 +120,10 @@ const ChartMain = (props) => {
                     market={market}
                     is_sections_expanded={is_sections_expanded}
                   />
+                  
     }
+
+    
         
 
       

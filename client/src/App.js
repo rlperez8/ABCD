@@ -8,14 +8,10 @@ import * as tools from './MainTools.js'
 
 import FilterDropDown from './FilterDropDown.js';
 
-const update_selected_pattern = async (selected_pattern, set_chart_data) => {
+const handle_candles = async(symbol) => {
 
-  
-  // === SELECTED PATTERN CANDLES ===
-  let candles = await route.get_candles(selected_pattern?.symbol)
-  
+  let candles = await route.get_candles(symbol)
   candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
-  console.log(candles)
   candles = candles?.map(item => {
     const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
 
@@ -24,17 +20,178 @@ const update_selected_pattern = async (selected_pattern, set_chart_data) => {
       candle_date: toISO(item.candle_date),
     };
   });
-  console.log('after:',candles[0])
-  // === SUPPORT & RESISTANCE ===
+
+  return candles
+
+}
+const format_patterns = async (candles, patterns) => {
+  
+  const formatted_patterns = []
+  patterns.map(p=>{
+    const pattern = tools.format_pattern_(candles, p)
+    formatted_patterns.push(pattern)
+  })
+
+  return formatted_patterns
+
+}
+const update_selected_pattern = async (selected_pattern, set_chart_data) => {
+
+  // GET SELECTED PATTERN CANDLES
+  let candles = await route.get_candles(selected_pattern?.symbol)
+  candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+  candles = candles?.map(item => {
+    const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
+
+    return {
+      ...item,
+      candle_date: toISO(item.candle_date),
+    };
+  });
+
+  // GET SELECTED PATTERN SUPPORT & RESISTANCE
   const snr_lines = await route.get_support_resistance_lines(selected_pattern?.symbol)
 
-  // === FORMAT PATTERN FOR CANVAS ===
+  // FORMAT SELECTED PATTERN FOR CANVAS 
   tools.format_pattern(candles, selected_pattern, snr_lines, set_chart_data)
 
+}
+const filter_stacker = (patterns, activeFilters) => {
+
+    let result = patterns;
+
+    if(activeFilters.market.active){
+      result =  result.filter(p=>p.market===activeFilters.market.filter)
+    }
+    if(activeFilters.result.active){
+      if(activeFilters.result.filter==="Open"){
+        result =  result.filter(p=>p.trade_open==="1")
+      }
+      else{
+        result =  result.filter(p=>p.trade_result===activeFilters.result.filter)
+      }
+      
+    }
+    if(activeFilters.retracement.active){
+     
+      result = result.filter(p =>
+        p.trade_ab_price_retracement >= activeFilters.retracement.filter.ab_xa_gr &&
+        p.trade_ab_price_retracement <= activeFilters.retracement.filter.ab_xa_lt &&
+
+        p.trade_bc_price_retracement >= activeFilters.retracement.filter.bc_ab_gr &&
+        p.trade_bc_price_retracement <= activeFilters.retracement.filter.bc_ab_lt &&
+
+        p.trade_cd_bc_price_retracement >= activeFilters.retracement.filter.cd_bc_gr &&
+        p.trade_cd_bc_price_retracement <= activeFilters.retracement.filter.cd_bc_lt &&
+
+        p.trade_cd_xa_price_retracement >= activeFilters.retracement.filter.cd_xa_gr &&
+        p.trade_cd_xa_price_retracement <= activeFilters.retracement.filter.cd_xa_lt
+      );
+    
+    }
+    if(activeFilters.date.active){
+      result =  result.filter(p=>p.d_date===activeFilters.date.filter)
+    }
+    if(activeFilters.symbol.active){
+      result =  result.filter(p=>p.symbol===activeFilters.symbol.filter)
+    }
+    if(activeFilters.snr.active){
+
+      if(activeFilters.snr.filter === 3){
+        result = result.filter(p=>p.three_month === "true")
+      }
+      if(activeFilters.snr.filter === 6){
+        result = result.filter(p=>p.six_month === "true")
+      }
+      if(activeFilters.snr.filter === 12){
+        result = result.filter(p=>p.twelve_month === "true")
+      }
+      
+   
+    }
+
+ 
+     return result
 }
 
 
 const App = () => {
+
+  const [pattern_group_ids, set_pattern_group_ids] = useState([])
+  const [grouped_pattern_data, set_grouped_pattern_data] = useState({
+    symbol: null,
+    candles: [],
+    rust_patterns: [],
+  })
+  const [is_selected_xabcd, set_is_selected_xabcd] = useState(false)
+  const [selected_xabcd, set_selected_xabcd] = useState({})
+
+
+  useEffect(()=>{
+
+    const fetch = async () => {
+
+      // === LOADING ===
+      set_loading(true);
+      set_loading_patterns(true)
+
+      // FETCH PATTERNS
+      const data = await route.fetch_abcd_patterns(market, filters)
+
+      const rust_patterns = data.patterns
+      const filtered_patterns = filter_stacker(data.patterns, activeFilters)
+      
+      set_filtered_patterns(filtered_patterns)
+      set_recent_patterns(data.patterns)
+
+      // GET UNIQUE DATES FOR PATTERN DATE LIST
+      const uniqueDates = [...new Set(filtered_patterns.map(item => item.d_date))];
+      set_unique_d_dates(uniqueDates)
+
+      // GET UNIQUE SYMBOLS FOR PATTERN DATE LIST
+      const uniqueSymbols = [...new Set(filtered_patterns.map(item => item.symbol))];
+      set_unique_symbols(uniqueSymbols)
+
+      // GET UNIQUE GROUP IDS
+      const uniqueGroupIds = [...new Set(filtered_patterns.map(item => item.pattern_group_id))];
+      set_pattern_group_ids(uniqueGroupIds)
+
+      const selected_group_id = uniqueGroupIds[1]
+
+      const selected_grouped_pattern = filtered_patterns.filter(p => p.pattern_group_id === selected_group_id);
+
+
+      
+      const candles = await handle_candles(selected_grouped_pattern[0].symbol)
+      const formatted_patterns = await format_patterns(candles, selected_grouped_pattern)
+
+      // === MONTNLY PEFORMANCE ===
+      // let rust_statistics = data.monthly_stats
+      // rust_statistics.sort((a, b) => a.month - b.month);
+      // set_monthly_peformance(rust_statistics)
+
+      // SET INITAL SELECTED PATTERN
+      let selected_pattern = rust_patterns[0]
+      update_selected_pattern(selected_pattern, set_chart_data)
+
+      const formatted_data = {
+          symbol: selected_grouped_pattern[0].symbol,
+          candles: candles,
+          rust_patterns: formatted_patterns
+      }
+      set_grouped_pattern_data(formatted_data)
+  
+          
+      // === LOADING ===
+      set_loading(false);
+      set_loading_patterns(false)
+    
+    }
+    fetch()
+
+  },[])
+
+  // ============================================
 
   const [market, set_market] = useState("Bullish")
   const [table_result, set_table_result] = useState('Won')
@@ -94,63 +251,7 @@ const App = () => {
     },
   });
 
-  const filter_stacker = (patterns) => {
-
-    let result = patterns;
-
-    if(activeFilters.market.active){
-      result =  result.filter(p=>p.market===activeFilters.market.filter)
-    }
-    if(activeFilters.result.active){
-      if(activeFilters.result.filter==="Open"){
-        result =  result.filter(p=>p.trade_open==="1")
-      }
-      else{
-        result =  result.filter(p=>p.trade_result===activeFilters.result.filter)
-      }
-      
-    }
-    if(activeFilters.retracement.active){
-     
-      result = result.filter(p =>
-        p.trade_ab_price_retracement >= activeFilters.retracement.filter.ab_xa_gr &&
-        p.trade_ab_price_retracement <= activeFilters.retracement.filter.ab_xa_lt &&
-
-        p.trade_bc_price_retracement >= activeFilters.retracement.filter.bc_ab_gr &&
-        p.trade_bc_price_retracement <= activeFilters.retracement.filter.bc_ab_lt &&
-
-        p.trade_cd_bc_price_retracement >= activeFilters.retracement.filter.cd_bc_gr &&
-        p.trade_cd_bc_price_retracement <= activeFilters.retracement.filter.cd_bc_lt &&
-
-        p.trade_cd_xa_price_retracement >= activeFilters.retracement.filter.cd_xa_gr &&
-        p.trade_cd_xa_price_retracement <= activeFilters.retracement.filter.cd_xa_lt
-      );
-    
-    }
-    if(activeFilters.date.active){
-      result =  result.filter(p=>p.d_date===activeFilters.date.filter)
-    }
-    if(activeFilters.symbol.active){
-      result =  result.filter(p=>p.symbol===activeFilters.symbol.filter)
-    }
-    if(activeFilters.snr.active){
-
-      if(activeFilters.snr.filter === 3){
-        result = result.filter(p=>p.three_month === "true")
-      }
-      if(activeFilters.snr.filter === 6){
-        result = result.filter(p=>p.six_month === "true")
-      }
-      if(activeFilters.snr.filter === 12){
-        result = result.filter(p=>p.twelve_month === "true")
-      }
-      
-   
-    }
-
- 
-     return result
-  }
+  
 
   const [selected_harmonic_pattern, set_selected_harmonic_pattern] = useState("AB=CD Standard")
   const [price_retracement, set_price_retracement] = useState({
@@ -453,90 +554,55 @@ const App = () => {
 
   const [selected_filter, set_selected_filter] = useState('')
 
-  // useEffect(() => {
-  //   let isMounted = true;
+  useEffect(() => {
+    let isMounted = true;
 
     
 
-  //   const loadPattern = async () => {
-  //     try {
-  //       set_loading(true);
+    const loadPattern = async () => {
+      try {
+        set_loading(true);
 
-  //       const rust_patterns = filter_stacker(recent_patterns);
-  //       set_filtered_patterns(rust_patterns.sort((a,b)=> a.trade_enter_price - b.trade_enter_price));
-  //       // const uniqueDates = [...new Set(rust_patterns.map(item => item.d_date))];
-  //       // set_unique_d_dates(uniqueDates)
-  //       // const uniqueSymbols = [...new Set(rust_patterns.map(item => item.symbol))];
-  //       // set_unique_symbols(uniqueSymbols)
-
-  //       if (!rust_patterns?.length) {
-  //         set_chart_data({ selected: null, candles: [] });
-  //         return;
-  //       }
-
-  //       await update_selected_pattern(rust_patterns[0], (data) => {
-  //         if (isMounted) set_chart_data(data);
-  //       });
-
-  //     } catch (err) {
-  //       console.error("Pattern load failed:", err);
-  //       if (isMounted) {
-  //         set_chart_data({ selected: null, candles: [] });
-  //       }
-  //     } finally {
-  //       if (isMounted) set_loading(false);
-  //     }
-  //   };
-
-  //   loadPattern();
-
-  //   set_selected_row_index(0)
-
-  //   return () => {
-  //     isMounted = false;
-  //   };
-  // }, [activeFilters, recent_patterns]);
-
-  useEffect(()=>{
-
-    const fetch = async () => {
-
-      // === LOADING ===
-      set_loading(true);
-      set_loading_patterns(true)
-
-      // === FETCH  DATA === 
-      const data = await route.fetch_abcd_patterns(market, filters)
-
-      // === PATTERNS ===
-      const rust_patterns = data.patterns
-      const filtered_patterns = filter_stacker(data.patterns)
-      set_filtered_patterns(filtered_patterns)
-      set_recent_patterns(data.patterns)
-      const uniqueDates = [...new Set(filtered_patterns.map(item => item.d_date))];
-      set_unique_d_dates(uniqueDates)
-      const uniqueSymbols = [...new Set(filtered_patterns.map(item => item.symbol))];
-      set_unique_symbols(uniqueSymbols)
+     
+        const rust_patterns = filter_stacker(recent_patterns);
     
-      // === MONTNLY PEFORMANCE ===
-      // let rust_statistics = data.monthly_stats
-      // rust_statistics.sort((a, b) => a.month - b.month);
-      // set_monthly_peformance(rust_statistics)
+        
+        set_filtered_patterns(rust_patterns.sort((a,b)=> a.trade_enter_price - b.trade_enter_price));
 
-      
-      let selected_pattern = rust_patterns[0]
-      console.log('selected pattern:',selected_pattern)
-      update_selected_pattern(selected_pattern, set_chart_data)
-          
+        // const uniqueDates = [...new Set(rust_patterns.map(item => item.d_date))];
+        // set_unique_d_dates(uniqueDates)
+        // const uniqueSymbols = [...new Set(rust_patterns.map(item => item.symbol))];
+        // set_unique_symbols(uniqueSymbols)
 
-      // === LOADING ===
-      set_loading(false);
-      set_loading_patterns(false)
-    
-    }
-    fetch()
+        if (!rust_patterns?.length) {
+          set_chart_data({ selected: null, candles: [] });
+          return;
+        }
 
-  },[])
+        await update_selected_pattern(rust_patterns[0], (data) => {
+          if (isMounted) set_chart_data(data);
+        });
+
+      } catch (err) {
+        console.error("Pattern load failed:", err);
+        if (isMounted) {
+          set_chart_data({ selected: null, candles: [] });
+        }
+      } finally {
+        if (isMounted) set_loading(false);
+      }
+    };
+
+    loadPattern();
+
+    set_selected_row_index(0)
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeFilters, recent_patterns]);
+
+  console.log(grouped_pattern_data)
 
   return (
 
@@ -545,68 +611,262 @@ const App = () => {
         <div className='app-inner'>
 
           <div className='main'>
-            {is_loading && 
-              <div className='overlay'>
-                <div className='loading_container'>Loading...</div>
-              </div>
-            }
 
-            <div className='app-header'>
+            {
+  is_selected_xabcd ? (
+    <ChartMain
+      chart_data={{
+        candles: grouped_pattern_data.candles,
+        rust_patterns: grouped_pattern_data.rust_patterns[0],
+      }}
+      is_loading_patterns={is_loading_patterns}
+      is_sections_expanded={is_sections_expanded}
+      set_sections_expanded={set_sections_expanded}
+      market={market}
+      set_selected_xabcd={set_selected_xabcd}
+      is_selected_xabcd={is_selected_xabcd}
+      set_is_selected_xabcd={set_is_selected_xabcd}
+    />
+  ) : (
+    <>
+      {is_loading && (
+        <div className="overlay">
+          <div className="loading_container">Loading...</div>
+        </div>
+      )}
 
-              <FilterDropDown
-                name={"Market"}
-                activateMarket={activateMarket}
-                options = {["Bullish", "Bearish", "Both"]}
-                set_selected_filter={set_selected_filter}
-                selected_filter={selected_filter}
-                open={selected_filter==="Market" ? true : false}
-              />
+      <div className="app-header">
+        <FilterDropDown
+          name="Market"
+          activateMarket={activateMarket}
+          options={["Bullish", "Bearish", "Both"]}
+          set_selected_filter={set_selected_filter}
+          selected_filter={selected_filter}
+          open={selected_filter === "Market"}
+        />
 
-              <FilterDropDown
-                name={"Status"}
-                activateMarket={activateResult}
-                options = {["Open", "Won", "Lost"]}
-                set_selected_filter={set_selected_filter}
-                selected_filter={selected_filter}
-                open={selected_filter==="Status" ? true : false}
-              />
+        <FilterDropDown
+          name="Status"
+          activateMarket={activateResult}
+          options={["Open", "Won", "Lost"]}
+          set_selected_filter={set_selected_filter}
+          selected_filter={selected_filter}
+          open={selected_filter === "Status"}
+        />
 
-              <FilterDropDown
-                name={"Pattern"}
-                activateMarket={activateRetracement}
-                options = {options4}
-                set_selected_filter={set_selected_filter}
-                selected_filter={selected_filter}
-                open={selected_filter==="Pattern" ? true : false}
-              />
+        <FilterDropDown
+          name="Pattern"
+          activateMarket={activateRetracement}
+          options={options4}
+          set_selected_filter={set_selected_filter}
+          selected_filter={selected_filter}
+          open={selected_filter === "Pattern"}
+        />
 
-              <FilterDropDown
-                name={"Date"}
-                activateMarket={activateDate}
-                options = {unique_d_dates}
-                set_selected_filter={set_selected_filter}
-                selected_filter={selected_filter}
-                open={selected_filter==="Date" ? true : false}
-              />
+        <FilterDropDown
+          name="Date"
+          activateMarket={activateDate}
+          options={unique_d_dates}
+          set_selected_filter={set_selected_filter}
+          selected_filter={selected_filter}
+          open={selected_filter === "Date"}
+        />
 
-              <FilterDropDown
-                name={"Symbol"}
-                activateMarket={activateSymbol}
-                options = {unique_symbols}
-                set_selected_filter={set_selected_filter}
-                selected_filter={selected_filter}
-                open={selected_filter==="Symbol" ? true : false}
-              />
+        <FilterDropDown
+          name="Symbol"
+          activateMarket={activateSymbol}
+          options={unique_symbols}
+          set_selected_filter={set_selected_filter}
+          selected_filter={selected_filter}
+          open={selected_filter === "Symbol"}
+        />
+      </div>
 
-              {/* <FilterDropDown
-                name={"S&R"}
-                activateMarket={activateResult}
-                options = {["3", "6", "12"]}
-                set_selected_filter={set_selected_filter}
-                selected_filter={selected_filter}
-                open={selected_filter==="S&R" ? true : false}
+      <div className="main_left">
+        {grouped_pattern_data.rust_patterns?.map((pattern, index) => (
+          <ChartMain
+            key={pattern.id ?? index}
+            chart_data={{
+              candles: grouped_pattern_data.candles,
+              rust_patterns: pattern,
+            }}
+            is_loading_patterns={is_loading_patterns}
+            is_sections_expanded={is_sections_expanded}
+            set_sections_expanded={set_sections_expanded}
+            market={market}
+            set_selected_xabcd={set_selected_xabcd}
+            is_selected_xabcd={is_selected_xabcd}
+            set_is_selected_xabcd={set_is_selected_xabcd}
+          />
+        ))}
+      </div>
+    </>
+  )
+}
+
+
+             {/* <ChartMain
+                    
+                    chart_data={{
+                      candles: grouped_pattern_data.candles,
+                      rust_patterns: grouped_pattern_data.rust_patterns[0],
+                    }}
+                    is_loading_patterns={is_loading_patterns}
+                    is_sections_expanded={is_sections_expanded}
+                    set_sections_expanded={set_sections_expanded}
+                    market={market}
+                    set_selected_xabcd={set_selected_xabcd}
+                  /> */}
+
+
+          </div>
+          
+        </div>
+
+			</div>
+  );
+}
+
+export default App;
+
+   
+
+
+
+
+
+
+
+
+
+
+
+ // useEffect(() => {
+ 
+  //   handle_updated_recent_patterns(set_recent_patterns, set_wl_patterns, set_monthly_peformance, set_chart_data, filters)
+  
+  // }, [filters]);
+  
+  // useEffect(() => {
+  // const handleKeyDown = async (event) => {
+  //   if (event.key === "ArrowRight") {
+  //     if (selected_row_index < recent_patterns.length - 1) {
+  //       const newIndex = selected_row_index + 1;
+  //       // set_selected_pattern_index(newIndex);
+  //       set_selected_row_index(newIndex);
+
+  //       let candles = await route.get_candles(recent_patterns[newIndex].symbol)
+  //       candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+  //       candles = candles.map(item => {
+  //         const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
+
+  //         return {
+  //           ...item,
+  //           candle_date: toISO(item.candle_date),
+  //         };
+  //       });
+  //       tools.format_pattern(candles, recent_patterns[newIndex], set_chart_data)
+
+  //     }
+  //   }
+
+  //   if (event.key === "ArrowLeft") {
+  //     if (selected_row_index > 0) {
+  //         const newIndex = selected_row_index - 1;
+  //         // set_selected_pattern_index(newIndex);
+  //         set_selected_row_index(newIndex);
+  //         let candles = await route.get_candles(recent_patterns[newIndex].symbol)
+  //         candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
+  //         candles = candles.map(item => {
+  //           const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
+
+  //           return {
+  //             ...item,
+  //             candle_date: toISO(item.candle_date),
+  //           };
+  //         });
+  //         tools.format_pattern(candles, recent_patterns[newIndex], set_chart_data)
+  //       }
+  //   }
+  // };
+
+  // window.addEventListener("keydown", handleKeyDown);
+  // return () => window.removeEventListener("keydown", handleKeyDown);
+  // }, [selected_row_index, recent_patterns]);
+
+
+
+
+
+
+
+
+
+
+            {/* <div className={is_sections_expanded ? 'sections-wrapper-expanded':'sections-wrapper-minimized'}> */}
+
+         
+              {/* <Section title={'Build Pattern'} body={<Filter
+                filters={filters}
+                set_filters={set_filters}
+                fetch_filtered_peformances={route.fetch_filtered_peformances}
+                set_ticker_peformance={set_ticker_peformance}
+                is_loading={is_loading}
+                set_loading={set_loading}
+                handle_updated_recent_patterns={handle_updated_recent_patterns}
+           
+                
+              />}/>  */}
+              {/* <Section title={'Watchlist'} body={<WatchList
+                
+                all_watchlists={all_watchlists}
+                set_all_watchlist={set_all_watchlist}
+                all_wl_patterns={all_wl_patterns}
+                set_chart_data={set_chart_data}
+              />}/> */}
+
+              {/* <Section 
+                price_retracement={price_retracement}
+                update_harmonic_pattern={update_harmonic_pattern}
+                harmonic_patterns={harmonic_patterns}
+                selected_harmonic_pattern={selected_harmonic_pattern}
+                set_selected_harmonic_pattern={set_selected_harmonic_pattern}
+                sort_by_result={sort_by_result} table_result={table_result}
+                market={market}set_market={set_market} title={'Recent Patterns'} 
+                length={recent_patterns?.length}
+                activeFilters={activeFilters}
+                setActiveFilters={setActiveFilters}
+                body={<InfiniteTable
+                  recent_patterns={filtered_patterns}
+                  set_loading_patterns={set_loading}
+                  set_chart_data={set_chart_data}
+                  selected_row_index={selected_row_index}
+                  set_selected_row_index={set_selected_row_index}
+                  update_selected_pattern={update_selected_pattern}
+                />}
               /> */}
-{/* 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+              {/* 
             
               <div className="setting-container">
                 <div className="setting-key">Pattern:</div>
@@ -770,145 +1030,3 @@ const App = () => {
                 </div>
 
             </div> */}
-
-
-
-            </div>
-
-            <div className={is_sections_expanded ? 'sections-wrapper-expanded':'sections-wrapper-minimized'}>
-
-         
-              {/* <Section title={'Build Pattern'} body={<Filter
-                filters={filters}
-                set_filters={set_filters}
-                fetch_filtered_peformances={route.fetch_filtered_peformances}
-                set_ticker_peformance={set_ticker_peformance}
-                is_loading={is_loading}
-                set_loading={set_loading}
-                handle_updated_recent_patterns={handle_updated_recent_patterns}
-           
-                
-              />}/>  */}
-              {/* <Section title={'Watchlist'} body={<WatchList
-                
-                all_watchlists={all_watchlists}
-                set_all_watchlist={set_all_watchlist}
-                all_wl_patterns={all_wl_patterns}
-                set_chart_data={set_chart_data}
-              />}/> */}
-
-              <Section 
-                price_retracement={price_retracement}
-                update_harmonic_pattern={update_harmonic_pattern}
-                harmonic_patterns={harmonic_patterns}
-                selected_harmonic_pattern={selected_harmonic_pattern}
-                set_selected_harmonic_pattern={set_selected_harmonic_pattern}
-                sort_by_result={sort_by_result} table_result={table_result}
-                market={market}set_market={set_market} title={'Recent Patterns'} 
-                length={recent_patterns?.length}
-                activeFilters={activeFilters}
-                setActiveFilters={setActiveFilters}
-                body={<InfiniteTable
-                  recent_patterns={filtered_patterns}
-                  set_loading_patterns={set_loading}
-                  set_chart_data={set_chart_data}
-                  selected_row_index={selected_row_index}
-                  set_selected_row_index={set_selected_row_index}
-                  update_selected_pattern={update_selected_pattern}
-                />}
-              />
-
-            </div>
-{/* // */}
-            <div className='main_left'>
-
-                  
-              <ChartMain
-                chart_data={chart_data}
-                is_loading_patterns={is_loading_patterns}
-                // all_watchlists={all_watchlists}
-                is_sections_expanded={is_sections_expanded}
-                set_sections_expanded={set_sections_expanded}
-                market={market}
-
-              />
-
-           
-
-            </div>
-      
-     
-          
-          </div>
-        </div>
-
-			</div>
-  );
-}
-
-export default App;
-
-   
-
-
-
-
-
-
-
-
-
-
-
- // useEffect(() => {
- 
-  //   handle_updated_recent_patterns(set_recent_patterns, set_wl_patterns, set_monthly_peformance, set_chart_data, filters)
-  
-  // }, [filters]);
-  
-  // useEffect(() => {
-  // const handleKeyDown = async (event) => {
-  //   if (event.key === "ArrowRight") {
-  //     if (selected_row_index < recent_patterns.length - 1) {
-  //       const newIndex = selected_row_index + 1;
-  //       // set_selected_pattern_index(newIndex);
-  //       set_selected_row_index(newIndex);
-
-  //       let candles = await route.get_candles(recent_patterns[newIndex].symbol)
-  //       candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
-  //       candles = candles.map(item => {
-  //         const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
-
-  //         return {
-  //           ...item,
-  //           candle_date: toISO(item.candle_date),
-  //         };
-  //       });
-  //       tools.format_pattern(candles, recent_patterns[newIndex], set_chart_data)
-
-  //     }
-  //   }
-
-  //   if (event.key === "ArrowLeft") {
-  //     if (selected_row_index > 0) {
-  //         const newIndex = selected_row_index - 1;
-  //         // set_selected_pattern_index(newIndex);
-  //         set_selected_row_index(newIndex);
-  //         let candles = await route.get_candles(recent_patterns[newIndex].symbol)
-  //         candles.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
-  //         candles = candles.map(item => {
-  //           const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
-
-  //           return {
-  //             ...item,
-  //             candle_date: toISO(item.candle_date),
-  //           };
-  //         });
-  //         tools.format_pattern(candles, recent_patterns[newIndex], set_chart_data)
-  //       }
-  //   }
-  // };
-
-  // window.addEventListener("keydown", handleKeyDown);
-  // return () => window.removeEventListener("keydown", handleKeyDown);
-  // }, [selected_row_index, recent_patterns]);

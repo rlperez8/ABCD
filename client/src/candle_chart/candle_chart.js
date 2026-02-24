@@ -257,7 +257,7 @@ export const CandleChart = (props) => {
         return () => {
           window.removeEventListener('resize', resizeCanvas);
         };
-    }, [chart_data, is_sections_expanded]);
+    }, []);
    
     // ===== Pattern Highlighter
     useEffect(()=>{
@@ -485,8 +485,8 @@ export const CandleChart = (props) => {
             
             chart.candles(ctx);
             chart.prices(ctx_price, cp);
-            chart.grid_X(ctx, canvas)
-            chart.grid_Y(ctx, canvas)
+            // chart.grid_X(ctx, canvas)
+            // chart.grid_Y(ctx, canvas)
             // chart.pattern_center(ctx, canvas)
 
             ctx_date.clearRect(0, 0, canvas_date.width, canvas_date.height);
@@ -504,8 +504,8 @@ export const CandleChart = (props) => {
                 is_abcd_pattern && abcd_.abcd(ctx, chart_data.rust_patterns)
             }
             
-            is_retracement && abcd_.retracement(ctx, chart_data.rust_patterns)
-            abcd_.price_levels(ctx_price, ctx, canvas, chart_data.rust_patterns)
+            // is_retracement && abcd_.retracement(ctx, chart_data.rust_patterns)
+            // abcd_.price_levels(ctx_price, ctx, canvas, chart_data.rust_patterns)
 
 
             const snr_lines = (canvas, ctx, chart_data) => {
@@ -576,7 +576,7 @@ export const CandleChart = (props) => {
 
         if(chart_data.rust_patterns){
             // resize.reposition_candles(candleChartRef, chart_data.abcd_pattern, chart_data.rust_patterns)
-            resize.reposition_candles(candleChartRef, chart_data.rust_patterns)
+            // resize.reposition_candles(candleChartRef, chart_data.rust_patterns)
         }
     },[chart_data])
 
@@ -630,7 +630,7 @@ export const CandleChart = (props) => {
       
     };
 
-
+    
     return(
         <div className='candle_chart_container'>
          
@@ -640,37 +640,42 @@ export const CandleChart = (props) => {
                     <div className='header-bar'>
     
                         <div className='header_slot' >{chart_data?.rust_patterns.symbol}</div>
-                            <div className='header_slot'>
-                                <div className='header_one'>H</div>
-                                <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.high?.toFixed(2)}
-                                </div>
-                            </div>
-                            <div className='header_slot'>
-                                <div className='header_one'>C</div>
-                               <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.close?.toFixed(2)}
-                                </div>
-                            </div>
-                            <div className='header_slot'>
-                                <div className='header_one'>O</div>
-                                <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.open?.toFixed(2)}
-                                </div>
-                            </div>
-                            <div className='header_slot'>
-                                <div className='header_one'>L</div>
-                                <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.low?.toFixed(2)}
-                                </div>
-                            </div>
+                        <div className='header_slot' >{chart_data?.rust_patterns.market}</div>
+                        <div className='header_slot' >Closed</div>
+                        <div className='header_slot' >Butterfly</div>
+                        {/* <div className='header_slot' >{chart_data?.rust_patterns.pattern_group_id}</div> */}
 
-                            <div className='header_slot'>
-                                <div className='header_one'>L</div>
-                                <div className='header_two' style={{color: hovered_candle.color}}>
-                                    {hovered_candle.volume?.toFixed(0)}
-                                </div>
+                        {/* <div className='header_slot'>
+                            <div className='header_one'>H</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.high?.toFixed(2)}
                             </div>
+                        </div>
+                        <div className='header_slot'>
+                            <div className='header_one'>C</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.close?.toFixed(2)}
+                            </div>
+                        </div>
+                        <div className='header_slot'>
+                            <div className='header_one'>O</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.open?.toFixed(2)}
+                            </div>
+                        </div>
+                        <div className='header_slot'>
+                            <div className='header_one'>L</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.low?.toFixed(2)}
+                            </div>
+                        </div>
+
+                        <div className='header_slot'>
+                            <div className='header_one'>L</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.volume?.toFixed(0)}
+                            </div>
+                        </div> */}
                     </div>
     
                     <canvas id='canvas' 
@@ -693,7 +698,9 @@ export const CandleChart = (props) => {
                 <div className='pricesb'>
                     <canvas ref={canvas_price} 
                         onMouseDown={handleMouseDownPrices}
-                        onMouseUp={handleMouseUpPrices}></canvas>
+                        onMouseUp={handleMouseUpPrices}>
+                            
+                        </canvas>
                 </div>
             </div>
                     

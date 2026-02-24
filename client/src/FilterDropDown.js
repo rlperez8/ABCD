@@ -18,7 +18,7 @@ const FilterDropDown = (props) => {
 return(
 
     <div className="setting-container">
-        <div className="setting-key">{name}:</div>
+        {/* <div className="setting-key">{name}:</div> */}
 
         <div className="setting-value-outer">
             <div className="setting-value-inner" 

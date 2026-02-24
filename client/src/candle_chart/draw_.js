@@ -438,7 +438,7 @@ export class ABCD {
       
         
          ctx.fillStyle = "rgba(136, 134, 134, 0.3)";
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 2;
         ctx.stroke();
 
         ctx.restore()

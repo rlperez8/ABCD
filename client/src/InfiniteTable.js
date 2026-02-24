@@ -178,6 +178,12 @@ const InfiniteTable = (props) => {
                 style={{ overflowX: 'hidden' }}
             />) : ""}
 
+              <div className='peformance_table_header'>
+        
+              
+       
+            </div>
+
         </div>
     )
 }
