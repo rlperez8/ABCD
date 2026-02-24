@@ -94,9 +94,7 @@ const Section = (props) => {
                     {body}
                 </div>
 
-                <div className='table_header_main'>
-                
-                </div>
+        
 
             </div>
 

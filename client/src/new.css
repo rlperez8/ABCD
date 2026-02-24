@@ -22,40 +22,29 @@
     /* padding: 15px */
 }
 .app-header {
-    width: 20%;
-    max-width: 250px;
-    height: 100%;
-    /* padding-top: 5px; */
-    /* padding-bottom: 5px; */
+    width: 100%;
+    height:  5%;
     padding: 5px;
     display: flex;
-    flex-direction: column;
-    /* margin: 5px; */
-
-    /* background-color: rgb(5, 2, 35); */
-    /* border: 3px solid rgb(10, 39, 63);
-    border: 2px solid rgb(47, 65, 81); */
-    /* border-radius: 5px; */
+    flex-direction: row;
     box-sizing: border-box;
-
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-    overflow: hidden;
-    /* margin-top: 5px; */
     background-color: rgb(15, 15, 15);;
+    background-color: rgb(21, 22, 26);
 }
 .setting-container{
-    width: 100%;
-    height: 3%;
+    width: 5%;
+    height: 100%;
     display: flex;
     flex-direction: row;
     color: rgb(185, 183, 183);
     font-weight: 400;
     font-family: monospace;
-    font-size: 110%;
+    font-size: 95%;
     border-radius: 2px;
-    margin-top: 7px;
-    background-color: rgb(43, 43, 43);
-    border: 1px solid rgb(123, 123, 123);
+    /* margin-top: 7px; */
+    /* background-color: rgb(43, 43, 43); */
+    /* border: 1px solid rgb(123, 123, 123); */
 }
 .setting-key{
     width: 45%;
@@ -68,7 +57,7 @@
 }
 .setting-value-outer{
     position: relative; 
-    width: 55%;
+    width: 100%;
     height: 100%;
     display: flex;
     justify-content: center;
@@ -82,7 +71,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: #1d1d1e;
+    /* background-color: #1d1d1e; */
     /* border: 1px solid rgb(97, 97, 97); */
     border-radius: 5px;
     height: 90%;
@@ -103,8 +92,8 @@
     height: 100%;
 }
 .value-arrow{
-    width: 25%;
-    height: 100%;
+    width: 20%;
+    height: 50%;
 }
 .setting-dropdown {
   position: absolute;
@@ -139,27 +128,79 @@
     width: 100%;
     height: 100%;
     display: flex;
-    flex-direction: row;
+   
     box-sizing: border-box;
-    flex-direction: row;
-    /* border-radius: 10px; */
-    /* padding: 5px; */
+    flex-direction: column;
+    /* border: 2px solid yellow; */
+    box-sizing: border-box;
+    overflow: hidden;
+    background-color: rgb(21, 22, 26);
 }
-.main_left{
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-    box-sizing: border-box;
-    display: flex;
-    background-color: rgb(0, 0, 0);
-    background-color: rgb(53, 53, 53);
+.main_left {
+  width: 100%;
+  height: 100vh;
+  box-sizing: border-box;
+
+  display: flex;
+  flex-wrap: wrap;   /* 🔑 this enables wrapping */
+  align-content: flex-start;
+  gap: 5px;
+
+  /* background-color: rgb(37 37 37); */
+    /* background-color: rgb(16 17 20);
+        background-color: rgb(21, 22, 26); */
+
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  justify-content: center;
+  /* align-items: center; */
+  overflow-y: scroll;
+  /* border: 2PX solid orange; */
+  box-sizing: border-box;
+  padding-top: 10px;
+}
+.main_left::-webkit-scrollbar {
+  display: none;
+}
+.charts_container {
+    flex: 0 0 16.3%;    
+    /* width: 100%;
+    height: 100%;      */
+    height: 25%;
     display: flex;
     justify-content: center;
     align-items: center;
-
-  
+    /* background-color: rgb(20, 21, 24);
+    background-color: rgb(20, 21, 24); */
+    border: 2px solid rgb(65, 79, 94);
+    border-radius: 5px;
+    box-sizing: border-box;
 }
+.chart_container {
+    flex: 0 0 16.3%;    
+    /* width: 100%;
+    height: 100%;      */
+    height: 25%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* background-color: rgb(20, 21, 24);
+    background-color: rgb(20, 21, 24); */
+    border: 2px solid rgb(65, 79, 94);
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+/* .chart_margin_container:hover {
+   flex: 0 0 16.3%;    
+  height: 250px;     
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  border: 2px solid rgb(102, 99, 99);
+
+  box-sizing: border-box;
+} */
 .overlay{
     position: absolute;
     top: 0;
@@ -382,9 +423,11 @@
 .candle_chart_container{
     box-sizing: border-box; 
     height: 95%;
+    height: 100%;
     cursor:crosshair;
     width: 100%;
     display: flex;
+    
 
 
 }
@@ -406,17 +449,21 @@
 .canvas{
     width: 100%;
     height: 96%;
+    height: 100%;
     display: block;
     border-left: none;
     box-sizing: border-box;
     position: relative;
     border-top-right-radius: 5px;
     border-bottom-right-radius: 5px;
-    background-color: rgb(15, 15, 15);
+    /* background-color: rgb(6, 13, 20);
+    background-color: rgb(21, 23, 34);
+    background-color: rgb(30, 33, 44); */
     
 }
 .canvas_dates{
-    height: 4%;
+    /* height: 4%; */
+    height: 0px;
     width: 100%;
     box-sizing: border-box;
     display: flex;
@@ -425,6 +472,7 @@
 .canvas_prices{
 
     width: 70px;
+    /* width: 0px; */
     /* border: 3px solid rgb(26, 24, 24); */
     /* max-width: 25px; */
     /* background: linear-gradient(to right, rgb(8, 20, 36), rgb(3, 22, 31), rgb(8, 20, 36), rgb(4, 5, 7)); */
@@ -442,11 +490,12 @@
     
 }
 .header_slot{
-    width: 100px;
-    color: white;
+    width: 100%;
+    color: rgb(82, 112, 119);
     display: flex;
     justify-content: center;
     align-items: center;
+    /* background-color: rgb(43, 40, 40); */
 
 }
 .header-bar{
@@ -1259,15 +1308,7 @@ input:focus {
 
 }
 
-.chart_margin_container{
-    width: 95%;
-    height: 95%;
-    box-sizing: border-box; 
-    display: flex;
-    justify-content: center;
-    align-items: center ;
-    border: 1px solid gray;
-}
+
 .info_margin_container{
     padding:  10px;
     width: 100%;
@@ -1435,23 +1476,18 @@ input:focus {
 /* DATA=================== */
 .sections-wrapper-expanded {
     width: 20%;
-    /* min-width: 900px;
-    max-width: 900px; */
     overflow: hidden;
     height: 100%;
     display: flex;
     flex-direction: column;
-    /* transition: width 0.1s ease-in-out;    */
-    /* border: 5px solid red; */
     box-sizing: border-box;
-    /* margin-top: 5px; */
-    background-color: rgb(0, 0, 0);
-
-    /* border-radius: 5px; */
+    background-color: rgb(37 37 37);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
     border-right: 3px solid rgb(70, 69, 69);
     border-left: 3px solid rgb(70, 69, 69);
     box-sizing: border-box;
+    justify-content: center;
+    align-items: center;
 }
 
 .sections-wrapper-minimized {
@@ -1822,6 +1858,7 @@ input:focus {
     box-sizing: border-box;
     color: rgb(251, 251, 251);
     /* background-color: rgb(128, 127, 127); */
+    
 }
 .peformance_table_body{
     width: 100%;
@@ -2502,8 +2539,8 @@ input:focus {
     padding-bottom: 5px;
 }
 .rp-section{
-    width: 100%;
-    height: 100%;
+    width: 95%;
+    height: 95%;
       display: flex;
     justify-content: center;
     align-items: center;
@@ -2511,6 +2548,8 @@ input:focus {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    border: 1px solid gray;
+        background-color: #1e1f1f;;
 }
 .month-wrapper{
     width: 100%;
