@@ -37,8 +37,11 @@ const format_patterns = async (candles, patterns) => {
 }
 const update_selected_pattern = async (selected_pattern, set_chart_data) => {
 
+  
+
   // GET SELECTED PATTERN CANDLES
   let candles = await route.get_candles(selected_pattern?.symbol)
+
   candles?.sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date));
   candles = candles?.map(item => {
     const toISO = d => (d ? new Date(d).toISOString().split('T')[0] : null);
@@ -55,8 +58,12 @@ const update_selected_pattern = async (selected_pattern, set_chart_data) => {
   // FORMAT SELECTED PATTERN FOR CANVAS 
   tools.format_pattern(candles, selected_pattern, snr_lines, set_chart_data)
 
+  
+
 }
 const filter_stacker = (patterns, activeFilters) => {
+
+  
 
     let result = patterns;
 
@@ -564,7 +571,9 @@ const App = () => {
         set_loading(true);
 
      
-        const rust_patterns = filter_stacker(recent_patterns);
+        const rust_patterns = filter_stacker(recent_patterns, activeFilters);
+
+        console.log(rust_patterns)
     
         
         set_filtered_patterns(rust_patterns.sort((a,b)=> a.trade_enter_price - b.trade_enter_price));
@@ -602,7 +611,7 @@ const App = () => {
     };
   }, [activeFilters, recent_patterns]);
 
-  console.log(grouped_pattern_data)
+  console.log(activeFilters)
 
   return (
 
@@ -610,9 +619,104 @@ const App = () => {
 
         <div className='app-inner'>
 
+           {is_loading && (
+        <div className="overlay">
+          <div className="loading_container">Loading...</div>
+        </div>
+      )}
+
           <div className='main'>
 
-            {
+            <div className="app-header">
+
+              <FilterDropDown
+                name="Market"
+                activateMarket={activateMarket}
+                options={["Bullish", "Bearish", "Both"]}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter === "Market"}
+              />
+
+              <FilterDropDown
+                name="Status"
+                activateMarket={activateResult}
+                options={["Open", "Won", "Lost"]}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter === "Status"}
+              />
+
+              <FilterDropDown
+                name="Pattern"
+                activateMarket={activateRetracement}
+                options={options4}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter === "Pattern"}
+              />
+{/* 
+              <FilterDropDown
+                name="Date"
+                activateMarket={activateDate}
+                options={unique_d_dates}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter === "Date"}
+              />
+
+              <FilterDropDown
+                name="Symbol"
+                activateMarket={activateSymbol}
+                options={unique_symbols}
+                set_selected_filter={set_selected_filter}
+                selected_filter={selected_filter}
+                open={selected_filter === "Symbol"}
+              /> */}
+            </div>
+
+
+            <div className='app-body'>
+
+              <Section 
+                price_retracement={price_retracement}
+                update_harmonic_pattern={update_harmonic_pattern}
+                harmonic_patterns={harmonic_patterns}
+                selected_harmonic_pattern={selected_harmonic_pattern}
+                set_selected_harmonic_pattern={set_selected_harmonic_pattern}
+                sort_by_result={sort_by_result} table_result={table_result}
+                market={market}set_market={set_market} title={'Recent Patterns'} 
+                length={recent_patterns?.length}
+                activeFilters={activeFilters}
+                setActiveFilters={setActiveFilters}
+                body={<InfiniteTable
+                  recent_patterns={filtered_patterns}
+                  set_loading_patterns={set_loading}
+                  set_chart_data={set_chart_data}
+                  selected_row_index={selected_row_index}
+                  set_selected_row_index={set_selected_row_index}
+                  update_selected_pattern={update_selected_pattern}
+                />}
+              /> 
+
+              <ChartMain
+                chart_data={chart_data}
+                is_loading_patterns={is_loading_patterns}
+                is_sections_expanded={is_sections_expanded}
+                set_sections_expanded={set_sections_expanded}
+                market={market}
+                set_selected_xabcd={set_selected_xabcd}
+              />
+
+            </div>
+
+
+
+
+
+
+
+            {/* {
   is_selected_xabcd ? (
     <ChartMain
       chart_data={{
@@ -702,15 +806,14 @@ const App = () => {
       </div>
     </>
   )
-}
+} */}
+{/* 
+ 
 
 
              {/* <ChartMain
                     
-                    chart_data={{
-                      candles: grouped_pattern_data.candles,
-                      rust_patterns: grouped_pattern_data.rust_patterns[0],
-                    }}
+                    chart_data={chart_data}
                     is_loading_patterns={is_loading_patterns}
                     is_sections_expanded={is_sections_expanded}
                     set_sections_expanded={set_sections_expanded}

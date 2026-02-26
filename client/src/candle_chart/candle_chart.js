@@ -14,7 +14,8 @@ export const CandleChart = (props) => {
         is_sections_expanded
 
 	} = props
-    
+
+
     
     const canvas_dates = useRef()
     const canvas_price = useRef()
@@ -257,7 +258,7 @@ export const CandleChart = (props) => {
         return () => {
           window.removeEventListener('resize', resizeCanvas);
         };
-    }, []);
+    }, [chart_data]);
    
     // ===== Pattern Highlighter
     useEffect(()=>{

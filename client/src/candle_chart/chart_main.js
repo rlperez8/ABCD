@@ -17,8 +17,10 @@ const ChartMain = (props) => {
         set_is_selected_xabcd
         
     } = props 
+
+    
   
-   
+
     const [is_abcd_pattern, set_abcd_pattern] = useState(true)
     const [is_price_levels, set_price_levels] = useState(true)
     const [is_retracement, set_retracement] = useState(true)
@@ -30,17 +32,22 @@ const ChartMain = (props) => {
 
     return(
 
-      <div className={is_selected_xabcd ? "" : "charts_container"} onClick={()=>{set_selected_xabcd(chart_data); set_is_selected_xabcd(!is_selected_xabcd)}}>
+      <div className={is_selected_xabcd ? "charts_container" : "charts_container"}
+      onClick={() => {
+  // if (!is_selected_xabcd) {
+  //   set_selected_xabcd(chart_data)
+  //   set_is_selected_xabcd(true)
+  // }
+}}>
 
         <div className="margin-">
           
           <div className='chart_container'>
             
-      
-
             <div className='data_'>
 
-              {/* <div className='chart-header-wrapper'>
+              {
+                true && <div className='chart-header-wrapper'>
 
                 <div className="header-buttons-wrapper">
 
@@ -97,10 +104,22 @@ const ChartMain = (props) => {
 
                     <img className='abcd_img' src="/images/abcd.png"></img>
                   </div>
+
+                  <div className='chart_icon_' onClick={()=>{set_is_selected_xabcd(false)}}>
+
+                    <img className='abcd_img' src="/images/x.png"></img>
+
+        
+                    
+                    
+                  </div>
                 </div>
 
 
-              </div> */}
+              </div>
+
+              }
+              
 
           
                 {/* {is_loading_patterns &&
