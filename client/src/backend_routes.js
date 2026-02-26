@@ -53,7 +53,7 @@ export const get_candles = async (symbol) => {
 
       }));
 
-      console.log(responseData)
+
 
 
 

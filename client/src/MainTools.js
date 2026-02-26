@@ -38,6 +38,8 @@ export const format_pattern = (candles, rust_pattern, snr_lines, set_chart_data)
     let index_D = findIndexByDate(candles, rust_pattern?.d_date);
     let exit = findIndexByDate(candles, rust_pattern?.trade_date);
 
+    
+
     set_chart_data({
    
         candles: candles,
@@ -64,6 +66,8 @@ export const format_pattern = (candles, rust_pattern, snr_lines, set_chart_data)
                 exit_date: exit,
             
         }
+
+    
 
     });
 }
