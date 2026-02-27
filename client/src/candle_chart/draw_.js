@@ -372,7 +372,6 @@ export class ABCD {
         x_x_loc -= this.candleChartRef.current.width.current_X_origin;
         x_x_loc += this.candleChartRef.current.candles.complete_width / 2;
       
-
         // A
         let a_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.a_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
         let a_x_loc = -this.candleChartRef.current.candles.complete_width * ab.a;
@@ -399,13 +398,14 @@ export class ABCD {
 
         // Exit
         let exit_y_loc =  this.candleChartRef.current.height.currentBaselineY - (ab.exit_price  * (this.candleChartRef.current.price.current_pixels_per_price_unit / this.candleChartRef.current.unit_amount))
-
-    
         let exit_x_loc = -this.candleChartRef.current.candles.complete_width * ab.exit_date;
         exit_x_loc -= this.candleChartRef.current.width.current_X_origin;
         exit_x_loc += this.candleChartRef.current.candles.complete_width / 2;
 
+        
+
         ctx.save()
+
         // --- FILL XAB --- 
         ctx.beginPath();
         ctx.moveTo(x_x_loc, x_y_loc);
@@ -429,7 +429,7 @@ export class ABCD {
         
         
         ctx.beginPath();
-        ctx.lineTo(x_x_loc, x_y_loc);
+        ctx.moveTo(x_x_loc, x_y_loc);
         ctx.lineTo(a_x_loc, a_y_loc);
         ctx.lineTo(b_x_loc, b_y_loc);
         ctx.lineTo(c_x_loc, c_y_loc);
@@ -437,8 +437,8 @@ export class ABCD {
         ctx.lineTo(exit_x_loc, exit_y_loc);
       
         
-         ctx.fillStyle = "rgba(136, 134, 134, 0.3)";
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(186, 184, 184, 0.71)";
+        ctx.lineWidth = 5;
         ctx.stroke();
 
         ctx.restore()
