@@ -486,8 +486,8 @@ export const CandleChart = (props) => {
             
             chart.candles(ctx);
             chart.prices(ctx_price, cp);
-            // chart.grid_X(ctx, canvas)
-            // chart.grid_Y(ctx, canvas)
+            chart.grid_X(ctx, canvas)
+            chart.grid_Y(ctx, canvas)
             // chart.pattern_center(ctx, canvas)
 
             ctx_date.clearRect(0, 0, canvas_date.width, canvas_date.height);
@@ -505,8 +505,8 @@ export const CandleChart = (props) => {
                 is_abcd_pattern && abcd_.abcd(ctx, chart_data.rust_patterns)
             }
             
-            // is_retracement && abcd_.retracement(ctx, chart_data.rust_patterns)
-            // abcd_.price_levels(ctx_price, ctx, canvas, chart_data.rust_patterns)
+            is_retracement && abcd_.retracement(ctx, chart_data.rust_patterns)
+            is_price_levels && abcd_.price_levels(ctx_price, ctx, canvas, chart_data.rust_patterns)
 
 
             const snr_lines = (canvas, ctx, chart_data) => {
@@ -644,9 +644,9 @@ export const CandleChart = (props) => {
                         <div className='header_slot' >{chart_data?.rust_patterns.market}</div>
                         <div className='header_slot' >Closed</div>
                         <div className='header_slot' >Butterfly</div>
-                        {/* <div className='header_slot' >{chart_data?.rust_patterns.pattern_group_id}</div> */}
+                        <div className='header_slot' >{chart_data?.rust_patterns.pattern_group_id}</div>
 
-                        {/* <div className='header_slot'>
+                        <div className='header_slot'>
                             <div className='header_one'>H</div>
                             <div className='header_two' style={{color: hovered_candle.color}}>
                                 {hovered_candle.high?.toFixed(2)}
@@ -676,7 +676,7 @@ export const CandleChart = (props) => {
                             <div className='header_two' style={{color: hovered_candle.color}}>
                                 {hovered_candle.volume?.toFixed(0)}
                             </div>
-                        </div> */}
+                        </div>
                     </div>
     
                     <canvas id='canvas' 
