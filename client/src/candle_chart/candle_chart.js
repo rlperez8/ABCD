@@ -11,7 +11,9 @@ export const CandleChart = (props) => {
         is_retracement,
         is_abcd_pattern,
         market,
-        is_sections_expanded
+        is_sections_expanded,
+        hovered_candle,
+        set_hovered_candle
 
 	} = props
 
@@ -20,13 +22,13 @@ export const CandleChart = (props) => {
     const canvas_dates = useRef()
     const canvas_price = useRef()
     const canvas_chart = useRef()
-    const [hovered_candle, set_hovered_candle] = useState({
-        high: 0,
-        close: 0,
-        open: 0,
-        low: 0,
-        color: 'white'
-    })
+    // const [hovered_candle, set_hovered_candle] = useState({
+    //     high: 0,
+    //     close: 0,
+    //     open: 0,
+    //     low: 0,
+    //     color: 'white'
+    // })
 
     let mouse = null
     let chart = null
@@ -638,7 +640,7 @@ export const CandleChart = (props) => {
             <div className='candle_chart_wrapper'>
                 <div className='canvas'>
 
-                    <div className='header-bar'>
+                    {/* <div className='header-bar'>
     
                         <div className='header_slot' >{chart_data?.rust_patterns.symbol}</div>
                         <div className='header_slot' >{chart_data?.rust_patterns.market}</div>
@@ -678,7 +680,7 @@ export const CandleChart = (props) => {
                             </div>
                         </div>
                     </div>
-    
+     */}
                     <canvas id='canvas' 
                     ref={canvas_chart}
                         onMouseDown={handleMouseDown}

@@ -18,6 +18,7 @@ pub struct PatternXABCD {
     pub three_month: Option<bool>,
     pub six_month: Option<bool>,
     pub twelve_month: Option<bool>,
+    pub pattern_group_id: String,
 
 }
 

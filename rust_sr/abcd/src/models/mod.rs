@@ -12,11 +12,13 @@ pub mod pattern_a;
 pub mod pattern_ab;
 pub mod pattern_abc;
 pub mod pattern_abcd;
+pub mod accuracy;
 
 // Re-export everything
 pub use xabcd_csv::XABCD_CSV;
 pub use database::Database;
 pub use candle::Candle;
+pub use candle::CandleDecimal;
 pub use market::Market;
 pub use pivot_type::PivotType;
 pub use pivot::Pivot;
@@ -28,3 +30,6 @@ pub use pattern_a::PatternXA;
 pub use pattern_ab::PatternXAB;
 pub use pattern_abc::PatternXABC;
 pub use pattern_abcd::PatternXABCD;
+pub use accuracy::Accuracies;
+pub use accuracy::PatternAccuracy;
+

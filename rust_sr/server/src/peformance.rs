@@ -80,8 +80,8 @@ impl MonthlySummary {
 
 
         for (month, patterns) in grouped_by_month {
-        let total = patterns.iter().filter(|p| p.trade_open == "false").count();
-        let wins = patterns.iter().filter(|p| p.trade_result == "true").count();
+        let total = patterns.iter().filter(|p| p.trade_open == false).count();
+        let wins = patterns.iter().filter(|p| p.trade_result == 1).count();
         let win_pct = MonthlySummary::calc_win_pct(total, wins);
 
         // Find the existing MonthlySummary by month and update it
@@ -144,11 +144,11 @@ impl YearlySummary {
         for (year, patterns) in grouped_by_year {
             let closed: Vec<&Pattern> = patterns
                 .iter()
-                .filter(|p| p.trade_open == "false")
+                .filter(|p| p.trade_open == false)
                 .collect();
 
             let total = closed.len();
-            let wins = closed.iter().filter(|p| p.trade_result == "true").count();
+            let wins = closed.iter().filter(|p| p.trade_result == 1).count();
             let win_pct = MonthlySummary::calc_win_pct(total, wins);
 
             yearly_summary.push(YearlySummary::new(*year, total as u32, wins as u32, win_pct));

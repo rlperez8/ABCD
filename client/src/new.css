@@ -131,6 +131,32 @@
 .setting-dropdown-item:hover {
   background: #1e293b;
 }
+.trade_data_container{
+    width: 250px;
+    height: 100%;
+    background-color: rgb(15, 15, 15);
+}
+.data_row_wrap{
+    width: 100%;
+    height: 50px;
+    color: white;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+.data_row_keyvalue{
+    width: 50%;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    font-family: 'JetBrains Mono', 'Roboto Mono', 'Consolas', 'Menlo', monospace;
+
+    font-size: 16px;
+    color: #989696;
+}
 .main{
     max-width: 100%;
     width: 100%;
@@ -432,7 +458,7 @@
 .candle_chart_container{
     box-sizing: border-box; 
     height: 95%;
-    height: 100%;
+    /* height: 100%; */
     cursor:crosshair;
     width: 100%;
     display: flex;
@@ -453,30 +479,29 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    /* border: 1px solid white; */
+    /* border: 5px solid white; */
+    box-sizing: border-box;
 }
-.canvas{
+.canvas_dates {
+    height: 35px; /* fixed height */
     width: 100%;
-    height: 96%;
-    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    /* border: 2px solid red; */
+    overflow: hidden;
+}
+
+.canvas {
+    flex: 1; /* take all remaining space */
+    width: 100%;
     display: block;
     border-left: none;
     box-sizing: border-box;
     position: relative;
     border-top-right-radius: 5px;
     border-bottom-right-radius: 5px;
-    /* background-color: rgb(6, 13, 20);
-    background-color: rgb(21, 23, 34);
-    background-color: rgb(30, 33, 44); */
-    
-}
-.canvas_dates{
-    /* height: 4%; */
-    height: 0px;
-    width: 100%;
-    box-sizing: border-box;
-    display: flex;
-
+    /* border: 2px solid orange; */
+    overflow: hidden;
 }
 .canvas_prices{
 
@@ -499,7 +524,9 @@
     
 }
 .header_slot{
-    width: 100%;
+    width: 100px;
+    min-width: 100px;
+    max-width: 100px;
     color: rgb(82, 112, 119);
     display: flex;
     justify-content: center;
@@ -508,10 +535,9 @@
 
 }
 .header-bar{
-    position: absolute; /* Position the header bar absolutely */
-    top: 0; /* Place it at the top of the canvas container */
-    left: 0; /* Align it to the left */
-    width: 100%; /* Full width of the canvas container */
+ 
+    /* width: 50%; */
+
     box-sizing: border-box; /* Ensure padding doesn't affect width */
     /* border: 2px solid orange; */
     display: flex;
@@ -1010,14 +1036,14 @@ input:focus {
 .chart-header-wrapper{
     width: 100%;
     height: 5%;
-    max-height: 42px;
-    min-height: 42px;
     display: flex;
     flex-direction: row;
+    border: 1px solid red;
+    box-sizing: border-box;
 }
 .header-buttons-wrapper{
-    width: 50%;
-    min-width: 50%;
+    /* width: 50%; */
+    /* min-width: 50% */
     height: 100%;
     display: flex;
     /* border: 1px solid white; */

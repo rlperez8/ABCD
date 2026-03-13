@@ -1,4 +1,5 @@
 use serde::Serialize;
+
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum ReversalType {
     MorningStar,

@@ -1,13 +1,14 @@
 use serde::Serialize;
 use chrono::NaiveDate;  
-
-#[derive(Debug, Clone, Serialize)]  
+use sqlx::FromRow;
+use rust_decimal::Decimal;
+#[derive(Debug, Clone, Serialize, FromRow)]  
 pub struct Candle {
     pub symbol: String,
     pub date: NaiveDate,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub close: f64,
-    pub volume: u64,
+    pub open: Decimal,
+    pub high: Decimal,
+    pub low: Decimal,
+    pub close: Decimal,
+    pub volume: i64,
 }

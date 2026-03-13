@@ -121,11 +121,13 @@ export class Mouse {
         // let y_text = 30;
         if (index >= 0) {
             ctx_date.beginPath();
-            ctx_date.font = "16px Arial";
-            ctx_date.fillStyle = "white";
+            ctx_date.font = "20px Source Sans Pro";
+            // ctx_price.font = `${font_size}px Source Sans Pro`;
+        ctx_date.fillStyle = "#FFFFFF"; 
+        ctx_date.textBaseline = "middle";
             ctx_date.fillText(
                 finalFormat,
-                (-pixelStart - this.candleChartRef.current.width.current_X_origin) - 65,
+                (-pixelStart - this.candleChartRef.current.width.current_X_origin) - 52,
                 (canvas_date.height / 2) + textHeight / 2
             );
             ctx_date.stroke();
@@ -157,7 +159,7 @@ export class Mouse {
         if(index>=0){
             ctx_date.beginPath();
             // ctx_date.fillStyle = "teal";
-            ctx_date.fillStyle = "#1c1d1de0";
+            ctx_date.fillStyle = "rgba(21, 22, 26, 1)"; // 1 = fully opaque
             ctx_date.fillRect( (-pixelStart - this.candleChartRef.current.width.current_X_origin)-80, y_rect, width_rect, canvas_date.height);
             ctx_date.stroke();
             

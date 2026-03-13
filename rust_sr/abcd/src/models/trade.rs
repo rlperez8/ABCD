@@ -5,6 +5,7 @@ use crate::models::candle::Candle;
 use crate::models::pivot::Pivot;
 use chrono::Datelike;
 #[derive(Debug, Clone, Serialize)]
+
 pub struct Trade {
     pub open: bool,
     pub risk_exit_price: f64,
@@ -13,7 +14,7 @@ pub struct Trade {
     pub current_price: f64,
     pub length: i64,
     pub pnl: f64,
-    pub result: Option<bool>,
+    pub result: i32,
     pub date: String,
     pub symbol: String,
     pub ab_price_retracement: f64,
@@ -139,7 +140,7 @@ impl Trade {
             risk_exit_price,
             reward_exit_price,
             length: 0,
-            result: None,
+            result: 0,
             date: prev1.date.to_string(),
             symbol: symbol.to_string(),
             ab_price_retracement,

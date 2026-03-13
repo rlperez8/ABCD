@@ -4,6 +4,15 @@ use chrono::Datelike;
 mod models; 
 use crate::models::database::Database;
 use crate::models::*;
+use crate::abcd_type::find_harmonic_type;
+use rust_decimal::Decimal;
+use crate::models::abcd_type::ABCDType;
+use crate::models::accuracy::Accuracies;
+use crate::models::accuracy::PatternAccuracy;
+
+use sqlx::mysql::MySqlPool;
+use actix_web::{post, get, web, App, HttpServer, Responder, HttpResponse};
+
 
 #[derive(Clone, Debug)]
 struct SRLine {
@@ -17,13 +26,18 @@ pub fn create_support_resistance(candles: &[Candle]) -> Vec<SRLine> {
         let reaction_tolerance = 0.01;   
 
         // === FIND RANGE ===
-        let min_price = candles.iter()
-            .flat_map(|c| vec![c.open, c.high, c.low, c.close])
+        let min_price = candles
+            .iter()
+            .flat_map(|c| [c.open, c.high, c.low, c.close])
             .fold(f64::INFINITY, |a, b| a.min(b));
-        let max_price = candles.iter()
-            .flat_map(|c| vec![c.open, c.high, c.low, c.close])
+
+        let max_price = candles
+            .iter()
+            .flat_map(|c| [c.open, c.high, c.low, c.close])
             .fold(f64::NEG_INFINITY, |a, b| a.max(b));
+
         let price_range = max_price - min_price;
+                            
 
         // === INITIALIZE TICKS ===
         let tick_interval = (price_range * 0.001).max(0.01);
@@ -137,36 +151,47 @@ fn detect_pattern(c1: &Candle, c2: &Candle, c3: &Candle) -> ReversalType {
         ReversalType::None
     }
 }
-
-fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+#[tokio::main] // ✅ This macro makes main async
+async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
 
     let mut all_patterns: Vec<PatternXABCD> = Vec::new();
-    
-    // === Connect ===  
-    let mut db = Database::new()?;
-    let symbols = db.get_distinct_symbols()?;
 
-    // === Symbols ===
+
+    // // Connect To Local DataBase
+    let database_url = "mysql://rperezkc:Nar8uto!@localhost:3306/abcd";
+    let pool = match MySqlPool::connect(database_url).await {
+        Ok(pool) => {
+            println!("✅ Connected to local DB");
+            pool
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to connect to DB: {:?}", e);
+            panic!();
+        }
+    };
+    let db = Database { pool };
+
+    // Distinct Symbols
+    let symbols = db.get_distinct_symbols().await?;
+    // println!("Symbols: {:?}", symbols);
+
+    // Scan Symbols
     for symbol in &symbols {
 
-        // === Candles ===
-        let mut candles = db.get_stored_candles(&symbol)?;
-     
-        //  // === Calculate Heatmap / SR Zones ===
+        // Symbol Candles
+        let candles = db.get_stored_candles(&symbol).await?;
+
+        // // S&R
         let support_and_resistance = create_support_resistance(&candles);
     
-
-        // === Pattern storage ===
+        // Pattern Holders
         let mut pattern_x: Vec<PatternX> = Vec::new();
         let mut pattern_xa: Vec<PatternXA> = Vec::new();
-
         let mut pattern_xab: Vec<PatternXAB> = Vec::new();
         let mut pattern_xab_holder: Vec<PatternXABC> = Vec::new();
-
         let mut pattern_xabc: Vec<PatternXABC> = Vec::new();
         let mut pattern_xabc_holder: Vec<PatternXABC> = Vec::new();
-
         let mut pattern_xabcd: Vec<PatternXABCD> = Vec::new();
 
         // === Detect pivots ===
@@ -382,6 +407,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                         support_and_resistance[0].price,
                         ReversalType::None,
                     );
+
+                
           
                     pattern_xabcd.push(PatternXABCD {
                         symbol: symbol.clone(),
@@ -391,11 +418,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                         c: pattern.c.clone(),
                         d: new_d, 
                         market,
-                        abcd_type: ABCDType::Standard,
+                        abcd_type:  find_harmonic_type(&pattern.x.low, &pattern.a.high, &pattern.b.low,&pattern.c.high, &prev1.low),
                         trade,
                         three_month: Some(three_month),
                         six_month: Some(false),
-                        twelve_month: Some(false)
+                        twelve_month: Some(false),
+                        pattern_group_id: symbol.clone() + pattern.a.date.as_str()
                     });
                 
                         
@@ -435,7 +463,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                             {
                                 pattern.trade.open = false;
                                 pattern.trade.current_price = pattern.trade.reward_exit_price;
-                                pattern.trade.result = Some(true);
+                                pattern.trade.result = 1;
                                 pattern.trade.length =
                                     pattern.a.length + pattern.b.length + pattern.c.length + pattern.d.length;
                             }
@@ -449,7 +477,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                             ) {
                                 pattern.trade.open = false;
                                 pattern.trade.current_price = pattern.trade.risk_exit_price;
-                                pattern.trade.result = Some(false);
+                                pattern.trade.result = 2;
                                 pattern.trade.length =
                                     pattern.a.length + pattern.b.length + pattern.c.length + pattern.d.length;
                             }
@@ -468,7 +496,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                             {
                                 pattern.trade.open = false;
                                 pattern.trade.current_price = pattern.trade.reward_exit_price;
-                                pattern.trade.result = Some(true);
+                                pattern.trade.result = 1;
                                 pattern.trade.length =
                                     pattern.a.length + pattern.b.length + pattern.c.length + pattern.d.length;
                             }
@@ -482,7 +510,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                             ) {
                                 pattern.trade.open = false;
                                 pattern.trade.current_price = pattern.trade.risk_exit_price;
-                                pattern.trade.result = Some(false);
+                                pattern.trade.result = 2;
                                 pattern.trade.length =
                                     pattern.a.length + pattern.b.length + pattern.c.length + pattern.d.length;
                             }
@@ -490,6 +518,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }   
+
+            // 
 
             // === LOAD === 
             pattern_xabc.extend(pattern_xabc_holder.drain(..));
@@ -531,19 +561,62 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .count();
 
         
-        println!(
-            "Symbol: {}, XABCD total: {}, Bear: {}, Bull: {}",
-            symbol,
-            pattern_xabcd.len(),
-            a_bear,
-            a_bull
-        );
+        // println!(
+        //     "Symbol: {}, XABCD total: {}, Bear: {}, Bull: {}",
+        //     symbol,
+        //     pattern_xabcd.len(),
+        //     a_bear,
+        //     a_bull
+        // );
 
+    }
+
+    // PATTERY ACCCURACY
+    for pattern in all_patterns.iter_mut() {
+
+        let mut accuracies = Accuracies {
+            bat: PatternAccuracy::default(),
+            butterfly: PatternAccuracy::default(),
+            gartley: PatternAccuracy::default(),
+            crab: PatternAccuracy::default(),
+            shark: PatternAccuracy::default(),
+        };
+
+        for pt in [
+            ABCDType::Bat,
+            ABCDType::Crab,
+            ABCDType::Gartley,
+            ABCDType::Butterfly,
+            ABCDType::Shark
+        ]  {
+
+            let computed = PatternAccuracy {
+                ab_xa: 0.5,
+                bc_ab: 0.6,
+                cd_bc: 0.7,
+                cd_ab: 0.8,
+                cd_xa: 0.9,
+                pattern_accuracy: 0.72,
+            };
+                                
+            match pt {
+                ABCDType::Butterfly => accuracies.butterfly = computed,
+                ABCDType::Bat => accuracies.bat = computed,
+                ABCDType::Gartley => accuracies.gartley = computed,
+                ABCDType::Crab => accuracies.crab = computed,
+                ABCDType::Shark => accuracies.shark = computed,
+                ABCDType::Standard => {}
+                ABCDType::Extended => {}
+                ABCDType::None => {}
+            }
+        }
     }
 
     // === WRITE TO CSV ===
     // XABCD_CSV::write_patterns_to_csv(&all_patterns, "../../patterns_
-    XABCD_CSV::insert_patterns_into_db(&mut db.conn, &all_patterns)?;
+    // let mut conn = db.get_conn()?;  // borrow a PooledConn from the pool
+    // XABCD_CSV::insert_patterns_into_db(&mut conn, &all_patterns)?;
+    // db.insert_patterns(&all_patterns).await?;
 
     // === DISPLAY BEAR AND BULL COUNTS ===
     let abcd_bear = all_patterns

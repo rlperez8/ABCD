@@ -107,7 +107,7 @@ pub struct PatternABCDCsv {
     trade_current_price: f64,
     trade_length: i64,
     trade_pnl: f64,
-    trade_result: Option<bool>,
+    trade_result: i64,
     trade_date: String,
     trade_symbol: String,
     trade_bc_price_retracement: f64,
@@ -309,7 +309,7 @@ impl ABCD {
                                     current_price: truncate_to_2_decimals(prev1.close),
                                     length: 0,
                                     pnl: 0.0,
-                                    result: None,
+                                    result: 0,
                                     date: prev1.date.to_string(), // optional: keep string if you want
                                     symbol: symbol.clone(),
                                     bc_price_retracement,

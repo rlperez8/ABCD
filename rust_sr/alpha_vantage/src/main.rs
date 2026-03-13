@@ -4,6 +4,7 @@ use std::error::Error;
 use alpha_vantage::models::listing_status::ListingStatus;
 use alpha_vantage::models::alpha_vantage::AlphaVantage;
 use alpha_vantage::models::candle::Candle;
+use chrono::NaiveDate;
 
 pub async fn mark_as_bugged(pool: &sqlx::MySqlPool,symbol: &str,) -> Result<(), sqlx::Error> {
 
@@ -99,9 +100,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     
     for item in &listing{
-
+        println!("Symbol {}", item);
+        // CONNECT TO ALPHA
         let alpha = AlphaVantage {api_key: "ZA9N4R1HE9ARIJ0S".to_string()};
 
+        // FETCH SINGLE SYMBOL CANDLES
         let candles = match alpha.load_single_symbol_candle_data("full", item).await {
             Ok(c) => c,
             Err(e) => {
@@ -110,12 +113,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
         };
+
+        // CHECK IF CANDLES
         if candles.is_empty() {
             eprintln!("No candles returned for {}", item);
             mark_as_bugged(&pool, item).await?;
             continue;
         }
 
+        // let cutoff = NaiveDate::from_ymd_opt(2026, 1, 16).unwrap();
+
+        // let index = candles
+        //     .iter()
+        //     .position(|c| c.date.map_or(false, |d| d > cutoff))
+        //     .unwrap_or(candles.len());
+
+        // let candles_after = &candles[index..];
 
 
         // let candles = alpha.load_single_symbol_candle_data("full", item.symbol.as_str()).await?;
@@ -123,11 +136,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         //     insert_candles(&pool, std::slice::from_ref(last_candle)).await?;
         //     println!("Inserted last candle: {:?}", last_candle);
         // }
-        let last_n = candles.len().saturating_sub(3);
-        let last_three = &candles[last_n..];
+        // let last_n = candles.len().saturating_sub(3);
+        // let last_three = &candles[last_n..];
 
-        insert_candles(&pool, last_three).await?;
-        println!("Inserted {} candles", last_three.len());
+        insert_candles(&pool, &candles).await?;
+        println!("Inserted {} candles", candles.len());
+        // println!("Inserted candles: {:?}", candles_after);
+
+
+
+
         // // ---- Calculate average volume ----
         // let mut total_volume: u64 = 0;
         // let mut count: usize = 0;

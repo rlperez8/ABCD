@@ -7,6 +7,7 @@ import InfiniteTable from './InfiniteTable.js';
 import * as tools from './MainTools.js'
 
 import FilterDropDown from './FilterDropDown.js';
+import Data from './Data/data.js';
 
 const handle_candles = async(symbol) => {
 
@@ -64,58 +65,61 @@ const update_selected_pattern = async (selected_pattern, set_chart_data) => {
 const filter_stacker = (patterns, activeFilters) => {
 
   
+  
+  let result = patterns;
 
-    let result = patterns;
-
-    if(activeFilters.market.active){
-      result =  result.filter(p=>p.market===activeFilters.market.filter)
+  if(activeFilters.market.active){
+    result =  result.filter(p=>p.market===activeFilters.market.filter)
+  }
+  if(activeFilters.result.active){
+    if(activeFilters.result.filter==="Open"){
+      result =  result.filter(p=>p.trade_result===0)
     }
-    if(activeFilters.result.active){
-      if(activeFilters.result.filter==="Open"){
-        result =  result.filter(p=>p.trade_open==="1")
-      }
-      else{
-        result =  result.filter(p=>p.trade_result===activeFilters.result.filter)
-      }
-      
+    if(activeFilters.result.filter==="1"){
+      result =  result.filter(p=>p.trade_result===1)
     }
-    if(activeFilters.retracement.active){
-     
-      result = result.filter(p =>
-        p.trade_ab_price_retracement >= activeFilters.retracement.filter.ab_xa_gr &&
-        p.trade_ab_price_retracement <= activeFilters.retracement.filter.ab_xa_lt &&
-
-        p.trade_bc_price_retracement >= activeFilters.retracement.filter.bc_ab_gr &&
-        p.trade_bc_price_retracement <= activeFilters.retracement.filter.bc_ab_lt &&
-
-        p.trade_cd_bc_price_retracement >= activeFilters.retracement.filter.cd_bc_gr &&
-        p.trade_cd_bc_price_retracement <= activeFilters.retracement.filter.cd_bc_lt &&
-
-        p.trade_cd_xa_price_retracement >= activeFilters.retracement.filter.cd_xa_gr &&
-        p.trade_cd_xa_price_retracement <= activeFilters.retracement.filter.cd_xa_lt
-      );
+    if(activeFilters.result.filter==="0"){
+      result =  result.filter(p=>p.trade_result===2)
+    }
     
-    }
-    if(activeFilters.date.active){
-      result =  result.filter(p=>p.d_date===activeFilters.date.filter)
-    }
-    if(activeFilters.symbol.active){
-      result =  result.filter(p=>p.symbol===activeFilters.symbol.filter)
-    }
-    if(activeFilters.snr.active){
+  }
+  if(activeFilters.retracement.active){
+    
+    result = result.filter(p =>
+      p.trade_ab_price_retracement >= activeFilters.retracement.filter.ab_xa_gr &&
+      p.trade_ab_price_retracement <= activeFilters.retracement.filter.ab_xa_lt &&
 
-      if(activeFilters.snr.filter === 3){
-        result = result.filter(p=>p.three_month === "true")
-      }
-      if(activeFilters.snr.filter === 6){
-        result = result.filter(p=>p.six_month === "true")
-      }
-      if(activeFilters.snr.filter === 12){
-        result = result.filter(p=>p.twelve_month === "true")
-      }
-      
-   
+      p.trade_bc_price_retracement >= activeFilters.retracement.filter.bc_ab_gr &&
+      p.trade_bc_price_retracement <= activeFilters.retracement.filter.bc_ab_lt &&
+
+      p.trade_cd_bc_price_retracement >= activeFilters.retracement.filter.cd_bc_gr &&
+      p.trade_cd_bc_price_retracement <= activeFilters.retracement.filter.cd_bc_lt &&
+
+      p.trade_cd_xa_price_retracement >= activeFilters.retracement.filter.cd_xa_gr &&
+      p.trade_cd_xa_price_retracement <= activeFilters.retracement.filter.cd_xa_lt
+    );
+  
+  }
+  if(activeFilters.date.active){
+    result =  result.filter(p=>p.d_date===activeFilters.date.filter)
+  }
+  if(activeFilters.symbol.active){
+    result =  result.filter(p=>p.symbol===activeFilters.symbol.filter)
+  }
+  if(activeFilters.snr.active){
+
+    if(activeFilters.snr.filter === 3){
+      result = result.filter(p=>p.three_month === "true")
     }
+    if(activeFilters.snr.filter === 6){
+      result = result.filter(p=>p.six_month === "true")
+    }
+    if(activeFilters.snr.filter === 12){
+      result = result.filter(p=>p.twelve_month === "true")
+    }
+    
+  
+  }
 
  
      return result
@@ -573,8 +577,6 @@ const App = () => {
      
         const rust_patterns = filter_stacker(recent_patterns, activeFilters);
 
-        console.log(rust_patterns)
-    
         
         set_filtered_patterns(rust_patterns.sort((a,b)=> a.trade_enter_price - b.trade_enter_price));
 
@@ -611,7 +613,7 @@ const App = () => {
     };
   }, [activeFilters, recent_patterns]);
 
-  console.log(activeFilters)
+
 
   return (
 
@@ -678,7 +680,9 @@ const App = () => {
 
             <div className='app-body'>
 
-              <Section 
+              <Data patterns={recent_patterns}/>
+
+               <Section 
                 price_retracement={price_retracement}
                 update_harmonic_pattern={update_harmonic_pattern}
                 harmonic_patterns={harmonic_patterns}
@@ -699,6 +703,36 @@ const App = () => {
                 />}
               /> 
 
+              <div className='trade_data_container'>
+                <div className='data_row_wrap'>
+                   <div className='data_row_keyvalue'>AB to XA</div>
+                   <div className='data_row_keyvalue'>{chart_data?.rust_patterns?.trade_ab_price_retracement}</div>
+
+                </div>
+                <div className='data_row_wrap'>
+                   <div className='data_row_keyvalue'>BC to AB</div>
+                   <div className='data_row_keyvalue'>{chart_data?.rust_patterns?.trade_bc_price_retracement}</div>
+
+                </div>
+                <div className='data_row_wrap'>
+                   <div className='data_row_keyvalue'>CD to BC</div>
+                   <div className='data_row_keyvalue'>{chart_data?.rust_patterns?.trade_cd_bc_price_retracement}</div>
+
+                </div>
+                <div className='data_row_wrap'>
+                   <div className='data_row_keyvalue'>CD to AB</div>
+                   <div className='data_row_keyvalue'>{chart_data?.rust_patterns?.trade_cd_price_retracement}</div>
+
+                </div>
+                <div className='data_row_wrap'>
+                   <div className='data_row_keyvalue'>CD to XA</div>
+                   <div className='data_row_keyvalue'>{chart_data?.rust_patterns?.trade_cd_xa_price_retracement}</div>
+
+                </div>
+               
+              </div>
+
+
               <ChartMain
                 chart_data={chart_data}
                 is_loading_patterns={is_loading_patterns}
@@ -706,7 +740,7 @@ const App = () => {
                 set_sections_expanded={set_sections_expanded}
                 market={market}
                 set_selected_xabcd={set_selected_xabcd}
-              />
+              /> 
 
             </div>
 

@@ -13,6 +13,8 @@ const InfiniteTable = (props) => {
         set_selected_row_index,
         update_selected_pattern
     } = props
+
+    
     
 
     const sorted = recent_patterns
@@ -71,11 +73,10 @@ const InfiniteTable = (props) => {
                 cellContent = Number(content).toFixed(2);
             }
 
-
-            if (columnIndex === 0 && content === '1') {
+            if (columnIndex === 0 && content === 1) {
                 cellContent = <div className="first_column_box">Won</div>;
 
-            } else if (columnIndex === 0 && content === '0') {
+            } else if (columnIndex === 0 && content === 2) {
                 cellContent = <div className="lost_column_box">Lost</div>;
             
             } else if (columnIndex === 0) {

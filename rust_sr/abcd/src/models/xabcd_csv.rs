@@ -4,6 +4,7 @@ use serde::Serialize;
 use serde::ser::Serializer;
 use crate::models::reversal_type::ReversalType;
 use crate::models::pattern_abcd::PatternXABCD;
+use crate::models::abcd_type::ABCDType;
 use crate::models::market::Market;
 use sqlx::{MySqlPool, QueryBuilder};
 use mysql::*;
@@ -117,7 +118,7 @@ pub struct XABCD_CSV {
     #[serde(serialize_with = "two_decimals")]
     trade_pnl: f64,
 
-    trade_result: Option<bool>,
+    trade_result: i32,
     trade_date: String,
     trade_symbol: String,
 
@@ -153,11 +154,15 @@ pub struct XABCD_CSV {
     three_month: Option<bool>,
     six_month: Option<bool>,
     twelve_month: Option<bool>,
+    pattern_group_id: String,
+    harmonic_type: ABCDType
 
 }
 
 impl XABCD_CSV {
-     pub fn from_pattern(p: &PatternXABCD) -> Self {
+    
+    pub fn from_pattern(p: &PatternXABCD) -> Self {
+        
         XABCD_CSV {
             symbol: p.symbol.clone(),
             x_date: p.x.date.clone(),
@@ -221,93 +226,98 @@ impl XABCD_CSV {
             three_month: p.three_month,
             six_month: p.six_month,
             twelve_month: p.twelve_month,
+            pattern_group_id: p.pattern_group_id.clone(),
+            harmonic_type: p.abcd_type.clone(),
         }
     }
-    pub fn write_patterns_to_csv(patterns: &[PatternXABCD], filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Map nested structs into flat CSV structs
-        let csv_patterns: Vec<XABCD_CSV> = patterns.iter().map(|p| XABCD_CSV {
-            symbol: p.symbol.clone(),
-            x_date: p.x.date.clone(),
-            x_open: p.x.open,
-            x_high: p.x.high,
-            x_low: p.x.low,
-            x_close: p.x.close,
-            x_length: p.x.length,
-            x_min_max: p.x.min_max,
-            a_date: p.a.date.clone(),
-            a_open: p.a.open,
-            a_high: p.a.high,
-            a_low: p.a.low,
-            a_close: p.a.close,
-            a_length: p.a.length,
-            a_min_max: p.a.min_max,
-            b_date: p.b.date.clone(),
-            b_open: p.b.open,
-            b_high: p.b.high,
-            b_low: p.b.low,
-            b_close: p.b.close,
-            b_length: p.b.length,
-            b_min_max: p.b.min_max,
-            c_date: p.c.date.clone(),
-            c_open: p.c.open,
-            c_high: p.c.high,
-            c_low: p.c.low,
-            c_close: p.c.close,
-            c_length: p.c.length,
-            c_min_max: p.c.min_max,
-            d_date: p.d.date.clone(),
-            d_open: p.d.open,
-            d_high: p.d.high,
-            d_low: p.d.low,
-            d_close: p.d.close,
-            d_length: p.d.length,
-            d_min_max: p.d.min_max,
-            trade_open: p.trade.open,
-            trade_risk_exit_price: p.trade.risk_exit_price,
-            trade_reward_exit_price: p.trade.reward_exit_price,
-            trade_enter_price: p.trade.enter_price,
-            trade_current_price: p.trade.current_price,
-            trade_length: p.trade.length,
-            trade_pnl: p.trade.pnl,
-            trade_result: p.trade.result,
-            trade_date: p.trade.date.clone(),
-            trade_symbol: p.trade.symbol.clone(),
-            trade_ab_price_retracement:  p.trade.ab_price_retracement,
-            trade_bc_price_retracement:  p.trade.bc_price_retracement,
-            trade_cd_bc_price_retracement: p.trade.cd_bc_price_retracement,
-            trade_cd_price_retracement: p.trade.cd_price_retracement,
-            trade_cd_xa_price_retracement: p.trade.cd_xa_price_retracement,
-            trade_bc_bar_retracement:  p.trade.bc_bar_retracement,
-            trade_cd_bar_retracement: p.trade.cd_bar_retracement,
+    // pub fn write_patterns_to_csv(patterns: &[PatternXABCD], filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+    //     // Map nested structs into flat CSV structs
+    //     let csv_patterns: Vec<XABCD_CSV> = patterns.iter().map(|p| XABCD_CSV {
+    //         symbol: p.symbol.clone(),
+    //         x_date: p.x.date.clone(),
+    //         x_open: p.x.open,
+    //         x_high: p.x.high,
+    //         x_low: p.x.low,
+    //         x_close: p.x.close,
+    //         x_length: p.x.length,
+    //         x_min_max: p.x.min_max,
+    //         a_date: p.a.date.clone(),
+    //         a_open: p.a.open,
+    //         a_high: p.a.high,
+    //         a_low: p.a.low,
+    //         a_close: p.a.close,
+    //         a_length: p.a.length,
+    //         a_min_max: p.a.min_max,
+    //         b_date: p.b.date.clone(),
+    //         b_open: p.b.open,
+    //         b_high: p.b.high,
+    //         b_low: p.b.low,
+    //         b_close: p.b.close,
+    //         b_length: p.b.length,
+    //         b_min_max: p.b.min_max,
+    //         c_date: p.c.date.clone(),
+    //         c_open: p.c.open,
+    //         c_high: p.c.high,
+    //         c_low: p.c.low,
+    //         c_close: p.c.close,
+    //         c_length: p.c.length,
+    //         c_min_max: p.c.min_max,
+    //         d_date: p.d.date.clone(),
+    //         d_open: p.d.open,
+    //         d_high: p.d.high,
+    //         d_low: p.d.low,
+    //         d_close: p.d.close,
+    //         d_length: p.d.length,
+    //         d_min_max: p.d.min_max,
+    //         trade_open: p.trade.open,
+    //         trade_risk_exit_price: p.trade.risk_exit_price,
+    //         trade_reward_exit_price: p.trade.reward_exit_price,
+    //         trade_enter_price: p.trade.enter_price,
+    //         trade_current_price: p.trade.current_price,
+    //         trade_length: p.trade.length,
+    //         trade_pnl: p.trade.pnl,
+    //         trade_result: p.trade.result,
+    //         trade_date: p.trade.date.clone(),
+    //         trade_symbol: p.trade.symbol.clone(),
+    //         trade_ab_price_retracement:  p.trade.ab_price_retracement,
+    //         trade_bc_price_retracement:  p.trade.bc_price_retracement,
+    //         trade_cd_bc_price_retracement: p.trade.cd_bc_price_retracement,
+    //         trade_cd_price_retracement: p.trade.cd_price_retracement,
+    //         trade_cd_xa_price_retracement: p.trade.cd_xa_price_retracement,
+    //         trade_bc_bar_retracement:  p.trade.bc_bar_retracement,
+    //         trade_cd_bar_retracement: p.trade.cd_bar_retracement,
             
-            trade_snr: p.trade.snr,
-            trade_year: p.trade.year,
-            trade_month: p.trade.month,
-            trade_day: p.trade.day,
-            reversal_type: p.trade.reversal_type.clone(),
-            market: p.market,
-            three_month: p.three_month,
-            six_month: p.six_month,
-            twelve_month: p.twelve_month
-        }).collect();
+    //         trade_snr: p.trade.snr,
+    //         trade_year: p.trade.year,
+    //         trade_month: p.trade.month,
+    //         trade_day: p.trade.day,
+    //         reversal_type: p.trade.reversal_type.clone(),
+    //         market: p.market,
+    //         three_month: p.three_month,
+    //         six_month: p.six_month,
+    //         twelve_month: p.twelve_month
+        
+    //     }).collect();
 
-        let file = File::create(filename)?;
-        let mut writer = WriterBuilder::new().has_headers(true).from_writer(file);
+    //     let file = File::create(filename)?;
+    //     let mut writer = WriterBuilder::new().has_headers(true).from_writer(file);
 
-        for p in csv_patterns {
-            writer.serialize(p)?;
-        }
+    //     for p in csv_patterns {
+    //         writer.serialize(p)?;
+    //     }
 
-        writer.flush()?;
-        Ok(())
-    }
-    pub fn insert_patterns_into_db(
-        conn: &mut PooledConn,
-        patterns: &[PatternXABCD],   // <-- slice of PatternXABCD like your CSV function
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    //     writer.flush()?;
+    //     Ok(())
+    // }
+    pub fn insert_patterns_into_db(conn: &mut PooledConn, patterns: &[PatternXABCD]) -> Result<(), Box<dyn std::error::Error>> {
+
+
         for p in patterns {
-            let csv = XABCD_CSV::from_pattern(p);  // convert one PatternXABCD -> XABCD_CSV
+            
+            // CONVERT TO XABCD_CSV STRUCT
+            let csv = XABCD_CSV::from_pattern(p);  
 
+            // INSERT INTO DB
             conn.exec_drop(
                 r"INSERT INTO xabcd_patterns (
                     symbol, x_date, x_open, x_high, x_low, x_close, x_length, x_min_max,
@@ -324,7 +334,7 @@ impl XABCD_CSV {
                     trade_cd_bc_price_retracement,
                     trade_snr, trade_year, trade_month, trade_day,
                     reversal_type, market,
-                    three_month, six_month, twelve_month
+                    three_month, six_month, twelve_month, pattern_group_id, harmonic_type
                 ) VALUES (
                     :symbol, :x_date, :x_open, :x_high, :x_low, :x_close, :x_length, :x_min_max,
                     :a_date, :a_open, :a_high, :a_low, :a_close, :a_length, :a_min_max,
@@ -340,7 +350,7 @@ impl XABCD_CSV {
                     :trade_cd_bc_price_retracement,
                     :trade_snr, :trade_year, :trade_month, :trade_day,
                     :reversal_type, :market,
-                    :three_month, :six_month, :twelve_month
+                    :three_month, :six_month, :twelve_month, :pattern_group_id, :harmonic_type
                 )",
                 params! {
                     "symbol" => &csv.symbol,
@@ -404,7 +414,9 @@ impl XABCD_CSV {
                     "market" => format!("{:?}", csv.market),
                     "three_month" => csv.three_month.unwrap_or(false),
                     "six_month" => csv.six_month.unwrap_or(false),
-                    "twelve_month" => csv.twelve_month.unwrap_or(false)
+                    "twelve_month" => csv.twelve_month.unwrap_or(false),
+                    "pattern_group_id" => csv.pattern_group_id,
+                    "harmonic_type" => format!("{:?}", csv.harmonic_type),
                 }
             )?;
         }

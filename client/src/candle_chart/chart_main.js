@@ -29,25 +29,22 @@ const ChartMain = (props) => {
     const bc_pct = (chart_data.abcd_pattern?.pattern_BC_bar_length / chart_data.abcd_pattern?.pattern_AB_bar_length) * 100
     const cd_pct = (chart_data.abcd_pattern?.pattern_CD_bar_length / chart_data.abcd_pattern?.pattern_AB_bar_length) * 100
 
+    const [hovered_candle, set_hovered_candle] = useState({
+            high: 0,
+            close: 0,
+            open: 0,
+            low: 0,
+            color: 'white'
+        })
+
 
     return(
 
-      <div className={is_selected_xabcd ? "charts_container" : "charts_container"}
-      onClick={() => {
-  // if (!is_selected_xabcd) {
-  //   set_selected_xabcd(chart_data)
-  //   set_is_selected_xabcd(true)
-  // }
-}}>
+      <div className={is_selected_xabcd ? "charts_container" : "charts_container"}>
 
         <div className="margin-">
-          
-          <div className='chart_container'>
-            
-            <div className='data_'>
 
-              {
-                true && <div className='chart-header-wrapper'>
+          <div className='chart-header-wrapper'>
 
                 <div className="header-buttons-wrapper">
 
@@ -113,45 +110,71 @@ const ChartMain = (props) => {
                     
                     
                   </div>
+
                 </div>
 
-
-              </div>
-
-              }
-              
-
-          
-                {/* {is_loading_patterns &&
-                  <div className="overlay">
-                            <div className='loading_container'>Loading...</div>
-                  </div>
-                } */}
-
-                
-                {chart_data.candles.length > 0 && 
-
-                  <CandleChart 
-                    chart_data={chart_data}
-                    is_price_levels={is_price_levels}
-                    is_retracement={is_retracement}
-                    is_abcd_pattern={is_abcd_pattern}
-                    market={market}
-                    is_sections_expanded={is_sections_expanded}
-                  />
-                  
-    }
-
+                <div className='header-bar'>
     
-        
+                        {/* <div className='header_slot' >{chart_data?.rust_patterns?.symbol}</div>
+                        <div className='header_slot' >{chart_data?.rust_patterns?.market}</div>
+                        <div className='header_slot' >Closed</div>
+                        <div className='header_slot' >Butterfly</div>
+                        <div className='header_slot' >{chart_data?.rust_patterns?.pattern_group_id}</div> */}
 
-      
-            </div>
-            
+                        <div className='header_slot'>
+                            <div className='header_one'>H</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.high?.toFixed(2)}
+                            </div>
+                        </div>
+                        <div className='header_slot'>
+                            <div className='header_one'>C</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.close?.toFixed(2)}
+                            </div>
+                        </div>
+                        <div className='header_slot'>
+                            <div className='header_one'>O</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.open?.toFixed(2)}
+                            </div>
+                        </div>
+                        <div className='header_slot'>
+                            <div className='header_one'>L</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.low?.toFixed(2)}
+                            </div>
+                        </div>
+
+                        <div className='header_slot'>
+                            <div className='header_one'>V</div>
+                            <div className='header_two' style={{color: hovered_candle.color}}>
+                                {hovered_candle.volume?.toFixed(0)}
+                            </div>
+                        </div>
+                    </div>
+
+
           </div>
 
-        </div>        
-        
+            
+      
+          {chart_data.candles.length > 0 && 
+
+              <CandleChart 
+                chart_data={chart_data}
+                is_price_levels={is_price_levels}
+                is_retracement={is_retracement}
+                is_abcd_pattern={is_abcd_pattern}
+                market={market}
+                is_sections_expanded={is_sections_expanded}
+                hovered_candle={hovered_candle}
+                set_hovered_candle={set_hovered_candle}
+              />
+              
+          }
+
+            </div>
       </div>
     )
 }
