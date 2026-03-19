@@ -1,6 +1,7 @@
 use serde::Serialize;
 #[derive(Debug, Clone, Copy, Serialize)]
-pub enum ABCDType {
+
+pub enum HarmonicType {
     Butterfly,
     Bat,
     Gartley,
@@ -11,7 +12,7 @@ pub enum ABCDType {
     None
 }
 
-pub fn find_harmonic_type(x: &f64, a: &f64, b: &f64, c: &f64, d: &f64) -> ABCDType {
+pub fn find_harmonic_type(x: &f64, a: &f64, b: &f64, c: &f64, d: &f64) -> HarmonicType {
     let tol = 0.00;
 
     let xa = (a - x).abs();
@@ -37,32 +38,32 @@ pub fn find_harmonic_type(x: &f64, a: &f64, b: &f64, c: &f64, d: &f64) -> ABCDTy
     if (b_ratio - 0.618).abs() < tol &&
        (0.382..=0.886).contains(&c_ratio) &&
        (d_ratio - 0.786).abs() < tol {
-        return ABCDType::Gartley;
+        return HarmonicType::Gartley;
     }
 
     // Bat
     if (0.382..=0.50).contains(&b_ratio) &&
        (d_ratio - 0.886).abs() < tol {
-        return ABCDType::Bat;
+        return HarmonicType::Bat;
     }
 
     // Butterfly
     if (b_ratio - 0.786).abs() < tol &&
        (1.27..=1.618).contains(&d_ratio) {
-        return ABCDType::Butterfly;
+        return HarmonicType::Butterfly;
     }
 
     // Crab
     if (0.382..=0.618).contains(&b_ratio) &&
        (d_ratio - 1.618).abs() < tol {
-        return ABCDType::Crab;
+        return HarmonicType::Crab;
     }
 
     // Shark
     if (0.382..=0.618).contains(&b_ratio) &&
        (0.886..=1.13).contains(&d_ratio) {
-        return ABCDType::Shark;
+        return HarmonicType::Shark;
     }
 
-    ABCDType::None
+    HarmonicType::None
 }

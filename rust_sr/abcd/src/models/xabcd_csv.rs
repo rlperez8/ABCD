@@ -1,12 +1,12 @@
-use std::fs::File;
-use csv::WriterBuilder;
+// use std::fs::File;
+// use csv::WriterBuilder;
 use serde::Serialize;
 use serde::ser::Serializer;
 use crate::models::reversal_type::ReversalType;
 use crate::models::pattern_abcd::PatternXABCD;
-use crate::models::abcd_type::ABCDType;
+use crate::models::harmonic_types::HarmonicType;
 use crate::models::market::Market;
-use sqlx::{MySqlPool, QueryBuilder};
+// use sqlx::{MySqlPool, QueryBuilder};
 use mysql::*;
 use mysql::prelude::*;
 
@@ -17,7 +17,7 @@ where
     let v = (val * 100.0).round() / 100.0;
     s.serialize_f64(v)
 }
-
+#[allow(non_camel_case_types)]
 #[derive(Serialize)]
 pub struct XABCD_CSV {
     symbol: String,
@@ -155,7 +155,7 @@ pub struct XABCD_CSV {
     six_month: Option<bool>,
     twelve_month: Option<bool>,
     pattern_group_id: String,
-    harmonic_type: ABCDType
+    harmonic_type: HarmonicType
 
 }
 

@@ -1,136 +1,69 @@
+
 use std::time::Instant;
-use chrono::NaiveDate;
-use chrono::Datelike;
 mod models; 
+use crate::models::accuracy::Accuracies;
 use crate::models::database::Database;
 use crate::models::*;
-use crate::abcd_type::find_harmonic_type;
-use rust_decimal::Decimal;
-use crate::models::abcd_type::ABCDType;
-use crate::models::accuracy::Accuracies;
-use crate::models::accuracy::PatternAccuracy;
-
+use crate::harmonic_types::find_harmonic_type;
 use sqlx::mysql::MySqlPool;
-use actix_web::{post, get, web, App, HttpServer, Responder, HttpResponse};
 
 
-#[derive(Clone, Debug)]
-struct SRLine {
-    price: f64,
-    score: f64,
-}
 
-pub fn create_support_resistance(candles: &[Candle]) -> Vec<SRLine> {
-        let decay_per_tick = 0.01;       
-        let range_pct = 0.05;            
-        let reaction_tolerance = 0.01;   
+// fn is_morning_star(c1: &Candle, c2: &Candle, c3: &Candle) -> bool {
+//     let body1 = (c1.close - c1.open).abs();
+//     let body2 = (c2.close - c2.open).abs();
+//     let body3 = (c3.close - c3.open).abs();
 
-        // === FIND RANGE ===
-        let min_price = candles
-            .iter()
-            .flat_map(|c| [c.open, c.high, c.low, c.close])
-            .fold(f64::INFINITY, |a, b| a.min(b));
+//     let range1 = c1.high - c1.low;
+//     let range2 = c2.high - c2.low;
+//     let range3 = c3.high - c3.low;
 
-        let max_price = candles
-            .iter()
-            .flat_map(|c| [c.open, c.high, c.low, c.close])
-            .fold(f64::NEG_INFINITY, |a, b| a.max(b));
+//     let c1_bearish = c1.close < c1.open;
+//     let c1_strong = body1 >= 0.5 * range1;
 
-        let price_range = max_price - min_price;
+//     let c2_small_body = body2 <= 0.3 * range2;
+
+//     let c3_bullish = c3.close > c3.open;
+//     let c3_strong = body3 >= 0.5 * range3;
+
+//     let midpoint_c1 = (c1.open + c1.close) / 2.0;
+//     let c3_closes_into_c1 = c3.close >= midpoint_c1;
+
+//     c1_bearish && c1_strong && c2_small_body && c3_bullish && c3_strong && c3_closes_into_c1
+// }
+// fn is_evening_star(c1: &Candle, c2: &Candle, c3: &Candle) -> bool {
+//     let body1 = (c1.close - c1.open).abs();
+//     let body2 = (c2.close - c2.open).abs();
+//     let body3 = (c3.close - c3.open).abs();
+
+//     let range1 = c1.high - c1.low;
+//     let range2 = c2.high - c2.low;
+//     let range3 = c3.high - c3.low;
+
+//     let c1_bullish = c1.close > c1.open;
+//     let c1_strong = body1 >= 0.5 * range1;
+
+//     let c2_small_body = body2 <= 0.3 * range2;
+
+//     let c3_bearish = c3.close < c3.open;
+//     let c3_strong = body3 >= 0.5 * range3;
+
+//     let midpoint_c1 = (c1.open + c1.close) / 2.0;
+//     let c3_closes_into_c1 = c3.close <= midpoint_c1;
+
+//     c1_bullish && c1_strong && c2_small_body && c3_bearish && c3_strong && c3_closes_into_c1
+// }
+// fn detect_pattern(c1: &Candle, c2: &Candle, c3: &Candle) -> ReversalType {
                             
+//     if is_morning_star(c1, c2, c3) {
+//         ReversalType::MorningStar
+//     } else if is_evening_star(c1, c2, c3) {
+//         ReversalType::EveningStar
+//     } else {
+//         ReversalType::None
+//     }
+// }
 
-        // === INITIALIZE TICKS ===
-        let tick_interval = (price_range * 0.001).max(0.01);
-        let mut ticks = vec![];
-        let mut current = min_price;
-        while current <= max_price {
-            ticks.push(current);
-            current += tick_interval;
-        }
-
-        // --- Initialize scores ---
-        let mut scores = vec![0.0; ticks.len()];
-
-        // --- Reaction-only scoring ---
-        for (i, &tick) in ticks.iter().enumerate() {
-            for candle in candles {
-                if candle.low >= tick - reaction_tolerance && candle.low <= tick + reaction_tolerance {
-                    let tick_dist = (tick - candle.low).abs() / tick_interval;
-                    scores[i] += (1.0 - tick_dist * decay_per_tick).max(0.0);
-                }
-            }
-        }
-
-        // --- Pick top SR lines with ±range_pct removal ---
-        let mut sr_lines = vec![];
-        let mut remaining: Vec<(f64, f64)> = ticks.iter().copied().zip(scores.iter().copied()).collect();
-
-        for _ in 0..1 {
-            if remaining.is_empty() { break; }
-
-            let (top_idx, &(price, score)) = remaining.iter().enumerate()
-                .max_by(|a, b| a.1.1.partial_cmp(&b.1.1).unwrap())
-                .unwrap();
-
-            sr_lines.push(SRLine {
-                price:  truncate_to_2_decimals(price),
-                score,
-            });
-
-            // let lower = price * (1.0 - range_pct);
-            // let upper = price * (1.0 + range_pct);
-            // remaining.retain(|&(p, _)| p < lower || p > upper);
-        }
-
-        sr_lines
-    }
-
-
-
-    fn is_morning_star(c1: &Candle, c2: &Candle, c3: &Candle) -> bool {
-    let body1 = (c1.close - c1.open).abs();
-    let body2 = (c2.close - c2.open).abs();
-    let body3 = (c3.close - c3.open).abs();
-
-    let range1 = c1.high - c1.low;
-    let range2 = c2.high - c2.low;
-    let range3 = c3.high - c3.low;
-
-    let c1_bearish = c1.close < c1.open;
-    let c1_strong = body1 >= 0.5 * range1;
-
-    let c2_small_body = body2 <= 0.3 * range2;
-
-    let c3_bullish = c3.close > c3.open;
-    let c3_strong = body3 >= 0.5 * range3;
-
-    let midpoint_c1 = (c1.open + c1.close) / 2.0;
-    let c3_closes_into_c1 = c3.close >= midpoint_c1;
-
-    c1_bearish && c1_strong && c2_small_body && c3_bullish && c3_strong && c3_closes_into_c1
-}
-fn is_evening_star(c1: &Candle, c2: &Candle, c3: &Candle) -> bool {
-    let body1 = (c1.close - c1.open).abs();
-    let body2 = (c2.close - c2.open).abs();
-    let body3 = (c3.close - c3.open).abs();
-
-    let range1 = c1.high - c1.low;
-    let range2 = c2.high - c2.low;
-    let range3 = c3.high - c3.low;
-
-    let c1_bullish = c1.close > c1.open;
-    let c1_strong = body1 >= 0.5 * range1;
-
-    let c2_small_body = body2 <= 0.3 * range2;
-
-    let c3_bearish = c3.close < c3.open;
-    let c3_strong = body3 >= 0.5 * range3;
-
-    let midpoint_c1 = (c1.open + c1.close) / 2.0;
-    let c3_closes_into_c1 = c3.close <= midpoint_c1;
-
-    c1_bullish && c1_strong && c2_small_body && c3_bearish && c3_strong && c3_closes_into_c1
-}
 pub fn truncate_to_2_decimals(value: f64) -> f64 {
     (value * 100.0).trunc() / 100.0
 }
@@ -141,24 +74,19 @@ fn check_for_pivot(current: &Candle, prev1: &Candle, prev2: &Candle, pivot_type:
         PivotType::Low => prev1.low < current.low && prev1.low < prev2.low,
     }
 }
-fn detect_pattern(c1: &Candle, c2: &Candle, c3: &Candle) -> ReversalType {
-                            
-    if is_morning_star(c1, c2, c3) {
-        ReversalType::MorningStar
-    } else if is_evening_star(c1, c2, c3) {
-        ReversalType::EveningStar
-    } else {
-        ReversalType::None
-    }
-}
-#[tokio::main] // ✅ This macro makes main async
+
+
+#[tokio::main] 
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+
+
     let start = Instant::now();
 
+    // === ALL PATTERNS HOLDER ===
     let mut all_patterns: Vec<PatternXABCD> = Vec::new();
 
 
-    // // Connect To Local DataBase
+    // === DB CONNECTION ===
     let database_url = "mysql://rperezkc:Nar8uto!@localhost:3306/abcd";
     let pool = match MySqlPool::connect(database_url).await {
         Ok(pool) => {
@@ -172,29 +100,32 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     };
     let db = Database { pool };
 
-    // Distinct Symbols
+    // === GET SYMBOLS ===
     let symbols = db.get_distinct_symbols().await?;
     // println!("Symbols: {:?}", symbols);
 
-    // Scan Symbols
+    // === MAIN LOOP ===
     for symbol in &symbols {
+        // print!("Scanning symbol: {}... ", symbol);
 
-        // Symbol Candles
+        // === GET CANDLES ===
         let candles = db.get_stored_candles(&symbol).await?;
+        // println!("Symbol: {}, Candles: {}", symbol, candles.len());
 
-        // // S&R
-        let support_and_resistance = create_support_resistance(&candles);
+        let sr = SrLine::new(0.0, 0.0);
+
+        let support_and_resistance = sr.create_support_resistance(&candles);
     
-        // Pattern Holders
+        // === PATTERN HOLDERS ===
         let mut pattern_x: Vec<PatternX> = Vec::new();
         let mut pattern_xa: Vec<PatternXA> = Vec::new();
         let mut pattern_xab: Vec<PatternXAB> = Vec::new();
-        let mut pattern_xab_holder: Vec<PatternXABC> = Vec::new();
+        // let mut pattern_xab_holder: Vec<PatternXABC> = Vec::new();
         let mut pattern_xabc: Vec<PatternXABC> = Vec::new();
         let mut pattern_xabc_holder: Vec<PatternXABC> = Vec::new();
         let mut pattern_xabcd: Vec<PatternXABCD> = Vec::new();
 
-        // === Detect pivots ===
+        // === PATTERN DETECTION ===
         for window in candles.windows(3) {
             let prev2 = &window[0];
             let prev1 = &window[1];
@@ -202,7 +133,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
             // === X ===
             if check_for_pivot(current, prev1, prev2, PivotType::Low) {
-                let x = Pivot::new(prev1, PivotType::Low, 0, prev1.low);
+                let x = Pivot::new(prev1, PivotType::Low, 0, prev1.low, 0.0);
                 pattern_x.push(PatternX { x });
             }
             else if check_for_pivot(current, prev1, prev2, PivotType::High) {
@@ -211,7 +142,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     prev1, 
                     PivotType::High, 
                     0, 
-                    prev1.low
+                    prev1.low,
+                    0.0
                 );
 
                 pattern_x.push(PatternX { x });
@@ -247,9 +179,16 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
                 if conditions && pivot_check {
 
-                     let new_a = Pivot::new(prev1, new_a_type, 0, prev1.low);
+                    let leg_price_length = match new_a_type {
+                        PivotType::Low => pattern.x.low - prev1.low,
+                        PivotType::High => prev1.high - pattern.x.low
+                    };
 
-                     pattern_xa.push(PatternXA { 
+                    let new_a = Pivot::new(prev1, new_a_type, 0, prev1.low, leg_price_length);
+
+                    
+
+                    pattern_xa.push(PatternXA { 
                         x: pattern.x.clone(), 
                         a: new_a, 
                         
@@ -289,7 +228,13 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
                 if conditions && pivot_check {
 
-                     let new_b = Pivot::new(prev1, new_b_type, 0, prev1.low);
+                    let leg_price_length = match new_b_type {
+                        PivotType::Low => pattern.a.high - prev1.low,
+                        PivotType::High => prev1.high - pattern.a.low
+                    };
+
+
+                     let new_b = Pivot::new(prev1, new_b_type, 0, prev1.low, leg_price_length);
 
                      pattern_xab.push(PatternXAB { 
                         x: pattern.x.clone(), 
@@ -329,8 +274,14 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 };
 
                 if conditions && pivot_check {
+
+                    let leg_price_length = match new_c_type {
+                        PivotType::Low => pattern.b.low - prev1.low,
+                        PivotType::High => prev1.high - pattern.b.low
+                    };
+
                  
-                    let new_c = Pivot::new(prev1, new_c_type, 0, prev1.low);
+                    let new_c = Pivot::new(prev1, new_c_type, 0, prev1.low, leg_price_length);
 
                     pattern_xabc_holder.push(PatternXABC { 
                         x: pattern.x.clone(),
@@ -366,6 +317,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
                 // === SUPPORT & RESISTANCE ===
                 let level = support_and_resistance[0].price;
+                // let level: f64 = 50.0;
            
                 let three_month = match pattern.c.type_ {
                     PivotType::Low => {
@@ -391,10 +343,16 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                         PivotType::Low => Market::Bearish,
                         PivotType::High => Market::Bullish
                     };
-                    
-                    let new_d = Pivot::new(prev1, new_d_type, 0, prev1.low);
 
-                    let reversal = detect_pattern(prev2, prev1, current);  
+                    let leg_price_length = match new_d_type {
+                        PivotType::Low => pattern.c.high - prev1.low,
+                        PivotType::High => prev1.high - pattern.c.low
+                    };
+
+                    
+                    let new_d = Pivot::new(prev1, new_d_type, 0, prev1.low, leg_price_length);
+
+                    // let reversal = detect_pattern(prev2, prev1, current);  
                     
                     let trade = Trade::new(
                         symbol, 
@@ -423,7 +381,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                         three_month: Some(three_month),
                         six_month: Some(false),
                         twelve_month: Some(false),
-                        pattern_group_id: symbol.clone() + pattern.a.date.as_str()
+                        pattern_group_id: symbol.clone() + pattern.a.date.as_str(),
+                        accuracies: Accuracies::new(),
                     });
                 
                         
@@ -519,8 +478,6 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 }
             }   
 
-            // 
-
             // === LOAD === 
             pattern_xabc.extend(pattern_xabc_holder.drain(..));
 
@@ -561,61 +518,30 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .count();
 
         
-        // println!(
-        //     "Symbol: {}, XABCD total: {}, Bear: {}, Bull: {}",
-        //     symbol,
-        //     pattern_xabcd.len(),
-        //     a_bear,
-        //     a_bull
-        // );
+        println!(
+            "Symbol: {}, XABCD total: {}, Bear: {}, Bull: {}",
+            symbol,
+            pattern_xabcd.len(),
+            a_bear,
+            a_bull
+        );
 
     }
 
-    // PATTERY ACCCURACY
-    for pattern in all_patterns.iter_mut() {
+    
+    // === Pattern Accuracy ===
+    let all_patterns = Accuracies::new().get_accuracy(all_patterns);
+    //  let mut pattern_accuracies: Vec<Accuracies> = Vec::new();
+    // pattern_accuracies = Accuracies::new().get_accuracy(all_patterns.clone());
 
-        let mut accuracies = Accuracies {
-            bat: PatternAccuracy::default(),
-            butterfly: PatternAccuracy::default(),
-            gartley: PatternAccuracy::default(),
-            crab: PatternAccuracy::default(),
-            shark: PatternAccuracy::default(),
-        };
+    // === Scatter Data ===
 
-        for pt in [
-            ABCDType::Bat,
-            ABCDType::Crab,
-            ABCDType::Gartley,
-            ABCDType::Butterfly,
-            ABCDType::Shark
-        ]  {
 
-            let computed = PatternAccuracy {
-                ab_xa: 0.5,
-                bc_ab: 0.6,
-                cd_bc: 0.7,
-                cd_ab: 0.8,
-                cd_xa: 0.9,
-                pattern_accuracy: 0.72,
-            };
-                                
-            match pt {
-                ABCDType::Butterfly => accuracies.butterfly = computed,
-                ABCDType::Bat => accuracies.bat = computed,
-                ABCDType::Gartley => accuracies.gartley = computed,
-                ABCDType::Crab => accuracies.crab = computed,
-                ABCDType::Shark => accuracies.shark = computed,
-                ABCDType::Standard => {}
-                ABCDType::Extended => {}
-                ABCDType::None => {}
-            }
-        }
-    }
 
-    // === WRITE TO CSV ===
-    // XABCD_CSV::write_patterns_to_csv(&all_patterns, "../../patterns_
-    // let mut conn = db.get_conn()?;  // borrow a PooledConn from the pool
-    // XABCD_CSV::insert_patterns_into_db(&mut conn, &all_patterns)?;
+
+    db.insert_scatter_plot(&all_patterns).await?;
+
+    // Insert patterns into DB
     // db.insert_patterns(&all_patterns).await?;
 
     // === DISPLAY BEAR AND BULL COUNTS ===

@@ -1,6 +1,6 @@
 use serde::Serialize;
 use chrono::NaiveDate; 
-use sqlx::FromRow;
+// use sqlx::FromRow;
 use rust_decimal::Decimal;
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)] 

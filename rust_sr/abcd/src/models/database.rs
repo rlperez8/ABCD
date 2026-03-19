@@ -1,24 +1,28 @@
-use mysql::{Pool, PooledConn, OptsBuilder, SslOpts};
+// use std::str::pattern;
+
+use std::vec;
+
+// use mysql::{Pool, PooledConn, OptsBuilder, SslOpts};
 use mysql::*;
-use mysql::prelude::*;
-use crate::models::candle::*; 
-use chrono::NaiveDate;
+// use mysql::prelude::*;
+use crate::models::{PatternX, candle::*}; 
+// use chrono::NaiveDate;
 use sqlx::mysql::MySqlPool;
-use std::fs::File;
-use csv::WriterBuilder;
+// use std::fs::File;
+// use csv::WriterBuilder;
 use serde::Serialize;
 use serde::ser::Serializer;
 use crate::models::reversal_type::ReversalType;
 use crate::models::pattern_abcd::PatternXABCD;
-use crate::models::abcd_type::ABCDType;
+use crate::models::harmonic_types::HarmonicType;
 use crate::models::market::Market;
-use sqlx::{QueryBuilder};
+// use sqlx::{QueryBuilder};
 use rust_decimal::prelude::ToPrimitive;
 
 pub struct Database {
     pub pool: MySqlPool,
 }
-
+#[allow(non_camel_case_types)]
 #[derive(Serialize)]
 pub struct XABCD_CSV {
     symbol: String,
@@ -52,6 +56,8 @@ pub struct XABCD_CSV {
 
     #[serde(serialize_with = "two_decimals")]
     a_min_max: f64,
+    #[serde(serialize_with = "two_decimals")]
+    xa_price_length: f64,
 
     b_date: String,
 
@@ -68,6 +74,8 @@ pub struct XABCD_CSV {
 
     #[serde(serialize_with = "two_decimals")]
     b_min_max: f64,
+    #[serde(serialize_with = "two_decimals")]
+    ab_price_length: f64,
 
     c_date: String,
 
@@ -84,6 +92,8 @@ pub struct XABCD_CSV {
 
     #[serde(serialize_with = "two_decimals")]
     c_min_max: f64,
+    #[serde(serialize_with = "two_decimals")]
+    bc_price_length: f64,
 
     d_date: String,
 
@@ -100,6 +110,9 @@ pub struct XABCD_CSV {
 
     #[serde(serialize_with = "two_decimals")]
     d_min_max: f64,
+
+    #[serde(serialize_with = "two_decimals")]
+    cd_price_length: f64,
 
     trade_open: bool,
 
@@ -154,9 +167,17 @@ pub struct XABCD_CSV {
     six_month: Option<bool>,
     twelve_month: Option<bool>,
     pattern_group_id: String,
-    harmonic_type: ABCDType
+    harmonic_type: HarmonicType
 
 }
+
+pub struct ScatterPlotDataBase {
+    pub accuracy: f64,
+    pub return_pct: f64,    
+    pub harmonic_type: String,
+
+}
+
 impl Database {
  
     pub async fn get_distinct_symbols(&self) -> Result<Vec<String>, sqlx::Error> {
@@ -174,6 +195,7 @@ impl Database {
 
         Ok(symbols)
     }
+    
     pub async fn get_stored_candles(&self, symbol: &str) -> Result<Vec<Candle>, sqlx::Error> {
             
         let mut candles_decimal: Vec<CandleDecimal> = sqlx::query_as!(
@@ -206,6 +228,7 @@ impl Database {
             .collect();
             Ok(candles)
     }
+    
     pub async fn insert_patterns(&self, patterns: &[PatternXABCD]) -> Result<(), sqlx::Error> {
         for pat in patterns {
 
@@ -228,8 +251,8 @@ impl Database {
                     trade_bc_bar_retracement, trade_cd_bar_retracement,
                     trade_cd_bc_price_retracement, trade_snr, trade_year,
                     trade_month, trade_day, reversal_type, market,
-                    three_month, six_month, twelve_month, pattern_group_id, harmonic_type
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    three_month, six_month, twelve_month, pattern_group_id, harmonic_type, xa_price_length, ab_price_length, bc_price_length, cd_price_length
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#,
                 
                 p.symbol, p.x_date, p.x_open, p.x_high, p.x_low, p.x_close, p.x_length, p.x_min_max,
@@ -246,7 +269,8 @@ impl Database {
                 p.trade_cd_bc_price_retracement,
                 p.trade_snr, p.trade_year, p.trade_month, p.trade_day,
                 format!("{:?}", p.reversal_type), format!("{:?}", p.market),
-                p.three_month, p.six_month, p.twelve_month, p.pattern_group_id, format!("{:?}", p.harmonic_type)
+                p.three_month, p.six_month, p.twelve_month, p.pattern_group_id, format!("{:?}", p.harmonic_type),
+                p.xa_price_length, p.ab_price_length, p.bc_price_length, p.cd_price_length
                 
             )
             .execute(&self.pool)
@@ -254,6 +278,7 @@ impl Database {
                     }
         Ok(())
     }    
+    
     pub fn from_pattern(&self, p: &PatternXABCD) -> XABCD_CSV  {
         
         XABCD_CSV {
@@ -271,6 +296,7 @@ impl Database {
             a_low: p.a.low,
             a_close: p.a.close,
             a_length: p.a.length,
+            xa_price_length: p.a.leg_price_length,
             a_min_max: p.a.min_max,
             b_date: p.b.date.clone(),
             b_open: p.b.open,
@@ -279,6 +305,7 @@ impl Database {
             b_close: p.b.close,
             b_length: p.b.length,
             b_min_max: p.b.min_max,
+            ab_price_length: p.b.leg_price_length,
             c_date: p.c.date.clone(),
             c_open: p.c.open,
             c_high: p.c.high,
@@ -286,6 +313,7 @@ impl Database {
             c_close: p.c.close,
             c_length: p.c.length,
             c_min_max: p.c.min_max,
+            bc_price_length: p.c.leg_price_length,
             d_date: p.d.date.clone(),
             d_open: p.d.open,
             d_high: p.d.high,
@@ -293,6 +321,7 @@ impl Database {
             d_close: p.d.close,
             d_length: p.d.length,
             d_min_max: p.d.min_max,
+            cd_price_length: p.d.leg_price_length,
             trade_open: p.trade.open,
             trade_risk_exit_price: p.trade.risk_exit_price,
             trade_reward_exit_price: p.trade.reward_exit_price,
@@ -324,8 +353,48 @@ impl Database {
         }
     }
 
-    
+    pub async fn insert_scatter_plot(&self, patterns: &Vec<PatternXABCD>) -> Result<(), sqlx::Error> {
+        
+        for pattern in patterns {
+            let acc = &pattern.accuracies;
+   
+            for (name, value) in [
+                ("Bat", &acc.bat),
+                ("Butterfly", &acc.butterfly),
+                ("Gartley", &acc.gartley),
+                ("Crab", &acc.crab),
+                ("Shark", &acc.shark),
+            ] {
+                let scatter_data = ScatterPlotDataBase {
+                    accuracy: value.pattern_accuracy,
+                    return_pct: pattern.trade.pnl,
+                    harmonic_type: name.to_string(),
+                };
+
+                sqlx::query!(
+                    r#"
+                        INSERT INTO accuracies (
+                            accuracy, return_pct, harmonic_type
+                        ) VALUES (?, ?, ?)
+                    "#,
+                    scatter_data.accuracy, scatter_data.return_pct, scatter_data.harmonic_type
+                )
+                .execute(&self.pool)
+                .await
+                .unwrap();
+
+
+                // println!("Scatter Data - Harmonic: {}, Accuracy: {:.2}, Return %: {:.2}", 
+                //     scatter_data.harmonic_type, scatter_data.accuracy, scatter_data.return_pct);
+            }
+        }
+
+        Ok(())
+    }
+     
 }
+
+
 
 fn two_decimals<S>(val: &f64, s: S) -> Result<S::Ok, S::Error>
 where
