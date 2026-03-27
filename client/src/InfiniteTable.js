@@ -14,8 +14,6 @@ const InfiniteTable = (props) => {
         update_selected_pattern
     } = props
 
-    
-    
 
     const sorted = recent_patterns
     const containerRef = useRef(null);

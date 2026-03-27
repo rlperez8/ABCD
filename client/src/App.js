@@ -8,6 +8,15 @@ import * as tools from './MainTools.js'
 
 import FilterDropDown from './FilterDropDown.js';
 import Data from './Data/data.js';
+import Accuracy from './accuracy.js';
+import Heatmap from './heatmap.js';
+import RankedChart from './ranked_bar_chart.js';
+import LineChart from './line_chart.js';
+import BinScatterChart from './scatter_plot.js';
+import BinBubbleChart from './bubble_chart.js';
+import { Line } from 'react-chartjs-2';
+import BinCumulativeLineChart from './line.js';
+
 
 const handle_candles = async(symbol) => {
 
@@ -126,6 +135,8 @@ const filter_stacker = (patterns, activeFilters) => {
 }
 
 
+
+
 const App = () => {
 
   const [pattern_group_ids, set_pattern_group_ids] = useState([])
@@ -136,6 +147,7 @@ const App = () => {
   })
   const [is_selected_xabcd, set_is_selected_xabcd] = useState(false)
   const [selected_xabcd, set_selected_xabcd] = useState({})
+  const [accuracyData, setAccuracyData] = useState([])
 
 
   useEffect(()=>{
@@ -145,7 +157,10 @@ const App = () => {
       // === LOADING ===
       set_loading(true);
       set_loading_patterns(true)
+      
+      const accuracyData = await route.fetch_accuracy(); 
 
+      setAccuracyData(accuracyData)
       // FETCH PATTERNS
       const data = await route.fetch_abcd_patterns(market, filters)
 
@@ -191,7 +206,7 @@ const App = () => {
           rust_patterns: formatted_patterns
       }
       set_grouped_pattern_data(formatted_data)
-  
+      
           
       // === LOADING ===
       set_loading(false);
@@ -218,16 +233,18 @@ const App = () => {
   // const [ticker_performance, set_ticker_peformance] = useState([])
   const [recent_patterns, set_recent_patterns] = useState([])
   const [filters, set_filters] = useState({
-    bc_retracement_greater: 0,
-    bc_retracement_less: 101,
-    cd_retracement_greater: 0,
-    cd_retracement_less: 1000,
-    ab_leg_greater: 0,
-    ab_leg_less: 5000,
-    bc_leg_greater: 0,
-    bc_leg_less: 5000,
-    cd_leg_greater: 0,
-    cd_leg_less: 5000,
+    bin: "10-20",
+    harmonicType: "Bat",
+    // bc_retracement_greater: 0,
+    // bc_retracement_less: 101,
+    // cd_retracement_greater: 0,
+    // cd_retracement_less: 1000,
+    // ab_leg_greater: 0,
+    // ab_leg_less: 5000,
+    // bc_leg_greater: 0,
+    // bc_leg_less: 5000,
+    // cd_leg_greater: 0,
+    // cd_leg_less: 5000,
   })
   const months = [
   "January", "February", "March", "April", "May", "June",
@@ -614,18 +631,16 @@ const App = () => {
   }, [activeFilters, recent_patterns]);
 
 
-
   return (
 
       <div className='App' >
-
         <div className='app-inner'>
 
-           {is_loading && (
+          {is_loading && (
         <div className="overlay">
           <div className="loading_container">Loading...</div>
         </div>
-      )}
+          )}
 
           <div className='main'>
 
@@ -680,9 +695,7 @@ const App = () => {
 
             <div className='app-body'>
 
-              <Data patterns={recent_patterns}/>
-
-               <Section 
+              <div className='left_side'> <Section 
                 price_retracement={price_retracement}
                 update_harmonic_pattern={update_harmonic_pattern}
                 harmonic_patterns={harmonic_patterns}
@@ -701,7 +714,68 @@ const App = () => {
                   set_selected_row_index={set_selected_row_index}
                   update_selected_pattern={update_selected_pattern}
                 />}
-              /> 
+                
+              />
+              
+              <ChartMain
+                chart_data={chart_data}
+                is_loading_patterns={is_loading_patterns}
+                is_sections_expanded={is_sections_expanded}
+                set_sections_expanded={set_sections_expanded}
+                market={market}
+                set_selected_xabcd={set_selected_xabcd}
+              />  </div>
+
+           
+
+              {/* <Data patterns={recent_patterns}/> */}
+
+              <div className='dashboard_bin_container'>
+                
+                <div className='h'>
+                  <div className='q'><Accuracy accuracy={accuracyData} 
+                set_filtered_patterns={set_filtered_patterns}/></div>
+                  <div className='q'>
+                      <BinBubbleChart data={accuracyData}/>
+                   </div>
+                   <div className='q'>
+                    <Heatmap data={accuracyData}
+                set_filtered_patterns={set_filtered_patterns}/>
+                   </div>
+                </div>
+                <div className='h'>
+                  <div className='q'>
+                    <RankedChart accuracy={accuracyData}/>
+                  </div>
+                   <div className='q'>
+                  <LineChart data={accuracyData}/>
+                   </div>
+                    <div className='q'>
+                      <BinScatterChart data={accuracyData}/>
+                   </div>
+                </div>
+                 <div className='h'>
+                  <div className='q'>
+                    <RankedChart accuracy={accuracyData}/>
+                  </div>
+                   <div className='q'>
+                  <LineChart data={accuracyData}/>
+                   </div>
+                    <div className='q'>
+                      <BinCumulativeLineChart data={accuracyData}/>
+                   </div>
+                </div>
+
+                {/* <Accuracy accuracy={accuracyData} 
+                set_filtered_patterns={set_filtered_patterns}/> */}
+              </div>
+
+              
+                
+{/* 
+              <Data patterns={recent_patterns}/>
+
+              
 
               <div className='trade_data_container'>
                 <div className='data_row_wrap'>
@@ -740,7 +814,7 @@ const App = () => {
                 set_sections_expanded={set_sections_expanded}
                 market={market}
                 set_selected_xabcd={set_selected_xabcd}
-              /> 
+              />  */}
 
             </div>
 
@@ -859,7 +933,6 @@ const App = () => {
           </div>
           
         </div>
-
 			</div>
   );
 }

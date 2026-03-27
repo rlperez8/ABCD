@@ -4,18 +4,33 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+actix-web = "4.3.0"     # latest stable 4.x version
+actix-cors = "0.6"
+# async + web framework
 axum = "0.7"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.41.0", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors"] }
 
+# serialization / utilities
 csv = "1.1"
-actix-web = "4.0" # Use your appropriate version
-actix-cors = "0.6"
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "3.17"
-mysql = { version = "27.0", features = ["native-tls"] }
-sqlx = { version = "0.7", features = ["mysql", "runtime-tokio", "tls-rustls", "chrono", "rust_decimal"] }
-rust_decimal = "1"
-rust_decimal_macros = "1"
+
+# SQLx stable
+sqlx = { version = "0.8.6", features = [
+    "mysql",
+    "runtime-tokio",
+    "tls-rustls",
+    "chrono",
+    "rust_decimal"
+] }
+
+# MySQL support
+mysql = { version = "27.0", features = ["native-tls"], default-features = false }
+mysql_common = "0.35"
+
+# decimals
+rust_decimal = "1.33.0"
+rust_decimal_macros = "1.33.0"

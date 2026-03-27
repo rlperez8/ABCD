@@ -65,8 +65,6 @@ export const get_candles = async (symbol) => {
     }
 
 }
-
-
 export const fetch_filtered_peformances = async (value) => {
 
     try {
@@ -290,11 +288,8 @@ export const fetch_abcd_patterns = async (market, filters) => {
 
 
   const filter = {
-    market: market, 
-    bc_greater: filters.bc_retracement_greater,
-    bc_less: filters.bc_retracement_less,
-    cd_greater: filters.cd_retracement_greater,
-    cd_less: filters.cd_retracement_less
+    bin: filters.bin,
+    harmonic_type: filters.harmonicType
   };
 
   try {
@@ -313,6 +308,8 @@ export const fetch_abcd_patterns = async (market, filters) => {
     }
 
     const data = await res.json(); 
+
+
 
     function parsePattern(p) {
       return {
@@ -387,7 +384,7 @@ export const fetch_abcd_patterns = async (market, filters) => {
     }
     data.patterns = data.patterns.map(parsePattern);
 
-    
+
 
 
 
@@ -399,9 +396,28 @@ export const fetch_abcd_patterns = async (market, filters) => {
     console.error(e);
   }
 };
+export const fetch_accuracy = async () => {
 
+    try{
+      const res = await fetch('http://localhost:8080/accuracy',
+        {
+          method: "POST", 
+          headers: {"Content-Type": "application/json",}, 
+          body: JSON.stringify({'symbol':"symbol"})
+        });
 
+      if (!res.ok) {
+        console.error(`Server Error: ${res.status} - ${res.statusText}`);
+        throw new Error("Request failed");
+      }
+      const responseData = await res.json();
 
+      return responseData
+
+    } catch(error) {
+      console.error(error)
+    }
+  }
 
 
 const get_ab_candles = async () => {

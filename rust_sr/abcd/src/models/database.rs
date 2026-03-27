@@ -23,6 +23,7 @@ pub struct Database {
     pub pool: MySqlPool,
 }
 #[allow(non_camel_case_types)]
+
 #[derive(Serialize)]
 pub struct XABCD_CSV {
     symbol: String,
@@ -167,7 +168,13 @@ pub struct XABCD_CSV {
     six_month: Option<bool>,
     twelve_month: Option<bool>,
     pattern_group_id: String,
-    harmonic_type: HarmonicType
+    harmonic_type: HarmonicType,
+    #[serde(serialize_with = "two_decimals")]
+    bat_accuracy: f64,
+    shark_accuracy: f64,
+    butterfly_accuracy: f64,
+    gartley_accuracy: f64,
+    crab_accuracy: f64,
 
 }
 
@@ -251,8 +258,8 @@ impl Database {
                     trade_bc_bar_retracement, trade_cd_bar_retracement,
                     trade_cd_bc_price_retracement, trade_snr, trade_year,
                     trade_month, trade_day, reversal_type, market,
-                    three_month, six_month, twelve_month, pattern_group_id, harmonic_type, xa_price_length, ab_price_length, bc_price_length, cd_price_length
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    three_month, six_month, twelve_month, pattern_group_id, harmonic_type, xa_price_length, ab_price_length, bc_price_length, cd_price_length, bat_accuracy, butterfly_accuracy, gartley_accuracy, crab_accuracy, shark_accuracy
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?)
                 "#,
                 
                 p.symbol, p.x_date, p.x_open, p.x_high, p.x_low, p.x_close, p.x_length, p.x_min_max,
@@ -270,7 +277,7 @@ impl Database {
                 p.trade_snr, p.trade_year, p.trade_month, p.trade_day,
                 format!("{:?}", p.reversal_type), format!("{:?}", p.market),
                 p.three_month, p.six_month, p.twelve_month, p.pattern_group_id, format!("{:?}", p.harmonic_type),
-                p.xa_price_length, p.ab_price_length, p.bc_price_length, p.cd_price_length
+                p.xa_price_length, p.ab_price_length, p.bc_price_length, p.cd_price_length, p.bat_accuracy, p.butterfly_accuracy, p.gartley_accuracy, p.crab_accuracy, p.shark_accuracy
                 
             )
             .execute(&self.pool)
@@ -350,6 +357,12 @@ impl Database {
             twelve_month: p.twelve_month,
             pattern_group_id: p.pattern_group_id.clone(),
             harmonic_type: p.abcd_type.clone(),
+            bat_accuracy: p.accuracies.bat.pattern_accuracy,
+            butterfly_accuracy: p.accuracies.butterfly.pattern_accuracy,
+            gartley_accuracy: p.accuracies.gartley.pattern_accuracy,    
+            crab_accuracy: p.accuracies.crab.pattern_accuracy,
+            shark_accuracy: p.accuracies.shark.pattern_accuracy,
+            
         }
     }
 
@@ -393,8 +406,6 @@ impl Database {
     }
      
 }
-
-
 
 fn two_decimals<S>(val: &f64, s: S) -> Result<S::Ok, S::Error>
 where

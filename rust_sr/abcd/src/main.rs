@@ -542,7 +542,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     db.insert_scatter_plot(&all_patterns).await?;
 
     // Insert patterns into DB
-    // db.insert_patterns(&all_patterns).await?;
+    db.insert_patterns(&all_patterns).await?;
 
     // === DISPLAY BEAR AND BULL COUNTS ===
     let abcd_bear = all_patterns
