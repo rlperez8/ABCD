@@ -1,11 +1,12 @@
 use serde::Serialize;
+use chrono::NaiveDate;
 use crate::models::candle::Candle;
 use crate::models::pivot_type::PivotType;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct Pivot {
     pub type_: PivotType,
-    pub date: String,
+    pub date: NaiveDate,
     pub open: f64,
     pub high: f64,
     pub low: f64,
@@ -30,7 +31,7 @@ impl Pivot {
     ) -> Self {
         Self {
             type_,
-            date: candle.date.to_string(),
+            date: candle.date,
             open: Self::truncate_to_2_decimals(candle.open),
             high: Self::truncate_to_2_decimals(candle.high),
             low: Self::truncate_to_2_decimals(candle.low),

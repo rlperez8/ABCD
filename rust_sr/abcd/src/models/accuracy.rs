@@ -1,20 +1,21 @@
 // use crate::models::abcd_type::HarmonicType;
 
 use serde::Serialize;
+use std::cmp::Ordering;
 
 use crate::models::PatternXABCD;
 use crate::models::HarmonicType;
 
-#[derive(Default, Debug, Clone, Serialize)]
+#[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct PatternAccuracy {
     pub ab_xa: f64,
     pub bc_ab: f64,
     pub cd_bc: f64,
     pub cd_xa: f64,
     pub pattern_accuracy: f64,
-    pub harmonic_type: String,
+    pub harmonic_type: HarmonicType,
 }
-#[derive(Default, Debug, Clone, Serialize)]
+#[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Accuracies {
     pub bat: PatternAccuracy,
     pub butterfly: PatternAccuracy,
@@ -42,6 +43,22 @@ impl Accuracies {
         accuracy.clamp(0.0, 100.0)
     }
 
+    pub fn dominant_harmonic(&self) -> HarmonicType {
+        [
+            (HarmonicType::Bat, self.bat.pattern_accuracy),
+            (HarmonicType::Butterfly, self.butterfly.pattern_accuracy),
+            (HarmonicType::Gartley, self.gartley.pattern_accuracy),
+            (HarmonicType::Crab, self.crab.pattern_accuracy),
+            (HarmonicType::Shark, self.shark.pattern_accuracy),
+        ]
+        .into_iter()
+        .max_by(|(_, left), (_, right)| {
+            left.partial_cmp(right).unwrap_or(Ordering::Equal)
+        })
+        .map(|(harmonic_type, _)| harmonic_type)
+        .unwrap_or(HarmonicType::None)
+    }
+
     pub fn get_accuracy(&self, mut xabcd_patterns: Vec<PatternXABCD>) -> Vec<PatternXABCD>  {
    
         // let mut all_accuracies: Vec<Accuracies> = Vec::new();
@@ -59,7 +76,7 @@ impl Accuracies {
                         bat.cd_bc = Self::leg_accuracy(pattern.trade.cd_bc_price_retracement, 2.618);
                         bat.cd_xa = Self::leg_accuracy(pattern.trade.cd_xa_price_retracement, 1.618); 
                         bat.pattern_accuracy = (bat.ab_xa + bat.bc_ab + bat.cd_bc + bat.cd_xa) / 4.0;
-                        bat.harmonic_type = "Bat".to_string();
+                        bat.harmonic_type = HarmonicType::Bat;
                         accuracies.bat = bat;
 
                         // println!("Bat AB/XA: {:.2}, Accuracy: {:.2}, Target: {:.2}", 
@@ -76,7 +93,7 @@ impl Accuracies {
                         butterfly.cd_bc = Self::leg_accuracy(pattern.trade.cd_bc_price_retracement, 1.27);
                         butterfly.cd_xa = Self::leg_accuracy(pattern.trade.cd_xa_price_retracement, 1.618); 
                         butterfly.pattern_accuracy = (butterfly.ab_xa + butterfly.bc_ab + butterfly.cd_bc + butterfly.cd_xa) / 4.0;
-                        butterfly.harmonic_type = "Butterfly".to_string();
+                        butterfly.harmonic_type = HarmonicType::Butterfly;
                         accuracies.butterfly = butterfly
                     },
                     HarmonicType::Gartley => {
@@ -86,7 +103,7 @@ impl Accuracies {
                         gartley.cd_bc = Self::leg_accuracy(pattern.trade.cd_bc_price_retracement, 1.27);
                         gartley.cd_xa = Self::leg_accuracy(pattern.trade.cd_xa_price_retracement, 0.786); 
                         gartley.pattern_accuracy = (gartley.ab_xa + gartley.bc_ab + gartley.cd_bc + gartley.cd_xa) / 4.0;   
-                        gartley.harmonic_type = "Gartley".to_string();  
+                        gartley.harmonic_type = HarmonicType::Gartley;
                         accuracies.gartley = gartley
                     },
                     HarmonicType::Crab => {
@@ -96,7 +113,7 @@ impl Accuracies {
                         crab.cd_bc = Self::leg_accuracy(pattern.trade.cd_bc_price_retracement, 3.618);
                         crab.cd_xa = Self::leg_accuracy(pattern.trade.cd_xa_price_retracement, 2.618); 
                         crab.pattern_accuracy = (crab.ab_xa + crab.bc_ab + crab.cd_bc + crab.cd_xa) / 4.0;
-                        crab.harmonic_type = "Crab".to_string();    
+                        crab.harmonic_type = HarmonicType::Crab;
                         accuracies.crab = crab
                     },
                     HarmonicType::Shark => {
@@ -106,7 +123,7 @@ impl Accuracies {
                         shark.cd_bc = Self::leg_accuracy(pattern.trade.cd_bc_price_retracement, 1.13);
                         shark.cd_xa = Self::leg_accuracy(pattern.trade.cd_xa_price_retracement, 1.618); 
                         shark.pattern_accuracy = (shark.ab_xa + shark.bc_ab + shark.cd_bc + shark.cd_xa) / 4.0;
-                        shark.harmonic_type = "Shark".to_string();
+                        shark.harmonic_type = HarmonicType::Shark;
                         accuracies.shark = shark
                     },
              
@@ -117,7 +134,11 @@ impl Accuracies {
             }
             // println!("{:?}", accuracies);
 
-            pattern.accuracies = accuracies.clone();
+            // Trade::new() already calculates retracements differently for bullish
+            // and bearish patterns, so the top score here becomes our market-aware
+            // primary harmonic label for both directions.
+            pattern.abcd_type = accuracies.dominant_harmonic();
+            pattern.accuracies = accuracies;
             // all_accuracies.push(accuracies);
         }
            

@@ -1,10 +1,11 @@
 use serde::Serialize;
+use chrono::NaiveDate;
 use crate::models::reversal_type::ReversalType;
 use crate::models::market::Market;
 use crate::models::candle::Candle;
 use crate::models::pivot::Pivot;
 use chrono::Datelike;
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize)]
 
 pub struct Trade {
     pub open: bool,
@@ -15,8 +16,7 @@ pub struct Trade {
     pub length: i64,
     pub pnl: f64,
     pub result: i32,
-    pub date: String,
-    pub symbol: String,
+    pub date: NaiveDate,
     pub ab_price_retracement: f64,
     pub bc_price_retracement: f64,
     pub cd_bc_price_retracement: f64,
@@ -37,7 +37,6 @@ pub fn truncate_to_2_decimals(value: f64) -> f64 {
 
 impl Trade {
     pub fn new(
-        symbol: &str,
         market: Market,
         candle_x: &Pivot,
         candle_a: &Pivot,
@@ -141,8 +140,7 @@ impl Trade {
             reward_exit_price,
             length: 0,
             result: 0,
-            date: prev1.date.to_string(),
-            symbol: symbol.to_string(),
+            date: prev1.date,
             ab_price_retracement,
             bc_price_retracement,
             cd_bc_price_retracement,

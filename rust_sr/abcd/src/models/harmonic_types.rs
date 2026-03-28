@@ -12,6 +12,12 @@ pub enum HarmonicType {
     None
 }
 
+impl Default for HarmonicType {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 pub fn find_harmonic_type(x: &f64, a: &f64, b: &f64, c: &f64, d: &f64) -> HarmonicType {
     let tol = 0.00;
 

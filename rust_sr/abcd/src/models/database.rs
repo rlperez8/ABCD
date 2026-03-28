@@ -1,11 +1,9 @@
 // use std::str::pattern;
 
-use std::vec;
-
 // use mysql::{Pool, PooledConn, OptsBuilder, SslOpts};
 use mysql::*;
 // use mysql::prelude::*;
-use crate::models::{PatternX, candle::*}; 
+use crate::models::candle::*;
 // use chrono::NaiveDate;
 use sqlx::mysql::MySqlPool;
 // use std::fs::File;
@@ -16,8 +14,12 @@ use crate::models::reversal_type::ReversalType;
 use crate::models::pattern_abcd::PatternXABCD;
 use crate::models::harmonic_types::HarmonicType;
 use crate::models::market::Market;
+use sqlx::{MySql, QueryBuilder};
 // use sqlx::{QueryBuilder};
 use rust_decimal::prelude::ToPrimitive;
+
+const PATTERN_INSERT_CHUNK_SIZE: usize = 200;
+const ACCURACY_INSERT_CHUNK_SIZE: usize = 1000;
 
 pub struct Database {
     pub pool: MySqlPool,
@@ -181,12 +183,24 @@ pub struct XABCD_CSV {
 pub struct ScatterPlotDataBase {
     pub accuracy: f64,
     pub return_pct: f64,    
-    pub harmonic_type: String,
+    pub harmonic_type: &'static str,
 
 }
 
 impl Database {
  
+    pub async fn clear_generated_outputs(&self) -> Result<(), sqlx::Error> {
+        sqlx::query("TRUNCATE TABLE xabcd_patterns")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query("TRUNCATE TABLE accuracies")
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn get_distinct_symbols(&self) -> Result<Vec<String>, sqlx::Error> {
         println!("✅ get_distinct_symbols");
 
@@ -203,23 +217,51 @@ impl Database {
         Ok(symbols)
     }
     
+    pub async fn get_symbols_above_average_volume(
+        &self,
+        minimum_average_volume: f64,
+    ) -> Result<Vec<String>, sqlx::Error> {
+        println!(
+            "Filtering symbols by recent average volume >= {}",
+            minimum_average_volume
+        );
+
+        let symbols: Vec<String> = sqlx::query_scalar(
+            r#"
+            SELECT ls.symbol
+            FROM abcd.listing_status ls
+            INNER JOIN (
+                SELECT DISTINCT symbol
+                FROM abcd.candles
+            ) candles ON candles.symbol = ls.symbol
+            WHERE ls.status = 'Active'
+              AND (ls.bugged IS NULL OR ls.bugged = false)
+              AND ls.average_volume_30d IS NOT NULL
+              AND ls.average_volume_30d >= ?
+            ORDER BY ls.symbol
+            "#
+        )
+        .bind(minimum_average_volume)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(symbols)
+    }
+
     pub async fn get_stored_candles(&self, symbol: &str) -> Result<Vec<Candle>, sqlx::Error> {
             
-        let mut candles_decimal: Vec<CandleDecimal> = sqlx::query_as!(
+        let candles_decimal: Vec<CandleDecimal> = sqlx::query_as!(
                 CandleDecimal,
                 r#"
                 SELECT symbol, date, open, high, low, close, volume
                 FROM abcd.candles
                 WHERE symbol = ?
-                ORDER BY date DESC
-                LIMIT 90
+                ORDER BY date
                 "#,
                 symbol
             )
             .fetch_all(&self.pool)
             .await?;
-
-            candles_decimal.reverse();
 
             let candles: Vec<Candle> = candles_decimal
             .into_iter()
@@ -237,14 +279,21 @@ impl Database {
     }
     
     pub async fn insert_patterns(&self, patterns: &[PatternXABCD]) -> Result<(), sqlx::Error> {
-        for pat in patterns {
+        if patterns.is_empty() {
+            return Ok(());
+        }
 
+        let serialized_patterns: Vec<XABCD_CSV> = patterns
+            .iter()
+            .map(|pattern| self.from_pattern(pattern))
+            .collect();
 
-            let p = self.from_pattern(pat); 
+        let mut tx = self.pool.begin().await?;
 
-            sqlx::query!(
+        for chunk in serialized_patterns.chunks(PATTERN_INSERT_CHUNK_SIZE) {
+            let mut builder = QueryBuilder::<MySql>::new(
                 r#"
-                    INSERT INTO xabcd_patterns (
+                INSERT INTO xabcd_patterns (
                     symbol, x_date, x_open, x_high, x_low, x_close,
                     x_length, x_min_max, a_date, a_open, a_high, a_low, a_close,
                     a_length, a_min_max, b_date, b_open, b_high, b_low, b_close,
@@ -258,46 +307,108 @@ impl Database {
                     trade_bc_bar_retracement, trade_cd_bar_retracement,
                     trade_cd_bc_price_retracement, trade_snr, trade_year,
                     trade_month, trade_day, reversal_type, market,
-                    three_month, six_month, twelve_month, pattern_group_id, harmonic_type, xa_price_length, ab_price_length, bc_price_length, cd_price_length, bat_accuracy, butterfly_accuracy, gartley_accuracy, crab_accuracy, shark_accuracy
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?)
-                "#,
-                
-                p.symbol, p.x_date, p.x_open, p.x_high, p.x_low, p.x_close, p.x_length, p.x_min_max,
-                p.a_date, p.a_open, p.a_high, p.a_low, p.a_close, p.a_length, p.a_min_max,
-                p.b_date, p.b_open, p.b_high, p.b_low, p.b_close, p.b_length, p.b_min_max,
-                p.c_date, p.c_open, p.c_high, p.c_low, p.c_close, p.c_length, p.c_min_max,
-                p.d_date, p.d_open, p.d_high, p.d_low, p.d_close, p.d_length, p.d_min_max,
-                p.trade_open, p.trade_risk_exit_price, p.trade_reward_exit_price,
-                p.trade_enter_price, p.trade_current_price, p.trade_length, p.trade_pnl,
-                p.trade_result, p.trade_date, p.trade_symbol,
-                p.trade_ab_price_retracement, p.trade_bc_price_retracement,
-                p.trade_cd_xa_price_retracement, p.trade_cd_price_retracement,
-                p.trade_bc_bar_retracement, p.trade_cd_bar_retracement,
-                p.trade_cd_bc_price_retracement,
-                p.trade_snr, p.trade_year, p.trade_month, p.trade_day,
-                format!("{:?}", p.reversal_type), format!("{:?}", p.market),
-                p.three_month, p.six_month, p.twelve_month, p.pattern_group_id, format!("{:?}", p.harmonic_type),
-                p.xa_price_length, p.ab_price_length, p.bc_price_length, p.cd_price_length, p.bat_accuracy, p.butterfly_accuracy, p.gartley_accuracy, p.crab_accuracy, p.shark_accuracy
-                
-            )
-            .execute(&self.pool)
-            .await?;
-                    }
+                    three_month, six_month, twelve_month, pattern_group_id, harmonic_type,
+                    xa_price_length, ab_price_length, bc_price_length, cd_price_length,
+                    bat_accuracy, butterfly_accuracy, gartley_accuracy, crab_accuracy, shark_accuracy
+                )
+                "#
+            );
+
+            builder.push_values(chunk, |mut row, p| {
+                row.push_bind(&p.symbol)
+                    .push_bind(&p.x_date)
+                    .push_bind(p.x_open)
+                    .push_bind(p.x_high)
+                    .push_bind(p.x_low)
+                    .push_bind(p.x_close)
+                    .push_bind(p.x_length)
+                    .push_bind(p.x_min_max)
+                    .push_bind(&p.a_date)
+                    .push_bind(p.a_open)
+                    .push_bind(p.a_high)
+                    .push_bind(p.a_low)
+                    .push_bind(p.a_close)
+                    .push_bind(p.a_length)
+                    .push_bind(p.a_min_max)
+                    .push_bind(&p.b_date)
+                    .push_bind(p.b_open)
+                    .push_bind(p.b_high)
+                    .push_bind(p.b_low)
+                    .push_bind(p.b_close)
+                    .push_bind(p.b_length)
+                    .push_bind(p.b_min_max)
+                    .push_bind(&p.c_date)
+                    .push_bind(p.c_open)
+                    .push_bind(p.c_high)
+                    .push_bind(p.c_low)
+                    .push_bind(p.c_close)
+                    .push_bind(p.c_length)
+                    .push_bind(p.c_min_max)
+                    .push_bind(&p.d_date)
+                    .push_bind(p.d_open)
+                    .push_bind(p.d_high)
+                    .push_bind(p.d_low)
+                    .push_bind(p.d_close)
+                    .push_bind(p.d_length)
+                    .push_bind(p.d_min_max)
+                    .push_bind(p.trade_open)
+                    .push_bind(p.trade_risk_exit_price)
+                    .push_bind(p.trade_reward_exit_price)
+                    .push_bind(p.trade_enter_price)
+                    .push_bind(p.trade_current_price)
+                    .push_bind(p.trade_length)
+                    .push_bind(p.trade_pnl)
+                    .push_bind(p.trade_result)
+                    .push_bind(&p.trade_date)
+                    .push_bind(&p.trade_symbol)
+                    .push_bind(p.trade_ab_price_retracement)
+                    .push_bind(p.trade_bc_price_retracement)
+                    .push_bind(p.trade_cd_xa_price_retracement)
+                    .push_bind(p.trade_cd_price_retracement)
+                    .push_bind(p.trade_bc_bar_retracement)
+                    .push_bind(p.trade_cd_bar_retracement)
+                    .push_bind(p.trade_cd_bc_price_retracement)
+                    .push_bind(p.trade_snr)
+                    .push_bind(p.trade_year)
+                    .push_bind(p.trade_month)
+                    .push_bind(p.trade_day)
+                    .push_bind(format!("{:?}", p.reversal_type))
+                    .push_bind(format!("{:?}", p.market))
+                    .push_bind(p.three_month)
+                    .push_bind(p.six_month)
+                    .push_bind(p.twelve_month)
+                    .push_bind(&p.pattern_group_id)
+                    .push_bind(format!("{:?}", p.harmonic_type))
+                    .push_bind(p.xa_price_length)
+                    .push_bind(p.ab_price_length)
+                    .push_bind(p.bc_price_length)
+                    .push_bind(p.cd_price_length)
+                    .push_bind(p.bat_accuracy)
+                    .push_bind(p.butterfly_accuracy)
+                    .push_bind(p.gartley_accuracy)
+                    .push_bind(p.crab_accuracy)
+                    .push_bind(p.shark_accuracy);
+            });
+
+            builder.build().execute(&mut *tx).await?;
+        }
+
+        tx.commit().await?;
         Ok(())
     }    
     
     pub fn from_pattern(&self, p: &PatternXABCD) -> XABCD_CSV  {
         
         XABCD_CSV {
-            symbol: p.symbol.clone(),
-            x_date: p.x.date.clone(),
+            symbol: p.symbol.to_string(),
+            x_date: p.x.date.to_string(),
             x_open: p.x.open,
             x_high: p.x.high,
             x_low: p.x.low,
             x_close: p.x.close,
             x_length: p.x.length,
             x_min_max: p.x.min_max,
-            a_date: p.a.date.clone(),
+            a_date: p.a.date.to_string(),
             a_open: p.a.open,
             a_high: p.a.high,
             a_low: p.a.low,
@@ -305,7 +416,7 @@ impl Database {
             a_length: p.a.length,
             xa_price_length: p.a.leg_price_length,
             a_min_max: p.a.min_max,
-            b_date: p.b.date.clone(),
+            b_date: p.b.date.to_string(),
             b_open: p.b.open,
             b_high: p.b.high,
             b_low: p.b.low,
@@ -313,7 +424,7 @@ impl Database {
             b_length: p.b.length,
             b_min_max: p.b.min_max,
             ab_price_length: p.b.leg_price_length,
-            c_date: p.c.date.clone(),
+            c_date: p.c.date.to_string(),
             c_open: p.c.open,
             c_high: p.c.high,
             c_low: p.c.low,
@@ -321,7 +432,7 @@ impl Database {
             c_length: p.c.length,
             c_min_max: p.c.min_max,
             bc_price_length: p.c.leg_price_length,
-            d_date: p.d.date.clone(),
+            d_date: p.d.date.to_string(),
             d_open: p.d.open,
             d_high: p.d.high,
             d_low: p.d.low,
@@ -337,8 +448,8 @@ impl Database {
             trade_length: p.trade.length,
             trade_pnl: p.trade.pnl,
             trade_result: p.trade.result,
-            trade_date: p.trade.date.clone(),
-            trade_symbol: p.trade.symbol.clone(),
+            trade_date: p.trade.date.to_string(),
+            trade_symbol: p.symbol.to_string(),
             trade_ab_price_retracement: p.trade.ab_price_retracement,
             trade_bc_price_retracement: p.trade.bc_price_retracement,
             trade_cd_xa_price_retracement: p.trade.cd_xa_price_retracement,
@@ -355,8 +466,8 @@ impl Database {
             three_month: p.three_month,
             six_month: p.six_month,
             twelve_month: p.twelve_month,
-            pattern_group_id: p.pattern_group_id.clone(),
-            harmonic_type: p.abcd_type.clone(),
+            pattern_group_id: format!("{}{}", p.symbol, p.a.date),
+            harmonic_type: p.abcd_type,
             bat_accuracy: p.accuracies.bat.pattern_accuracy,
             butterfly_accuracy: p.accuracies.butterfly.pattern_accuracy,
             gartley_accuracy: p.accuracies.gartley.pattern_accuracy,    
@@ -366,11 +477,16 @@ impl Database {
         }
     }
 
-    pub async fn insert_scatter_plot(&self, patterns: &Vec<PatternXABCD>) -> Result<(), sqlx::Error> {
-        
+    pub async fn insert_scatter_plot(&self, patterns: &[PatternXABCD]) -> Result<(), sqlx::Error> {
+        if patterns.is_empty() {
+            return Ok(());
+        }
+
+        let mut scatter_rows: Vec<ScatterPlotDataBase> = Vec::with_capacity(patterns.len() * 5);
+
         for pattern in patterns {
             let acc = &pattern.accuracies;
-   
+
             for (name, value) in [
                 ("Bat", &acc.bat),
                 ("Butterfly", &acc.butterfly),
@@ -378,30 +494,35 @@ impl Database {
                 ("Crab", &acc.crab),
                 ("Shark", &acc.shark),
             ] {
-                let scatter_data = ScatterPlotDataBase {
+                scatter_rows.push(ScatterPlotDataBase {
                     accuracy: value.pattern_accuracy,
                     return_pct: pattern.trade.pnl,
-                    harmonic_type: name.to_string(),
-                };
-
-                sqlx::query!(
-                    r#"
-                        INSERT INTO accuracies (
-                            accuracy, return_pct, harmonic_type
-                        ) VALUES (?, ?, ?)
-                    "#,
-                    scatter_data.accuracy, scatter_data.return_pct, scatter_data.harmonic_type
-                )
-                .execute(&self.pool)
-                .await
-                .unwrap();
-
-
-                // println!("Scatter Data - Harmonic: {}, Accuracy: {:.2}, Return %: {:.2}", 
-                //     scatter_data.harmonic_type, scatter_data.accuracy, scatter_data.return_pct);
+                    harmonic_type: name,
+                });
             }
         }
 
+        let mut tx = self.pool.begin().await?;
+
+        for chunk in scatter_rows.chunks(ACCURACY_INSERT_CHUNK_SIZE) {
+            let mut builder = QueryBuilder::<MySql>::new(
+                r#"
+                INSERT INTO accuracies (
+                    accuracy, return_pct, harmonic_type
+                )
+                "#
+            );
+
+            builder.push_values(chunk, |mut row, item| {
+                row.push_bind(item.accuracy)
+                    .push_bind(item.return_pct)
+                    .push_bind(item.harmonic_type);
+            });
+
+            builder.build().execute(&mut *tx).await?;
+        }
+
+        tx.commit().await?;
         Ok(())
     }
      

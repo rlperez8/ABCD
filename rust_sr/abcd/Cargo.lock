@@ -10,13 +10,13 @@ dependencies = [
  "axum",
  "chrono",
  "csv",
+ "dotenvy",
  "mysql",
  "rust_decimal",
  "serde",
  "sqlx",
  "tabled",
  "tokio",
- "tools",
 ]
 
 [[package]]
@@ -3141,16 +3141,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0cbe268d35bdb4bb5a56a2de88d0ad0eb70af5384a99d648cd4b3d04039800e"
 dependencies = [
  "winnow",
-]
-
-[[package]]
-name = "tools"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "csv",
- "mysql",
- "serde",
 ]
 
 [[package]]

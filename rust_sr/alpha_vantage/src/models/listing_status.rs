@@ -5,9 +5,13 @@ pub struct ListingStatus {
     pub symbol: String,
     pub name: String,
     pub exchange: String,
-    pub assetType: String,
-    pub ipoDate: String,
-    pub delistingDate: String,
+    #[serde(rename = "assetType")]
+    pub asset_type: String,
+    #[serde(rename = "ipoDate")]
+    pub ipo_date: String,
+    #[serde(rename = "delistingDate")]
+    pub delisting_date: String,
     pub status: String,
-    pub average_volume: Option<f64>, 
+    #[serde(default)]
+    pub average_volume_30d: Option<f64>, 
 }
