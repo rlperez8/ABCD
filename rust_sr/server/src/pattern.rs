@@ -1,11 +1,6 @@
 use chrono::NaiveDate;
-use mysql::prelude::*;
-use mysql::Row;
-use mysql::{params, Pool, PooledConn};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::error::Error;
 
 #[derive(Debug, Deserialize, Serialize, Clone, sqlx::FromRow)]
 pub struct Pattern {
@@ -95,33 +90,4 @@ pub struct Pattern {
     pub crab_accuracy: Option<Decimal>,
     pub shark_accuracy: Option<Decimal>,
     pub time_accuracy: Option<f64>,
-}
-
-impl Pattern {
-    pub fn count_closed(patterns: &[Pattern]) -> usize {
-        patterns.iter().filter(|p| p.trade_open == false).count()
-    }
-
-    pub fn count_open(patterns: &[Pattern]) -> usize {
-        patterns.iter().filter(|p| p.trade_open == true).count()
-    }
-
-    pub fn count_wins(patterns: &[Pattern]) -> usize {
-        patterns.iter().filter(|p| p.trade_result == 1).count()
-    }
-
-    pub fn count_lost(patterns: &[Pattern]) -> usize {
-        patterns.iter().filter(|p| p.trade_result == 2).count()
-    }
-
-    pub fn group_by_month(patterns: &[Pattern]) -> HashMap<u32, Vec<Pattern>> {
-        let mut grouped = HashMap::new();
-        for p in patterns {
-            grouped
-                .entry(p.trade_month as u32)
-                .or_insert_with(Vec::new)
-                .push(p.clone());
-        }
-        grouped
-    }
 }

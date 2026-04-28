@@ -1,7 +1,4 @@
-#[path = "../models/mod.rs"]
-mod models;
-
-use models::database::Database;
+use abcd::models::database::Database;
 use sqlx::mysql::MySqlPool;
 
 fn database_url_from_env() -> Result<String, Box<dyn std::error::Error>> {

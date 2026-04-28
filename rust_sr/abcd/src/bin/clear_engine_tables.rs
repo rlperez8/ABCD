@@ -12,12 +12,7 @@ const ENGINE_TABLES: [&str; 4] = [
     "prop_strategy_family_summary",
 ];
 
-const CACHE_STATES: [&str; 4] = [
-    "accuracy_bin_rollup",
-    "structure_rollups",
-    "swing_strategy_rollups",
-    "prop_strategy_family_rollups",
-];
+const CACHE_STATES: [&str; 1] = ["prop_strategy_family_rollups"];
 
 const LEGACY_TABLES: [&str; 19] = [
     "prop_strategy_family_members",

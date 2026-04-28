@@ -3,11 +3,9 @@ use std::env;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-mod models;
-
-use crate::models::accuracy::Accuracies;
-use crate::models::database::{Database, OutputWriteOptions};
-use crate::models::*;
+use abcd::models::accuracy::Accuracies;
+use abcd::models::database::{Database, OutputWriteOptions};
+use abcd::models::*;
 use sqlx::mysql::MySqlPool;
 use tokio::task::JoinSet;
 
@@ -36,10 +34,6 @@ fn calculate_x_extreme_bars_left(candles: &[Candle], x_index: usize, x: &Pivot) 
             PivotType::Low => candle.low >= x.low,
         })
         .count() as i64
-}
-
-fn required_env(name: &str) -> Result<String, Box<dyn std::error::Error>> {
-    env::var(name).map_err(|_| format!("Missing required environment variable: {}", name).into())
 }
 
 fn database_url_from_env() -> Result<String, Box<dyn std::error::Error>> {
@@ -568,21 +562,17 @@ async fn flush_pending_patterns(
     run_id: &str,
     pending_patterns: &mut Vec<PatternXABCD>,
     pending_prop_reversal_outcomes: &mut Vec<PropReversalOutcome>,
-    enable_accuracy_rollups: bool,
     fast_rebuild: bool,
     use_build_tables: bool,
     write_pattern_setups: bool,
     write_harmonic_scores: bool,
-    write_swing_outcomes: bool,
-    _write_prop_outcomes: bool,
     target_ready_outcomes_only: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if pending_patterns.is_empty() {
         return Ok(());
     }
 
-    let pattern_count = pending_patterns.len() as i64;
-    if write_pattern_setups || write_harmonic_scores || write_swing_outcomes {
+    if write_pattern_setups || write_harmonic_scores {
         db.insert_pattern_setups_with_timings(
             pending_patterns,
             Some(run_id),
@@ -590,7 +580,7 @@ async fn flush_pending_patterns(
             use_build_tables,
             write_pattern_setups,
             write_harmonic_scores,
-            write_swing_outcomes,
+            false,
             false,
         )
         .await?;
@@ -628,21 +618,6 @@ async fn flush_pending_patterns(
         }),
     )
     .await?;
-
-    if enable_accuracy_rollups && !use_build_tables {
-        let phase_started = Instant::now();
-        db.upsert_accuracy_bin_rollup_from_patterns(pending_patterns)
-            .await?;
-        db.record_engine_phase_timing(
-            run_id,
-            None,
-            "write_accuracy_rollups",
-            Some(pattern_count),
-            phase_started.elapsed(),
-            None,
-        )
-        .await?;
-    }
     pending_patterns.clear();
     pending_prop_reversal_outcomes.clear();
 
@@ -659,22 +634,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = database_url_from_env()?;
     let minimum_average_volume = env_f64("ABCD_MIN_AVG_VOLUME", 500000.0)?;
     let reset_outputs = env_flag("ABCD_RESET_OUTPUTS");
-    let enable_accuracy_rollups = env_flag("ABCD_ENABLE_ACCURACY_ROLLUPS");
     let use_build_tables = env_flag("ABCD_USE_BUILD_TABLES");
     let fast_rebuild = use_build_tables || reset_outputs || env_flag("ABCD_FAST_REBUILD");
     let write_pattern_setups = true;
     let write_harmonic_scores = env_flag("ABCD_WRITE_HARMONIC_SCORES");
-    let write_swing_outcomes = env_flag("ABCD_WRITE_SWING_OUTCOMES");
     let write_prop_outcomes = true;
     let target_ready_outcomes_only = env_flag_or("ABCD_TARGET_READY_OUTCOMES_ONLY", true)
         && !env_flag("ABCD_WRITE_OPEN_PROP_OUTCOMES");
     let output_write_options = OutputWriteOptions {
         write_pattern_setups,
         write_harmonic_scores,
-        write_swing_outcomes,
+        write_swing_outcomes: false,
         write_prop_outcomes,
     };
-    let refresh_structure_rollups = env_flag("ABCD_REFRESH_STRUCTURE_ROLLUPS");
     let scan_concurrency = cmp::max(1, env_usize("ABCD_SCAN_CONCURRENCY", 4)?);
     let write_batch_size = cmp::max(1, env_usize("ABCD_WRITE_BATCH_SIZE", 1000)?);
     let symbol_offset = env_usize("ABCD_SYMBOL_OFFSET", 0)?;
@@ -842,12 +814,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|| "unlimited".to_string())
     );
     println!(
-        "Using fast rebuild {}, build tables {}, pattern setups {}, harmonic scores {}, swing outcomes {}, prop outcomes {}, target-ready outcomes only {}",
+        "Using fast rebuild {}, build tables {}, pattern setups {}, harmonic scores {}, prop outcomes {}, target-ready outcomes only {}",
         fast_rebuild,
         use_build_tables,
         write_pattern_setups,
         write_harmonic_scores,
-        write_swing_outcomes,
         write_prop_outcomes,
         target_ready_outcomes_only
     );
@@ -1020,13 +991,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &run_id,
                 &mut pending_patterns,
                 &mut pending_prop_reversal_outcomes,
-                enable_accuracy_rollups,
                 fast_rebuild,
                 use_build_tables,
                 write_pattern_setups,
                 write_harmonic_scores,
-                write_swing_outcomes,
-                write_prop_outcomes,
                 target_ready_outcomes_only,
             )
             .await?;
@@ -1039,13 +1007,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &run_id,
         &mut pending_patterns,
         &mut pending_prop_reversal_outcomes,
-        enable_accuracy_rollups,
         fast_rebuild,
         use_build_tables,
         write_pattern_setups,
         write_harmonic_scores,
-        write_swing_outcomes,
-        write_prop_outcomes,
         target_ready_outcomes_only,
     )
     .await?;
@@ -1087,28 +1052,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
         println!("Swapped build tables into final output table names");
-    }
-
-    if reset_outputs && enable_accuracy_rollups {
-        db.set_dashboard_cache_state("accuracy_bin_rollup", true, None, Some("ready"))
-            .await?;
-        println!("Marked accuracy bin rollup cache ready");
-    }
-
-    if refresh_structure_rollups {
-        println!("Refreshing structure rollups");
-        let phase_started = Instant::now();
-        db.refresh_structure_rollups().await?;
-        db.record_engine_phase_timing(
-            &run_id,
-            None,
-            "refresh_structure_rollups",
-            None,
-            phase_started.elapsed(),
-            None,
-        )
-        .await?;
-        println!("Marked structure rollups ready");
     }
 
     println!("Refreshing prop strategy family summaries");

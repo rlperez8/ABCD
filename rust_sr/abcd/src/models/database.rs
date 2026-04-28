@@ -23,7 +23,6 @@ use std::time::{Duration, Instant};
 use rust_decimal::prelude::ToPrimitive;
 
 const PATTERN_INSERT_CHUNK_SIZE: usize = 1000;
-const XABCD_MIRROR_INSERT_CHUNK_SIZE: usize = 400;
 const CANDLE_TREND_UPSERT_CHUNK_SIZE: usize = 500;
 const THREE_MONTH_SMA_PERIOD: usize = 63;
 const SIX_MONTH_SMA_PERIOD: usize = 126;
@@ -177,7 +176,6 @@ struct PatternOutputTables {
     harmonic_scores: &'static str,
     swing_outcomes: &'static str,
     prop_outcomes: &'static str,
-    xabcd_patterns: &'static str,
 }
 
 impl PatternOutputTables {
@@ -187,7 +185,6 @@ impl PatternOutputTables {
             harmonic_scores: "pattern_harmonic_scores",
             swing_outcomes: "pattern_outcomes_swing",
             prop_outcomes: "pattern_outcomes_prop",
-            xabcd_patterns: "xabcd_patterns",
         }
     }
 
@@ -197,7 +194,6 @@ impl PatternOutputTables {
             harmonic_scores: "pattern_harmonic_scores_build",
             swing_outcomes: "pattern_outcomes_swing_build",
             prop_outcomes: "pattern_outcomes_prop_build",
-            xabcd_patterns: "xabcd_patterns_build",
         }
     }
 }
@@ -1639,9 +1635,7 @@ impl Database {
         for table in [
             "pattern_outcomes_prop",
             "pattern_setups",
-            "pattern_outcomes_swing",
             "pattern_harmonic_scores",
-            "xabcd_patterns",
         ] {
             let sql = format!("DROP TABLE IF EXISTS {table}");
             sqlx::query(&sql).execute(&self.pool).await?;
@@ -1649,7 +1643,7 @@ impl Database {
 
         self.ensure_pattern_mode_tables().await?;
 
-        for table in ["pattern_outcomes_swing", "pattern_harmonic_scores"] {
+        for table in ["pattern_harmonic_scores"] {
             let sql = format!("DROP TABLE IF EXISTS {table}");
             sqlx::query(&sql).execute(&self.pool).await?;
         }
@@ -1705,19 +1699,11 @@ impl Database {
     }
 
     pub async fn clear_generated_rollups_for_output_swap(&self) -> Result<(), sqlx::Error> {
-        self.ensure_accuracy_bin_cache_table().await?;
-        self.ensure_accuracy_bin_rollup_table().await?;
-        self.ensure_pattern_structure_rollup_table().await?;
-        self.ensure_accuracy_structure_rollup_table().await?;
         self.ensure_prop_strategy_family_yearly_table().await?;
         self.ensure_prop_strategy_family_summary_table().await?;
         self.ensure_dashboard_cache_state_table().await?;
 
         for table in [
-            "accuracy_bin_cache",
-            "accuracy_bin_rollup",
-            "pattern_structure_rollup",
-            "accuracy_structure_rollup",
             "prop_strategy_family_yearly",
             "prop_strategy_family_summary",
         ] {
@@ -1726,10 +1712,6 @@ impl Database {
                 .await?;
         }
 
-        self.set_dashboard_cache_state("accuracy_bin_rollup", false, None, Some("cleared"))
-            .await?;
-        self.set_dashboard_cache_state("structure_rollups", false, None, Some("cleared"))
-            .await?;
         self.set_dashboard_cache_state(
             "prop_strategy_family_rollups",
             false,
