@@ -1,9 +1,8 @@
-
+use crate::pattern::*;
 use csv::ReaderBuilder;
-use std::error::Error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::pattern::*;   
+use std::error::Error;
 
 #[derive(Serialize, Clone)]
 pub struct YearlySummary {
@@ -13,10 +12,8 @@ pub struct YearlySummary {
     win_pct: i32,
 }
 pub fn read_csv_top10_yext(path: &str) -> Result<Vec<Pattern>, Box<dyn Error>> {
-   let file = std::fs::File::open(path)?;
-    let mut rdr = ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(file);
+    let file = std::fs::File::open(path)?;
+    let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(file);
 
     let mut all_patterns = Vec::new();
     for result in rdr.deserialize::<Pattern>() {
@@ -27,18 +24,13 @@ pub fn read_csv_top10_yext(path: &str) -> Result<Vec<Pattern>, Box<dyn Error>> {
     Ok(all_patterns)
 }
 pub async fn load_patterns() -> Vec<Pattern> {
-
-    tokio::task::spawn_blocking(|| {
-        
-        match read_csv_top10_yext("../../../patterns_all.csv") {
-            Ok(rows) => rows,
-            Err(e) => {
-                println!("Error reading CSV: {}", e);
-                Vec::new()
-            }
+    tokio::task::spawn_blocking(|| match read_csv_top10_yext("../../../patterns_all.csv") {
+        Ok(rows) => rows,
+        Err(e) => {
+            println!("Error reading CSV: {}", e);
+            Vec::new()
         }
     })
     .await
     .unwrap_or_default()
 }
-

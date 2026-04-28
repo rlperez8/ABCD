@@ -1,14 +1,13 @@
 // use std::fs::File;
 // use csv::WriterBuilder;
-use serde::Serialize;
-use serde::ser::Serializer;
-use crate::models::reversal_type::ReversalType;
-use crate::models::pattern_abcd::PatternXABCD;
-use crate::models::harmonic_types::HarmonicType;
 use crate::models::market::Market;
+use crate::models::pattern_abcd::PatternXABCD;
+use crate::models::reversal_type::ReversalType;
+use serde::ser::Serializer;
+use serde::Serialize;
 // use sqlx::{MySqlPool, QueryBuilder};
-use mysql::*;
 use mysql::prelude::*;
+use mysql::*;
 
 fn two_decimals<S>(val: &f64, s: S) -> Result<S::Ok, S::Error>
 where
@@ -98,6 +97,7 @@ pub struct XABCD_CSV {
     d_close: f64,
 
     d_length: i64,
+    full_pattern_length: i64,
 
     #[serde(serialize_with = "two_decimals")]
     d_min_max: f64,
@@ -150,19 +150,28 @@ pub struct XABCD_CSV {
     trade_day: i64,
 
     reversal_type: ReversalType,
+    bullish_key_reversal: bool,
+    bearish_key_reversal: bool,
+    bullish_engulfing: bool,
+    bearish_engulfing: bool,
+    bullish_outside_reversal: bool,
+    bearish_outside_reversal: bool,
+    hammer: bool,
+    shooting_star: bool,
+    morning_star: bool,
+    evening_star: bool,
+    three_white_soldiers: bool,
+    three_black_crows: bool,
     market: Market,
     three_month: Option<bool>,
     six_month: Option<bool>,
     twelve_month: Option<bool>,
     pattern_group_id: String,
-    harmonic_type: HarmonicType
-
+    harmonic_type: String,
 }
 
 impl XABCD_CSV {
-    
     pub fn from_pattern(p: &PatternXABCD) -> Self {
-        
         XABCD_CSV {
             symbol: p.symbol.to_string(),
             x_date: p.x.date.to_string(),
@@ -199,6 +208,7 @@ impl XABCD_CSV {
             d_low: p.d.low,
             d_close: p.d.close,
             d_length: p.d.length,
+            full_pattern_length: p.x.length + p.a.length + p.b.length + p.c.length + p.d.length,
             d_min_max: p.d.min_max,
             trade_open: p.trade.open,
             trade_risk_exit_price: p.trade.risk_exit_price,
@@ -222,12 +232,24 @@ impl XABCD_CSV {
             trade_month: p.trade.month,
             trade_day: p.trade.day,
             reversal_type: p.trade.reversal_type.clone(),
+            bullish_key_reversal: p.trade.bullish_key_reversal,
+            bearish_key_reversal: p.trade.bearish_key_reversal,
+            bullish_engulfing: p.trade.bullish_engulfing,
+            bearish_engulfing: p.trade.bearish_engulfing,
+            bullish_outside_reversal: p.trade.bullish_outside_reversal,
+            bearish_outside_reversal: p.trade.bearish_outside_reversal,
+            hammer: p.trade.hammer,
+            shooting_star: p.trade.shooting_star,
+            morning_star: p.trade.morning_star,
+            evening_star: p.trade.evening_star,
+            three_white_soldiers: p.trade.three_white_soldiers,
+            three_black_crows: p.trade.three_black_crows,
             market: p.market,
             three_month: p.three_month,
             six_month: p.six_month,
             twelve_month: p.twelve_month,
             pattern_group_id: format!("{}{}", p.symbol, p.a.date),
-            harmonic_type: p.abcd_type,
+            harmonic_type: "Multi".to_string(),
         }
     }
     // pub fn write_patterns_to_csv(patterns: &[PatternXABCD], filename: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -286,7 +308,7 @@ impl XABCD_CSV {
     //         trade_cd_xa_price_retracement: p.trade.cd_xa_price_retracement,
     //         trade_bc_bar_retracement:  p.trade.bc_bar_retracement,
     //         trade_cd_bar_retracement: p.trade.cd_bar_retracement,
-            
+
     //         trade_snr: p.trade.snr,
     //         trade_year: p.trade.year,
     //         trade_month: p.trade.month,
@@ -296,7 +318,7 @@ impl XABCD_CSV {
     //         three_month: p.three_month,
     //         six_month: p.six_month,
     //         twelve_month: p.twelve_month
-        
+
     //     }).collect();
 
     //     let file = File::create(filename)?;
@@ -309,13 +331,13 @@ impl XABCD_CSV {
     //     writer.flush()?;
     //     Ok(())
     // }
-    pub fn insert_patterns_into_db(conn: &mut PooledConn, patterns: &[PatternXABCD]) -> Result<(), Box<dyn std::error::Error>> {
-
-
+    pub fn insert_patterns_into_db(
+        conn: &mut PooledConn,
+        patterns: &[PatternXABCD],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         for p in patterns {
-            
             // CONVERT TO XABCD_CSV STRUCT
-            let csv = XABCD_CSV::from_pattern(p);  
+            let csv = XABCD_CSV::from_pattern(p);
 
             // INSERT INTO DB
             conn.exec_drop(
@@ -324,7 +346,7 @@ impl XABCD_CSV {
                     a_date, a_open, a_high, a_low, a_close, a_length, a_min_max,
                     b_date, b_open, b_high, b_low, b_close, b_length, b_min_max,
                     c_date, c_open, c_high, c_low, c_close, c_length, c_min_max,
-                    d_date, d_open, d_high, d_low, d_close, d_length, d_min_max,
+                    d_date, d_open, d_high, d_low, d_close, d_length, full_pattern_length, d_min_max,
                     trade_open, trade_risk_exit_price, trade_reward_exit_price,
                     trade_enter_price, trade_current_price, trade_length, trade_pnl,
                     trade_result, trade_date, trade_symbol,
@@ -333,14 +355,19 @@ impl XABCD_CSV {
                     trade_bc_bar_retracement, trade_cd_bar_retracement,
                     trade_cd_bc_price_retracement,
                     trade_snr, trade_year, trade_month, trade_day,
-                    reversal_type, market,
+                    reversal_type,
+                    bullish_key_reversal, bearish_key_reversal,
+                    bullish_engulfing, bearish_engulfing,
+                    bullish_outside_reversal, bearish_outside_reversal,
+                    hammer, shooting_star,
+                    market,
                     three_month, six_month, twelve_month, pattern_group_id, harmonic_type
                 ) VALUES (
                     :symbol, :x_date, :x_open, :x_high, :x_low, :x_close, :x_length, :x_min_max,
                     :a_date, :a_open, :a_high, :a_low, :a_close, :a_length, :a_min_max,
                     :b_date, :b_open, :b_high, :b_low, :b_close, :b_length, :b_min_max,
                     :c_date, :c_open, :c_high, :c_low, :c_close, :c_length, :c_min_max,
-                    :d_date, :d_open, :d_high, :d_low, :d_close, :d_length, :d_min_max,
+                    :d_date, :d_open, :d_high, :d_low, :d_close, :d_length, :full_pattern_length, :d_min_max,
                     :trade_open, :trade_risk_exit_price, :trade_reward_exit_price,
                     :trade_enter_price, :trade_current_price, :trade_length, :trade_pnl,
                     :trade_result, :trade_date, :trade_symbol,
@@ -349,7 +376,12 @@ impl XABCD_CSV {
                     :trade_bc_bar_retracement, :trade_cd_bar_retracement,
                     :trade_cd_bc_price_retracement,
                     :trade_snr, :trade_year, :trade_month, :trade_day,
-                    :reversal_type, :market,
+                    :reversal_type,
+                    :bullish_key_reversal, :bearish_key_reversal,
+                    :bullish_engulfing, :bearish_engulfing,
+                    :bullish_outside_reversal, :bearish_outside_reversal,
+                    :hammer, :shooting_star,
+                    :market,
                     :three_month, :six_month, :twelve_month, :pattern_group_id, :harmonic_type
                 )",
                 params! {
@@ -388,6 +420,7 @@ impl XABCD_CSV {
                     "d_low" => csv.d_low,
                     "d_close" => csv.d_close,
                     "d_length" => csv.d_length,
+                    "full_pattern_length" => csv.full_pattern_length,
                     "d_min_max" => csv.d_min_max,
                     "trade_open" => csv.trade_open,
                     "trade_risk_exit_price" => csv.trade_risk_exit_price,
@@ -411,6 +444,14 @@ impl XABCD_CSV {
                     "trade_month" => csv.trade_month,
                     "trade_day" => csv.trade_day,
                     "reversal_type" => format!("{:?}", csv.reversal_type),
+                    "bullish_key_reversal" => csv.bullish_key_reversal,
+                    "bearish_key_reversal" => csv.bearish_key_reversal,
+                    "bullish_engulfing" => csv.bullish_engulfing,
+                    "bearish_engulfing" => csv.bearish_engulfing,
+                    "bullish_outside_reversal" => csv.bullish_outside_reversal,
+                    "bearish_outside_reversal" => csv.bearish_outside_reversal,
+                    "hammer" => csv.hammer,
+                    "shooting_star" => csv.shooting_star,
                     "market" => format!("{:?}", csv.market),
                     "three_month" => csv.three_month.unwrap_or(false),
                     "six_month" => csv.six_month.unwrap_or(false),

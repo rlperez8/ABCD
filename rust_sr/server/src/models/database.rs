@@ -1,41 +1,26 @@
 // use sqlx::mysql::MySqlPool;
 // use sqlx::Error;
 // use crate::pattern::Pattern; // your Pattern struct
-// use crate::candles::Candle; 
+// use crate::candles::Candle;
 // pub use sqlx::Database;
 // pub use sqlx::Error::Database;
 
-use sqlx::mysql::MySqlPool;
 use crate::pattern::Pattern;
+use sqlx::mysql::MySqlPool;
 use sqlx::Error;
 
 pub struct Database {
     pub pool: MySqlPool,
 }
 
-
 impl Database {
-
-
     pub async fn fetch_all(&self) -> Result<Vec<Pattern>, Error> {
-
-        let patterns: Vec<Pattern> = sqlx::query_as::<_, Pattern>("SELECT * FROM xabcd_patterns").fetch_all(&self.pool).await?;
+        let patterns: Vec<Pattern> = sqlx::query_as::<_, Pattern>("SELECT * FROM xabcd_patterns")
+            .fetch_all(&self.pool)
+            .await?;
 
         Ok(patterns)
     }
-    
-
-
-
-
-
-
-
-
-
-
-
-
 
     // Azure DB
     // pub fn new_azure() -> Result<Self, Box<dyn std::error::Error>> {
@@ -50,9 +35,6 @@ impl Database {
     //     let pool = Pool::new(builder)?;  // create pool once
     //     Ok(Self { pool })
     // }
-
-    
-
 
     // // Get a connection from the pool when needed
     // pub fn get_conn(&self) -> Result<PooledConn, mysql::Error> {
@@ -76,8 +58,8 @@ impl Database {
     //     let candles: Vec<Candle> = conn.exec_map(
     //         query,
     //         params,
-    //         |(symbol, date_str, open, high, low, close, volume): 
-    //             (String, String, f64, f64, f64, f64, u64)| 
+    //         |(symbol, date_str, open, high, low, close, volume):
+    //             (String, String, f64, f64, f64, f64, u64)|
     //         {
     //             let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
     //                 .expect("Failed to parse date");

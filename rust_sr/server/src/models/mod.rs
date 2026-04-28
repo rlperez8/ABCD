@@ -1,5 +1,5 @@
-pub mod database;
 pub mod candles;
+pub mod database;
 
-pub use database::Database;
 pub use candles::Candle;
+pub use database::Database;

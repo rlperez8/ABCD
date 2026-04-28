@@ -1,7 +1,7 @@
-use serde::Serialize;
-use chrono::NaiveDate;
 use crate::models::candle::Candle;
 use crate::models::pivot_type::PivotType;
+use chrono::NaiveDate;
+use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Pivot {
@@ -13,7 +13,7 @@ pub struct Pivot {
     pub close: f64,
     pub length: i64,
     pub min_max: f64,
-    pub leg_price_length: f64
+    pub leg_price_length: f64,
 }
 
 impl Pivot {
@@ -23,11 +23,11 @@ impl Pivot {
 
     // Constructor for Pivot
     pub fn new(
-        candle: &Candle, 
-        type_: PivotType, 
-        length: i64, 
+        candle: &Candle,
+        type_: PivotType,
+        length: i64,
         min_max: f64,
-        leg_price_length: f64
+        leg_price_length: f64,
     ) -> Self {
         Self {
             type_,
@@ -38,7 +38,7 @@ impl Pivot {
             close: Self::truncate_to_2_decimals(candle.close),
             length,
             min_max: Self::truncate_to_2_decimals(min_max),
-            leg_price_length
+            leg_price_length,
         }
     }
 }

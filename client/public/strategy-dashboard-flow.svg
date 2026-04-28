@@ -1,0 +1,154 @@
+<svg width="1700" height="1420" viewBox="0 0 1700 1420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1700" height="1420" fill="#0D1117"/>
+
+  <style>
+    .title { font: 700 32px 'Segoe UI', Arial, sans-serif; fill: #E6EDF3; }
+    .subtitle { font: 500 16px 'Segoe UI', Arial, sans-serif; fill: #9DA7B3; }
+    .section { font: 700 23px 'Segoe UI', Arial, sans-serif; fill: #E6EDF3; }
+    .label { font: 700 17px 'Segoe UI', Arial, sans-serif; fill: #E6EDF3; }
+    .body { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #BCC5D0; }
+    .mono { font: 700 14px Consolas, 'SFMono-Regular', monospace; fill: #D2E5FF; }
+    .pill { font: 700 12px 'Segoe UI', Arial, sans-serif; }
+    .box { fill: #161B22; stroke: #30363D; stroke-width: 1.5; rx: 18; }
+    .source { fill: #111A24; stroke: #58A6FF; stroke-width: 2; rx: 18; }
+    .cache { fill: #132018; stroke: #238636; stroke-width: 2; rx: 18; }
+    .ui { fill: #221A10; stroke: #D29922; stroke-width: 2; rx: 18; }
+    .slow { fill: #271718; stroke: #DA3633; stroke-width: 2; rx: 18; }
+    .arrow { stroke: #58A6FF; stroke-width: 3; stroke-linecap: round; }
+    .mutedArrow { stroke: #6E7681; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 8 8; }
+  </style>
+
+  <defs>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#58A6FF"/>
+    </marker>
+    <marker id="arrowGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6E7681"/>
+    </marker>
+  </defs>
+
+  <rect x="24" y="24" width="1652" height="126" class="box"/>
+  <text x="52" y="68" class="title">Strategy Dashboard Flow Only</text>
+  <text x="52" y="98" class="subtitle">This is just the strategies/current-setups path. It shows what loads on page refresh, what tables power the strategy views, and which steps are still slow.</text>
+  <rect x="52" y="112" width="250" height="24" rx="12" fill="#1D2A38" stroke="#58A6FF"/>
+  <text x="68" y="128" class="pill" fill="#9DCCFF">Normal page refresh = read path</text>
+  <rect x="316" y="112" width="286" height="24" rx="12" fill="#2B1B1A" stroke="#DA3633"/>
+  <text x="332" y="128" class="pill" fill="#FFB2AA">refresh_structure_rollups = rebuild path</text>
+
+  <text x="52" y="200" class="section">1. Source</text>
+
+  <rect x="52" y="228" width="760" height="156" class="source"/>
+  <text x="76" y="262" class="label">xabcd_patterns</text>
+  <text x="76" y="290" class="body">Raw pattern/trade source table.</text>
+  <text x="76" y="316" class="body">Contains harmonic_type, reversal_type, trade_result, trade_pnl, X/A/B/C lengths, dates, and trend source columns.</text>
+  <text x="76" y="342" class="body">Everything in the strategy dashboard ultimately comes from here.</text>
+  <text x="76" y="368" class="body">This is also the table that becomes painful when the app has to read it live.</text>
+
+  <rect x="850" y="228" width="798" height="156" class="slow"/>
+  <text x="874" y="262" class="label">Why raw is expensive</text>
+  <text x="874" y="290" class="body">The strategy UI still sometimes asks raw-table questions that also compute derived buckets inside the query:</text>
+  <text x="898" y="318" class="mono">bin + reversal_type + size_bucket + time_bin + 3M/6M/12M trend</text>
+  <text x="874" y="350" class="body">That is much slower than reading a narrow prepared cache.</text>
+
+  <line x1="850" y1="406" x2="850" y2="464" class="arrow" marker-end="url(#arrowBlue)"/>
+
+  <text x="52" y="518" class="section">2. Strategy Rollup Tables</text>
+
+  <rect x="52" y="546" width="760" height="188" class="cache"/>
+  <text x="76" y="580" class="label">strategy_yearly_rollup</text>
+  <text x="76" y="608" class="body">Strategy aggregate table.</text>
+  <text x="76" y="634" class="body">One row per exact strategy cohort per year.</text>
+  <text x="76" y="664" class="body">Current cohort dimensions:</text>
+  <text x="100" y="692" class="mono">market</text>
+  <text x="180" y="692" class="mono">harmonic_type</text>
+  <text x="330" y="692" class="mono">bin</text>
+  <text x="390" y="692" class="mono">reversal_type</text>
+  <text x="540" y="692" class="mono">size_bucket</text>
+  <text x="100" y="718" class="mono">time_bin</text>
+  <text x="210" y="718" class="mono">three_month_trend</text>
+  <text x="420" y="718" class="mono">six_month_trend</text>
+  <text x="600" y="718" class="mono">twelve_month_trend</text>
+
+  <rect x="850" y="546" width="798" height="188" class="cache"/>
+  <text x="874" y="580" class="label">strategy_trade_summary_cache</text>
+  <text x="874" y="608" class="body">Trade-level cache.</text>
+  <text x="874" y="634" class="body">Stores the individual patterns already assigned to exact strategy cohorts.</text>
+  <text x="874" y="660" class="body">Used to populate the trade list for a selected strategy.</text>
+  <text x="874" y="690" class="body">This is much cheaper to read than recomputing cohort membership from scratch.</text>
+
+  <line x1="850" y1="758" x2="850" y2="814" class="arrow" marker-end="url(#arrowBlue)"/>
+
+  <text x="52" y="868" class="section">3. API Endpoints Used By Strategies</text>
+
+  <rect x="52" y="896" width="500" height="176" class="ui"/>
+  <text x="76" y="930" class="label">/strategy-candidates</text>
+  <text x="76" y="958" class="body">Reads from</text>
+  <text x="160" y="958" class="mono">strategy_yearly_rollup</text>
+  <text x="76" y="986" class="body">Builds the ranked strategy table.</text>
+  <text x="76" y="1014" class="body">This should be the main fast entry into the strategy universe.</text>
+
+  <rect x="600" y="896" width="500" height="176" class="ui"/>
+  <text x="624" y="930" class="label">/strategy-trades</text>
+  <text x="624" y="958" class="body">Reads from</text>
+  <text x="708" y="958" class="mono">strategy_trade_summary_cache</text>
+  <text x="624" y="986" class="body">Builds the pattern list for the selected strategy.</text>
+  <text x="624" y="1014" class="body">This is the trade drill-down path.</text>
+
+  <rect x="1148" y="896" width="500" height="176" class="ui"/>
+  <text x="1172" y="930" class="label">/setup-comparison</text>
+  <text x="1172" y="958" class="body">Tries</text>
+  <text x="1228" y="958" class="mono">strategy_yearly_rollup</text>
+  <text x="1172" y="986" class="body">If cached lookup misses, it falls back to raw cohort queries on</text>
+  <text x="1172" y="1014" class="mono">xabcd_patterns</text>
+
+  <rect x="420" y="1104" width="860" height="164" class="slow"/>
+  <text x="444" y="1138" class="label">/pattern-summaries (current setups path)</text>
+  <text x="444" y="1166" class="body">This is the current setups bottleneck.</text>
+  <text x="444" y="1194" class="body">It reads raw</text>
+  <text x="541" y="1194" class="mono">xabcd_patterns</text>
+  <text x="667" y="1194" class="body">and computes size/time/trend buckets in the query.</text>
+  <text x="444" y="1222" class="body">The strategies page uses this when loading current setups inside the strategy dashboard.</text>
+  <text x="444" y="1250" class="body">This is why current setups still feel much slower than they should.</text>
+
+  <line x1="850" y1="1284" x2="850" y2="1338" class="arrow" marker-end="url(#arrowBlue)"/>
+
+  <text x="52" y="1388" class="section">4. UI View</text>
+
+  <rect x="52" y="1416" width="760" height="0" fill="none"/>
+
+  <rect x="52" y="1416" width="1596" height="0" fill="none"/>
+
+  <rect x="52" y="1416" width="1596" height="0" fill="none"/>
+
+  <rect x="52" y="1416" width="1596" height="0" fill="none"/>
+
+  <rect x="52" y="1416" width="1596" height="0" fill="none"/>
+
+  <rect x="52" y="1416" width="1596" height="0" fill="none"/>
+
+  <rect x="52" y="1416" width="1596" height="0" fill="none"/>
+
+  <rect x="52" y="1328" width="1596" height="64" rx="18" fill="#161B22" stroke="#30363D"/>
+  <text x="76" y="1362" class="label">Strategies UI</text>
+  <text x="246" y="1362" class="body">Strategy leaderboard + current setups tab + selected strategy trades + setup comparison/workbench.</text>
+
+  <rect x="52" y="602" width="160" height="24" rx="12" fill="#16331E" stroke="#238636"/>
+  <text x="68" y="618" class="pill" fill="#8DDB9D">fast when ready</text>
+  <rect x="420" y="1180" width="154" height="24" rx="12" fill="#2B1B1A" stroke="#DA3633"/>
+  <text x="436" y="1196" class="pill" fill="#FFB2AA">slow raw path</text>
+
+  <rect x="52" y="1116" width="330" height="150" class="box"/>
+  <text x="76" y="1150" class="label">What happens on browser refresh?</text>
+  <text x="76" y="1178" class="body">It does not rebuild the whole strategy database.</text>
+  <text x="76" y="1206" class="body">It just calls the endpoints again.</text>
+  <text x="76" y="1234" class="body">It feels slow because some of those calls still hit raw data.</text>
+
+  <rect x="1318" y="1104" width="330" height="162" class="slow"/>
+  <text x="1342" y="1138" class="label">What happens on rollup refresh?</text>
+  <text x="1342" y="1166" class="body">The Rust job drops and rebuilds</text>
+  <text x="1342" y="1194" class="mono">strategy_yearly_rollup</text>
+  <text x="1342" y="1220" class="body">and</text>
+  <text x="1382" y="1220" class="mono">strategy_trade_summary_cache</text>
+  <text x="1342" y="1248" class="body">from the full raw history in</text>
+  <text x="1342" y="1274" class="mono">xabcd_patterns</text>
+</svg>

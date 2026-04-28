@@ -27,6 +27,17 @@ fn check_for_pivot(
     }
 }
 
+fn calculate_x_extreme_bars_left(candles: &[Candle], x_index: usize, x: &Pivot) -> i64 {
+    candles[..x_index]
+        .iter()
+        .rev()
+        .take_while(|candle| match x.type_ {
+            PivotType::High => candle.high <= x.high,
+            PivotType::Low => candle.low >= x.low,
+        })
+        .count() as i64
+}
+
 fn required_env(name: &str) -> Result<String, Box<dyn std::error::Error>> {
     env::var(name).map_err(|_| format!("Missing required environment variable: {}", name).into())
 }
@@ -53,6 +64,13 @@ fn env_usize(name: &str, default: usize) -> Result<usize, Box<dyn std::error::Er
     }
 }
 
+fn env_i64(name: &str, default: i64) -> Result<i64, Box<dyn std::error::Error>> {
+    match env::var(name) {
+        Ok(value) => Ok(value.trim().parse::<i64>()?),
+        Err(_) => Ok(default),
+    }
+}
+
 fn env_flag(name: &str) -> bool {
     match env::var(name) {
         Ok(value) => matches!(
@@ -60,6 +78,17 @@ fn env_flag(name: &str) -> bool {
             "1" | "true" | "yes"
         ),
         Err(_) => false,
+    }
+}
+
+fn env_flag_or(name: &str, default: bool) -> bool {
+    match env::var(name) {
+        Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" => true,
+            "0" | "false" | "no" => false,
+            _ => default,
+        },
+        Err(_) => default,
     }
 }
 
@@ -104,7 +133,11 @@ fn apply_closed_trade_reversal(pattern: &mut PatternXABCD, candles: &[Candle], c
     pattern.trade.three_black_crows = reversal_signals.three_black_crows;
 }
 
-fn scan_symbol(symbol: String, candles: Vec<Candle>) -> SymbolScanResult {
+fn scan_symbol(
+    symbol: String,
+    candles: Vec<Candle>,
+    max_x_bars_left: Option<i64>,
+) -> SymbolScanResult {
     let symbol = Arc::<str>::from(symbol);
 
     if candles.len() < 3 {
@@ -142,10 +175,16 @@ fn scan_symbol(symbol: String, candles: Vec<Candle>) -> SymbolScanResult {
 
         if check_for_pivot(current, prev1, prev2, PivotType::Low) {
             let x = Pivot::new(prev1, PivotType::Low, 0, prev1.low, 0.0);
-            pattern_x.push(PatternX { x });
+            pattern_x.push(PatternX {
+                x,
+                x_index: prev1_index,
+            });
         } else if check_for_pivot(current, prev1, prev2, PivotType::High) {
             let x = Pivot::new(prev1, PivotType::High, 0, prev1.low, 0.0);
-            pattern_x.push(PatternX { x });
+            pattern_x.push(PatternX {
+                x,
+                x_index: prev1_index,
+            });
         }
 
         for pattern in &mut pattern_x {
@@ -178,10 +217,14 @@ fn scan_symbol(symbol: String, candles: Vec<Candle>) -> SymbolScanResult {
                 };
 
                 let new_a = Pivot::new(prev1, new_a_type, 0, prev1.low, leg_price_length);
+                let mut finalized_x = pattern.x;
+                finalized_x.length = prev1_index.saturating_sub(pattern.x_index) as i64;
 
                 pattern_xa.push(PatternXA {
-                    x: pattern.x,
+                    x: finalized_x,
                     a: new_a,
+                    x_index: pattern.x_index,
+                    a_index: prev1_index,
                 });
             }
         }
@@ -216,11 +259,16 @@ fn scan_symbol(symbol: String, candles: Vec<Candle>) -> SymbolScanResult {
                 };
 
                 let new_b = Pivot::new(prev1, new_b_type, 0, prev1.low, leg_price_length);
+                let mut finalized_a = pattern.a;
+                finalized_a.length = prev1_index.saturating_sub(pattern.a_index) as i64;
 
                 pattern_xab.push(PatternXAB {
                     x: pattern.x,
-                    a: pattern.a,
+                    a: finalized_a,
                     b: new_b,
+                    x_index: pattern.x_index,
+                    a_index: pattern.a_index,
+                    b_index: prev1_index,
                 });
             }
         }
@@ -263,12 +311,18 @@ fn scan_symbol(symbol: String, candles: Vec<Candle>) -> SymbolScanResult {
                 };
 
                 let new_c = Pivot::new(prev1, new_c_type, 0, prev1.low, leg_price_length);
+                let mut finalized_b = pattern.b;
+                finalized_b.length = prev1_index.saturating_sub(pattern.b_index) as i64;
 
                 pattern_xabc_holder.push(PatternXABC {
                     x: pattern.x,
                     a: pattern.a,
-                    b: pattern.b,
+                    b: finalized_b,
                     c: new_c,
+                    x_index: pattern.x_index,
+                    a_index: pattern.a_index,
+                    b_index: pattern.b_index,
+                    c_index: prev1_index,
                 });
             }
         }
@@ -316,13 +370,15 @@ fn scan_symbol(symbol: String, candles: Vec<Candle>) -> SymbolScanResult {
                 };
 
                 let new_d = Pivot::new(prev1, new_d_type, 0, prev1.low, leg_price_length);
+                let mut finalized_c = pattern.c;
+                finalized_c.length = prev1_index.saturating_sub(pattern.c_index) as i64;
 
                 let trade = Trade::new(
                     market,
                     &pattern.x,
                     &pattern.a,
                     &pattern.b,
-                    &pattern.c,
+                    &finalized_c,
                     prev1,
                     support_level,
                     ReversalType::None,
@@ -331,10 +387,12 @@ fn scan_symbol(symbol: String, candles: Vec<Candle>) -> SymbolScanResult {
                 pattern_xabcd_holder.push(PatternXABCD {
                     symbol: Arc::clone(&symbol),
                     pattern_id: String::new(),
+                    x_bars_left: 0,
+                    x_index: pattern.x_index,
                     x: pattern.x,
                     a: pattern.a,
                     b: pattern.b,
-                    c: pattern.c,
+                    c: finalized_c,
                     d: new_d,
                     market,
                     trade,
@@ -355,7 +413,7 @@ fn scan_symbol(symbol: String, candles: Vec<Candle>) -> SymbolScanResult {
 
         for pattern in &mut pattern_xabcd {
             if pattern.trade.open {
-                if pattern.target_candle.is_none() {
+                if pattern.target_candle.is_none() && current_index + 1 < candles.len() {
                     pattern.target_candle = Some(TargetCandle::from_candle(current, &pattern.d));
                 }
 
@@ -452,16 +510,21 @@ fn scan_symbol(symbol: String, candles: Vec<Candle>) -> SymbolScanResult {
         });
     }
 
-    let bearish_count = pattern_xabcd
+    let mut patterns = Accuracies::new().get_accuracy(pattern_xabcd);
+    for pattern in &mut patterns {
+        pattern.x_bars_left = calculate_x_extreme_bars_left(&candles, pattern.x_index, &pattern.x);
+    }
+    if let Some(max_x_bars_left) = max_x_bars_left {
+        patterns.retain(|pattern| pattern.x_bars_left <= max_x_bars_left);
+    }
+    let bearish_count = patterns
         .iter()
         .filter(|p| p.market == Market::Bearish)
         .count();
-    let bullish_count = pattern_xabcd
+    let bullish_count = patterns
         .iter()
         .filter(|p| p.market == Market::Bullish)
         .count();
-
-    let patterns = Accuracies::new().get_accuracy(pattern_xabcd);
     let prop_reversal_outcomes = build_prop_reversal_outcomes(&patterns, &candles);
 
     SymbolScanResult {
@@ -478,6 +541,7 @@ fn spawn_symbol_scan(
     tasks: &mut JoinSet<Result<SymbolScanResult, String>>,
     pool: MySqlPool,
     symbol: String,
+    max_x_bars_left: Option<i64>,
 ) {
     tasks.spawn(async move {
         let db = Database { pool };
@@ -488,9 +552,12 @@ fn spawn_symbol_scan(
         let candle_count = candles.len();
 
         let symbol_for_error = symbol.clone();
-        let mut result = tokio::task::spawn_blocking(move || scan_symbol(symbol, candles))
-            .await
-            .map_err(|error| format!("{}: scanner worker failed: {}", symbol_for_error, error))?;
+        let mut result =
+            tokio::task::spawn_blocking(move || scan_symbol(symbol, candles, max_x_bars_left))
+                .await
+                .map_err(|error| {
+                    format!("{}: scanner worker failed: {}", symbol_for_error, error)
+                })?;
         result.candle_count = candle_count;
         Ok(result)
     });
@@ -503,61 +570,64 @@ async fn flush_pending_patterns(
     pending_prop_reversal_outcomes: &mut Vec<PropReversalOutcome>,
     enable_accuracy_rollups: bool,
     fast_rebuild: bool,
-    write_xabcd_mirror: bool,
     use_build_tables: bool,
+    write_pattern_setups: bool,
     write_harmonic_scores: bool,
     write_swing_outcomes: bool,
-    write_prop_outcomes: bool,
+    _write_prop_outcomes: bool,
+    target_ready_outcomes_only: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if pending_patterns.is_empty() {
         return Ok(());
     }
 
     let pattern_count = pending_patterns.len() as i64;
-    let reversal_count = pending_prop_reversal_outcomes.len() as i64;
-
-    db.insert_pattern_setups_with_timings(
-        pending_patterns,
-        Some(run_id),
-        fast_rebuild,
-        use_build_tables,
-        write_harmonic_scores,
-        write_swing_outcomes,
-        write_prop_outcomes,
-    )
-    .await?;
-
-    let phase_started = Instant::now();
-    db.sync_prop_reversal_outcomes(
-        pending_patterns,
-        pending_prop_reversal_outcomes,
-        use_build_tables,
-    )
-    .await?;
-    db.record_engine_phase_timing(
-        run_id,
-        None,
-        "write_prop_reversal_outcomes",
-        Some(reversal_count),
-        phase_started.elapsed(),
-        None,
-    )
-    .await?;
-
-    if write_xabcd_mirror {
-        let phase_started = Instant::now();
-        db.mirror_xabcd_patterns_with_target(pending_patterns, use_build_tables)
-            .await?;
+    if write_pattern_setups || write_harmonic_scores || write_swing_outcomes {
+        db.insert_pattern_setups_with_timings(
+            pending_patterns,
+            Some(run_id),
+            fast_rebuild,
+            use_build_tables,
+            write_pattern_setups,
+            write_harmonic_scores,
+            write_swing_outcomes,
+            false,
+        )
+        .await?;
+    } else {
         db.record_engine_phase_timing(
             run_id,
             None,
-            "write_xabcd_mirror",
-            Some(pattern_count),
-            phase_started.elapsed(),
-            Some("legacy wide mirror table"),
+            "write_pattern_setups",
+            Some(0),
+            std::time::Duration::ZERO,
+            Some("disabled; strategy run writes pattern_outcomes_prop directly"),
         )
         .await?;
     }
+
+    let phase_started = Instant::now();
+    let prop_outcome_rows_written = db
+        .sync_prop_outcomes(
+            pending_patterns,
+            pending_prop_reversal_outcomes,
+            use_build_tables,
+            target_ready_outcomes_only,
+        )
+        .await?;
+    db.record_engine_phase_timing(
+        run_id,
+        None,
+        "write_prop_outcomes",
+        Some(prop_outcome_rows_written),
+        phase_started.elapsed(),
+        Some(if target_ready_outcomes_only {
+            "closed/target-ready outcome rows only"
+        } else {
+            "all outcome rows, including open/not-target-ready rows"
+        }),
+    )
+    .await?;
 
     if enable_accuracy_rollups && !use_build_tables {
         let phase_started = Instant::now();
@@ -592,23 +662,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let enable_accuracy_rollups = env_flag("ABCD_ENABLE_ACCURACY_ROLLUPS");
     let use_build_tables = env_flag("ABCD_USE_BUILD_TABLES");
     let fast_rebuild = use_build_tables || reset_outputs || env_flag("ABCD_FAST_REBUILD");
-    let write_xabcd_mirror = env_flag("ABCD_WRITE_XABCD_MIRROR");
+    let write_pattern_setups = true;
     let write_harmonic_scores = env_flag("ABCD_WRITE_HARMONIC_SCORES");
     let write_swing_outcomes = env_flag("ABCD_WRITE_SWING_OUTCOMES");
-    let write_prop_outcomes = env_flag("ABCD_WRITE_PROP_OUTCOMES");
+    let write_prop_outcomes = true;
+    let target_ready_outcomes_only = env_flag_or("ABCD_TARGET_READY_OUTCOMES_ONLY", true)
+        && !env_flag("ABCD_WRITE_OPEN_PROP_OUTCOMES");
     let output_write_options = OutputWriteOptions {
+        write_pattern_setups,
         write_harmonic_scores,
         write_swing_outcomes,
         write_prop_outcomes,
-        write_xabcd_mirror,
     };
     let refresh_structure_rollups = env_flag("ABCD_REFRESH_STRUCTURE_ROLLUPS");
-    let refresh_prop_strategy_summaries = env_flag("ABCD_REFRESH_PROP_STRATEGY_SUMMARIES");
-    let refresh_prop_reversal_summaries = env_flag("ABCD_REFRESH_PROP_REVERSAL_SUMMARIES");
     let scan_concurrency = cmp::max(1, env_usize("ABCD_SCAN_CONCURRENCY", 4)?);
     let write_batch_size = cmp::max(1, env_usize("ABCD_WRITE_BATCH_SIZE", 1000)?);
     let symbol_offset = env_usize("ABCD_SYMBOL_OFFSET", 0)?;
     let symbol_limit = env_usize("ABCD_SYMBOL_LIMIT", 0)?;
+    let max_x_bars_left = match env_i64("ABCD_MAX_X_BARS_LEFT", 0)? {
+        value if value > 0 => Some(value),
+        _ => None,
+    };
 
     let pool = match MySqlPool::connect(&database_url).await {
         Ok(pool) => {
@@ -638,9 +712,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let phase_started = Instant::now();
     db.ensure_candle_trend_columns().await?;
     db.ensure_pattern_mode_tables().await?;
-    db.ensure_prop_reversal_outcomes_table().await?;
     db.ensure_xabcd_trend_columns().await?;
     db.ensure_xabcd_length_columns().await?;
+    db.ensure_xabcd_x_bars_left_column().await?;
     db.record_engine_phase_timing(
         &run_id,
         None,
@@ -668,7 +742,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if use_build_tables {
         let phase_started = Instant::now();
-        db.recreate_build_output_tables(write_xabcd_mirror).await?;
+        db.recreate_build_output_tables(output_write_options)
+            .await?;
         db.record_engine_phase_timing(
             &run_id,
             None,
@@ -761,13 +836,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("Using symbol offset {}", symbol_offset);
     println!(
-        "Using fast rebuild {}, build tables {}, xabcd mirror {}, harmonic scores {}, swing outcomes {}, prop outcomes {}",
+        "Using max X bars left {}",
+        max_x_bars_left
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unlimited".to_string())
+    );
+    println!(
+        "Using fast rebuild {}, build tables {}, pattern setups {}, harmonic scores {}, swing outcomes {}, prop outcomes {}, target-ready outcomes only {}",
         fast_rebuild,
         use_build_tables,
-        write_xabcd_mirror,
+        write_pattern_setups,
         write_harmonic_scores,
         write_swing_outcomes,
-        write_prop_outcomes
+        write_prop_outcomes,
+        target_ready_outcomes_only
     );
 
     let total_symbols = symbols.len();
@@ -787,7 +869,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut queued_symbols = 0i64;
     for _ in 0..scan_concurrency {
         if let Some(symbol) = symbol_iter.next() {
-            spawn_symbol_scan(&mut tasks, pool.clone(), symbol);
+            spawn_symbol_scan(&mut tasks, pool.clone(), symbol, max_x_bars_left);
             queued_symbols += 1;
         }
     }
@@ -830,7 +912,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
                 let phase_started = Instant::now();
                 if let Some(symbol) = symbol_iter.next() {
-                    spawn_symbol_scan(&mut tasks, pool.clone(), symbol);
+                    spawn_symbol_scan(&mut tasks, pool.clone(), symbol, max_x_bars_left);
                     db.record_engine_phase_timing(
                         &run_id,
                         None,
@@ -860,7 +942,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
                 let phase_started = Instant::now();
                 if let Some(symbol) = symbol_iter.next() {
-                    spawn_symbol_scan(&mut tasks, pool.clone(), symbol);
+                    spawn_symbol_scan(&mut tasks, pool.clone(), symbol, max_x_bars_left);
                     db.record_engine_phase_timing(
                         &run_id,
                         None,
@@ -919,7 +1001,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let phase_started = Instant::now();
         if let Some(symbol) = symbol_iter.next() {
-            spawn_symbol_scan(&mut tasks, pool.clone(), symbol);
+            spawn_symbol_scan(&mut tasks, pool.clone(), symbol, max_x_bars_left);
             db.record_engine_phase_timing(
                 &run_id,
                 None,
@@ -940,11 +1022,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &mut pending_prop_reversal_outcomes,
                 enable_accuracy_rollups,
                 fast_rebuild,
-                write_xabcd_mirror,
                 use_build_tables,
+                write_pattern_setups,
                 write_harmonic_scores,
                 write_swing_outcomes,
                 write_prop_outcomes,
+                target_ready_outcomes_only,
             )
             .await?;
             println!("Flushed {} pattern setups to DB", flush_size);
@@ -958,11 +1041,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut pending_prop_reversal_outcomes,
         enable_accuracy_rollups,
         fast_rebuild,
-        write_xabcd_mirror,
         use_build_tables,
+        write_pattern_setups,
         write_harmonic_scores,
         write_swing_outcomes,
         write_prop_outcomes,
+        target_ready_outcomes_only,
     )
     .await?;
 
@@ -992,7 +1076,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if use_build_tables {
         let phase_started = Instant::now();
-        db.swap_build_output_tables(write_xabcd_mirror).await?;
+        db.swap_build_output_tables(output_write_options).await?;
         db.record_engine_phase_timing(
             &run_id,
             None,
@@ -1027,37 +1111,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Marked structure rollups ready");
     }
 
-    if refresh_prop_strategy_summaries {
-        println!("Refreshing prop strategy summaries");
-        let phase_started = Instant::now();
-        db.refresh_prop_strategy_rollups().await?;
-        db.record_engine_phase_timing(
-            &run_id,
-            None,
-            "refresh_prop_strategy_rollups",
-            None,
-            phase_started.elapsed(),
-            None,
-        )
+    println!("Refreshing prop strategy family summaries");
+    db.refresh_prop_strategy_family_rollups(Some(&run_id))
         .await?;
-        println!("Marked prop strategy summaries ready");
-    }
-
-    if refresh_prop_reversal_summaries {
-        println!("Refreshing prop reversal summaries");
-        let phase_started = Instant::now();
-        db.refresh_prop_reversal_strategy_rollups().await?;
-        db.record_engine_phase_timing(
-            &run_id,
-            None,
-            "refresh_prop_reversal_strategy_rollups",
-            None,
-            phase_started.elapsed(),
-            None,
-        )
-        .await?;
-        println!("Marked prop reversal summaries ready");
-    }
+    println!("Marked prop strategy family summaries ready");
 
     println!(
         "Pattern setups total: {}, Prop reversal rows: {}, Bear: {}, Bull: {}, Failed symbols: {}",

@@ -8,6 +8,15 @@ use tokio::time::{sleep, Duration};
 const MAX_RATE_LIMIT_RETRIES: usize = 3;
 const RATE_LIMIT_DELAY_SECONDS: u64 = 20;
 
+fn is_rate_limit_message(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    normalized.contains("rate limit")
+        || normalized.contains("burst pattern detected")
+        || normalized.contains("requests per minute")
+        || normalized.contains("requests per second")
+        || normalized.contains("premium subscription plan")
+}
+
 #[derive(Debug)]
 pub enum AlphaVantageError {
     Api(String),
@@ -89,6 +98,22 @@ impl AlphaVantage {
             }
 
             if let Some(message) = data.get("Information").and_then(Value::as_str) {
+                if is_rate_limit_message(message) {
+                    if attempt < MAX_RATE_LIMIT_RETRIES {
+                        eprintln!(
+                            "Rate limit for {}. Waiting {} seconds before retry {}/{}.",
+                            ticker,
+                            RATE_LIMIT_DELAY_SECONDS,
+                            attempt + 1,
+                            MAX_RATE_LIMIT_RETRIES
+                        );
+                        sleep(Duration::from_secs(RATE_LIMIT_DELAY_SECONDS)).await;
+                        continue;
+                    }
+
+                    return Err(AlphaVantageError::RateLimited(message.to_string()));
+                }
+
                 return Err(AlphaVantageError::UnexpectedResponse(message.to_string()));
             }
 

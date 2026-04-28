@@ -16,9 +16,9 @@ impl SrLine {
             return vec![];
         }
 
-        let decay_per_tick = 0.01;       
-        let range_pct = 0.05;            
-        let reaction_tolerance = 0.01;   
+        let decay_per_tick = 0.01;
+        let range_pct = 0.05;
+        let reaction_tolerance = 0.01;
 
         // === FIND RANGE ===
         let min_price = candles
@@ -56,8 +56,10 @@ impl SrLine {
         // Update only the ticks near each candle low instead of scanning
         // every tick against every candle.
         for candle in candles {
-            let lower_tick = ((candle.low - reaction_tolerance - min_price) / tick_interval).floor() as isize;
-            let upper_tick = ((candle.low + reaction_tolerance - min_price) / tick_interval).ceil() as isize;
+            let lower_tick =
+                ((candle.low - reaction_tolerance - min_price) / tick_interval).floor() as isize;
+            let upper_tick =
+                ((candle.low + reaction_tolerance - min_price) / tick_interval).ceil() as isize;
 
             let lower_tick = lower_tick.max(0) as usize;
             let upper_tick = upper_tick.min((ticks.len() as isize) - 1).max(0) as usize;
@@ -71,17 +73,22 @@ impl SrLine {
 
         // --- Pick top SR lines with ±range_pct removal ---
         let mut sr_lines = vec![];
-        let mut remaining: Vec<(f64, f64)> = ticks.iter().copied().zip(scores.iter().copied()).collect();
+        let mut remaining: Vec<(f64, f64)> =
+            ticks.iter().copied().zip(scores.iter().copied()).collect();
 
         for _ in 0..1 {
-            if remaining.is_empty() { break; }
+            if remaining.is_empty() {
+                break;
+            }
 
-            let (_, &(price, score)) = remaining.iter().enumerate()
-                .max_by(|a, b| a.1.1.partial_cmp(&b.1.1).unwrap())
+            let (_, &(price, score)) = remaining
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1 .1.partial_cmp(&b.1 .1).unwrap())
                 .unwrap();
 
             sr_lines.push(SrLine {
-                price:  self.truncate_to_2_decimals(price),
+                price: self.truncate_to_2_decimals(price),
                 score,
             });
 
@@ -94,8 +101,6 @@ impl SrLine {
     }
 
     pub fn truncate_to_2_decimals(&self, value: f64) -> f64 {
-    (value * 100.0).trunc() / 100.0
+        (value * 100.0).trunc() / 100.0
     }
-
-
 }

@@ -1,0 +1,488 @@
+import { useEffect, useState } from 'react';
+import { CandleChart } from './CandleChart';
+import PatternTable from '../../components/PatternTable';
+import Section from '../../components/Section';
+
+const formatDebugDate = (value) => {
+  if (!value) {
+    return '--';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value);
+  }
+
+  return parsed.toISOString().slice(0, 10);
+};
+
+const formatDebugPrice = (value) => {
+  if (!Number.isFinite(value)) {
+    return '--';
+  }
+
+  return value.toFixed(2);
+};
+
+const formatDebugInteger = (value) =>
+  Number.isFinite(value) ? `${value}` : '--';
+
+const resolvePivotPrice = (pattern, pivot) => {
+  const directValue = pattern?.[`${pivot}_price`];
+  if (Number.isFinite(directValue)) {
+    return directValue;
+  }
+
+  const market = pattern?.market;
+  const bullishField = `${pivot}_low`;
+  const bearishField = `${pivot}_high`;
+  const fallbackField = market === 'Bearish' ? bearishField : bullishField;
+  const fallbackValue = parseFloat(pattern?.[fallbackField]);
+  return Number.isFinite(fallbackValue) ? fallbackValue : null;
+};
+
+const getTrendDisplayMeta = (value) => {
+  if (value === true) {
+    return { valueLabel: 'BULL', className: 'header_two header_two--trend-bullish' };
+  }
+
+  if (value === false) {
+    return { valueLabel: 'BEAR', className: 'header_two header_two--trend-bearish' };
+  }
+
+  return { valueLabel: '--', className: 'header_two header_two--trend-neutral' };
+};
+
+const CandleChartPanel = ({
+  chartData,
+  isSectionsExpanded,
+  setSectionsExpanded,
+  market,
+  focusMode = 'pattern',
+  activeReversalFilter = null,
+  overlayTopOffset = 0,
+  overlayTableProps,
+}) => {
+  const isPropFocus = focusMode === 'prop';
+  const [isAbcdPattern, setAbcdPattern] = useState(
+    focusMode !== 'reversal' && focusMode !== 'prop'
+  );
+  const [isPriceLevels, setPriceLevels] = useState(
+    focusMode !== 'reversal' && focusMode !== 'prop'
+  );
+  const [isRetracement, setRetracement] = useState(
+    focusMode !== 'reversal' && focusMode !== 'prop'
+  );
+  const [isReversalFocus, setReversalFocus] = useState(focusMode === 'reversal');
+  const [isTrend3M, setTrend3M] = useState(false);
+  const [isTrend6M, setTrend6M] = useState(false);
+  const [isTrend12M, setTrend12M] = useState(false);
+  const [isExpandedChart, setExpandedChart] = useState(false);
+  const [hoveredCandle, setHoveredCandle] = useState({
+    high: 0,
+    close: 0,
+    open: 0,
+    low: 0,
+    threeMonth: null,
+    sixMonth: null,
+    twelveMonth: null,
+    color: 'white',
+  });
+  const marketTone = market === 'Bearish' ? 'chart-market-bearish' : 'chart-market-bullish';
+  const selectedPattern = chartData?.rust_patterns ?? null;
+  const hoveredPriceStats = [
+    { label: 'H', value: hoveredCandle.high?.toFixed(2), color: hoveredCandle.color },
+    { label: 'C', value: hoveredCandle.close?.toFixed(2), color: hoveredCandle.color },
+    { label: 'O', value: hoveredCandle.open?.toFixed(2), color: hoveredCandle.color },
+    { label: 'L', value: hoveredCandle.low?.toFixed(2), color: hoveredCandle.color },
+    { label: 'V', value: hoveredCandle.volume?.toFixed(0), color: hoveredCandle.color },
+  ];
+  const legBarStats = [
+    { label: 'X Bars', value: selectedPattern?.x_length },
+    { label: 'A Bars', value: selectedPattern?.a_length },
+    { label: 'B Bars', value: selectedPattern?.b_length },
+    { label: 'C Bars', value: selectedPattern?.c_length },
+    {
+      label: 'Total',
+      value:
+        [selectedPattern?.x_length, selectedPattern?.a_length, selectedPattern?.b_length, selectedPattern?.c_length]
+          .filter((value) => Number.isFinite(value))
+          .reduce((sum, value) => sum + value, 0) || null,
+    },
+  ];
+  const hoveredTrendStats = [
+    { label: '3M Trend', ...getTrendDisplayMeta(hoveredCandle.threeMonth) },
+    { label: '6M Trend', ...getTrendDisplayMeta(hoveredCandle.sixMonth) },
+    { label: '12M Trend', ...getTrendDisplayMeta(hoveredCandle.twelveMonth) },
+    { label: 'D 3M', ...getTrendDisplayMeta(selectedPattern?.three_month) },
+    { label: 'D 6M', ...getTrendDisplayMeta(selectedPattern?.six_month) },
+    { label: 'D 12M', ...getTrendDisplayMeta(selectedPattern?.twelve_month) },
+  ];
+  const headerStats = [
+    ...hoveredPriceStats.map((item) => ({
+      label: item.label,
+      value: item.value ?? '--',
+      valueClassName: 'header_two',
+      valueStyle: { color: item.color },
+    })),
+    ...legBarStats.map((item) => ({
+      label: item.label,
+      value: Number.isFinite(item.value) ? item.value : '--',
+      valueClassName: 'header_two',
+    })),
+    ...hoveredTrendStats.map((item) => ({
+      label: item.label,
+      value: item.valueLabel,
+      valueClassName: item.className,
+    })),
+  ];
+  const pivotRows = ['x', 'a', 'b', 'c', 'd'].map((pivot) => {
+    const upperPivot = pivot.toUpperCase();
+
+    return {
+      key: upperPivot,
+      index: formatDebugInteger(selectedPattern?.[pivot]),
+      date: formatDebugDate(selectedPattern?.[`${pivot}_date`]),
+      price: formatDebugPrice(resolvePivotPrice(selectedPattern, pivot)),
+    };
+  });
+  const isPropReversalFocus =
+    selectedPattern?.prop_outcome_mode === 'reversal' || Boolean(selectedPattern?.reversal_detect_date);
+  const dConfirmDate = selectedPattern?.d_confirm_date ?? null;
+  const reversalDetectDate = selectedPattern?.reversal_detect_date ?? null;
+  const hasDistinctReversalEvent =
+    isPropReversalFocus &&
+    (selectedPattern?.reversal_detect ?? null) !== (selectedPattern?.d_confirm ?? null);
+  const eventRows = isPropReversalFocus
+    ? [
+        {
+          key: 'DC',
+          label: 'D Confirm',
+          index: formatDebugInteger(selectedPattern?.d_confirm),
+          date: formatDebugDate(dConfirmDate),
+          price: '--',
+        },
+        {
+          key: 'RV',
+          label: hasDistinctReversalEvent ? 'Reversal' : 'D + Reversal',
+          index: formatDebugInteger(selectedPattern?.reversal_detect ?? selectedPattern?.d_confirm),
+          date: formatDebugDate(reversalDetectDate ?? dConfirmDate),
+          price: '--',
+        },
+        {
+          key: 'TG',
+          label: 'Rev Target',
+          index: formatDebugInteger(selectedPattern?.target),
+          date: formatDebugDate(selectedPattern?.target_date),
+          price: formatDebugPrice(
+            selectedPattern?.target_close ?? selectedPattern?.target_open ?? selectedPattern?.trade_reward_exit_price
+          ),
+        },
+      ]
+    : [
+        {
+          key: 'DC',
+          label: 'Confirm',
+          index: formatDebugInteger(selectedPattern?.d_confirm),
+          date: formatDebugDate(dConfirmDate),
+          price: '--',
+        },
+        {
+          key: 'TG',
+          label: 'Target',
+          index: formatDebugInteger(selectedPattern?.target),
+          date: formatDebugDate(selectedPattern?.target_date),
+          price: formatDebugPrice(
+            selectedPattern?.target_close ?? selectedPattern?.target_open ?? selectedPattern?.trade_reward_exit_price
+          ),
+        },
+      ];
+  const identityFields = [
+    { label: 'Pattern Group', value: selectedPattern?.pattern_group_id ?? '--', wide: true },
+    { label: 'Pattern ID', value: selectedPattern?.pattern_id ?? '--', wide: true },
+    { label: 'Strategy ID', value: selectedPattern?.prop_strategy_id ?? '--', wide: true },
+    { label: 'Symbol', value: selectedPattern?.symbol ?? '--' },
+    { label: 'Pattern', value: selectedPattern?.harmonic_type ?? '--' },
+    { label: 'Market', value: selectedPattern?.market ?? '--' },
+    { label: 'Loaded D', value: formatDebugDate(selectedPattern?.d_date) },
+    { label: 'D Confirm', value: formatDebugDate(dConfirmDate) },
+    ...(isPropReversalFocus
+      ? [{ label: 'Reversal Detect', value: formatDebugDate(reversalDetectDate ?? dConfirmDate) }]
+      : []),
+  ];
+  const tradeLevelFields = [
+    { label: 'Entry', value: formatDebugPrice(selectedPattern?.trade_enter_price) },
+    { label: 'Stop', value: formatDebugPrice(selectedPattern?.trade_risk_exit_price) },
+    { label: 'Target', value: formatDebugPrice(selectedPattern?.trade_reward_exit_price) },
+  ];
+  const patternIdentityPanel = selectedPattern ? (
+    <div className="pattern-identity-card">
+      <div className="pattern-identity-header">
+        <div className="pattern-identity-kicker">Pattern Inspector</div>
+        <div className="pattern-identity-title">Verify the active load</div>
+        <div className="pattern-identity-copy">
+          Compare the chart against the exact pivot dates and prices that were loaded.
+        </div>
+      </div>
+
+      <div className="pattern-identity-grid">
+        {identityFields.map((field) => (
+          <div
+            key={field.label}
+            className={field.wide ? 'pattern-identity-field pattern-identity-field--wide' : 'pattern-identity-field'}
+          >
+            <div className="pattern-identity-label">{field.label}</div>
+            <div className="pattern-identity-value">{field.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="pattern-identity-section">
+        <div className="pattern-identity-section-title">XABCD pivots</div>
+        <div className="pattern-pivot-table" role="table" aria-label="Pattern pivot points">
+          <div className="pattern-pivot-table__header" role="row">
+            <span>Pt</span>
+            <span>Idx</span>
+            <span>Date</span>
+            <span>Price</span>
+          </div>
+
+          {pivotRows.map((row) => (
+            <div className="pattern-pivot-table__row" role="row" key={row.key}>
+              <span className="pattern-pivot-table__leg">{row.key}</span>
+              <span>{row.index}</span>
+              <span>{row.date}</span>
+              <span className="pattern-pivot-table__price">{row.price}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="pattern-identity-section">
+        <div className="pattern-identity-section-title">Confirm and target</div>
+        <div className="pattern-pivot-table" role="table" aria-label="Pattern checkpoints">
+          <div className="pattern-pivot-table__header" role="row">
+            <span>Evt</span>
+            <span>Idx</span>
+            <span>Date</span>
+            <span>Price</span>
+          </div>
+
+          {eventRows.map((row) => (
+            <div className="pattern-pivot-table__row" role="row" key={row.key}>
+              <span className="pattern-pivot-table__leg">{row.label}</span>
+              <span>{row.index}</span>
+              <span>{row.date}</span>
+              <span className="pattern-pivot-table__price">{row.price}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="pattern-identity-section">
+        <div className="pattern-identity-section-title">Trade levels</div>
+        <div className="pattern-identity-grid">
+          {tradeLevelFields.map((field) => (
+            <div className="pattern-identity-field" key={field.label}>
+              <div className="pattern-identity-label">{field.label}</div>
+              <div className="pattern-identity-value">{field.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  useEffect(() => {
+    if (focusMode === 'reversal') {
+      setAbcdPattern(false);
+      setPriceLevels(false);
+      setRetracement(false);
+      setReversalFocus(true);
+      return;
+    }
+
+    if (focusMode === 'prop') {
+      setAbcdPattern(false);
+      setPriceLevels(false);
+      setRetracement(false);
+      setReversalFocus(false);
+    }
+  }, [focusMode]);
+  const controlItems = [
+    ...(!isPropFocus
+      ? [
+          {
+            active: isAbcdPattern,
+            onClick: () => setAbcdPattern(!isAbcdPattern),
+            icon: '/images/dropdown.png',
+            label: 'Pattern',
+          },
+          {
+            active: isPriceLevels,
+            onClick: () => setPriceLevels(!isPriceLevels),
+            icon: '/images/prices.png',
+            label: 'Levels',
+          },
+          {
+            active: isRetracement,
+            onClick: () => setRetracement(!isRetracement),
+            icon: '/images/retracement.png',
+            label: 'Retrace',
+          },
+          {
+            active: isReversalFocus,
+            onClick: () => setReversalFocus(!isReversalFocus),
+            icon: '/images/abcd.png',
+            label: 'Reversal',
+          },
+        ]
+      : []),
+    {
+      active: isTrend3M,
+      onClick: () => setTrend3M(!isTrend3M),
+      icon: '/images/prices.png',
+      label: '3M',
+    },
+    {
+      active: isTrend6M,
+      onClick: () => setTrend6M(!isTrend6M),
+      icon: '/images/prices.png',
+      label: '6M',
+    },
+    {
+      active: isTrend12M,
+      onClick: () => setTrend12M(!isTrend12M),
+      icon: '/images/prices.png',
+      label: '12M',
+    },
+    {
+      active: isSectionsExpanded,
+      onClick: () => setSectionsExpanded(!isSectionsExpanded),
+      icon: '/images/abcd.png',
+      label: 'Panels',
+    },
+  ];
+
+  const renderChartShell = (isOverlay = false) => (
+    <div className={`chart-panel-shell${isOverlay ? ' chart-panel-shell--overlay' : ''}`}>
+      <div className="chart-header-wrapper">
+        <div className="chart-panel-topline">
+          <div className="chart-panel-copy">
+            <div className="chart-window-dots" aria-hidden="true">
+              <span className="chart-window-dot chart-window-dot--warm" />
+              <span className="chart-window-dot chart-window-dot--neutral" />
+              <span className="chart-window-dot chart-window-dot--cool" />
+            </div>
+            <div className="chart-kicker">XABCD Terminal</div>
+            <div className="chart-title-row">
+              <h3 className="chart-panel-title">
+                {isPropFocus ? 'Target Candle Workspace' : 'Pattern Workspace'}
+              </h3>
+              <div className={`chart-market-pill ${marketTone}`}>{market}</div>
+            </div>
+          </div>
+
+          <div className="header-buttons-wrapper">
+            {controlItems.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                className={item.active ? 'chart-tool-button chart-tool-button--active' : 'chart-tool-button'}
+                onClick={item.onClick}
+              >
+                <span className="chart-tool-icon-wrap">
+                  <img className="abcd_img" src={item.icon} alt="" />
+                </span>
+                <span className="chart-control-copy">
+                  <span className="chart-control-label">{item.label}</span>
+                  <span className="chart-control-state">{item.active ? 'On' : 'Off'}</span>
+                </span>
+                <span className="chart-tool-indicator" aria-hidden="true" />
+              </button>
+            ))}
+
+            {!isOverlay && (
+              <button className="chart-action-button" onClick={() => setExpandedChart(true)}>
+                Expand View
+              </button>
+            )}
+
+            {isOverlay && (
+              <button className="chart-action-button" onClick={() => setExpandedChart(false)}>
+                Close View
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="header-bar">
+          {headerStats.map((item) => (
+            <div className="header_slot" key={item.label}>
+              <div className="header_one">{item.label}</div>
+              <div className={item.valueClassName} style={item.valueStyle}>
+                {item.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {chartData.candles.length > 0 && (
+        <div className={patternIdentityPanel ? 'chart-workspace chart-workspace--with-detail' : 'chart-workspace'}>
+          {patternIdentityPanel ? <aside className="chart-detail-rail">{patternIdentityPanel}</aside> : null}
+
+          <div className="chart-canvas-stage">
+            <CandleChart
+              chartData={chartData}
+              is_price_levels={isPriceLevels}
+              is_retracement={isRetracement}
+              is_abcd_pattern={isAbcdPattern}
+              is_reversal_focus={isReversalFocus}
+              trend_line_toggles={{
+                threeMonth: isTrend3M,
+                sixMonth: isTrend6M,
+                twelveMonth: isTrend12M,
+              }}
+              focusMode={focusMode}
+              market={market}
+              activeReversalFilter={activeReversalFilter}
+              set_hovered_candle={setHoveredCandle}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <div className="charts_container">
+        <div className="margin-">{renderChartShell()}</div>
+      </div>
+
+      {isExpandedChart && (
+        <div
+          className="chart-overlay"
+          style={{ top: `${overlayTopOffset}px` }}
+          onClick={() => setExpandedChart(false)}
+        >
+          <div className="chart-overlay-card" onClick={(event) => event.stopPropagation()}>
+            <div className="chart-overlay-layout">
+              <div className="chart-overlay-chart">{renderChartShell(true)}</div>
+              <div className="chart-overlay-table">
+                {overlayTableProps ? (
+                  <Section>
+                    <PatternTable {...overlayTableProps} />
+                  </Section>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default CandleChartPanel;

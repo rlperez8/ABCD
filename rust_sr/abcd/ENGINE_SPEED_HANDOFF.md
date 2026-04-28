@@ -2,45 +2,62 @@
 
 This note summarizes the speed-focused engine work from the recent chat.
 
-## Goal
+## Current Direction
 
-The engine was narrowed toward fast prop-reversal testing.
+The engine is moving to a single canonical prop outcome fact table.
 
-The active default output path is now:
+The active output path is:
 
 ```text
 pattern_setups
-pattern_outcomes_prop_reversal
+pattern_outcomes_prop
+prop_strategy_family_yearly
+prop_strategy_family_summary
 ```
 
-The following outputs still exist, but are optional research/extra routes:
+`pattern_outcomes_prop` stores both setup outcome routes:
+
+```text
+outcome_model = "D"
+outcome_model = "DReversal"
+```
+
+The following outputs still exist, but are legacy or optional research routes:
 
 ```text
 pattern_harmonic_scores
 pattern_outcomes_swing
-pattern_outcomes_prop
 xabcd_patterns
+```
+
+The old split reversal table is legacy and should not be used for new work:
+
+```text
+pattern_outcomes_prop_reversal
 ```
 
 ## Main Design Decisions
 
 1. `pattern_setups` remains the core raw detected XABCD setup table.
-2. Route tables store their own dominant harmonic fields:
+2. `pattern_outcomes_prop` is the canonical outcome table for family rollups.
+3. Outcome rows store their own dominant harmonic fields:
    - `harmonic_type`
    - `bin`
    - `time_bin`
-   - route strategy id
-3. `pattern_harmonic_scores` is no longer required for normal runs because the strategy routes use only the dominant harmonic.
-4. The engine now supports build-table rebuilds:
+   - prop strategy id
+   - outcome model
+4. `pattern_harmonic_scores` is no longer required for normal runs because the strategy routes use only the dominant harmonic.
+5. The engine now supports build-table rebuilds:
    - write into `_build` tables
    - rebuild indexes on build tables
    - swap build tables into final table names
-5. The build-table swap keeps final tables untouched until the run is complete.
-6. Index rebuild is now route-aware, so inactive optional tables do not have their indexes rebuilt.
+6. The build-table swap keeps final tables untouched until the run is complete.
+7. Index rebuild is now route-aware, so inactive optional tables do not have their indexes rebuilt.
+8. Family rollups are concrete strategy rows only. The engine no longer writes wildcard `All` dimensions into `prop_strategy_family_yearly` or `prop_strategy_family_summary`.
 
 ## Environment Flags
 
-Default fast prop-reversal run:
+Default family-outcome run:
 
 ```powershell
 $env:ABCD_USE_BUILD_TABLES='true'; $env:ABCD_SYMBOL_LIMIT='10'; $env:ABCD_WRITE_BATCH_SIZE='25000'; $env:ABCD_SCAN_CONCURRENCY='8'; cargo run --bin abcd
@@ -57,15 +74,14 @@ Optional outputs:
 ```powershell
 $env:ABCD_WRITE_HARMONIC_SCORES='true'
 $env:ABCD_WRITE_SWING_OUTCOMES='true'
-$env:ABCD_WRITE_PROP_OUTCOMES='true'
 $env:ABCD_WRITE_XABCD_MIRROR='true'
 ```
 
 Unset/false means those optional tables are swapped in empty by design.
 
-## Current Default Output Counts From 10-Symbol Test
+## Legacy 10-Symbol Output Counts
 
-With only prop reversal active:
+These counts came from the older split-table prop-reversal route and are no longer the target architecture:
 
 ```text
 xabcd_patterns:                  0
@@ -150,7 +166,6 @@ pattern_setups_build
 pattern_harmonic_scores_build
 pattern_outcomes_swing_build
 pattern_outcomes_prop_build
-pattern_outcomes_prop_reversal_build
 xabcd_patterns_build, if mirror enabled
 ```
 
@@ -163,9 +178,10 @@ Added route/output flags:
 ```text
 ABCD_WRITE_HARMONIC_SCORES
 ABCD_WRITE_SWING_OUTCOMES
-ABCD_WRITE_PROP_OUTCOMES
 ABCD_WRITE_XABCD_MIRROR
 ```
+
+`pattern_outcomes_prop` is the canonical outcome table and is always written by the current engine path.
 
 ### Route-Aware Index Rebuild
 
@@ -185,7 +201,6 @@ Index rebuild now skips inactive optional tables:
 ```text
 pattern_harmonic_scores       skipped unless ABCD_WRITE_HARMONIC_SCORES=true
 pattern_outcomes_swing        skipped unless ABCD_WRITE_SWING_OUTCOMES=true
-pattern_outcomes_prop         skipped unless ABCD_WRITE_PROP_OUTCOMES=true
 xabcd_patterns                skipped unless ABCD_WRITE_XABCD_MIRROR=true
 ```
 
@@ -193,7 +208,7 @@ Always active:
 
 ```text
 pattern_setups
-pattern_outcomes_prop_reversal
+pattern_outcomes_prop
 ```
 
 ### Harmonic Scores
@@ -204,7 +219,7 @@ Reason:
 
 ```text
 The active routes use the dominant harmonic fields already stored in route outcomes.
-All 7 harmonic score rows are useful for research/audit, but not required for normal prop-reversal testing.
+All 7 harmonic score rows are useful for research/audit, but not required for normal family-outcome testing.
 ```
 
 Also removed/reduced unnecessary harmonic score indexing:
@@ -229,19 +244,9 @@ Enable with:
 $env:ABCD_WRITE_SWING_OUTCOMES='true'
 ```
 
-### Regular Prop Outcomes
+### Prop Outcomes
 
-`pattern_outcomes_prop` is now default off.
-
-Enable with:
-
-```powershell
-$env:ABCD_WRITE_PROP_OUTCOMES='true'
-```
-
-### Prop Reversal Outcomes
-
-`pattern_outcomes_prop_reversal` remains always on in the current default engine path.
+`pattern_outcomes_prop` is the only current outcome fact table. Plain D rows use `outcome_model = "D"` and reversal-after-D rows use `outcome_model = "DReversal"`.
 
 ## Timing Queries
 

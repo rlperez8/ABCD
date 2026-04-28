@@ -17,7 +17,7 @@ use crate::models::reversal_type::ReversalType;
 use serde::ser::Serializer;
 use serde::Serialize;
 use sqlx::{MySql, QueryBuilder};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 // use sqlx::{QueryBuilder};
 use rust_decimal::prelude::ToPrimitive;
@@ -43,7 +43,7 @@ const HARMONIC_SCORE_COLUMNS: [(&str, &str, &str); 7] = [
     ("Shark", "shark_accuracy", "shark_time_accuracy"),
 ];
 
-const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 20] = [
+const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 24] = [
     (
         "pattern_harmonic_scores",
         "uniq_pattern_harmonic_score",
@@ -63,6 +63,11 @@ const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 20] = [
         "pattern_setups",
         "idx_pattern_setups_pattern_id",
         "CREATE INDEX idx_pattern_setups_pattern_id ON pattern_setups (pattern_id)",
+    ),
+    (
+        "pattern_setups",
+        "idx_pattern_setups_x_bars_left",
+        "CREATE INDEX idx_pattern_setups_x_bars_left ON pattern_setups (x_bars_left)",
     ),
     (
         "pattern_setups",
@@ -86,8 +91,13 @@ const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 20] = [
     ),
     (
         "pattern_outcomes_prop",
-        "uniq_pattern_outcomes_prop_setup_id",
-        "CREATE UNIQUE INDEX uniq_pattern_outcomes_prop_setup_id ON pattern_outcomes_prop (setup_id)",
+        "uniq_pattern_outcomes_prop_row_id",
+        "CREATE UNIQUE INDEX uniq_pattern_outcomes_prop_row_id ON pattern_outcomes_prop (outcome_row_id)",
+    ),
+    (
+        "pattern_outcomes_prop",
+        "idx_pattern_outcomes_prop_setup_id",
+        "CREATE INDEX idx_pattern_outcomes_prop_setup_id ON pattern_outcomes_prop (setup_id)",
     ),
     (
         "pattern_outcomes_prop",
@@ -96,33 +106,33 @@ const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 20] = [
     ),
     (
         "pattern_outcomes_prop",
+        "idx_pattern_outcomes_prop_x_bars_left",
+        "CREATE INDEX idx_pattern_outcomes_prop_x_bars_left ON pattern_outcomes_prop (x_bars_left)",
+    ),
+    (
+        "pattern_outcomes_prop",
+        "idx_pattern_outcomes_prop_pattern_id",
+        "CREATE INDEX idx_pattern_outcomes_prop_pattern_id ON pattern_outcomes_prop (pattern_id, d_date)",
+    ),
+    (
+        "pattern_outcomes_prop",
+        "idx_pattern_outcomes_prop_group_detail",
+        "CREATE INDEX idx_pattern_outcomes_prop_group_detail ON pattern_outcomes_prop (pattern_group_id, d_date, market, harmonic_type, size_bucket)",
+    ),
+    (
+        "pattern_outcomes_prop",
+        "idx_pattern_outcomes_prop_symbol_d_date",
+        "CREATE INDEX idx_pattern_outcomes_prop_symbol_d_date ON pattern_outcomes_prop (symbol, d_date)",
+    ),
+    (
+        "pattern_outcomes_prop",
         "idx_pattern_outcomes_prop_lookup",
-        "CREATE INDEX idx_pattern_outcomes_prop_lookup ON pattern_outcomes_prop (harmonic_type, bin, time_bin)",
+        "CREATE INDEX idx_pattern_outcomes_prop_lookup ON pattern_outcomes_prop (outcome_model, market, harmonic_type, bin, has_reversal, reversal_type, size_bucket, time_bin)",
     ),
     (
         "pattern_outcomes_prop",
         "idx_pattern_outcomes_prop_target_ready",
-        "CREATE INDEX idx_pattern_outcomes_prop_target_ready ON pattern_outcomes_prop (target_ready)",
-    ),
-    (
-        "pattern_outcomes_prop_reversal",
-        "uniq_prop_reversal_row_id",
-        "CREATE UNIQUE INDEX uniq_prop_reversal_row_id ON pattern_outcomes_prop_reversal (reversal_row_id)",
-    ),
-    (
-        "pattern_outcomes_prop_reversal",
-        "idx_prop_reversal_strategy",
-        "CREATE INDEX idx_prop_reversal_strategy ON pattern_outcomes_prop_reversal (prop_strategy_id)",
-    ),
-    (
-        "pattern_outcomes_prop_reversal",
-        "idx_prop_reversal_target_ready",
-        "CREATE INDEX idx_prop_reversal_target_ready ON pattern_outcomes_prop_reversal (target_ready, reversal_detect_date)",
-    ),
-    (
-        "pattern_outcomes_prop_reversal",
-        "idx_prop_reversal_lookup",
-        "CREATE INDEX idx_prop_reversal_lookup ON pattern_outcomes_prop_reversal (market, harmonic_type, bin, reversal_type, size_bucket, time_bin)",
+        "CREATE INDEX idx_pattern_outcomes_prop_target_ready ON pattern_outcomes_prop (target_ready, entry_date)",
     ),
     (
         "xabcd_patterns",
@@ -131,8 +141,18 @@ const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 20] = [
     ),
     (
         "xabcd_patterns",
+        "idx_xabcd_x_bars_left",
+        "CREATE INDEX idx_xabcd_x_bars_left ON xabcd_patterns (x_bars_left)",
+    ),
+    (
+        "xabcd_patterns",
         "idx_xabcd_symbol_d_date",
         "CREATE INDEX idx_xabcd_symbol_d_date ON xabcd_patterns (symbol, d_date)",
+    ),
+    (
+        "xabcd_patterns",
+        "idx_xabcd_pattern_group_d_date",
+        "CREATE INDEX idx_xabcd_pattern_group_d_date ON xabcd_patterns (pattern_group_id, d_date)",
     ),
     (
         "xabcd_patterns",
@@ -157,7 +177,6 @@ struct PatternOutputTables {
     harmonic_scores: &'static str,
     swing_outcomes: &'static str,
     prop_outcomes: &'static str,
-    prop_reversal_outcomes: &'static str,
     xabcd_patterns: &'static str,
 }
 
@@ -168,7 +187,6 @@ impl PatternOutputTables {
             harmonic_scores: "pattern_harmonic_scores",
             swing_outcomes: "pattern_outcomes_swing",
             prop_outcomes: "pattern_outcomes_prop",
-            prop_reversal_outcomes: "pattern_outcomes_prop_reversal",
             xabcd_patterns: "xabcd_patterns",
         }
     }
@@ -179,35 +197,26 @@ impl PatternOutputTables {
             harmonic_scores: "pattern_harmonic_scores_build",
             swing_outcomes: "pattern_outcomes_swing_build",
             prop_outcomes: "pattern_outcomes_prop_build",
-            prop_reversal_outcomes: "pattern_outcomes_prop_reversal_build",
             xabcd_patterns: "xabcd_patterns_build",
         }
     }
 }
 
-const CORE_OUTPUT_TABLES_FOR_SWAP: [&str; 5] = [
-    "pattern_setups",
-    "pattern_harmonic_scores",
-    "pattern_outcomes_swing",
-    "pattern_outcomes_prop",
-    "pattern_outcomes_prop_reversal",
-];
-
 #[derive(Clone, Copy)]
 pub struct OutputWriteOptions {
+    pub write_pattern_setups: bool,
     pub write_harmonic_scores: bool,
     pub write_swing_outcomes: bool,
     pub write_prop_outcomes: bool,
-    pub write_xabcd_mirror: bool,
 }
 
 impl OutputWriteOptions {
     fn should_rebuild_indexes_for(self, table: &str) -> bool {
         match table {
+            "pattern_setups" => self.write_pattern_setups,
             "pattern_harmonic_scores" => self.write_harmonic_scores,
             "pattern_outcomes_swing" => self.write_swing_outcomes,
             "pattern_outcomes_prop" => self.write_prop_outcomes,
-            "xabcd_patterns" => self.write_xabcd_mirror,
             _ => true,
         }
     }
@@ -651,6 +660,65 @@ fn trend_bucket_expr(trend_column: &str) -> String {
     )
 }
 
+fn x_strictness_expr(x_bars_left_column: &str, x_length_column: &str) -> String {
+    format!(
+        "CASE
+            WHEN COALESCE({x_length_column}, 0) <= 0 THEN 'Loose'
+            WHEN COALESCE({x_bars_left_column}, 0) >= COALESCE({x_length_column}, 0) THEN 'Strict'
+            WHEN COALESCE({x_bars_left_column}, 0) * 2 >= COALESCE({x_length_column}, 0) THEN 'Normal'
+            ELSE 'Loose'
+        END"
+    )
+}
+
+struct PropFamilySpec {
+    family_name: &'static str,
+    dimensions: &'static [&'static str],
+}
+
+const PROP_FAMILY_DIMENSIONS: [&str; 11] = [
+    "outcome_model",
+    "market",
+    "harmonic_type",
+    "bin",
+    "reversal_type",
+    "size_bucket",
+    "time_bin",
+    "x_strictness",
+    "three_month_trend",
+    "six_month_trend",
+    "twelve_month_trend",
+];
+
+const PROP_FAMILY_SPECS: [PropFamilySpec; 1] = [PropFamilySpec {
+    family_name: "concrete_route",
+    dimensions: &[
+        "outcome_model",
+        "market",
+        "harmonic_type",
+        "bin",
+        "reversal_type",
+        "size_bucket",
+        "time_bin",
+        "x_strictness",
+        "three_month_trend",
+        "six_month_trend",
+        "twelve_month_trend",
+    ],
+}];
+
+fn prop_family_dimension_expr(_spec: &PropFamilySpec, dimension: &str) -> String {
+    dimension.to_string()
+}
+
+fn prop_family_included_dimensions(spec: &PropFamilySpec) -> String {
+    if spec.dimensions.is_empty() {
+        "none".to_string()
+    } else {
+        spec.dimensions.join(",")
+    }
+}
+
 fn swing_strategy_id_expr(
     harmonic_type_expr: &str,
     bin_expr: &str,
@@ -735,6 +803,7 @@ pub struct Database {
 pub struct XABCD_CSV {
     symbol: String,
     pattern_id: String,
+    x_bars_left: i64,
     x_date: String,
     #[serde(serialize_with = "two_decimals")]
     x_open: f64,
@@ -1051,9 +1120,13 @@ fn pattern_id_expr() -> &'static str {
 }
 
 fn prop_result_value(csv: &XABCD_CSV) -> i32 {
-    match csv.target_is_green {
+    prop_result_from_market_target(csv.market, csv.target_is_green)
+}
+
+fn prop_result_from_market_target(market: Market, target_is_green: Option<bool>) -> i32 {
+    match target_is_green {
         None => 0,
-        Some(is_green) => match csv.market {
+        Some(is_green) => match market {
             Market::Bullish => {
                 if is_green {
                     1
@@ -1499,9 +1572,9 @@ impl Database {
             false,
             OutputWriteOptions {
                 write_harmonic_scores: true,
+                write_pattern_setups: true,
                 write_swing_outcomes: true,
                 write_prop_outcomes: true,
-                write_xabcd_mirror: true,
             },
         )
         .await
@@ -1546,9 +1619,9 @@ impl Database {
             false,
             OutputWriteOptions {
                 write_harmonic_scores: true,
+                write_pattern_setups: true,
                 write_swing_outcomes: true,
                 write_prop_outcomes: true,
-                write_xabcd_mirror: true,
             },
         )
         .await
@@ -1564,68 +1637,57 @@ impl Database {
 
     pub async fn recreate_fast_rebuild_output_tables(&self) -> Result<(), sqlx::Error> {
         for table in [
-            "pattern_outcomes_prop_reversal",
             "pattern_outcomes_prop",
+            "pattern_setups",
             "pattern_outcomes_swing",
             "pattern_harmonic_scores",
-            "pattern_setups",
             "xabcd_patterns",
         ] {
             let sql = format!("DROP TABLE IF EXISTS {table}");
             sqlx::query(&sql).execute(&self.pool).await?;
         }
 
-        self.ensure_xabcd_patterns_table().await?;
-        self.ensure_xabcd_trend_columns().await?;
-        self.ensure_xabcd_reversal_columns().await?;
-        self.ensure_xabcd_time_columns().await?;
-        self.ensure_xabcd_target_columns().await?;
-        self.ensure_xabcd_length_columns().await?;
-        self.ensure_xabcd_pattern_id_column().await?;
-        self.ensure_xabcd_prop_strategy_id_column().await?;
         self.ensure_pattern_mode_tables().await?;
-        self.ensure_prop_reversal_outcomes_table().await?;
+
+        for table in ["pattern_outcomes_swing", "pattern_harmonic_scores"] {
+            let sql = format!("DROP TABLE IF EXISTS {table}");
+            sqlx::query(&sql).execute(&self.pool).await?;
+        }
 
         Ok(())
     }
 
-    fn build_output_tables(include_xabcd_mirror: bool) -> Vec<&'static str> {
-        let mut tables = CORE_OUTPUT_TABLES_FOR_SWAP.to_vec();
-        if include_xabcd_mirror {
-            tables.push("xabcd_patterns");
+    fn build_output_tables(output_options: OutputWriteOptions) -> Vec<&'static str> {
+        let mut tables = Vec::new();
+        if output_options.write_pattern_setups {
+            tables.push("pattern_setups");
         }
+        if output_options.write_harmonic_scores {
+            tables.push("pattern_harmonic_scores");
+        }
+        if output_options.write_swing_outcomes {
+            tables.push("pattern_outcomes_swing");
+        }
+        tables.push("pattern_outcomes_prop");
         tables
     }
 
     async fn ensure_output_tables_for_build(
         &self,
-        include_xabcd_mirror: bool,
+        _output_options: OutputWriteOptions,
     ) -> Result<(), sqlx::Error> {
         self.ensure_pattern_mode_tables().await?;
-        self.ensure_prop_reversal_outcomes_table().await?;
-
-        if include_xabcd_mirror {
-            self.ensure_xabcd_patterns_table().await?;
-            self.ensure_xabcd_trend_columns().await?;
-            self.ensure_xabcd_reversal_columns().await?;
-            self.ensure_xabcd_time_columns().await?;
-            self.ensure_xabcd_target_columns().await?;
-            self.ensure_xabcd_length_columns().await?;
-            self.ensure_xabcd_pattern_id_column().await?;
-            self.ensure_xabcd_prop_strategy_id_column().await?;
-        }
 
         Ok(())
     }
 
     pub async fn recreate_build_output_tables(
         &self,
-        include_xabcd_mirror: bool,
+        output_options: OutputWriteOptions,
     ) -> Result<(), sqlx::Error> {
-        self.ensure_output_tables_for_build(include_xabcd_mirror)
-            .await?;
+        self.ensure_output_tables_for_build(output_options).await?;
 
-        for table in Self::build_output_tables(include_xabcd_mirror) {
+        for table in Self::build_output_tables(output_options) {
             let old_table = format!("{table}_old");
             let build_table = format!("{table}_build");
             sqlx::query(&format!("DROP TABLE IF EXISTS {old_table}"))
@@ -1647,12 +1709,8 @@ impl Database {
         self.ensure_accuracy_bin_rollup_table().await?;
         self.ensure_pattern_structure_rollup_table().await?;
         self.ensure_accuracy_structure_rollup_table().await?;
-        self.ensure_swing_strategy_yearly_table().await?;
-        self.ensure_swing_strategy_summary_table().await?;
-        self.ensure_prop_strategy_yearly_table().await?;
-        self.ensure_prop_strategy_summary_table().await?;
-        self.ensure_prop_reversal_strategy_yearly_table().await?;
-        self.ensure_prop_reversal_strategy_summary_table().await?;
+        self.ensure_prop_strategy_family_yearly_table().await?;
+        self.ensure_prop_strategy_family_summary_table().await?;
         self.ensure_dashboard_cache_state_table().await?;
 
         for table in [
@@ -1660,12 +1718,8 @@ impl Database {
             "accuracy_bin_rollup",
             "pattern_structure_rollup",
             "accuracy_structure_rollup",
-            "swing_strategy_yearly",
-            "swing_strategy_summary",
-            "prop_strategy_yearly",
-            "prop_strategy_summary",
-            "prop_reversal_strategy_yearly",
-            "prop_reversal_strategy_summary",
+            "prop_strategy_family_yearly",
+            "prop_strategy_family_summary",
         ] {
             sqlx::query(&format!("TRUNCATE TABLE {table}"))
                 .execute(&self.pool)
@@ -1676,12 +1730,8 @@ impl Database {
             .await?;
         self.set_dashboard_cache_state("structure_rollups", false, None, Some("cleared"))
             .await?;
-        self.set_dashboard_cache_state("swing_strategy_rollups", false, None, Some("cleared"))
-            .await?;
-        self.set_dashboard_cache_state("prop_strategy_rollups", false, None, Some("cleared"))
-            .await?;
         self.set_dashboard_cache_state(
-            "prop_reversal_strategy_rollups",
+            "prop_strategy_family_rollups",
             false,
             None,
             Some("cleared"),
@@ -1693,9 +1743,9 @@ impl Database {
 
     pub async fn swap_build_output_tables(
         &self,
-        include_xabcd_mirror: bool,
+        output_options: OutputWriteOptions,
     ) -> Result<(), sqlx::Error> {
-        let tables = Self::build_output_tables(include_xabcd_mirror);
+        let tables = Self::build_output_tables(output_options);
 
         for table in &tables {
             let build_table = format!("{table}_build");
@@ -1798,6 +1848,22 @@ impl Database {
         Ok(())
     }
 
+    async fn record_optional_engine_phase_timing(
+        &self,
+        run_id: Option<&str>,
+        phase: &str,
+        row_count: Option<i64>,
+        duration: Duration,
+        note: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        if let Some(run_id) = run_id {
+            self.record_engine_phase_timing(run_id, None, phase, row_count, duration, note)
+                .await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn ensure_harmonic_pattern_definitions_table(&self) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
@@ -1886,6 +1952,39 @@ impl Database {
         .await?;
 
         Ok(exists > 0)
+    }
+
+    async fn add_column_if_missing(
+        &self,
+        table: &str,
+        column: &str,
+        column_sql: &str,
+    ) -> Result<(), sqlx::Error> {
+        if self.table_column_exists(table, column).await? {
+            return Ok(());
+        }
+
+        let sql = format!("ALTER TABLE {table} ADD COLUMN {column_sql}");
+        sqlx::query(&sql).execute(&self.pool).await?;
+        Ok(())
+    }
+
+    async fn create_index_if_missing(&self, create_sql: &str) -> Result<(), sqlx::Error> {
+        if let Err(error) = sqlx::query(create_sql).execute(&self.pool).await {
+            let is_duplicate = match &error {
+                sqlx::Error::Database(db_error) => {
+                    db_error.message().contains("Duplicate key name")
+                        || db_error.message().contains("already exists")
+                }
+                _ => false,
+            };
+
+            if !is_duplicate {
+                return Err(error);
+            }
+        }
+
+        Ok(())
     }
 
     async fn drop_column_if_exists(&self, table: &str, column: &str) -> Result<(), sqlx::Error> {
@@ -1991,31 +2090,6 @@ impl Database {
         Ok(())
     }
 
-    async fn drop_prop_reversal_score_columns(&self) -> Result<(), sqlx::Error> {
-        for column in [
-            "time_accuracy",
-            "bat_accuracy",
-            "alternate_bat_accuracy",
-            "butterfly_accuracy",
-            "gartley_accuracy",
-            "crab_accuracy",
-            "deep_crab_accuracy",
-            "shark_accuracy",
-            "bat_time_accuracy",
-            "alternate_bat_time_accuracy",
-            "butterfly_time_accuracy",
-            "gartley_time_accuracy",
-            "crab_time_accuracy",
-            "deep_crab_time_accuracy",
-            "shark_time_accuracy",
-        ] {
-            self.drop_column_if_exists("pattern_outcomes_prop_reversal", column)
-                .await?;
-        }
-
-        Ok(())
-    }
-
     async fn upsert_harmonic_scores_from_xabcd(
         &self,
         setup_id_expr: &str,
@@ -2058,6 +2132,7 @@ impl Database {
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
                 symbol VARCHAR(32) NOT NULL,
                 pattern_id CHAR(24) NULL,
+                x_bars_left BIGINT NOT NULL DEFAULT 0,
                 x_date DATE NOT NULL,
                 x_open DOUBLE NOT NULL,
                 x_high DOUBLE NOT NULL,
@@ -2175,7 +2250,9 @@ impl Database {
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_xabcd_pattern_id (pattern_id),
+                INDEX idx_xabcd_x_bars_left (x_bars_left),
                 INDEX idx_xabcd_symbol_d_date (symbol, d_date),
+                INDEX idx_xabcd_pattern_group_d_date (pattern_group_id, d_date),
                 INDEX idx_xabcd_prop_strategy_id (prop_strategy_id),
                 INDEX idx_xabcd_lookup (market, harmonic_type, d_date)
             )
@@ -2457,6 +2534,37 @@ impl Database {
         Ok(())
     }
 
+    pub async fn ensure_xabcd_x_bars_left_column(&self) -> Result<(), sqlx::Error> {
+        self.ensure_xabcd_patterns_table().await?;
+
+        self.add_column_if_missing(
+            "xabcd_patterns",
+            "x_bars_left",
+            "x_bars_left BIGINT NOT NULL DEFAULT 0 AFTER pattern_id",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_xabcd_x_bars_left ON xabcd_patterns (x_bars_left)",
+        )
+        .await?;
+        sqlx::query(
+            r#"
+            UPDATE xabcd_patterns
+            SET x_bars_left = COALESCE(x_length, 0)
+                + COALESCE(a_length, 0)
+                + COALESCE(b_length, 0)
+                + COALESCE(c_length, 0)
+            WHERE x_bars_left = 0
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+        self.drop_column_if_exists("xabcd_patterns", "x_mode")
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn ensure_xabcd_pattern_id_column(&self) -> Result<(), sqlx::Error> {
         self.ensure_xabcd_patterns_table().await?;
 
@@ -2511,6 +2619,7 @@ impl Database {
                 pattern_id CHAR(24) NOT NULL,
                 symbol VARCHAR(32) NOT NULL,
                 pattern_group_id VARCHAR(64) NOT NULL,
+                x_bars_left BIGINT NOT NULL DEFAULT 0,
                 market VARCHAR(16) NOT NULL,
                 harmonic_type VARCHAR(24) NOT NULL,
                 prop_strategy_id CHAR(16) NULL,
@@ -2573,6 +2682,7 @@ impl Database {
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 UNIQUE KEY uniq_pattern_setups_setup_id (setup_id),
                 INDEX idx_pattern_setups_pattern_id (pattern_id),
+                INDEX idx_pattern_setups_x_bars_left (x_bars_left),
                 INDEX idx_pattern_setups_symbol_d_date (symbol, d_date),
                 INDEX idx_pattern_setups_prop_strategy_id (prop_strategy_id)
             )
@@ -2600,6 +2710,31 @@ impl Database {
                 }
             }
         }
+
+        self.add_column_if_missing(
+            "pattern_setups",
+            "x_bars_left",
+            "x_bars_left BIGINT NOT NULL DEFAULT 0 AFTER pattern_group_id",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_setups_x_bars_left ON pattern_setups (x_bars_left)",
+        )
+        .await?;
+        sqlx::query(
+            r#"
+            UPDATE pattern_setups
+            SET x_bars_left = COALESCE(x_length, 0)
+                + COALESCE(a_length, 0)
+                + COALESCE(b_length, 0)
+                + COALESCE(c_length, 0)
+            WHERE x_bars_left = 0
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+        self.drop_column_if_exists("pattern_setups", "x_mode")
+            .await?;
 
         self.migrate_pattern_setup_scores().await?;
         self.drop_pattern_setup_score_columns().await?;
@@ -2715,15 +2850,51 @@ impl Database {
             }
         }
 
+        if self.table_exists("pattern_outcomes_prop").await?
+            && !self
+                .table_column_exists("pattern_outcomes_prop", "outcome_model")
+                .await?
+        {
+            sqlx::query("DROP TABLE pattern_outcomes_prop")
+                .execute(&self.pool)
+                .await?;
+        }
+
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS pattern_outcomes_prop (
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                outcome_row_id CHAR(32) NOT NULL,
                 setup_id CHAR(24) NOT NULL,
                 prop_strategy_id CHAR(16) NULL,
+                outcome_model VARCHAR(24) NOT NULL,
+                has_reversal BOOLEAN NOT NULL,
+                reversal_type VARCHAR(32) NOT NULL DEFAULT 'None',
+                reversal_detect_date DATE NULL,
+                reversal_bars_after_d BIGINT NULL,
+                pattern_id CHAR(24) NULL,
+                pattern_group_id VARCHAR(64) NOT NULL,
+                x_bars_left BIGINT NOT NULL DEFAULT 0,
+                symbol VARCHAR(32) NOT NULL,
+                d_date DATE NOT NULL,
+                entry_date DATE NOT NULL,
                 harmonic_type VARCHAR(24) NOT NULL DEFAULT 'Multi',
                 bin VARCHAR(16) NOT NULL DEFAULT 'Multi',
+                size_bucket VARCHAR(16) NOT NULL,
                 time_bin VARCHAR(16) NOT NULL DEFAULT 'Multi',
+                market VARCHAR(16) NOT NULL,
+                three_month_trend VARCHAR(16) NOT NULL,
+                six_month_trend VARCHAR(16) NOT NULL,
+                twelve_month_trend VARCHAR(16) NOT NULL,
+                x_length BIGINT NOT NULL,
+                a_length BIGINT NOT NULL,
+                b_length BIGINT NOT NULL,
+                c_length BIGINT NOT NULL,
+                d_length BIGINT NOT NULL,
+                full_pattern_length BIGINT NOT NULL,
+                trade_enter_price DOUBLE NOT NULL,
+                trade_risk_exit_price DOUBLE NOT NULL,
+                trade_reward_exit_price DOUBLE NOT NULL,
                 d_confirm_date DATE NOT NULL,
                 target_ready BOOLEAN NOT NULL,
                 target_date DATE NULL,
@@ -2737,107 +2908,77 @@ impl Database {
                 target_high_vs_open_pct DOUBLE NULL,
                 target_low_vs_open_pct DOUBLE NULL,
                 target_range_pct DOUBLE NULL,
-                target_breaks_d_high BOOLEAN NULL,
-                target_breaks_d_low BOOLEAN NULL,
+                target_breaks_entry_high BOOLEAN NULL,
+                target_breaks_entry_low BOOLEAN NULL,
                 prop_result INT NOT NULL,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY uniq_pattern_outcomes_prop_setup_id (setup_id),
+                UNIQUE KEY uniq_pattern_outcomes_prop_row_id (outcome_row_id),
+                INDEX idx_pattern_outcomes_prop_setup_id (setup_id),
                 INDEX idx_pattern_outcomes_prop_strategy_id (prop_strategy_id),
-                INDEX idx_pattern_outcomes_prop_lookup (harmonic_type, bin, time_bin),
-                INDEX idx_pattern_outcomes_prop_target_ready (target_ready)
+                INDEX idx_pattern_outcomes_prop_x_bars_left (x_bars_left),
+                INDEX idx_pattern_outcomes_prop_pattern_id (pattern_id, d_date),
+                INDEX idx_pattern_outcomes_prop_group_detail (
+                    pattern_group_id,
+                    d_date,
+                    market,
+                    harmonic_type,
+                    size_bucket
+                ),
+                INDEX idx_pattern_outcomes_prop_symbol_d_date (symbol, d_date),
+                INDEX idx_pattern_outcomes_prop_lookup (
+                    outcome_model,
+                    market,
+                    harmonic_type,
+                    bin,
+                    has_reversal,
+                    reversal_type,
+                    size_bucket,
+                    time_bin
+                ),
+                INDEX idx_pattern_outcomes_prop_target_ready (target_ready, entry_date)
             )
             "#,
         )
         .execute(&self.pool)
         .await?;
 
-        for sql in [
-            "ALTER TABLE pattern_outcomes_prop ADD COLUMN harmonic_type VARCHAR(24) NOT NULL DEFAULT 'Multi' AFTER prop_strategy_id",
-            "ALTER TABLE pattern_outcomes_prop ADD COLUMN bin VARCHAR(16) NOT NULL DEFAULT 'Multi' AFTER harmonic_type",
-            "ALTER TABLE pattern_outcomes_prop ADD COLUMN time_bin VARCHAR(16) NOT NULL DEFAULT 'Multi' AFTER bin",
-            "ALTER TABLE pattern_outcomes_prop ADD INDEX idx_pattern_outcomes_prop_lookup (harmonic_type, bin, time_bin)",
-        ] {
-            if let Err(error) = sqlx::query(sql).execute(&self.pool).await {
-                let is_duplicate = match &error {
-                    sqlx::Error::Database(db_error) => {
-                        db_error.message().contains("Duplicate column name")
-                            || db_error.message().contains("Duplicate key name")
-                            || db_error.message().contains("already exists")
-                    }
-                    _ => false,
-                };
-
-                if !is_duplicate {
-                    return Err(error);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub async fn ensure_prop_reversal_outcomes_table(&self) -> Result<(), sqlx::Error> {
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "x_bars_left",
+            "x_bars_left BIGINT NOT NULL DEFAULT 0 AFTER pattern_group_id",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_outcomes_prop_x_bars_left ON pattern_outcomes_prop (x_bars_left)",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_outcomes_prop_pattern_id ON pattern_outcomes_prop (pattern_id, d_date)",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_outcomes_prop_group_detail ON pattern_outcomes_prop (pattern_group_id, d_date, market, harmonic_type, size_bucket)",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_outcomes_prop_symbol_d_date ON pattern_outcomes_prop (symbol, d_date)",
+        )
+        .await?;
         sqlx::query(
             r#"
-            CREATE TABLE IF NOT EXISTS pattern_outcomes_prop_reversal (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                reversal_row_id CHAR(32) NOT NULL,
-                setup_id CHAR(24) NOT NULL,
-                prop_strategy_id CHAR(16) NOT NULL,
-                pattern_id CHAR(24) NULL,
-                pattern_group_id VARCHAR(64) NOT NULL,
-                symbol VARCHAR(32) NOT NULL,
-                d_date DATE NOT NULL,
-                reversal_type VARCHAR(32) NOT NULL,
-                reversal_detect_date DATE NOT NULL,
-                reversal_bars_after_d BIGINT NOT NULL,
-                market VARCHAR(16) NOT NULL,
-                harmonic_type VARCHAR(24) NOT NULL,
-                bin VARCHAR(16) NOT NULL,
-                size_bucket VARCHAR(16) NOT NULL,
-                time_bin VARCHAR(16) NOT NULL,
-                three_month_trend VARCHAR(16) NOT NULL,
-                six_month_trend VARCHAR(16) NOT NULL,
-                twelve_month_trend VARCHAR(16) NOT NULL,
-                x_length BIGINT NOT NULL,
-                a_length BIGINT NOT NULL,
-                b_length BIGINT NOT NULL,
-                c_length BIGINT NOT NULL,
-                d_length BIGINT NOT NULL,
-                full_pattern_length BIGINT NOT NULL,
-                trade_enter_price DOUBLE NOT NULL,
-                trade_risk_exit_price DOUBLE NOT NULL,
-                trade_reward_exit_price DOUBLE NOT NULL,
-                trade_result INT NOT NULL,
-                target_ready BOOLEAN NOT NULL,
-                target_date DATE NULL,
-                target_open DOUBLE NULL,
-                target_high DOUBLE NULL,
-                target_low DOUBLE NULL,
-                target_close DOUBLE NULL,
-                target_volume BIGINT NULL,
-                target_is_green BOOLEAN NULL,
-                target_close_vs_open_pct DOUBLE NULL,
-                target_high_vs_open_pct DOUBLE NULL,
-                target_low_vs_open_pct DOUBLE NULL,
-                target_range_pct DOUBLE NULL,
-                target_breaks_reversal_high BOOLEAN NULL,
-                target_breaks_reversal_low BOOLEAN NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY uniq_prop_reversal_row_id (reversal_row_id),
-                UNIQUE KEY uniq_prop_reversal_event (setup_id, reversal_type, reversal_detect_date),
-                INDEX idx_prop_reversal_strategy (prop_strategy_id),
-                INDEX idx_prop_reversal_target_ready (target_ready, reversal_detect_date),
-                INDEX idx_prop_reversal_lookup (market, harmonic_type, bin, reversal_type, size_bucket, time_bin)
-            )
+            UPDATE pattern_outcomes_prop
+            SET x_bars_left = COALESCE(x_length, 0)
+                + COALESCE(a_length, 0)
+                + COALESCE(b_length, 0)
+                + COALESCE(c_length, 0)
+            WHERE x_bars_left = 0
             "#,
         )
         .execute(&self.pool)
         .await?;
-
-        self.drop_prop_reversal_score_columns().await?;
+        self.drop_column_if_exists("pattern_outcomes_prop", "x_mode")
+            .await?;
 
         Ok(())
     }
@@ -2845,6 +2986,7 @@ impl Database {
     pub async fn rebuild_pattern_mode_tables_from_xabcd(&self) -> Result<(), sqlx::Error> {
         self.ensure_xabcd_patterns_table().await?;
         self.ensure_xabcd_pattern_id_column().await?;
+        self.ensure_xabcd_x_bars_left_column().await?;
         self.ensure_xabcd_time_columns().await?;
         self.backfill_xabcd_pattern_ids().await?;
         self.ensure_pattern_mode_tables().await?;
@@ -2864,6 +3006,10 @@ impl Database {
         let route_time_accuracy_expr = dominant_harmonic_time_accuracy_expr();
         let route_time_bin_expr = time_bin_expr(&route_time_accuracy_expr);
         let route_reversal_type_expr = "COALESCE(NULLIF(reversal_type, ''), 'None')";
+        let size_bucket_expr = structure_size_bucket_expr(structure_total_bars_expr());
+        let three_month_trend_expr = trend_bucket_expr("three_month");
+        let six_month_trend_expr = trend_bucket_expr("six_month");
+        let twelve_month_trend_expr = trend_bucket_expr("twelve_month");
         let swing_strategy_id_expr = swing_strategy_id_expr(
             &route_harmonic_type_expr,
             &route_bin_expr,
@@ -2874,7 +3020,7 @@ impl Database {
         let insert_setups_sql = format!(
             r#"
             INSERT INTO pattern_setups (
-                setup_id, pattern_id, symbol, pattern_group_id, market, harmonic_type, prop_strategy_id,
+                setup_id, pattern_id, symbol, pattern_group_id, x_bars_left, market, harmonic_type, prop_strategy_id,
                 x_date, x_open, x_high, x_low, x_close, x_length, x_min_max,
                 a_date, a_open, a_high, a_low, a_close, a_length, a_min_max, xa_price_length,
                 b_date, b_open, b_high, b_low, b_close, b_length, b_min_max, ab_price_length,
@@ -2891,7 +3037,12 @@ impl Database {
             SELECT
                 {setup_id_expr},
                 {setup_id_expr},
-                symbol, pattern_group_id, market, 'Multi', NULLIF(prop_strategy_id, ''),
+                symbol,
+                pattern_group_id,
+                COALESCE(NULLIF(x_bars_left, 0), x_length + a_length + b_length + c_length),
+                market,
+                'Multi',
+                NULLIF(prop_strategy_id, ''),
                 x_date, x_open, x_high, x_low, x_close, x_length, x_min_max,
                 a_date, a_open, a_high, a_low, a_close, a_length, a_min_max, xa_price_length,
                 b_date, b_open, b_high, b_low, b_close, b_length, b_min_max, ab_price_length,
@@ -2973,19 +3124,51 @@ impl Database {
         let insert_prop_sql = format!(
             r#"
             INSERT INTO pattern_outcomes_prop (
-                setup_id, prop_strategy_id, harmonic_type, bin, time_bin,
+                outcome_row_id, setup_id, prop_strategy_id,
+                outcome_model, has_reversal, reversal_type, reversal_detect_date,
+                reversal_bars_after_d, pattern_id, pattern_group_id, x_bars_left, symbol,
+                d_date, entry_date, market, harmonic_type, bin, size_bucket, time_bin,
+                three_month_trend, six_month_trend, twelve_month_trend,
+                x_length, a_length, b_length, c_length, d_length, full_pattern_length,
+                trade_enter_price, trade_risk_exit_price, trade_reward_exit_price,
                 d_confirm_date, target_ready, target_date,
                 target_open, target_high, target_low, target_close, target_volume,
                 target_is_green, target_close_vs_open_pct, target_high_vs_open_pct,
-                target_low_vs_open_pct, target_range_pct, target_breaks_d_high,
-                target_breaks_d_low, prop_result
+                target_low_vs_open_pct, target_range_pct, target_breaks_entry_high,
+                target_breaks_entry_low, prop_result
             )
             SELECT
+                MD5(CONCAT({setup_id_expr}, '|D')),
                 {setup_id_expr},
                 NULLIF(prop_strategy_id, ''),
+                'D',
+                FALSE,
+                'None',
+                NULL,
+                NULL,
+                {setup_id_expr},
+                pattern_group_id,
+                COALESCE(NULLIF(x_bars_left, 0), x_length + a_length + b_length + c_length),
+                symbol,
+                d_date,
+                d_confirm_date,
+                market,
                 {route_harmonic_type_expr},
                 {route_bin_expr},
+                {size_bucket_expr},
                 {route_time_bin_expr},
+                {three_month_trend_expr},
+                {six_month_trend_expr},
+                {twelve_month_trend_expr},
+                x_length,
+                a_length,
+                b_length,
+                c_length,
+                d_length,
+                full_pattern_length,
+                trade_enter_price,
+                trade_risk_exit_price,
+                trade_reward_exit_price,
                 d_confirm_date,
                 target_ready,
                 target_date,
@@ -3014,6 +3197,10 @@ impl Database {
             route_harmonic_type_expr = route_harmonic_type_expr,
             route_bin_expr = route_bin_expr,
             route_time_bin_expr = route_time_bin_expr,
+            size_bucket_expr = size_bucket_expr,
+            three_month_trend_expr = three_month_trend_expr,
+            six_month_trend_expr = six_month_trend_expr,
+            twelve_month_trend_expr = twelve_month_trend_expr,
         );
         sqlx::query(&insert_prop_sql).execute(&self.pool).await?;
 
@@ -3023,6 +3210,7 @@ impl Database {
     pub async fn backfill_xabcd_pattern_ids(&self) -> Result<(), sqlx::Error> {
         self.ensure_xabcd_patterns_table().await?;
         self.ensure_xabcd_pattern_id_column().await?;
+        self.ensure_xabcd_x_bars_left_column().await?;
 
         let sql = format!(
             r#"
@@ -3045,6 +3233,7 @@ impl Database {
         run_id: Option<&str>,
         fast_rebuild: bool,
         use_build_tables: bool,
+        write_pattern_setups: bool,
         write_harmonic_scores: bool,
         write_swing_outcomes: bool,
         write_prop_outcomes: bool,
@@ -3073,123 +3262,127 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         for chunk in patterns.chunks(PATTERN_INSERT_CHUNK_SIZE) {
-            let phase_started = Instant::now();
-            let mut setup_builder = QueryBuilder::<MySql>::new(format!(
-                r#"
-                INSERT INTO {} (
-                    setup_id, pattern_id, symbol, pattern_group_id, market, harmonic_type, prop_strategy_id,
-                    x_date, x_open, x_high, x_low, x_close, x_length, x_min_max,
-                    a_date, a_open, a_high, a_low, a_close, a_length, a_min_max, xa_price_length,
-                    b_date, b_open, b_high, b_low, b_close, b_length, b_min_max, ab_price_length,
-                    c_date, c_open, c_high, c_low, c_close, c_length, c_min_max, bc_price_length,
-                    d_date, d_open, d_high, d_low, d_close, d_length, d_min_max, cd_price_length,
-                    full_pattern_length,
-                    bullish_key_reversal, bearish_key_reversal,
-                    bullish_engulfing, bearish_engulfing,
-                    bullish_outside_reversal, bearish_outside_reversal,
-                    hammer, shooting_star, morning_star, evening_star,
-                    three_white_soldiers, three_black_crows,
-                    three_month, six_month, twelve_month
-                )
-                "#,
-                tables.pattern_setups
-            ));
-
-            setup_builder.push_values(chunk, |mut row, p| {
-                let pattern_id = build_pattern_setup_id(p);
-                row.push_bind(pattern_id.clone())
-                    .push_bind(pattern_id)
-                    .push_bind(&p.symbol)
-                    .push_bind(&p.pattern_group_id)
-                    .push_bind(format!("{:?}", p.market))
-                    .push_bind(&p.harmonic_type)
-                    .push_bind(&p.prop_strategy_id)
-                    .push_bind(&p.x_date)
-                    .push_bind(p.x_open)
-                    .push_bind(p.x_high)
-                    .push_bind(p.x_low)
-                    .push_bind(p.x_close)
-                    .push_bind(p.x_length)
-                    .push_bind(p.x_min_max)
-                    .push_bind(&p.a_date)
-                    .push_bind(p.a_open)
-                    .push_bind(p.a_high)
-                    .push_bind(p.a_low)
-                    .push_bind(p.a_close)
-                    .push_bind(p.a_length)
-                    .push_bind(p.a_min_max)
-                    .push_bind(p.xa_price_length)
-                    .push_bind(&p.b_date)
-                    .push_bind(p.b_open)
-                    .push_bind(p.b_high)
-                    .push_bind(p.b_low)
-                    .push_bind(p.b_close)
-                    .push_bind(p.b_length)
-                    .push_bind(p.b_min_max)
-                    .push_bind(p.ab_price_length)
-                    .push_bind(&p.c_date)
-                    .push_bind(p.c_open)
-                    .push_bind(p.c_high)
-                    .push_bind(p.c_low)
-                    .push_bind(p.c_close)
-                    .push_bind(p.c_length)
-                    .push_bind(p.c_min_max)
-                    .push_bind(p.bc_price_length)
-                    .push_bind(&p.d_date)
-                    .push_bind(p.d_open)
-                    .push_bind(p.d_high)
-                    .push_bind(p.d_low)
-                    .push_bind(p.d_close)
-                    .push_bind(p.d_length)
-                    .push_bind(p.d_min_max)
-                    .push_bind(p.cd_price_length)
-                    .push_bind(p.full_pattern_length)
-                    .push_bind(p.bullish_key_reversal)
-                    .push_bind(p.bearish_key_reversal)
-                    .push_bind(p.bullish_engulfing)
-                    .push_bind(p.bearish_engulfing)
-                    .push_bind(p.bullish_outside_reversal)
-                    .push_bind(p.bearish_outside_reversal)
-                    .push_bind(p.hammer)
-                    .push_bind(p.shooting_star)
-                    .push_bind(p.morning_star)
-                    .push_bind(p.evening_star)
-                    .push_bind(p.three_white_soldiers)
-                    .push_bind(p.three_black_crows)
-                    .push_bind(p.three_month)
-                    .push_bind(p.six_month)
-                    .push_bind(p.twelve_month);
-            });
-
-            if !fast_rebuild {
-                setup_builder.push(
+            if write_pattern_setups {
+                let phase_started = Instant::now();
+                let mut setup_builder = QueryBuilder::<MySql>::new(format!(
                     r#"
-                    ON DUPLICATE KEY UPDATE
-                        pattern_id = VALUES(pattern_id),
-                        prop_strategy_id = VALUES(prop_strategy_id),
-                        bullish_key_reversal = VALUES(bullish_key_reversal),
-                        bearish_key_reversal = VALUES(bearish_key_reversal),
-                        bullish_engulfing = VALUES(bullish_engulfing),
-                        bearish_engulfing = VALUES(bearish_engulfing),
-                        bullish_outside_reversal = VALUES(bullish_outside_reversal),
-                        bearish_outside_reversal = VALUES(bearish_outside_reversal),
-                        hammer = VALUES(hammer),
-                        shooting_star = VALUES(shooting_star),
-                        morning_star = VALUES(morning_star),
-                        evening_star = VALUES(evening_star),
-                        three_white_soldiers = VALUES(three_white_soldiers),
-                        three_black_crows = VALUES(three_black_crows),
-                        three_month = VALUES(three_month),
-                        six_month = VALUES(six_month),
-                        twelve_month = VALUES(twelve_month),
-                        updated_at = CURRENT_TIMESTAMP
+                    INSERT INTO {} (
+                        setup_id, pattern_id, symbol, pattern_group_id, x_bars_left, market, harmonic_type, prop_strategy_id,
+                        x_date, x_open, x_high, x_low, x_close, x_length, x_min_max,
+                        a_date, a_open, a_high, a_low, a_close, a_length, a_min_max, xa_price_length,
+                        b_date, b_open, b_high, b_low, b_close, b_length, b_min_max, ab_price_length,
+                        c_date, c_open, c_high, c_low, c_close, c_length, c_min_max, bc_price_length,
+                        d_date, d_open, d_high, d_low, d_close, d_length, d_min_max, cd_price_length,
+                        full_pattern_length,
+                        bullish_key_reversal, bearish_key_reversal,
+                        bullish_engulfing, bearish_engulfing,
+                        bullish_outside_reversal, bearish_outside_reversal,
+                        hammer, shooting_star, morning_star, evening_star,
+                        three_white_soldiers, three_black_crows,
+                        three_month, six_month, twelve_month
+                    )
                     "#,
-                );
-            }
+                    tables.pattern_setups
+                ));
 
-            setup_builder.build().execute(&mut *tx).await?;
-            setup_duration += phase_started.elapsed();
-            setup_rows += chunk.len() as i64;
+                setup_builder.push_values(chunk, |mut row, p| {
+                    let pattern_id = build_pattern_setup_id(p);
+                    row.push_bind(pattern_id.clone())
+                        .push_bind(pattern_id)
+                        .push_bind(&p.symbol)
+                        .push_bind(&p.pattern_group_id)
+                        .push_bind(p.x_bars_left)
+                        .push_bind(format!("{:?}", p.market))
+                        .push_bind(&p.harmonic_type)
+                        .push_bind(&p.prop_strategy_id)
+                        .push_bind(&p.x_date)
+                        .push_bind(p.x_open)
+                        .push_bind(p.x_high)
+                        .push_bind(p.x_low)
+                        .push_bind(p.x_close)
+                        .push_bind(p.x_length)
+                        .push_bind(p.x_min_max)
+                        .push_bind(&p.a_date)
+                        .push_bind(p.a_open)
+                        .push_bind(p.a_high)
+                        .push_bind(p.a_low)
+                        .push_bind(p.a_close)
+                        .push_bind(p.a_length)
+                        .push_bind(p.a_min_max)
+                        .push_bind(p.xa_price_length)
+                        .push_bind(&p.b_date)
+                        .push_bind(p.b_open)
+                        .push_bind(p.b_high)
+                        .push_bind(p.b_low)
+                        .push_bind(p.b_close)
+                        .push_bind(p.b_length)
+                        .push_bind(p.b_min_max)
+                        .push_bind(p.ab_price_length)
+                        .push_bind(&p.c_date)
+                        .push_bind(p.c_open)
+                        .push_bind(p.c_high)
+                        .push_bind(p.c_low)
+                        .push_bind(p.c_close)
+                        .push_bind(p.c_length)
+                        .push_bind(p.c_min_max)
+                        .push_bind(p.bc_price_length)
+                        .push_bind(&p.d_date)
+                        .push_bind(p.d_open)
+                        .push_bind(p.d_high)
+                        .push_bind(p.d_low)
+                        .push_bind(p.d_close)
+                        .push_bind(p.d_length)
+                        .push_bind(p.d_min_max)
+                        .push_bind(p.cd_price_length)
+                        .push_bind(p.full_pattern_length)
+                        .push_bind(p.bullish_key_reversal)
+                        .push_bind(p.bearish_key_reversal)
+                        .push_bind(p.bullish_engulfing)
+                        .push_bind(p.bearish_engulfing)
+                        .push_bind(p.bullish_outside_reversal)
+                        .push_bind(p.bearish_outside_reversal)
+                        .push_bind(p.hammer)
+                        .push_bind(p.shooting_star)
+                        .push_bind(p.morning_star)
+                        .push_bind(p.evening_star)
+                        .push_bind(p.three_white_soldiers)
+                        .push_bind(p.three_black_crows)
+                        .push_bind(p.three_month)
+                        .push_bind(p.six_month)
+                        .push_bind(p.twelve_month);
+                });
+
+                if !fast_rebuild {
+                    setup_builder.push(
+                        r#"
+                        ON DUPLICATE KEY UPDATE
+                            pattern_id = VALUES(pattern_id),
+                            x_bars_left = VALUES(x_bars_left),
+                            prop_strategy_id = VALUES(prop_strategy_id),
+                            bullish_key_reversal = VALUES(bullish_key_reversal),
+                            bearish_key_reversal = VALUES(bearish_key_reversal),
+                            bullish_engulfing = VALUES(bullish_engulfing),
+                            bearish_engulfing = VALUES(bearish_engulfing),
+                            bullish_outside_reversal = VALUES(bullish_outside_reversal),
+                            bearish_outside_reversal = VALUES(bearish_outside_reversal),
+                            hammer = VALUES(hammer),
+                            shooting_star = VALUES(shooting_star),
+                            morning_star = VALUES(morning_star),
+                            evening_star = VALUES(evening_star),
+                            three_white_soldiers = VALUES(three_white_soldiers),
+                            three_black_crows = VALUES(three_black_crows),
+                            three_month = VALUES(three_month),
+                            six_month = VALUES(six_month),
+                            twelve_month = VALUES(twelve_month),
+                            updated_at = CURRENT_TIMESTAMP
+                        "#,
+                    );
+                }
+
+                setup_builder.build().execute(&mut *tx).await?;
+                setup_duration += phase_started.elapsed();
+                setup_rows += chunk.len() as i64;
+            }
 
             if write_harmonic_scores {
                 let phase_started = Instant::now();
@@ -3800,6 +3993,7 @@ impl Database {
                     reversal_type,
                     size_bucket,
                     time_bin,
+                    x_strictness,
                     three_month_trend,
                     six_month_trend,
                     twelve_month_trend
@@ -3886,6 +4080,7 @@ impl Database {
                     reversal_type,
                     size_bucket,
                     time_bin,
+                    x_strictness,
                     three_month_trend,
                     six_month_trend,
                     twelve_month_trend
@@ -3927,18 +4122,36 @@ impl Database {
         Ok(())
     }
 
-    pub async fn ensure_prop_strategy_yearly_table(&self) -> Result<(), sqlx::Error> {
+    pub async fn ensure_prop_strategy_family_yearly_table(&self) -> Result<(), sqlx::Error> {
+        if self.table_exists("prop_strategy_family_yearly").await?
+            && (self
+                .table_column_exists("prop_strategy_family_yearly", "has_reversal")
+                .await?
+                || !self
+                    .table_column_exists("prop_strategy_family_yearly", "x_strictness")
+                    .await?)
+        {
+            sqlx::query("DROP TABLE prop_strategy_family_yearly")
+                .execute(&self.pool)
+                .await?;
+        }
+
         sqlx::query(
             r#"
-            CREATE TABLE IF NOT EXISTS prop_strategy_yearly (
+            CREATE TABLE IF NOT EXISTS prop_strategy_family_yearly (
                 trade_year INT NOT NULL,
-                prop_strategy_id CHAR(16) NOT NULL,
+                family_key CHAR(16) NOT NULL,
+                family_name VARCHAR(64) NOT NULL,
+                family_level INT NOT NULL,
+                included_dimensions VARCHAR(255) NOT NULL,
+                outcome_model VARCHAR(24) NOT NULL,
                 market VARCHAR(16) NOT NULL,
-                harmonic_type VARCHAR(16) NOT NULL,
+                harmonic_type VARCHAR(24) NOT NULL,
                 bin VARCHAR(16) NOT NULL,
                 reversal_type VARCHAR(32) NOT NULL,
                 size_bucket VARCHAR(16) NOT NULL,
                 time_bin VARCHAR(16) NOT NULL,
+                x_strictness VARCHAR(16) NOT NULL,
                 three_month_trend VARCHAR(16) NOT NULL,
                 six_month_trend VARCHAR(16) NOT NULL,
                 twelve_month_trend VARCHAR(16) NOT NULL,
@@ -3955,41 +4168,18 @@ impl Database {
                 win_return_count BIGINT NOT NULL DEFAULT 0,
                 loss_return_sum DOUBLE NOT NULL DEFAULT 0,
                 loss_return_count BIGINT NOT NULL DEFAULT 0,
-                trade_length_sum DOUBLE NOT NULL DEFAULT 0,
-                trade_length_count BIGINT NOT NULL DEFAULT 0,
-                ab_xa_sum DOUBLE NOT NULL DEFAULT 0,
-                ab_xa_count BIGINT NOT NULL DEFAULT 0,
-                bc_ab_sum DOUBLE NOT NULL DEFAULT 0,
-                bc_ab_count BIGINT NOT NULL DEFAULT 0,
-                cd_bc_sum DOUBLE NOT NULL DEFAULT 0,
-                cd_bc_count BIGINT NOT NULL DEFAULT 0,
-                cd_xa_sum DOUBLE NOT NULL DEFAULT 0,
-                cd_xa_count BIGINT NOT NULL DEFAULT 0,
-                PRIMARY KEY (
-                    trade_year,
-                    prop_strategy_id,
+                target_range_sum DOUBLE NOT NULL DEFAULT 0,
+                target_range_count BIGINT NOT NULL DEFAULT 0,
+                PRIMARY KEY (trade_year, family_key),
+                INDEX idx_prop_family_yearly_family (family_key, trade_year),
+                INDEX idx_prop_family_yearly_lookup (
+                    family_name,
+                    family_level,
                     market,
                     harmonic_type,
                     bin,
-                    reversal_type,
-                    size_bucket,
-                    time_bin,
-                    three_month_trend,
-                    six_month_trend,
-                    twelve_month_trend
-                ),
-                INDEX idx_prop_strategy_yearly_lookup (
-                    prop_strategy_id,
-                    market,
-                    harmonic_type,
-                    bin,
-                    reversal_type,
-                    size_bucket,
-                    time_bin,
-                    three_month_trend,
-                    six_month_trend,
-                    twelve_month_trend,
-                    trade_year
+                    outcome_model,
+                    reversal_type
                 )
             )
             "#,
@@ -3997,60 +4187,38 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
-        if let Err(error) = sqlx::query(
-            r#"
-            ALTER TABLE prop_strategy_yearly
-            ADD COLUMN prop_strategy_id CHAR(16) NULL AFTER trade_year
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        {
-            let duplicate_column = matches!(
-                &error,
-                sqlx::Error::Database(db_error)
-                    if matches!(db_error.code().as_deref(), Some("1060") | Some("42S21"))
-            );
-
-            if !duplicate_column {
-                return Err(error);
-            }
-        }
-
-        if let Err(error) = sqlx::query(
-            r#"
-            CREATE INDEX idx_prop_strategy_yearly_id
-            ON prop_strategy_yearly (prop_strategy_id, trade_year)
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        {
-            let duplicate_index = matches!(
-                &error,
-                sqlx::Error::Database(db_error)
-                    if matches!(db_error.code().as_deref(), Some("1061") | Some("42000"))
-            );
-
-            if !duplicate_index {
-                return Err(error);
-            }
-        }
-
         Ok(())
     }
 
-    pub async fn ensure_prop_strategy_summary_table(&self) -> Result<(), sqlx::Error> {
+    pub async fn ensure_prop_strategy_family_summary_table(&self) -> Result<(), sqlx::Error> {
+        if self.table_exists("prop_strategy_family_summary").await?
+            && (self
+                .table_column_exists("prop_strategy_family_summary", "has_reversal")
+                .await?
+                || !self
+                    .table_column_exists("prop_strategy_family_summary", "x_strictness")
+                    .await?)
+        {
+            sqlx::query("DROP TABLE prop_strategy_family_summary")
+                .execute(&self.pool)
+                .await?;
+        }
+
         sqlx::query(
             r#"
-            CREATE TABLE IF NOT EXISTS prop_strategy_summary (
-                prop_strategy_id CHAR(16) NOT NULL,
+            CREATE TABLE IF NOT EXISTS prop_strategy_family_summary (
+                family_key CHAR(16) NOT NULL PRIMARY KEY,
+                family_name VARCHAR(64) NOT NULL,
+                family_level INT NOT NULL,
+                included_dimensions VARCHAR(255) NOT NULL,
+                outcome_model VARCHAR(24) NOT NULL,
                 market VARCHAR(16) NOT NULL,
-                harmonic_type VARCHAR(16) NOT NULL,
+                harmonic_type VARCHAR(24) NOT NULL,
                 bin VARCHAR(16) NOT NULL,
                 reversal_type VARCHAR(32) NOT NULL,
                 size_bucket VARCHAR(16) NOT NULL,
                 time_bin VARCHAR(16) NOT NULL,
+                x_strictness VARCHAR(16) NOT NULL,
                 three_month_trend VARCHAR(16) NOT NULL,
                 six_month_trend VARCHAR(16) NOT NULL,
                 twelve_month_trend VARCHAR(16) NOT NULL,
@@ -4067,171 +4235,23 @@ impl Database {
                 closed_rate DOUBLE NOT NULL DEFAULT 0,
                 avg_win DOUBLE NOT NULL DEFAULT 0,
                 avg_loss DOUBLE NOT NULL DEFAULT 0,
-                avg_trade_length DOUBLE NOT NULL DEFAULT 0,
-                avg_ab_xa DOUBLE NOT NULL DEFAULT 0,
-                avg_bc_ab DOUBLE NOT NULL DEFAULT 0,
-                avg_cd_bc DOUBLE NOT NULL DEFAULT 0,
-                avg_cd_xa DOUBLE NOT NULL DEFAULT 0,
-                PRIMARY KEY (
-                    prop_strategy_id,
-                    market,
-                    harmonic_type,
-                    bin,
-                    reversal_type,
-                    size_bucket,
-                    time_bin,
-                    three_month_trend,
-                    six_month_trend,
-                    twelve_month_trend
-                ),
-                INDEX idx_prop_strategy_cohort_summary_rank (
+                avg_target_range DOUBLE NOT NULL DEFAULT 0,
+                score DOUBLE NOT NULL DEFAULT 0,
+                INDEX idx_prop_family_summary_rank (
+                    score,
                     expectancy,
                     closed_count,
                     win_rate
                 ),
-                INDEX idx_prop_strategy_cohort_summary_id (
-                    prop_strategy_id
+                INDEX idx_prop_family_summary_lookup (
+                    family_name,
+                    family_level,
+                    market,
+                    harmonic_type,
+                    bin,
+                    outcome_model,
+                    reversal_type
                 )
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        if let Err(error) = sqlx::query(
-            r#"
-            ALTER TABLE prop_strategy_summary
-            ADD COLUMN prop_strategy_id CHAR(16) NULL FIRST
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        {
-            let duplicate_column = matches!(
-                &error,
-                sqlx::Error::Database(db_error)
-                    if matches!(db_error.code().as_deref(), Some("1060") | Some("42S21"))
-            );
-
-            if !duplicate_column {
-                return Err(error);
-            }
-        }
-
-        if let Err(error) = sqlx::query(
-            r#"
-            CREATE INDEX idx_prop_strategy_cohort_summary_id
-            ON prop_strategy_summary (prop_strategy_id)
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        {
-            let duplicate_index = matches!(
-                &error,
-                sqlx::Error::Database(db_error)
-                    if matches!(db_error.code().as_deref(), Some("1061") | Some("42000"))
-            );
-
-            if !duplicate_index {
-                return Err(error);
-            }
-        }
-
-        Ok(())
-    }
-
-    pub async fn ensure_prop_reversal_strategy_yearly_table(&self) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS prop_reversal_strategy_yearly (
-                trade_year INT NOT NULL,
-                prop_strategy_id CHAR(16) NOT NULL,
-                market VARCHAR(16) NOT NULL,
-                harmonic_type VARCHAR(16) NOT NULL,
-                bin VARCHAR(16) NOT NULL,
-                reversal_type VARCHAR(32) NOT NULL,
-                size_bucket VARCHAR(16) NOT NULL,
-                time_bin VARCHAR(16) NOT NULL,
-                three_month_trend VARCHAR(16) NOT NULL,
-                six_month_trend VARCHAR(16) NOT NULL,
-                twelve_month_trend VARCHAR(16) NOT NULL,
-                total_count BIGINT NOT NULL DEFAULT 0,
-                closed_count BIGINT NOT NULL DEFAULT 0,
-                open_count BIGINT NOT NULL DEFAULT 0,
-                win_count BIGINT NOT NULL DEFAULT 0,
-                loss_count BIGINT NOT NULL DEFAULT 0,
-                return_sum DOUBLE NOT NULL DEFAULT 0,
-                return_count BIGINT NOT NULL DEFAULT 0,
-                expectancy_sum DOUBLE NOT NULL DEFAULT 0,
-                expectancy_count BIGINT NOT NULL DEFAULT 0,
-                win_return_sum DOUBLE NOT NULL DEFAULT 0,
-                win_return_count BIGINT NOT NULL DEFAULT 0,
-                loss_return_sum DOUBLE NOT NULL DEFAULT 0,
-                loss_return_count BIGINT NOT NULL DEFAULT 0,
-                PRIMARY KEY (
-                    trade_year,
-                    prop_strategy_id,
-                    market,
-                    harmonic_type,
-                    bin,
-                    reversal_type,
-                    size_bucket,
-                    time_bin,
-                    three_month_trend,
-                    six_month_trend,
-                    twelve_month_trend
-                ),
-                INDEX idx_prop_reversal_strategy_yearly_id (prop_strategy_id, trade_year)
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
-    pub async fn ensure_prop_reversal_strategy_summary_table(&self) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS prop_reversal_strategy_summary (
-                prop_strategy_id CHAR(16) NOT NULL,
-                market VARCHAR(16) NOT NULL,
-                harmonic_type VARCHAR(16) NOT NULL,
-                bin VARCHAR(16) NOT NULL,
-                reversal_type VARCHAR(32) NOT NULL,
-                size_bucket VARCHAR(16) NOT NULL,
-                time_bin VARCHAR(16) NOT NULL,
-                three_month_trend VARCHAR(16) NOT NULL,
-                six_month_trend VARCHAR(16) NOT NULL,
-                twelve_month_trend VARCHAR(16) NOT NULL,
-                worst_year_expectancy DOUBLE NOT NULL DEFAULT 0,
-                down_years BIGINT NOT NULL DEFAULT 0,
-                total_count BIGINT NOT NULL DEFAULT 0,
-                closed_count BIGINT NOT NULL DEFAULT 0,
-                open_count BIGINT NOT NULL DEFAULT 0,
-                win_count BIGINT NOT NULL DEFAULT 0,
-                loss_count BIGINT NOT NULL DEFAULT 0,
-                expectancy DOUBLE NOT NULL DEFAULT 0,
-                avg_return DOUBLE NOT NULL DEFAULT 0,
-                win_rate DOUBLE NOT NULL DEFAULT 0,
-                closed_rate DOUBLE NOT NULL DEFAULT 0,
-                avg_win DOUBLE NOT NULL DEFAULT 0,
-                avg_loss DOUBLE NOT NULL DEFAULT 0,
-                PRIMARY KEY (
-                    prop_strategy_id,
-                    market,
-                    harmonic_type,
-                    bin,
-                    reversal_type,
-                    size_bucket,
-                    time_bin,
-                    three_month_trend,
-                    six_month_trend,
-                    twelve_month_trend
-                ),
-                INDEX idx_prop_reversal_strategy_cohort_rank (expectancy, closed_count, win_rate)
             )
             "#,
         )
@@ -4295,30 +4315,38 @@ impl Database {
     }
 
     pub async fn clear_generated_outputs(&self) -> Result<(), sqlx::Error> {
-        self.ensure_xabcd_patterns_table().await?;
-        self.ensure_accuracy_bin_cache_table().await?;
-        self.ensure_accuracy_bin_rollup_table().await?;
-        self.ensure_pattern_structure_rollup_table().await?;
-        self.ensure_accuracy_structure_rollup_table().await?;
-        self.ensure_swing_strategy_yearly_table().await?;
-        self.ensure_swing_strategy_summary_table().await?;
-        self.ensure_prop_strategy_yearly_table().await?;
-        self.ensure_prop_strategy_summary_table().await?;
-        self.ensure_prop_reversal_outcomes_table().await?;
-        self.ensure_prop_reversal_strategy_yearly_table().await?;
-        self.ensure_prop_reversal_strategy_summary_table().await?;
+        self.ensure_prop_strategy_family_yearly_table().await?;
+        self.ensure_prop_strategy_family_summary_table().await?;
         self.ensure_dashboard_cache_state_table().await?;
         self.ensure_pattern_mode_tables().await?;
 
-        sqlx::query("TRUNCATE TABLE xabcd_patterns")
-            .execute(&self.pool)
-            .await?;
+        for table in [
+            "prop_strategy_family_members",
+            "pattern_outcomes_prop_reversal",
+            "pattern_outcomes_swing",
+            "pattern_harmonic_scores",
+            "xabcd_patterns",
+            "swing_strategy_yearly",
+            "swing_strategy_summary",
+            "strategy_cohort_summary_cache",
+            "strategy_yearly_rollup",
+            "strategy_trade_summary_cache",
+            "current_open_setups_cache",
+            "prop_strategy_cohort_summary_cache",
+            "prop_strategy_yearly_rollup",
+            "prop_strategy_yearly",
+            "prop_strategy_summary",
+            "prop_reversal_strategy_cohort_summary_cache",
+            "prop_reversal_strategy_yearly_rollup",
+            "prop_reversal_strategy_yearly",
+            "prop_reversal_strategy_summary",
+        ] {
+            sqlx::query(&format!("DROP TABLE IF EXISTS {table}"))
+                .execute(&self.pool)
+                .await?;
+        }
 
         sqlx::query("TRUNCATE TABLE pattern_outcomes_prop")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE pattern_outcomes_swing")
             .execute(&self.pool)
             .await?;
 
@@ -4326,55 +4354,11 @@ impl Database {
             .execute(&self.pool)
             .await?;
 
-        sqlx::query("TRUNCATE TABLE pattern_harmonic_scores")
+        sqlx::query("TRUNCATE TABLE prop_strategy_family_yearly")
             .execute(&self.pool)
             .await?;
 
-        sqlx::query("TRUNCATE TABLE accuracies")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE accuracy_bin_cache")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE accuracy_bin_rollup")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE pattern_structure_rollup")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE accuracy_structure_rollup")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE swing_strategy_yearly")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE swing_strategy_summary")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE prop_strategy_yearly")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE prop_strategy_summary")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE pattern_outcomes_prop_reversal")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE prop_reversal_strategy_yearly")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE prop_reversal_strategy_summary")
+        sqlx::query("TRUNCATE TABLE prop_strategy_family_summary")
             .execute(&self.pool)
             .await?;
 
@@ -4387,11 +4371,8 @@ impl Database {
         self.set_dashboard_cache_state("swing_strategy_rollups", false, None, Some("cleared"))
             .await?;
 
-        self.set_dashboard_cache_state("prop_strategy_rollups", false, None, Some("cleared"))
-            .await?;
-
         self.set_dashboard_cache_state(
-            "prop_reversal_strategy_rollups",
+            "prop_strategy_family_rollups",
             false,
             None,
             Some("cleared"),
@@ -4449,8 +4430,15 @@ impl Database {
     }
 
     pub async fn get_stored_candles(&self, symbol: &str) -> Result<Vec<Candle>, sqlx::Error> {
-        self.ensure_candle_trend_columns().await?;
+        self.get_stored_candles_with_trend_persist(symbol, false)
+            .await
+    }
 
+    pub async fn get_stored_candles_with_trend_persist(
+        &self,
+        symbol: &str,
+        persist_trends: bool,
+    ) -> Result<Vec<Candle>, sqlx::Error> {
         let candles_decimal: Vec<CandleDecimal> = sqlx::query_as::<_, CandleDecimal>(
             r#"
                 SELECT
@@ -4490,7 +4478,9 @@ impl Database {
             .collect();
 
         apply_sma_trends_to_candles(&mut candles);
-        self.persist_candle_trends(&candles).await?;
+        if persist_trends {
+            self.persist_candle_trends(&candles).await?;
+        }
 
         Ok(candles)
     }
@@ -4499,8 +4489,10 @@ impl Database {
         &self,
         patterns: &[PatternXABCD],
     ) -> Result<(), sqlx::Error> {
-        self.insert_pattern_setups_with_timings(patterns, None, false, false, true, true, true)
-            .await
+        self.insert_pattern_setups_with_timings(
+            patterns, None, false, false, true, true, true, false,
+        )
+        .await
     }
 
     pub async fn insert_pattern_setups_with_timings(
@@ -4509,6 +4501,7 @@ impl Database {
         run_id: Option<&str>,
         fast_rebuild: bool,
         use_build_tables: bool,
+        write_pattern_setups: bool,
         write_harmonic_scores: bool,
         write_swing_outcomes: bool,
         write_prop_outcomes: bool,
@@ -4522,9 +4515,11 @@ impl Database {
         }
 
         let serialize_started = Instant::now();
+        let mut seen_setup_ids = HashSet::new();
         let serialized_patterns: Vec<XABCD_CSV> = patterns
             .iter()
             .map(|pattern| self.from_pattern(pattern))
+            .filter(|pattern| seen_setup_ids.insert(build_pattern_setup_id(pattern)))
             .collect();
         let serialize_duration = serialize_started.elapsed();
 
@@ -4545,6 +4540,7 @@ impl Database {
             run_id,
             fast_rebuild,
             use_build_tables,
+            write_pattern_setups,
             write_harmonic_scores,
             write_swing_outcomes,
             write_prop_outcomes,
@@ -4553,228 +4549,23 @@ impl Database {
         Ok(())
     }
 
-    pub async fn mirror_xabcd_patterns(
-        &self,
-        patterns: &[PatternXABCD],
-    ) -> Result<(), sqlx::Error> {
-        self.mirror_xabcd_patterns_with_target(patterns, false)
-            .await
-    }
-
-    pub async fn mirror_xabcd_patterns_with_target(
-        &self,
-        patterns: &[PatternXABCD],
-        use_build_tables: bool,
-    ) -> Result<(), sqlx::Error> {
-        if patterns.is_empty() {
-            return Ok(());
-        }
-
-        if !use_build_tables {
-            self.ensure_xabcd_length_columns().await?;
-            self.ensure_xabcd_reversal_columns().await?;
-            self.ensure_xabcd_time_columns().await?;
-            self.ensure_xabcd_target_columns().await?;
-            self.ensure_xabcd_pattern_id_column().await?;
-            self.ensure_xabcd_prop_strategy_id_column().await?;
-        }
-
-        let tables = if use_build_tables {
-            PatternOutputTables::build_tables()
-        } else {
-            PatternOutputTables::final_tables()
-        };
-
-        let serialized_patterns: Vec<XABCD_CSV> = patterns
-            .iter()
-            .map(|pattern| self.from_pattern(pattern))
-            .collect();
-
-        let mut tx = self.pool.begin().await?;
-
-        for chunk in serialized_patterns.chunks(XABCD_MIRROR_INSERT_CHUNK_SIZE) {
-            let mut builder = QueryBuilder::<MySql>::new(format!(
-                r#"
-                INSERT INTO {} (
-                    symbol, pattern_id, x_date, x_open, x_high, x_low, x_close,
-                    x_length, x_min_max, a_date, a_open, a_high, a_low, a_close,
-                    a_length, a_min_max, b_date, b_open, b_high, b_low, b_close,
-                    b_length, b_min_max, c_date, c_open, c_high, c_low, c_close,
-                    c_length, c_min_max, d_date, d_open, d_high, d_low, d_close,
-                    d_confirm_date, target_ready, target_date, target_open, target_high, target_low, target_close,
-                    target_volume, target_is_green, target_close_vs_open_pct, target_high_vs_open_pct,
-                    target_low_vs_open_pct, target_range_pct, target_breaks_d_high, target_breaks_d_low,
-                    d_length, full_pattern_length, d_min_max, trade_open, trade_risk_exit_price,
-                    trade_reward_exit_price, trade_enter_price, trade_current_price,
-                    trade_length, trade_pnl, trade_result, trade_date, trade_symbol,
-                    trade_ab_price_retracement, trade_bc_price_retracement,
-                    trade_cd_xa_price_retracement, trade_cd_price_retracement,
-                    trade_ab_bar_retracement, trade_bc_bar_retracement, trade_cd_bar_retracement,
-                    trade_cd_bc_bar_retracement, trade_cd_xa_bar_retracement,
-                    trade_cd_bc_price_retracement, trade_snr, trade_year,
-                    trade_month, trade_day, reversal_type,
-                    bullish_key_reversal, bearish_key_reversal,
-                    bullish_engulfing, bearish_engulfing,
-                    bullish_outside_reversal, bearish_outside_reversal,
-                    hammer, shooting_star, morning_star, evening_star,
-                    three_white_soldiers, three_black_crows,
-                    market,
-                    three_month, six_month, twelve_month, pattern_group_id, prop_strategy_id, harmonic_type,
-                    xa_price_length, ab_price_length, bc_price_length, cd_price_length,
-                    bat_accuracy, alternate_bat_accuracy, butterfly_accuracy, gartley_accuracy,
-                    crab_accuracy, deep_crab_accuracy, shark_accuracy,
-                    time_accuracy, bat_time_accuracy, alternate_bat_time_accuracy,
-                    butterfly_time_accuracy, gartley_time_accuracy, crab_time_accuracy,
-                    deep_crab_time_accuracy, shark_time_accuracy
-                )
-                "#,
-                tables.xabcd_patterns
-            ));
-
-            builder.push_values(chunk, |mut row, p| {
-                row.push_bind(&p.symbol)
-                    .push_bind(&p.pattern_id)
-                    .push_bind(&p.x_date)
-                    .push_bind(p.x_open)
-                    .push_bind(p.x_high)
-                    .push_bind(p.x_low)
-                    .push_bind(p.x_close)
-                    .push_bind(p.x_length)
-                    .push_bind(p.x_min_max)
-                    .push_bind(&p.a_date)
-                    .push_bind(p.a_open)
-                    .push_bind(p.a_high)
-                    .push_bind(p.a_low)
-                    .push_bind(p.a_close)
-                    .push_bind(p.a_length)
-                    .push_bind(p.a_min_max)
-                    .push_bind(&p.b_date)
-                    .push_bind(p.b_open)
-                    .push_bind(p.b_high)
-                    .push_bind(p.b_low)
-                    .push_bind(p.b_close)
-                    .push_bind(p.b_length)
-                    .push_bind(p.b_min_max)
-                    .push_bind(&p.c_date)
-                    .push_bind(p.c_open)
-                    .push_bind(p.c_high)
-                    .push_bind(p.c_low)
-                    .push_bind(p.c_close)
-                    .push_bind(p.c_length)
-                    .push_bind(p.c_min_max)
-                    .push_bind(&p.d_date)
-                    .push_bind(p.d_open)
-                    .push_bind(p.d_high)
-                    .push_bind(p.d_low)
-                    .push_bind(p.d_close)
-                    .push_bind(&p.d_confirm_date)
-                    .push_bind(p.target_ready)
-                    .push_bind(&p.target_date)
-                    .push_bind(p.target_open)
-                    .push_bind(p.target_high)
-                    .push_bind(p.target_low)
-                    .push_bind(p.target_close)
-                    .push_bind(p.target_volume)
-                    .push_bind(p.target_is_green)
-                    .push_bind(p.target_close_vs_open_pct)
-                    .push_bind(p.target_high_vs_open_pct)
-                    .push_bind(p.target_low_vs_open_pct)
-                    .push_bind(p.target_range_pct)
-                    .push_bind(p.target_breaks_d_high)
-                    .push_bind(p.target_breaks_d_low)
-                    .push_bind(p.d_length)
-                    .push_bind(p.full_pattern_length)
-                    .push_bind(p.d_min_max)
-                    .push_bind(p.trade_open)
-                    .push_bind(p.trade_risk_exit_price)
-                    .push_bind(p.trade_reward_exit_price)
-                    .push_bind(p.trade_enter_price)
-                    .push_bind(p.trade_current_price)
-                    .push_bind(p.trade_length)
-                    .push_bind(p.trade_pnl)
-                    .push_bind(p.trade_result)
-                    .push_bind(&p.trade_date)
-                    .push_bind(&p.trade_symbol)
-                    .push_bind(p.trade_ab_price_retracement)
-                    .push_bind(p.trade_bc_price_retracement)
-                    .push_bind(p.trade_cd_xa_price_retracement)
-                    .push_bind(p.trade_cd_price_retracement)
-                    .push_bind(p.trade_ab_bar_retracement)
-                    .push_bind(p.trade_bc_bar_retracement)
-                    .push_bind(p.trade_cd_bar_retracement)
-                    .push_bind(p.trade_cd_bc_bar_retracement)
-                    .push_bind(p.trade_cd_xa_bar_retracement)
-                    .push_bind(p.trade_cd_bc_price_retracement)
-                    .push_bind(p.trade_snr)
-                    .push_bind(p.trade_year)
-                    .push_bind(p.trade_month)
-                    .push_bind(p.trade_day)
-                    .push_bind(format!("{:?}", p.reversal_type))
-                    .push_bind(p.bullish_key_reversal)
-                    .push_bind(p.bearish_key_reversal)
-                    .push_bind(p.bullish_engulfing)
-                    .push_bind(p.bearish_engulfing)
-                    .push_bind(p.bullish_outside_reversal)
-                    .push_bind(p.bearish_outside_reversal)
-                    .push_bind(p.hammer)
-                    .push_bind(p.shooting_star)
-                    .push_bind(p.morning_star)
-                    .push_bind(p.evening_star)
-                    .push_bind(p.three_white_soldiers)
-                    .push_bind(p.three_black_crows)
-                    .push_bind(format!("{:?}", p.market))
-                    .push_bind(p.three_month)
-                    .push_bind(p.six_month)
-                    .push_bind(p.twelve_month)
-                    .push_bind(&p.pattern_group_id)
-                    .push_bind(&p.prop_strategy_id)
-                    .push_bind(&p.harmonic_type)
-                    .push_bind(p.xa_price_length)
-                    .push_bind(p.ab_price_length)
-                    .push_bind(p.bc_price_length)
-                    .push_bind(p.cd_price_length)
-                    .push_bind(p.bat_accuracy)
-                    .push_bind(p.alternate_bat_accuracy)
-                    .push_bind(p.butterfly_accuracy)
-                    .push_bind(p.gartley_accuracy)
-                    .push_bind(p.crab_accuracy)
-                    .push_bind(p.deep_crab_accuracy)
-                    .push_bind(p.shark_accuracy)
-                    .push_bind(p.time_accuracy)
-                    .push_bind(p.bat_time_accuracy)
-                    .push_bind(p.alternate_bat_time_accuracy)
-                    .push_bind(p.butterfly_time_accuracy)
-                    .push_bind(p.gartley_time_accuracy)
-                    .push_bind(p.crab_time_accuracy)
-                    .push_bind(p.deep_crab_time_accuracy)
-                    .push_bind(p.shark_time_accuracy);
-            });
-
-            builder.build().execute(&mut *tx).await?;
-        }
-
-        tx.commit().await?;
-        Ok(())
-    }
-
     pub async fn insert_patterns(&self, patterns: &[PatternXABCD]) -> Result<(), sqlx::Error> {
-        self.insert_pattern_setups(patterns).await?;
-        self.mirror_xabcd_patterns(patterns).await?;
-        Ok(())
+        self.insert_pattern_setups(patterns).await
     }
 
-    pub async fn sync_prop_reversal_outcomes(
+    pub async fn sync_prop_outcomes(
         &self,
         patterns: &[PatternXABCD],
         outcomes: &[PropReversalOutcome],
         use_build_tables: bool,
-    ) -> Result<(), sqlx::Error> {
+        target_ready_only: bool,
+    ) -> Result<i64, sqlx::Error> {
         if patterns.is_empty() {
-            return Ok(());
+            return Ok(0);
         }
 
         if !use_build_tables {
-            self.ensure_prop_reversal_outcomes_table().await?;
+            self.ensure_pattern_mode_tables().await?;
         }
 
         let tables = if use_build_tables {
@@ -4783,48 +4574,74 @@ impl Database {
             PatternOutputTables::final_tables()
         };
 
-        let mut setup_ids: Vec<String> = patterns
+        if !use_build_tables {
+            let mut setup_ids: Vec<String> = patterns
+                .iter()
+                .map(|pattern| pattern.pattern_id.clone())
+                .filter(|pattern_id| !pattern_id.is_empty())
+                .collect();
+
+            setup_ids.sort();
+            setup_ids.dedup();
+
+            for chunk in setup_ids.chunks(PATTERN_INSERT_CHUNK_SIZE) {
+                let mut builder = QueryBuilder::<MySql>::new(format!(
+                    "DELETE FROM {} WHERE setup_id IN (",
+                    tables.prop_outcomes
+                ));
+                let mut separated = builder.separated(", ");
+                for setup_id in chunk {
+                    separated.push_bind(setup_id);
+                }
+                separated.push_unseparated(")");
+                builder.build().execute(&self.pool).await?;
+            }
+        }
+
+        if patterns.is_empty() && outcomes.is_empty() {
+            return Ok(0);
+        }
+
+        let mut seen_direct_row_ids: HashSet<String> = HashSet::new();
+        let unique_patterns: Vec<&PatternXABCD> = patterns
             .iter()
-            .map(|pattern| pattern.pattern_id.clone())
-            .filter(|pattern_id| !pattern_id.is_empty())
+            .filter(|pattern| !pattern.pattern_id.is_empty())
+            .filter(|pattern| !target_ready_only || pattern.target_candle.is_some())
+            .filter(|pattern| {
+                let outcome_row_id =
+                    format!("{:x}", md5::compute(format!("{}|D", pattern.pattern_id)));
+                seen_direct_row_ids.insert(outcome_row_id)
+            })
             .collect();
 
-        setup_ids.sort();
-        setup_ids.dedup();
+        let mut seen_reversal_row_ids: HashSet<String> = HashSet::new();
+        let unique_outcomes: Vec<&PropReversalOutcome> = outcomes
+            .iter()
+            .filter(|item| !target_ready_only || item.target_ready)
+            .filter(|item| seen_reversal_row_ids.insert(item.reversal_row_id.clone()))
+            .collect();
 
-        for chunk in setup_ids.chunks(PATTERN_INSERT_CHUNK_SIZE) {
-            let mut builder = QueryBuilder::<MySql>::new(format!(
-                "DELETE FROM {} WHERE setup_id IN (",
-                tables.prop_reversal_outcomes
-            ));
-            let mut separated = builder.separated(", ");
-            for setup_id in chunk {
-                separated.push_bind(setup_id);
-            }
-            separated.push_unseparated(")");
-            builder.build().execute(&self.pool).await?;
-        }
-
-        if outcomes.is_empty() {
-            return Ok(());
-        }
-
+        let mut rows_written = 0i64;
         let mut tx = self.pool.begin().await?;
 
-        for chunk in outcomes.chunks(PATTERN_INSERT_CHUNK_SIZE) {
+        for chunk in unique_patterns.chunks(PATTERN_INSERT_CHUNK_SIZE) {
             let mut builder = QueryBuilder::<MySql>::new(format!(
                 r#"
                 INSERT INTO {} (
-                    reversal_row_id,
+                    outcome_row_id,
                     setup_id,
                     prop_strategy_id,
-                    pattern_id,
-                    pattern_group_id,
-                    symbol,
-                    d_date,
+                    outcome_model,
+                    has_reversal,
                     reversal_type,
                     reversal_detect_date,
                     reversal_bars_after_d,
+                    pattern_id,
+                    pattern_group_id,
+                    x_bars_left,
+                    symbol,
+                    d_date,
+                    entry_date,
                     market,
                     harmonic_type,
                     bin,
@@ -4842,7 +4659,8 @@ impl Database {
                     trade_enter_price,
                     trade_risk_exit_price,
                     trade_reward_exit_price,
-                    trade_result,
+                    d_confirm_date,
+                    prop_result,
                     target_ready,
                     target_date,
                     target_open,
@@ -4855,24 +4673,170 @@ impl Database {
                     target_high_vs_open_pct,
                     target_low_vs_open_pct,
                     target_range_pct,
-                    target_breaks_reversal_high,
-                    target_breaks_reversal_low
+                    target_breaks_entry_high,
+                    target_breaks_entry_low
                 )
                 "#,
-                tables.prop_reversal_outcomes
+                tables.prop_outcomes
             ));
 
-            builder.push_values(chunk, |mut row, item| {
+            let chunk_rows = chunk.len() as i64;
+            if chunk_rows == 0 {
+                continue;
+            }
+
+            builder.push_values(chunk.iter().copied(), |mut row, pattern| {
+                let setup_id = pattern.pattern_id.clone();
+                let outcome_row_id = format!("{:x}", md5::compute(format!("{setup_id}|D")));
+                let pattern_group_id = format!("{}{}", pattern.symbol, pattern.a.date);
+                let market = format!("{:?}", pattern.market);
+                let lens = pattern.dominant_harmonic_lens();
+                let size_bucket = route_size_bucket(
+                    pattern.x.length,
+                    pattern.a.length,
+                    pattern.b.length,
+                    pattern.c.length,
+                );
+                let target = pattern.target_candle;
+
+                row.push_bind(outcome_row_id)
+                    .push_bind(setup_id.clone())
+                    .push_bind(&pattern.prop_strategy_id)
+                    .push_bind("D")
+                    .push_bind(false)
+                    .push_bind("None")
+                    .push_bind(None::<chrono::NaiveDate>)
+                    .push_bind(None::<i64>)
+                    .push_bind(Some(setup_id.clone()))
+                    .push_bind(pattern_group_id)
+                    .push_bind(pattern.x_bars_left)
+                    .push_bind(pattern.symbol.as_ref())
+                    .push_bind(pattern.d.date)
+                    .push_bind(pattern.d_confirm_date)
+                    .push_bind(market)
+                    .push_bind(lens.harmonic_type)
+                    .push_bind(lens.bin)
+                    .push_bind(size_bucket)
+                    .push_bind(lens.time_bin)
+                    .push_bind(trend_label(pattern.three_month))
+                    .push_bind(trend_label(pattern.six_month))
+                    .push_bind(trend_label(pattern.twelve_month))
+                    .push_bind(pattern.x.length)
+                    .push_bind(pattern.a.length)
+                    .push_bind(pattern.b.length)
+                    .push_bind(pattern.c.length)
+                    .push_bind(pattern.d.length)
+                    .push_bind(
+                        pattern.x.length
+                            + pattern.a.length
+                            + pattern.b.length
+                            + pattern.c.length
+                            + pattern.d.length,
+                    )
+                    .push_bind(pattern.trade.enter_price)
+                    .push_bind(pattern.trade.risk_exit_price)
+                    .push_bind(pattern.trade.reward_exit_price)
+                    .push_bind(pattern.d_confirm_date)
+                    .push_bind(prop_result_from_market_target(
+                        pattern.market,
+                        target.map(|target| target.is_green),
+                    ))
+                    .push_bind(target.is_some())
+                    .push_bind(target.map(|target| target.date))
+                    .push_bind(target.map(|target| target.open))
+                    .push_bind(target.map(|target| target.high))
+                    .push_bind(target.map(|target| target.low))
+                    .push_bind(target.map(|target| target.close))
+                    .push_bind(target.map(|target| target.volume))
+                    .push_bind(target.map(|target| target.is_green))
+                    .push_bind(target.map(|target| target.close_vs_open_pct))
+                    .push_bind(target.map(|target| target.high_vs_open_pct))
+                    .push_bind(target.map(|target| target.low_vs_open_pct))
+                    .push_bind(target.map(|target| target.range_pct))
+                    .push_bind(target.map(|target| target.breaks_d_high))
+                    .push_bind(target.map(|target| target.breaks_d_low));
+            });
+
+            builder.build().execute(&mut *tx).await?;
+            rows_written += chunk_rows;
+        }
+
+        for chunk in unique_outcomes.chunks(PATTERN_INSERT_CHUNK_SIZE) {
+            let mut builder = QueryBuilder::<MySql>::new(format!(
+                r#"
+                INSERT INTO {} (
+                    outcome_row_id,
+                    setup_id,
+                    prop_strategy_id,
+                    outcome_model,
+                    has_reversal,
+                    reversal_type,
+                    reversal_detect_date,
+                    reversal_bars_after_d,
+                    pattern_id,
+                    pattern_group_id,
+                    x_bars_left,
+                    symbol,
+                    d_date,
+                    entry_date,
+                    market,
+                    harmonic_type,
+                    bin,
+                    size_bucket,
+                    time_bin,
+                    three_month_trend,
+                    six_month_trend,
+                    twelve_month_trend,
+                    x_length,
+                    a_length,
+                    b_length,
+                    c_length,
+                    d_length,
+                    full_pattern_length,
+                    trade_enter_price,
+                    trade_risk_exit_price,
+                    trade_reward_exit_price,
+                    d_confirm_date,
+                    prop_result,
+                    target_ready,
+                    target_date,
+                    target_open,
+                    target_high,
+                    target_low,
+                    target_close,
+                    target_volume,
+                    target_is_green,
+                    target_close_vs_open_pct,
+                    target_high_vs_open_pct,
+                    target_low_vs_open_pct,
+                    target_range_pct,
+                    target_breaks_entry_high,
+                    target_breaks_entry_low
+                )
+                "#,
+                tables.prop_outcomes
+            ));
+
+            let chunk_rows = chunk.len() as i64;
+            if chunk_rows == 0 {
+                continue;
+            }
+
+            builder.push_values(chunk.iter().copied(), |mut row, item| {
                 row.push_bind(&item.reversal_row_id)
                     .push_bind(&item.setup_id)
                     .push_bind(&item.prop_strategy_id)
+                    .push_bind("DReversal")
+                    .push_bind(true)
+                    .push_bind(&item.reversal_type)
+                    .push_bind(Some(item.reversal_detect_date))
+                    .push_bind(Some(item.reversal_bars_after_d))
                     .push_bind(&item.pattern_id)
                     .push_bind(&item.pattern_group_id)
+                    .push_bind(item.x_bars_left)
                     .push_bind(&item.symbol)
                     .push_bind(item.d_date)
-                    .push_bind(&item.reversal_type)
                     .push_bind(item.reversal_detect_date)
-                    .push_bind(item.reversal_bars_after_d)
                     .push_bind(&item.market)
                     .push_bind(&item.harmonic_type)
                     .push_bind(&item.bin)
@@ -4890,6 +4854,7 @@ impl Database {
                     .push_bind(item.trade_enter_price)
                     .push_bind(item.trade_risk_exit_price)
                     .push_bind(item.trade_reward_exit_price)
+                    .push_bind(item.d_date)
                     .push_bind(item.trade_result)
                     .push_bind(item.target_ready)
                     .push_bind(item.target_date)
@@ -4908,11 +4873,12 @@ impl Database {
             });
 
             builder.build().execute(&mut *tx).await?;
+            rows_written += chunk_rows;
         }
 
         tx.commit().await?;
 
-        Ok(())
+        Ok(rows_written)
     }
 
     pub fn from_pattern(&self, p: &PatternXABCD) -> XABCD_CSV {
@@ -4920,6 +4886,7 @@ impl Database {
         let mut csv = XABCD_CSV {
             symbol: p.symbol.to_string(),
             pattern_id: p.pattern_id.clone(),
+            x_bars_left: p.x_bars_left,
             x_date: p.x.date.to_string(),
             x_open: p.x.open,
             x_high: p.x.high,
@@ -5614,6 +5581,7 @@ impl Database {
                 reversal_type,
                 size_bucket,
                 time_bin,
+                x_strictness,
                 three_month_trend,
                 six_month_trend,
                 twelve_month_trend,
@@ -5650,6 +5618,7 @@ impl Database {
                 reversal_type,
                 size_bucket,
                 time_bin,
+                x_strictness,
                 three_month_trend,
                 six_month_trend,
                 twelve_month_trend,
@@ -5714,6 +5683,7 @@ impl Database {
                 reversal_type,
                 size_bucket,
                 time_bin,
+                x_strictness,
                 three_month_trend,
                 six_month_trend,
                 twelve_month_trend
@@ -5752,6 +5722,7 @@ impl Database {
                 reversal_type,
                 size_bucket,
                 time_bin,
+                x_strictness,
                 three_month_trend,
                 six_month_trend,
                 twelve_month_trend,
@@ -5782,6 +5753,7 @@ impl Database {
                 reversal_type,
                 size_bucket,
                 time_bin,
+                x_strictness,
                 three_month_trend,
                 six_month_trend,
                 twelve_month_trend,
@@ -5878,38 +5850,121 @@ impl Database {
         Ok(())
     }
 
-    pub async fn refresh_prop_strategy_rollups(&self) -> Result<(), sqlx::Error> {
+    pub async fn refresh_prop_strategy_family_rollups(
+        &self,
+        run_id: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        let total_started = Instant::now();
+
+        let phase_started = Instant::now();
         self.ensure_dashboard_cache_state_table().await?;
-        self.ensure_prop_strategy_yearly_table().await?;
-        self.ensure_prop_strategy_summary_table().await?;
+        self.ensure_pattern_mode_tables().await?;
+        self.ensure_prop_strategy_family_yearly_table().await?;
+        self.ensure_prop_strategy_family_summary_table().await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_family_prepare_tables",
+            None,
+            phase_started.elapsed(),
+            None,
+        )
+        .await?;
 
-        self.set_dashboard_cache_state("prop_strategy_rollups", false, None, Some("refreshing"))
-            .await?;
+        let phase_started = Instant::now();
+        self.set_dashboard_cache_state(
+            "prop_strategy_family_rollups",
+            false,
+            None,
+            Some("refreshing"),
+        )
+        .await?;
 
-        sqlx::query("TRUNCATE TABLE prop_strategy_yearly")
+        sqlx::query("TRUNCATE TABLE prop_strategy_family_yearly")
             .execute(&self.pool)
             .await?;
-        sqlx::query("TRUNCATE TABLE prop_strategy_summary")
+        sqlx::query("TRUNCATE TABLE prop_strategy_family_summary")
             .execute(&self.pool)
             .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_family_truncate",
+            None,
+            phase_started.elapsed(),
+            Some("summary and yearly tables cleared"),
+        )
+        .await?;
 
-        let total_bars_expr = structure_total_bars_expr();
-        let size_bucket_expr = structure_size_bucket_expr(total_bars_expr);
-        let three_month_trend_expr = trend_bucket_expr("three_month");
-        let six_month_trend_expr = trend_bucket_expr("six_month");
-        let twelve_month_trend_expr = trend_bucket_expr("twelve_month");
+        let mut conn = self.pool.acquire().await?;
 
-        let prop_strategy_yearly_sql = format!(
+        let phase_started = Instant::now();
+        sqlx::query("DROP TEMPORARY TABLE IF EXISTS prop_strategy_family_source")
+            .execute(&mut *conn)
+            .await?;
+
+        sqlx::query(
             r#"
-            INSERT INTO prop_strategy_yearly (
+            CREATE TEMPORARY TABLE prop_strategy_family_source (
+                outcome_model VARCHAR(32) NOT NULL,
+                reversal_type VARCHAR(64) NOT NULL,
+                trade_year INT NOT NULL,
+                market VARCHAR(16) NOT NULL,
+                harmonic_type VARCHAR(32) NOT NULL,
+                bin VARCHAR(16) NOT NULL,
+                size_bucket VARCHAR(16) NOT NULL,
+                time_bin VARCHAR(16) NOT NULL,
+                x_strictness VARCHAR(16) NOT NULL,
+                three_month_trend VARCHAR(16) NOT NULL,
+                six_month_trend VARCHAR(16) NOT NULL,
+                twelve_month_trend VARCHAR(16) NOT NULL,
+                total_count BIGINT NOT NULL,
+                closed_count BIGINT NOT NULL,
+                open_count BIGINT NOT NULL,
+                win_count BIGINT NOT NULL,
+                loss_count BIGINT NOT NULL,
+                return_sum DOUBLE NOT NULL,
+                return_count BIGINT NOT NULL,
+                expectancy_sum DOUBLE NOT NULL,
+                expectancy_count BIGINT NOT NULL,
+                win_return_sum DOUBLE NOT NULL,
+                win_return_count BIGINT NOT NULL,
+                loss_return_sum DOUBLE NOT NULL,
+                loss_return_count BIGINT NOT NULL,
+                target_range_sum DOUBLE NOT NULL,
+                target_range_count BIGINT NOT NULL
+            )
+            "#,
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        let (min_source_id, max_source_id) = sqlx::query_as::<_, (Option<i64>, Option<i64>)>(
+            r#"
+            SELECT
+                CAST(MIN(id) AS SIGNED),
+                CAST(MAX(id) AS SIGNED)
+            FROM pattern_outcomes_prop
+            WHERE harmonic_type IS NOT NULL
+              AND bin IS NOT NULL
+              AND size_bucket IS NOT NULL
+              AND time_bin IS NOT NULL
+              AND COALESCE(target_date, entry_date) IS NOT NULL
+            "#,
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+
+        let insert_source_sql = format!(
+            r#"
+            INSERT INTO prop_strategy_family_source (
+                outcome_model,
+                reversal_type,
                 trade_year,
-                prop_strategy_id,
                 market,
                 harmonic_type,
                 bin,
-                reversal_type,
                 size_bucket,
                 time_bin,
+                x_strictness,
                 three_month_trend,
                 six_month_trend,
                 twelve_month_trend,
@@ -5926,135 +5981,265 @@ impl Database {
                 win_return_count,
                 loss_return_sum,
                 loss_return_count,
-                trade_length_sum,
-                trade_length_count,
-                ab_xa_sum,
-                ab_xa_count,
-                bc_ab_sum,
-                bc_ab_count,
-                cd_bc_sum,
-                cd_bc_count,
-                cd_xa_sum,
-                cd_xa_count
+                target_range_sum,
+                target_range_count
             )
             SELECT
+                outcome_model,
+                reversal_type,
                 trade_year,
-                prop_strategy_id,
                 market,
                 harmonic_type,
                 bin,
-                reversal_type,
                 size_bucket,
                 time_bin,
+                x_strictness,
                 three_month_trend,
                 six_month_trend,
                 twelve_month_trend,
                 CAST(COUNT(*) AS SIGNED) AS total_count,
-                CAST(COUNT(*) AS SIGNED) AS closed_count,
-                CAST(0 AS SIGNED) AS open_count,
-                CAST(SUM(CASE WHEN target_is_green = TRUE THEN 1 ELSE 0 END) AS SIGNED) AS win_count,
-                CAST(SUM(CASE WHEN target_is_green = FALSE THEN 1 ELSE 0 END) AS SIGNED) AS loss_count,
-                COALESCE(SUM(COALESCE(target_close_vs_open_pct, 0.0)), 0.0) AS return_sum,
-                CAST(SUM(CASE WHEN target_close_vs_open_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS return_count,
-                COALESCE(SUM(COALESCE(target_close_vs_open_pct, 0.0)), 0.0) AS expectancy_sum,
-                CAST(SUM(CASE WHEN target_close_vs_open_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS expectancy_count,
-                COALESCE(SUM(CASE WHEN target_is_green = TRUE THEN COALESCE(target_close_vs_open_pct, 0.0) ELSE 0.0 END), 0.0) AS win_return_sum,
-                CAST(SUM(CASE WHEN target_is_green = TRUE AND target_close_vs_open_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS win_return_count,
-                COALESCE(SUM(CASE WHEN target_is_green = FALSE THEN COALESCE(target_close_vs_open_pct, 0.0) ELSE 0.0 END), 0.0) AS loss_return_sum,
-                CAST(SUM(CASE WHEN target_is_green = FALSE AND target_close_vs_open_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS loss_return_count,
-                COALESCE(SUM(COALESCE(target_range_pct, 0.0)), 0.0) AS trade_length_sum,
-                CAST(SUM(CASE WHEN target_range_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS trade_length_count,
-                COALESCE(SUM(COALESCE(trade_ab_price_retracement, 0.0)), 0.0) AS ab_xa_sum,
-                CAST(SUM(CASE WHEN trade_ab_price_retracement IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS ab_xa_count,
-                COALESCE(SUM(COALESCE(trade_bc_price_retracement, 0.0)), 0.0) AS bc_ab_sum,
-                CAST(SUM(CASE WHEN trade_bc_price_retracement IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS bc_ab_count,
-                COALESCE(SUM(COALESCE(trade_cd_bc_price_retracement, 0.0)), 0.0) AS cd_bc_sum,
-                CAST(SUM(CASE WHEN trade_cd_bc_price_retracement IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS cd_bc_count,
-                COALESCE(SUM(COALESCE(trade_cd_xa_price_retracement, 0.0)), 0.0) AS cd_xa_sum,
-                CAST(SUM(CASE WHEN trade_cd_xa_price_retracement IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS cd_xa_count
+                CAST(SUM(CASE WHEN trade_result IN (1, 2) THEN 1 ELSE 0 END) AS SIGNED) AS closed_count,
+                CAST(SUM(CASE WHEN trade_result NOT IN (1, 2) THEN 1 ELSE 0 END) AS SIGNED) AS open_count,
+                CAST(SUM(CASE WHEN trade_result = 1 THEN 1 ELSE 0 END) AS SIGNED) AS win_count,
+                CAST(SUM(CASE WHEN trade_result = 2 THEN 1 ELSE 0 END) AS SIGNED) AS loss_count,
+                COALESCE(SUM(COALESCE(directional_return_pct, 0.0)), 0.0) AS return_sum,
+                CAST(SUM(CASE WHEN directional_return_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS return_count,
+                COALESCE(SUM(CASE WHEN trade_result IN (1, 2) THEN COALESCE(directional_return_pct, 0.0) ELSE 0.0 END), 0.0) AS expectancy_sum,
+                CAST(SUM(CASE WHEN trade_result IN (1, 2) AND directional_return_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS expectancy_count,
+                COALESCE(SUM(CASE WHEN trade_result = 1 THEN COALESCE(directional_return_pct, 0.0) ELSE 0.0 END), 0.0) AS win_return_sum,
+                CAST(SUM(CASE WHEN trade_result = 1 AND directional_return_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS win_return_count,
+                COALESCE(SUM(CASE WHEN trade_result = 2 THEN COALESCE(directional_return_pct, 0.0) ELSE 0.0 END), 0.0) AS loss_return_sum,
+                CAST(SUM(CASE WHEN trade_result = 2 AND directional_return_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS loss_return_count,
+                COALESCE(SUM(COALESCE(target_range_pct, 0.0)), 0.0) AS target_range_sum,
+                CAST(SUM(CASE WHEN target_range_pct IS NOT NULL THEN 1 ELSE 0 END) AS SIGNED) AS target_range_count
             FROM (
                 SELECT
-                    CAST(YEAR(target_date) AS SIGNED) AS trade_year,
-                    prop_strategy_id,
-                    market,
-                    harmonic_type,
-                    bin,
-                    COALESCE(NULLIF(reversal_type, ''), 'None') AS reversal_type,
-                    {size_bucket_expr} AS size_bucket,
-                    time_bin,
-                    {three_month_trend_expr} AS three_month_trend,
-                    {six_month_trend_expr} AS six_month_trend,
-                    {twelve_month_trend_expr} AS twelve_month_trend,
-                    target_is_green,
-                    CAST(target_close_vs_open_pct AS DOUBLE) AS target_close_vs_open_pct,
-                    CAST(target_range_pct AS DOUBLE) AS target_range_pct,
-                    CAST(trade_ab_price_retracement AS DOUBLE) AS trade_ab_price_retracement,
-                    CAST(trade_bc_price_retracement AS DOUBLE) AS trade_bc_price_retracement,
-                    CAST(trade_cd_bc_price_retracement AS DOUBLE) AS trade_cd_bc_price_retracement,
-                    CAST(trade_cd_xa_price_retracement AS DOUBLE) AS trade_cd_xa_price_retracement
-                FROM (
-                    SELECT
-                        p.target_date,
-                        p.prop_strategy_id,
-                        s.market,
-                        p.harmonic_type,
-                        p.bin,
-                        p.time_bin,
-                        sw.reversal_type,
-                        s.x_length,
-                        s.a_length,
-                        s.b_length,
-                        s.c_length,
-                        s.three_month,
-                        s.six_month,
-                        s.twelve_month,
-                        p.target_is_green,
-                        p.target_close_vs_open_pct,
-                        p.target_range_pct,
-                        sw.trade_ab_price_retracement,
-                        sw.trade_bc_price_retracement,
-                        sw.trade_cd_bc_price_retracement,
-                        sw.trade_cd_xa_price_retracement
-                    FROM pattern_outcomes_prop p
-                    INNER JOIN pattern_setups s
-                        ON s.setup_id = p.setup_id
-                    LEFT JOIN pattern_outcomes_swing sw
-                        ON sw.setup_id = p.setup_id
-                    WHERE p.target_date IS NOT NULL
-                      AND 1 = 1
-                      AND p.prop_strategy_id IS NOT NULL
-                ) source_rows
-            ) source_rows
-            WHERE bin IS NOT NULL
-              AND size_bucket IS NOT NULL
-              AND time_bin IS NOT NULL
+                    p.outcome_model,
+                    COALESCE(NULLIF(p.reversal_type, ''), 'None') AS reversal_type,
+                    CAST(YEAR(COALESCE(p.target_date, p.entry_date)) AS SIGNED) AS trade_year,
+                    p.market,
+                    p.harmonic_type,
+                    p.bin,
+                    p.size_bucket,
+                    p.time_bin,
+                    {x_strictness_expr} AS x_strictness,
+                    p.three_month_trend,
+                    p.six_month_trend,
+                    p.twelve_month_trend,
+                    p.prop_result AS trade_result,
+                    CASE
+                        WHEN p.target_close_vs_open_pct IS NULL THEN NULL
+                        WHEN p.market = 'Bearish' THEN -CAST(p.target_close_vs_open_pct AS DOUBLE)
+                        ELSE CAST(p.target_close_vs_open_pct AS DOUBLE)
+                    END AS directional_return_pct,
+                    CAST(p.target_range_pct AS DOUBLE) AS target_range_pct
+                FROM pattern_outcomes_prop p
+                WHERE p.harmonic_type IS NOT NULL
+                  AND p.bin IS NOT NULL
+                  AND p.size_bucket IS NOT NULL
+                  AND p.time_bin IS NOT NULL
+                  AND COALESCE(p.target_date, p.entry_date) IS NOT NULL
+                  AND p.id BETWEEN ? AND ?
+            ) source
             GROUP BY
+                outcome_model,
+                reversal_type,
                 trade_year,
-                prop_strategy_id,
                 market,
                 harmonic_type,
                 bin,
-                reversal_type,
                 size_bucket,
                 time_bin,
+                x_strictness,
                 three_month_trend,
                 six_month_trend,
                 twelve_month_trend
             "#,
+            x_strictness_expr = x_strictness_expr("p.x_bars_left", "p.x_length")
         );
-        sqlx::query(&prop_strategy_yearly_sql)
-            .execute(&self.pool)
-            .await?;
+        let mut rows_written = 0_i64;
+        if let (Some(min_id), Some(max_id)) = (min_source_id, max_source_id) {
+            let source_chunk_size = 25_000_i64;
+            let mut chunk_start = min_id;
+            while chunk_start <= max_id {
+                let chunk_end = (chunk_start + source_chunk_size - 1).min(max_id);
+                let result = sqlx::query(&insert_source_sql)
+                    .bind(chunk_start)
+                    .bind(chunk_end)
+                    .execute(&mut *conn)
+                    .await?;
+                rows_written += result.rows_affected() as i64;
+                chunk_start = chunk_end + 1;
+            }
+        }
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_family_source",
+            Some(rows_written),
+            phase_started.elapsed(),
+            Some("temporary detailed aggregate built from pattern_outcomes_prop in id-range chunks"),
+        )
+        .await?;
 
-        let prop_strategy_cohort_summary_sql = r#"
-            INSERT INTO prop_strategy_summary (
-                prop_strategy_id,
+        let phase_started = Instant::now();
+        for index_sql in [
+            "CREATE INDEX idx_prop_family_source_core ON prop_strategy_family_source (market, harmonic_type, bin)",
+            "CREATE INDEX idx_prop_family_source_outcome ON prop_strategy_family_source (outcome_model, reversal_type)",
+            "CREATE INDEX idx_prop_family_source_year ON prop_strategy_family_source (trade_year)",
+        ] {
+            sqlx::query(index_sql).execute(&mut *conn).await?;
+        }
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_family_source_indexes",
+            Some(3),
+            phase_started.elapsed(),
+            Some("temporary source indexes"),
+        )
+        .await?;
+
+        let trade_years = sqlx::query_scalar::<_, i64>(
+            "SELECT DISTINCT trade_year FROM prop_strategy_family_source ORDER BY trade_year ASC",
+        )
+        .fetch_all(&mut *conn)
+        .await?;
+
+        for spec in PROP_FAMILY_SPECS.iter() {
+            let phase_started = Instant::now();
+            let included_dimensions = prop_family_included_dimensions(spec);
+            let dimension_exprs = PROP_FAMILY_DIMENSIONS
+                .iter()
+                .map(|dimension| prop_family_dimension_expr(spec, dimension))
+                .collect::<Vec<_>>();
+            let dimension_selects = PROP_FAMILY_DIMENSIONS
+                .iter()
+                .zip(dimension_exprs.iter())
+                .map(|(dimension, expression)| format!("{expression} AS {dimension}"))
+                .collect::<Vec<_>>()
+                .join(",\n                ");
+            let dimension_group_by = dimension_exprs.join(",\n                ");
+            let family_key_values = dimension_exprs
+                .iter()
+                .map(|expression| format!("LOWER({expression})"))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            let family_yearly_sql = format!(
+                r#"
+                INSERT INTO prop_strategy_family_yearly (
+                    trade_year,
+                    family_key,
+                    family_name,
+                    family_level,
+                    included_dimensions,
+                    outcome_model,
+                    market,
+                    harmonic_type,
+                    bin,
+                    reversal_type,
+                    size_bucket,
+                    time_bin,
+                    x_strictness,
+                    three_month_trend,
+                    six_month_trend,
+                    twelve_month_trend,
+                    total_count,
+                    closed_count,
+                    open_count,
+                    win_count,
+                    loss_count,
+                    return_sum,
+                    return_count,
+                    expectancy_sum,
+                    expectancy_count,
+                    win_return_sum,
+                    win_return_count,
+                    loss_return_sum,
+                    loss_return_count,
+                    target_range_sum,
+                    target_range_count
+                )
+                SELECT
+                    trade_year,
+                    LEFT(MD5(CONCAT_WS('|', 'prop-family-v3', '{family_name}', {family_key_values})), 16) AS family_key,
+                    '{family_name}' AS family_name,
+                    {family_level} AS family_level,
+                    '{included_dimensions}' AS included_dimensions,
+                    {dimension_selects},
+                    CAST(COALESCE(SUM(total_count), 0) AS SIGNED) AS total_count,
+                    CAST(COALESCE(SUM(closed_count), 0) AS SIGNED) AS closed_count,
+                    CAST(COALESCE(SUM(open_count), 0) AS SIGNED) AS open_count,
+                    CAST(COALESCE(SUM(win_count), 0) AS SIGNED) AS win_count,
+                    CAST(COALESCE(SUM(loss_count), 0) AS SIGNED) AS loss_count,
+                    COALESCE(SUM(return_sum), 0.0) AS return_sum,
+                    CAST(COALESCE(SUM(return_count), 0) AS SIGNED) AS return_count,
+                    COALESCE(SUM(expectancy_sum), 0.0) AS expectancy_sum,
+                    CAST(COALESCE(SUM(expectancy_count), 0) AS SIGNED) AS expectancy_count,
+                    COALESCE(SUM(win_return_sum), 0.0) AS win_return_sum,
+                    CAST(COALESCE(SUM(win_return_count), 0) AS SIGNED) AS win_return_count,
+                    COALESCE(SUM(loss_return_sum), 0.0) AS loss_return_sum,
+                    CAST(COALESCE(SUM(loss_return_count), 0) AS SIGNED) AS loss_return_count,
+                    COALESCE(SUM(target_range_sum), 0.0) AS target_range_sum,
+                    CAST(COALESCE(SUM(target_range_count), 0) AS SIGNED) AS target_range_count
+                FROM prop_strategy_family_source
+                WHERE trade_year = ?
+                GROUP BY
+                    trade_year,
+                    {dimension_group_by}
+                "#,
+                family_name = spec.family_name,
+                family_level = spec.dimensions.len(),
+                included_dimensions = included_dimensions,
+                family_key_values = family_key_values,
+                dimension_selects = dimension_selects,
+                dimension_group_by = dimension_group_by,
+            );
+            let mut rows_written = 0_i64;
+            for trade_year in trade_years.iter() {
+                let result = sqlx::query(&family_yearly_sql)
+                    .bind(*trade_year)
+                    .execute(&mut *conn)
+                    .await?;
+                rows_written += result.rows_affected() as i64;
+            }
+            self.record_optional_engine_phase_timing(
+                run_id,
+                "refresh_prop_family_yearly_template",
+                Some(rows_written),
+                phase_started.elapsed(),
+                Some("yearly rows inserted in trade_year chunks"),
+            )
+            .await?;
+        }
+
+        // Release the connection to commit the yearly table inserts and free locks
+        // before reading from it in the summary insert. This prevents lock table overflow.
+        drop(conn);
+
+        let mut conn = self.pool.acquire().await?;
+
+        let outcome_models = sqlx::query_scalar::<_, String>(
+            "SELECT DISTINCT outcome_model FROM prop_strategy_family_yearly ORDER BY outcome_model ASC",
+        )
+        .fetch_all(&mut *conn)
+        .await?;
+
+        let phase_started = Instant::now();
+        let summary_sql =
+            r#"
+            INSERT INTO prop_strategy_family_summary (
+                family_key,
+                family_name,
+                family_level,
+                included_dimensions,
+                outcome_model,
                 market,
                 harmonic_type,
                 bin,
                 reversal_type,
                 size_bucket,
                 time_bin,
+                x_strictness,
                 three_month_trend,
                 six_month_trend,
                 twelve_month_trend,
@@ -6071,328 +6256,179 @@ impl Database {
                 closed_rate,
                 avg_win,
                 avg_loss,
-                avg_trade_length,
-                avg_ab_xa,
-                avg_bc_ab,
-                avg_cd_bc,
-                avg_cd_xa
+                avg_target_range,
+                score
             )
             SELECT
-                prop_strategy_id,
-                market,
-                harmonic_type,
-                bin,
-                reversal_type,
-                size_bucket,
-                time_bin,
-                three_month_trend,
-                six_month_trend,
-                twelve_month_trend,
-                COALESCE(
-                    MIN(
-                        CASE
-                            WHEN expectancy_count > 0 THEN expectancy_sum / expectancy_count
-                            ELSE NULL
-                        END
-                    ),
-                    0.0
-                ) AS worst_year_expectancy,
-                CAST(
-                    COALESCE(
-                        SUM(
-                            CASE
-                                WHEN expectancy_count > 0
-                                    AND (expectancy_sum / expectancy_count) <= 0 THEN 1
-                                ELSE 0
-                            END
-                        ),
-                        0
-                    ) AS SIGNED
-                ) AS down_years,
-                CAST(COALESCE(SUM(total_count), 0) AS SIGNED) AS total_count,
-                CAST(COALESCE(SUM(closed_count), 0) AS SIGNED) AS closed_count,
-                CAST(COALESCE(SUM(open_count), 0) AS SIGNED) AS open_count,
-                CAST(COALESCE(SUM(win_count), 0) AS SIGNED) AS win_count,
-                CAST(COALESCE(SUM(loss_count), 0) AS SIGNED) AS loss_count,
-                COALESCE(
-                    CAST(COALESCE(SUM(expectancy_sum), 0) / NULLIF(COALESCE(SUM(expectancy_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS expectancy,
-                COALESCE(
-                    CAST(COALESCE(SUM(return_sum), 0) / NULLIF(COALESCE(SUM(return_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS avg_return,
-                COALESCE(
-                    CAST(COALESCE(SUM(win_count), 0) / NULLIF(COALESCE(SUM(closed_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS win_rate,
-                COALESCE(
-                    CAST(COALESCE(SUM(closed_count), 0) / NULLIF(COALESCE(SUM(total_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS closed_rate,
-                COALESCE(
-                    CAST(COALESCE(SUM(win_return_sum), 0) / NULLIF(COALESCE(SUM(win_return_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS avg_win,
-                COALESCE(
-                    CAST(COALESCE(SUM(loss_return_sum), 0) / NULLIF(COALESCE(SUM(loss_return_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS avg_loss,
-                COALESCE(
-                    CAST(COALESCE(SUM(trade_length_sum), 0) / NULLIF(COALESCE(SUM(trade_length_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS avg_trade_length,
-                COALESCE(
-                    CAST(COALESCE(SUM(ab_xa_sum), 0) / NULLIF(COALESCE(SUM(ab_xa_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS avg_ab_xa,
-                COALESCE(
-                    CAST(COALESCE(SUM(bc_ab_sum), 0) / NULLIF(COALESCE(SUM(bc_ab_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS avg_bc_ab,
-                COALESCE(
-                    CAST(COALESCE(SUM(cd_bc_sum), 0) / NULLIF(COALESCE(SUM(cd_bc_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS avg_cd_bc,
-                COALESCE(
-                    CAST(COALESCE(SUM(cd_xa_sum), 0) / NULLIF(COALESCE(SUM(cd_xa_count), 0), 0) AS DOUBLE),
-                    0.0
-                ) AS avg_cd_xa
-            FROM prop_strategy_yearly
-            GROUP BY
-                prop_strategy_id,
-                market,
-                harmonic_type,
-                bin,
-                reversal_type,
-                size_bucket,
-                time_bin,
-                three_month_trend,
-                six_month_trend,
-                twelve_month_trend
-        "#;
-        sqlx::query(prop_strategy_cohort_summary_sql)
-            .execute(&self.pool)
-            .await?;
-
-        self.set_dashboard_cache_state("prop_strategy_rollups", true, None, Some("ready"))
-            .await?;
-
-        Ok(())
-    }
-
-    pub async fn refresh_prop_reversal_strategy_rollups(&self) -> Result<(), sqlx::Error> {
-        self.ensure_dashboard_cache_state_table().await?;
-        self.ensure_prop_reversal_outcomes_table().await?;
-        self.ensure_prop_reversal_strategy_yearly_table().await?;
-        self.ensure_prop_reversal_strategy_summary_table().await?;
-
-        self.set_dashboard_cache_state(
-            "prop_reversal_strategy_rollups",
-            false,
-            None,
-            Some("refreshing"),
-        )
-        .await?;
-
-        sqlx::query("TRUNCATE TABLE prop_reversal_strategy_yearly")
-            .execute(&self.pool)
-            .await?;
-        sqlx::query("TRUNCATE TABLE prop_reversal_strategy_summary")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query(
-            r#"
-            INSERT INTO prop_reversal_strategy_yearly (
-                trade_year,
-                prop_strategy_id,
-                market,
-                harmonic_type,
-                bin,
-                reversal_type,
-                size_bucket,
-                time_bin,
-                three_month_trend,
-                six_month_trend,
-                twelve_month_trend,
-                total_count,
-                closed_count,
-                open_count,
-                win_count,
-                loss_count,
-                return_sum,
-                return_count,
-                expectancy_sum,
-                expectancy_count,
-                win_return_sum,
-                win_return_count,
-                loss_return_sum,
-                loss_return_count
-            )
-            SELECT
-                YEAR(reversal_detect_date) AS trade_year,
-                prop_strategy_id,
-                market,
-                harmonic_type,
-                bin,
-                reversal_type,
-                size_bucket,
-                time_bin,
-                three_month_trend,
-                six_month_trend,
-                twelve_month_trend,
-                COUNT(*) AS total_count,
-                SUM(CASE WHEN trade_result IN (1, 2) THEN 1 ELSE 0 END) AS closed_count,
-                SUM(CASE WHEN trade_result NOT IN (1, 2) THEN 1 ELSE 0 END) AS open_count,
-                SUM(CASE WHEN trade_result = 1 THEN 1 ELSE 0 END) AS win_count,
-                SUM(CASE WHEN trade_result = 2 THEN 1 ELSE 0 END) AS loss_count,
-                SUM(COALESCE(target_close_vs_open_pct, 0.0)) AS return_sum,
-                SUM(CASE WHEN target_close_vs_open_pct IS NOT NULL THEN 1 ELSE 0 END) AS return_count,
-                SUM(CASE WHEN trade_result IN (1, 2) THEN COALESCE(target_close_vs_open_pct, 0.0) ELSE 0.0 END) AS expectancy_sum,
-                SUM(CASE WHEN trade_result IN (1, 2) AND target_close_vs_open_pct IS NOT NULL THEN 1 ELSE 0 END) AS expectancy_count,
-                SUM(CASE WHEN trade_result = 1 THEN COALESCE(target_close_vs_open_pct, 0.0) ELSE 0.0 END) AS win_return_sum,
-                SUM(CASE WHEN trade_result = 1 AND target_close_vs_open_pct IS NOT NULL THEN 1 ELSE 0 END) AS win_return_count,
-                SUM(CASE WHEN trade_result = 2 THEN COALESCE(target_close_vs_open_pct, 0.0) ELSE 0.0 END) AS loss_return_sum,
-                SUM(CASE WHEN trade_result = 2 AND target_close_vs_open_pct IS NOT NULL THEN 1 ELSE 0 END) AS loss_return_count
-            FROM pattern_outcomes_prop_reversal
-            GROUP BY
-                YEAR(reversal_detect_date),
-                prop_strategy_id,
-                market,
-                harmonic_type,
-                bin,
-                reversal_type,
-                size_bucket,
-                time_bin,
-                three_month_trend,
-                six_month_trend,
-                twelve_month_trend
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query(
-            r#"
-            INSERT INTO prop_reversal_strategy_summary (
-                prop_strategy_id,
-                market,
-                harmonic_type,
-                bin,
-                reversal_type,
-                size_bucket,
-                time_bin,
-                three_month_trend,
-                six_month_trend,
-                twelve_month_trend,
-                worst_year_expectancy,
-                down_years,
-                total_count,
-                closed_count,
-                open_count,
-                win_count,
-                loss_count,
-                expectancy,
-                avg_return,
-                win_rate,
-                closed_rate,
-                avg_win,
-                avg_loss
-            )
-            SELECT
-                p.prop_strategy_id,
-                p.market,
-                p.harmonic_type,
-                p.bin,
-                p.reversal_type,
-                p.size_bucket,
-                p.time_bin,
-                p.three_month_trend,
-                p.six_month_trend,
-                p.twelve_month_trend,
-                COALESCE(y.worst_year_expectancy, 0.0) AS worst_year_expectancy,
-                COALESCE(y.down_years, 0) AS down_years,
-                COUNT(*) AS total_count,
-                SUM(CASE WHEN p.trade_result IN (1, 2) THEN 1 ELSE 0 END) AS closed_count,
-                SUM(CASE WHEN p.trade_result NOT IN (1, 2) THEN 1 ELSE 0 END) AS open_count,
-                SUM(CASE WHEN p.trade_result = 1 THEN 1 ELSE 0 END) AS win_count,
-                SUM(CASE WHEN p.trade_result = 2 THEN 1 ELSE 0 END) AS loss_count,
-                COALESCE(AVG(CASE WHEN p.trade_result IN (1, 2) THEN p.target_close_vs_open_pct END), 0.0) AS expectancy,
-                COALESCE(AVG(p.target_close_vs_open_pct), 0.0) AS avg_return,
-                COALESCE(AVG(CASE WHEN p.trade_result = 1 THEN 1.0 WHEN p.trade_result = 2 THEN 0.0 END), 0.0) AS win_rate,
-                COALESCE(AVG(CASE WHEN p.trade_result IN (1, 2) THEN 1.0 ELSE 0.0 END), 0.0) AS closed_rate,
-                COALESCE(AVG(CASE WHEN p.trade_result = 1 THEN p.target_close_vs_open_pct END), 0.0) AS avg_win,
-                COALESCE(AVG(CASE WHEN p.trade_result = 2 THEN p.target_close_vs_open_pct END), 0.0) AS avg_loss
-            FROM pattern_outcomes_prop_reversal p
-            LEFT JOIN (
+                agg.family_key,
+                agg.family_name,
+                agg.family_level,
+                agg.included_dimensions,
+                agg.outcome_model,
+                agg.market,
+                agg.harmonic_type,
+                agg.bin,
+                agg.reversal_type,
+                agg.size_bucket,
+                agg.time_bin,
+                agg.x_strictness,
+                agg.three_month_trend,
+                agg.six_month_trend,
+                agg.twelve_month_trend,
+                agg.worst_year_expectancy,
+                agg.down_years,
+                agg.total_count,
+                agg.closed_count,
+                agg.open_count,
+                agg.win_count,
+                agg.loss_count,
+                agg.expectancy,
+                agg.avg_return,
+                agg.win_rate,
+                agg.closed_rate,
+                agg.avg_win,
+                agg.avg_loss,
+                agg.avg_target_range,
+                agg.expectancy
+                    * LEAST(1.0, SQRT(CAST(agg.closed_count AS DOUBLE) / 100.0))
+                    * CASE
+                        WHEN agg.down_years <= 0 THEN 1.0
+                        ELSE 1.0 / (1.0 + CAST(agg.down_years AS DOUBLE))
+                    END AS score
+            FROM (
                 SELECT
-                    prop_strategy_id,
+                    family_key,
+                    family_name,
+                    family_level,
+                    included_dimensions,
+                    outcome_model,
                     market,
                     harmonic_type,
                     bin,
                     reversal_type,
                     size_bucket,
                     time_bin,
+                    x_strictness,
                     three_month_trend,
                     six_month_trend,
                     twelve_month_trend,
-                    MIN(
-                        CASE
-                            WHEN expectancy_count > 0 THEN expectancy_sum / expectancy_count
-                            ELSE 0.0
-                        END
-                    ) AS worst_year_expectancy,
-                    SUM(
-                        CASE
-                            WHEN (CASE
+                    COALESCE(
+                        MIN(
+                            CASE
                                 WHEN expectancy_count > 0 THEN expectancy_sum / expectancy_count
-                                ELSE 0.0
-                            END) < 0 THEN 1
-                            ELSE 0
-                        END
-                    ) AS down_years
-                FROM prop_reversal_strategy_yearly
+                                ELSE NULL
+                            END
+                        ),
+                        0.0
+                    ) AS worst_year_expectancy,
+                    CAST(
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN expectancy_count > 0
+                                        AND (expectancy_sum / expectancy_count) <= 0 THEN 1
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS SIGNED
+                    ) AS down_years,
+                    CAST(COALESCE(SUM(total_count), 0) AS SIGNED) AS total_count,
+                    CAST(COALESCE(SUM(closed_count), 0) AS SIGNED) AS closed_count,
+                    CAST(COALESCE(SUM(open_count), 0) AS SIGNED) AS open_count,
+                    CAST(COALESCE(SUM(win_count), 0) AS SIGNED) AS win_count,
+                    CAST(COALESCE(SUM(loss_count), 0) AS SIGNED) AS loss_count,
+                    COALESCE(
+                        CAST(COALESCE(SUM(expectancy_sum), 0) / NULLIF(COALESCE(SUM(expectancy_count), 0), 0) AS DOUBLE),
+                        0.0
+                    ) AS expectancy,
+                    COALESCE(
+                        CAST(COALESCE(SUM(return_sum), 0) / NULLIF(COALESCE(SUM(return_count), 0), 0) AS DOUBLE),
+                        0.0
+                    ) AS avg_return,
+                    COALESCE(
+                        CAST(COALESCE(SUM(win_count), 0) / NULLIF(COALESCE(SUM(closed_count), 0), 0) AS DOUBLE),
+                        0.0
+                    ) AS win_rate,
+                    COALESCE(
+                        CAST(COALESCE(SUM(closed_count), 0) / NULLIF(COALESCE(SUM(total_count), 0), 0) AS DOUBLE),
+                        0.0
+                    ) AS closed_rate,
+                    COALESCE(
+                        CAST(COALESCE(SUM(win_return_sum), 0) / NULLIF(COALESCE(SUM(win_return_count), 0), 0) AS DOUBLE),
+                        0.0
+                    ) AS avg_win,
+                    COALESCE(
+                        CAST(COALESCE(SUM(loss_return_sum), 0) / NULLIF(COALESCE(SUM(loss_return_count), 0), 0) AS DOUBLE),
+                        0.0
+                    ) AS avg_loss,
+                    COALESCE(
+                        CAST(COALESCE(SUM(target_range_sum), 0) / NULLIF(COALESCE(SUM(target_range_count), 0), 0) AS DOUBLE),
+                        0.0
+                    ) AS avg_target_range
+                FROM prop_strategy_family_yearly
+                WHERE outcome_model = ?
                 GROUP BY
-                    prop_strategy_id,
+                    family_key,
+                    family_name,
+                    family_level,
+                    included_dimensions,
+                    outcome_model,
                     market,
                     harmonic_type,
                     bin,
                     reversal_type,
                     size_bucket,
                     time_bin,
+                    x_strictness,
                     three_month_trend,
                     six_month_trend,
                     twelve_month_trend
-            ) y
-                ON y.prop_strategy_id = p.prop_strategy_id
-               AND y.market = p.market
-               AND y.harmonic_type = p.harmonic_type
-               AND y.bin = p.bin
-               AND y.reversal_type = p.reversal_type
-               AND y.size_bucket = p.size_bucket
-               AND y.time_bin = p.time_bin
-               AND y.three_month_trend = p.three_month_trend
-               AND y.six_month_trend = p.six_month_trend
-               AND y.twelve_month_trend = p.twelve_month_trend
-            GROUP BY
-                p.prop_strategy_id,
-                p.market,
-                p.harmonic_type,
-                p.bin,
-                p.reversal_type,
-                p.size_bucket,
-                p.time_bin,
-                p.three_month_trend,
-                p.six_month_trend,
-                p.twelve_month_trend
-            "#,
+            ) agg
+            "#;
+        let mut rows_written = 0_i64;
+        for outcome_model in outcome_models.iter() {
+            let result = sqlx::query(summary_sql)
+                .bind(outcome_model)
+                .execute(&mut *conn)
+                .await?;
+            rows_written += result.rows_affected() as i64;
+        }
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_family_summary",
+            Some(rows_written),
+            phase_started.elapsed(),
+            Some("summary rows aggregated from yearly rows in outcome_model chunks"),
         )
-        .execute(&self.pool)
         .await?;
 
-        self.set_dashboard_cache_state("prop_reversal_strategy_rollups", true, None, Some("ready"))
+        let phase_started = Instant::now();
+        sqlx::query("DROP TEMPORARY TABLE IF EXISTS prop_strategy_family_source")
+            .execute(&mut *conn)
             .await?;
+
+        drop(conn);
+
+        self.set_dashboard_cache_state("prop_strategy_family_rollups", true, None, Some("ready"))
+            .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_family_cleanup",
+            None,
+            phase_started.elapsed(),
+            Some("temporary aggregate source dropped and cache marked ready"),
+        )
+        .await?;
+
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_strategy_family_rollups",
+            None,
+            total_started.elapsed(),
+            Some("total family rollup refresh"),
+        )
+        .await?;
 
         Ok(())
     }

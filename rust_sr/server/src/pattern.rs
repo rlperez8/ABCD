@@ -1,16 +1,16 @@
-
-use mysql::{Pool, PooledConn, params};
-use mysql::prelude::*; 
-use std::error::Error;
+use chrono::NaiveDate;
+use mysql::prelude::*;
 use mysql::Row;
+use mysql::{params, Pool, PooledConn};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::NaiveDate;
-use rust_decimal::Decimal;
+use std::error::Error;
 
 #[derive(Debug, Deserialize, Serialize, Clone, sqlx::FromRow)]
 pub struct Pattern {
     pub symbol: String,
+    pub pattern_id: Option<String>,
     pub x_date: NaiveDate,
     pub x_open: Decimal,
     pub x_high: Decimal,
@@ -45,6 +45,7 @@ pub struct Pattern {
     pub d_low: Decimal,
     pub d_close: Decimal,
     pub d_length: Decimal,
+    pub full_pattern_length: i64,
     pub d_min_max: Decimal,
     pub trade_open: bool,
     pub trade_risk_exit_price: Decimal,
@@ -60,58 +61,67 @@ pub struct Pattern {
     pub trade_cd_bc_price_retracement: Decimal,
     pub trade_cd_price_retracement: Decimal,
     pub trade_cd_xa_price_retracement: Decimal,
+    pub trade_ab_bar_retracement: Option<f64>,
     pub trade_bc_bar_retracement: Decimal,
     pub trade_cd_bar_retracement: Decimal,
+    pub trade_cd_bc_bar_retracement: Option<f64>,
+    pub trade_cd_xa_bar_retracement: Option<f64>,
     pub trade_snr: Decimal,
     pub trade_year: i64,
     pub trade_month: i64,
     pub trade_day: i64,
-    // pub reversalType: Option<String>,
+    pub reversal_type: Option<String>,
+    pub bullish_key_reversal: Option<bool>,
+    pub bearish_key_reversal: Option<bool>,
+    pub bullish_engulfing: Option<bool>,
+    pub bearish_engulfing: Option<bool>,
+    pub bullish_outside_reversal: Option<bool>,
+    pub bearish_outside_reversal: Option<bool>,
+    pub hammer: Option<bool>,
+    pub shooting_star: Option<bool>,
+    pub morning_star: Option<bool>,
+    pub evening_star: Option<bool>,
+    pub three_white_soldiers: Option<bool>,
+    pub three_black_crows: Option<bool>,
     pub market: String,
-    pub three_month: Decimal,
-    pub six_month: Decimal,
-    pub twelve_month: Decimal,
+    pub three_month: Option<bool>,
+    pub six_month: Option<bool>,
+    pub twelve_month: Option<bool>,
     pub pattern_group_id: String,
-    pub harmonic_type: Option<String>
-
+    pub harmonic_type: Option<String>,
+    pub bat_accuracy: Option<Decimal>,
+    pub butterfly_accuracy: Option<Decimal>,
+    pub gartley_accuracy: Option<Decimal>,
+    pub crab_accuracy: Option<Decimal>,
+    pub shark_accuracy: Option<Decimal>,
+    pub time_accuracy: Option<f64>,
 }
 
 impl Pattern {
-
     pub fn count_closed(patterns: &[Pattern]) -> usize {
-        patterns
-            .iter()
-            .filter(|p| p.trade_open == false)
-            .count()
+        patterns.iter().filter(|p| p.trade_open == false).count()
     }
 
     pub fn count_open(patterns: &[Pattern]) -> usize {
-        patterns
-            .iter()
-            .filter(|p| p.trade_open == true)
-            .count()
+        patterns.iter().filter(|p| p.trade_open == true).count()
     }
 
     pub fn count_wins(patterns: &[Pattern]) -> usize {
-        patterns
-            .iter()
-            .filter(|p| p.trade_result == 1)
-            .count()
+        patterns.iter().filter(|p| p.trade_result == 1).count()
     }
 
     pub fn count_lost(patterns: &[Pattern]) -> usize {
-        patterns
-            .iter()
-            .filter(|p| p.trade_result == 2)
-            .count()
+        patterns.iter().filter(|p| p.trade_result == 2).count()
     }
 
     pub fn group_by_month(patterns: &[Pattern]) -> HashMap<u32, Vec<Pattern>> {
         let mut grouped = HashMap::new();
         for p in patterns {
-            grouped.entry(p.trade_month as u32).or_insert_with(Vec::new).push(p.clone());
+            grouped
+                .entry(p.trade_month as u32)
+                .or_insert_with(Vec::new)
+                .push(p.clone());
         }
         grouped
     }
-
 }
