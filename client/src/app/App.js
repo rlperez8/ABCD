@@ -6,6 +6,7 @@ import StrategyLeaderboardCard from '../features/strategies/StrategyLeaderboardC
 import StrategyInsightCharts from '../features/strategies/StrategyInsightCharts';
 import StrategyVariationPoolCard from '../features/strategies/StrategyVariationPoolCard';
 import StrategyWorkbenchCard from '../features/strategies/StrategyWorkbenchCard';
+import TradeSimulatorPanel from '../features/simulator/TradeSimulatorPanel';
 import {
   fetchCurrentSetupStrategies,
   fetchCurrentSetups,
@@ -24,6 +25,7 @@ const ALL_PATTERNS_OPTION = 'All Patterns';
 const ALL_BINS_OPTION = 'All Bins';
 const STRATEGY_WORKSPACE_VIEW_CANVAS = 'canvas';
 const STRATEGY_WORKSPACE_VIEW_GRAPHS = 'graphs';
+const STRATEGY_WORKSPACE_VIEW_SIMULATOR = 'simulator';
 const STRATEGY_LIBRARY_VIEW_MATCHED = 'matched-patterns';
 const STRATEGY_LIBRARY_VIEW_CURRENT = 'current-setups';
 const STRATEGY_MODE_PROP = 'prop';
@@ -1726,7 +1728,7 @@ const App = () => {
         onClearAll: () => setSelectedStrategyMarketFeatures([STRATEGY_MARKET_FEATURE_OPTIONS[0]]),
       },
       {
-        title: 'Pattern',
+        title: 'Dominant Harmonic',
         options: STRATEGY_PATTERN_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyPatternFeatures,
         onToggleOption: toggleStrategyPatternFeature,
@@ -1734,7 +1736,7 @@ const App = () => {
         onClearAll: () => setSelectedStrategyPatternFeatures([STRATEGY_PATTERN_FEATURE_OPTIONS[0]]),
       },
       {
-        title: 'Bin',
+        title: 'Price Ratio Accuracy',
         options: STRATEGY_BIN_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyBinFeatures,
         onToggleOption: toggleStrategyBinFeature,
@@ -1750,7 +1752,7 @@ const App = () => {
         onClearAll: () => setSelectedStrategySizeFeatures([STRATEGY_SIZE_FEATURE_OPTIONS[0]]),
       },
       {
-        title: 'Time',
+        title: 'Time Ratio Accuracy',
         options: STRATEGY_TIME_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyTimeFeatures,
         onToggleOption: toggleStrategyTimeFeature,
@@ -2122,6 +2124,19 @@ const App = () => {
                         >
                           Graphs
                         </button>
+                        <button
+                          type="button"
+                          className={
+                            activeStrategyWorkspaceView === STRATEGY_WORKSPACE_VIEW_SIMULATOR
+                              ? 'strategies-workspace-tab strategies-workspace-tab--active'
+                              : 'strategies-workspace-tab'
+                          }
+                          onClick={() =>
+                            setActiveStrategyWorkspaceView(STRATEGY_WORKSPACE_VIEW_SIMULATOR)
+                          }
+                        >
+                          Simulator
+                        </button>
                       </div>
 
                       <div className="strategies-workspace-body">
@@ -2159,7 +2174,7 @@ const App = () => {
                               </div>
                             </div>
                           </div>
-                        ) : (
+                        ) : activeStrategyWorkspaceView === STRATEGY_WORKSPACE_VIEW_GRAPHS ? (
                           <div className="strategies-workspace-shell">
                             <StrategyInsightCharts
                               strategies={strategyTableSnapshots}
@@ -2168,6 +2183,14 @@ const App = () => {
                               isHydratingStrategy={isHydratingStrategy}
                               onSelectStrategy={handleSelectStrategyFromChart}
                               onHoverStrategy={setHoveredStrategyId}
+                            />
+                          </div>
+                        ) : (
+                          <div className="strategies-workspace-shell">
+                            <TradeSimulatorPanel
+                              selectedStrategy={selectedStrategy}
+                              loadedTrades={strategyTrades}
+                              totalTradeCount={strategyTradeTotalCount}
                             />
                           </div>
                         )}
