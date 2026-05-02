@@ -391,6 +391,165 @@ function StrategyYearlyChart({ strategy, isLoading = false }) {
   );
 }
 
+const fillContractWeeks = (contractWeeks = []) => {
+  const grouped = new Map();
+
+  contractWeeks.forEach((row) => {
+    const week = Number(row.contract_week_index ?? 0);
+    const current = grouped.get(week) ?? {
+      contract_week_index: week,
+      total_count: 0,
+      closed_count: 0,
+      open_count: 0,
+      win_count: 0,
+      loss_count: 0,
+      expectancy_sum: 0,
+      avg_return_sum: 0,
+    };
+
+    const total = Number(row.total_count ?? 0);
+    const closed = Number(row.closed_count ?? 0);
+    current.total_count += total;
+    current.closed_count += closed;
+    current.open_count += Number(row.open_count ?? 0);
+    current.win_count += Number(row.win_count ?? 0);
+    current.loss_count += Number(row.loss_count ?? 0);
+    current.expectancy_sum += Number(row.expectancy ?? 0) * closed;
+    current.avg_return_sum += Number(row.avg_return ?? 0) * total;
+    grouped.set(week, current);
+  });
+
+  const maxWeek = Math.max(0, ...[...grouped.keys()]);
+  const rows = [];
+
+  for (let week = 1; week <= maxWeek; week += 1) {
+    const row = grouped.get(week) ?? {
+      contract_week_index: week,
+      total_count: 0,
+      closed_count: 0,
+      open_count: 0,
+      win_count: 0,
+      loss_count: 0,
+      expectancy_sum: 0,
+      avg_return_sum: 0,
+    };
+
+    rows.push({
+      ...row,
+      expectancy: row.closed_count ? row.expectancy_sum / row.closed_count : 0,
+      avg_return: row.total_count ? row.avg_return_sum / row.total_count : 0,
+      win_rate: row.closed_count ? row.win_count / row.closed_count : 0,
+    });
+  }
+
+  return rows;
+};
+
+function StrategyContractWeekChart({ contractWeeks = [], isLoading = false }) {
+  const [metric, setMetric] = useState('expectancy');
+  const weeklyRows = useMemo(() => fillContractWeeks(contractWeeks), [contractWeeks]);
+
+  const chartData = useMemo(
+    () => ({
+      labels: weeklyRows.map((item) => `W${item.contract_week_index}`),
+      datasets: [
+        {
+          label: METRIC_META[metric]?.label ?? metric,
+          data: weeklyRows.map((item) => {
+            if (metric === 'closed_count') return item.closed_count ?? 0;
+            return (item?.[metric] ?? 0) * (METRIC_META[metric]?.scale ?? 1);
+          }),
+          backgroundColor: weeklyRows.map((item) =>
+            (item?.[metric] ?? 0) >= 0
+              ? 'rgba(116, 224, 170, 0.9)'
+              : 'rgba(255, 128, 128, 0.9)'
+          ),
+          borderColor: 'rgba(28, 28, 28, 0.92)',
+          borderWidth: 1,
+          borderRadius: 0,
+          borderSkipped: false,
+        },
+      ],
+    }),
+    [metric, weeklyRows]
+  );
+
+  const options = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(12, 12, 12, 0.98)',
+          titleColor: '#f0f0f0',
+          bodyColor: '#d8d8d8',
+          titleFont: { family: CHART_FONT_FAMILY },
+          bodyFont: { family: CHART_FONT_FAMILY },
+          borderColor: 'rgba(88, 88, 88, 0.9)',
+          borderWidth: 1,
+          callbacks: {
+            label: (context) => {
+              const point = weeklyRows[context.dataIndex];
+              if (!point) return [];
+
+              return [
+                `Contract Week: W${point.contract_week_index}`,
+                `${METRIC_META[metric]?.label ?? metric}: ${
+                  metric === 'closed_count' ? Math.round(context.raw) : formatMetric(metric, context.raw)
+                }`,
+                `Closed Trades: ${point.closed_count}/${point.total_count}`,
+                `Wins/Losses/Open: ${point.win_count}/${point.loss_count}/${point.open_count}`,
+              ];
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#d4d4d4', font: { family: CHART_FONT_FAMILY } },
+          grid: { color: 'rgba(126, 126, 126, 0.12)' },
+          border: { color: 'rgba(102, 102, 102, 0.58)' },
+        },
+        y: {
+          ticks: {
+            color: '#d4d4d4',
+            font: { family: CHART_FONT_FAMILY },
+            callback: (value) =>
+              metric === 'closed_count' ? `${value}` : `${value}%`,
+          },
+          grid: { color: 'rgba(126, 126, 126, 0.18)' },
+          border: { color: 'rgba(102, 102, 102, 0.58)' },
+        },
+      },
+    }),
+    [metric, weeklyRows]
+  );
+
+  return (
+    <DashboardCardFrame
+      title="Selected Contract Weeks"
+      subtitle="Performance by week inside futures contracts"
+      controls={
+        <MetricToggleGroup
+          activeMetric={metric}
+          onChange={setMetric}
+          metrics={['expectancy', 'avg_return', 'win_rate', 'closed_count']}
+        />
+      }
+      bodyClassName="strategy-chart-body"
+    >
+      {weeklyRows.length ? (
+        <Bar data={chartData} options={options} />
+      ) : isLoading ? (
+        <div className="strategy-empty-row">Loading contract weeks...</div>
+      ) : (
+        <div className="strategy-empty-row">No contract-week rows for this family yet.</div>
+      )}
+    </DashboardCardFrame>
+  );
+}
+
 function StrategyCohortMap({ strategies, selectedStrategyId, onSelectStrategy, onHoverStrategy }) {
   const plottedStrategies = useMemo(
     () => strategies.filter((strategy) => getSummary(strategy)?.closed_count > 0),
@@ -537,6 +696,8 @@ export default function StrategyInsightCharts({
   selectedStrategy = null,
   selectedStrategyId = '',
   isHydratingStrategy = false,
+  contractWeeks = [],
+  isLoadingContractWeeks = false,
   leaderChartStartIndex = 0,
   onSelectStrategy,
   onHoverStrategy,
@@ -598,6 +759,12 @@ export default function StrategyInsightCharts({
         <div className="strategy-chart-grid">
           <div className="q">
             <StrategyYearlyChart strategy={selectedStrategy} isLoading={isHydratingStrategy} />
+          </div>
+          <div className="q">
+            <StrategyContractWeekChart
+              contractWeeks={contractWeeks}
+              isLoading={isLoadingContractWeeks}
+            />
           </div>
         </div>
       )}

@@ -337,6 +337,21 @@ const parseSetupComparisonResponse = (comparison) => {
   };
 };
 
+const parseStrategyContractWeekRecord = (row) => ({
+  ...row,
+  family_key: row?.family_key ?? null,
+  symbol: row?.symbol ?? 'Unknown',
+  contract_week_index: parseOptionalInt(row?.contract_week_index) ?? 0,
+  total_count: parseOptionalInt(row?.total_count) ?? 0,
+  closed_count: parseOptionalInt(row?.closed_count) ?? 0,
+  open_count: parseOptionalInt(row?.open_count) ?? 0,
+  win_count: parseOptionalInt(row?.win_count) ?? 0,
+  loss_count: parseOptionalInt(row?.loss_count) ?? 0,
+  expectancy: parseOptionalFloat(row?.expectancy) ?? 0,
+  avg_return: parseOptionalFloat(row?.avg_return) ?? 0,
+  win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+});
+
 export const getCandles = async (symbol, { startDate = null, endDate = null } = {}) => {
   if (!symbol) {
     return [];
@@ -349,6 +364,24 @@ export const getCandles = async (symbol, { startDate = null, endDate = null } = 
       end_date: endDate,
     });
     return Array.isArray(candles) ? candles.map(parseCandleRecord).reverse() : [];
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
+};
+
+export const fetchStrategyContractWeeks = async (strategy, { limit = 2000 } = {}) => {
+  if (!strategy) {
+    return [];
+  }
+
+  try {
+    const data = await postJson('/strategy-contract-weeks', {
+      prop_strategy_id: strategy.propStrategyId ?? strategy.familyKey ?? strategy.id ?? null,
+      limit,
+    });
+
+    return Array.isArray(data) ? data.map(parseStrategyContractWeekRecord) : [];
   } catch (error) {
     console.error(error);
     return [];

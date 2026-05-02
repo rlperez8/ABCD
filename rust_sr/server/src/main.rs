@@ -98,6 +98,12 @@ struct StrategyTradesParams {
     pub offset: Option<i64>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct StrategyContractWeekParams {
+    pub prop_strategy_id: Option<String>,
+    pub limit: Option<i64>,
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 struct PatternDetailParams {
     pub pattern_id: Option<String>,
@@ -307,6 +313,21 @@ struct StrategyCandidateSummary {
     total_setups: i64,
     avg_setups_per_week: f64,
     max_setups_per_week: i64,
+}
+
+#[derive(sqlx::FromRow, serde::Serialize)]
+struct StrategyContractWeekSummary {
+    family_key: String,
+    symbol: String,
+    contract_week_index: i64,
+    total_count: i64,
+    closed_count: i64,
+    open_count: i64,
+    win_count: i64,
+    loss_count: i64,
+    expectancy: f64,
+    avg_return: f64,
+    win_rate: f64,
 }
 
 #[derive(Clone, sqlx::FromRow)]
@@ -1862,6 +1883,7 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_pattern_detail)
             .service(fetch_setup_comparison)
             .service(fetch_strategy_candidates)
+            .service(fetch_strategy_contract_weeks)
             .wrap(Logger::default()) // built-in Actix logs
             .wrap_fn(|req, srv| {
                 // <-- ADD THIS
@@ -2495,7 +2517,63 @@ async fn fetch_strategy_candidates(
             eprintln!("Strategy candidate DB error: {:?}", error);
             HttpResponse::InternalServerError().finish()
         }
+        };
+}
+
+#[route("/strategy-contract-weeks", method = "GET", method = "POST")]
+async fn fetch_strategy_contract_weeks(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<StrategyContractWeekParams>,
+) -> impl Responder {
+    let Some(family_key) = params.prop_strategy_id.as_deref() else {
+        return HttpResponse::Ok().json(Vec::<StrategyContractWeekSummary>::new());
     };
+    let limit = params.limit.unwrap_or(2_000).clamp(1, 10_000);
+
+    match table_exists(pool.get_ref(), "prop_strategy_contract_week_summary").await {
+        Ok(true) => {}
+        Ok(false) => return HttpResponse::Ok().json(Vec::<StrategyContractWeekSummary>::new()),
+        Err(error) => {
+            eprintln!("Contract week table check error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let rows = sqlx::query_as::<_, StrategyContractWeekSummary>(
+        r#"
+        SELECT
+            family_key,
+            symbol,
+            CAST(contract_week_index AS SIGNED) AS contract_week_index,
+            CAST(total_count AS SIGNED) AS total_count,
+            CAST(closed_count AS SIGNED) AS closed_count,
+            CAST(open_count AS SIGNED) AS open_count,
+            CAST(win_count AS SIGNED) AS win_count,
+            CAST(loss_count AS SIGNED) AS loss_count,
+            CAST(expectancy AS DOUBLE) AS expectancy,
+            CAST(avg_return AS DOUBLE) AS avg_return,
+            CAST(win_rate AS DOUBLE) AS win_rate
+        FROM prop_strategy_contract_week_summary
+        WHERE family_key = ?
+        ORDER BY symbol ASC, contract_week_index ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(family_key)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match rows {
+        Ok(rows) => HttpResponse::Ok().json(rows),
+        Err(error) if is_missing_table_error(&error) => {
+            HttpResponse::Ok().json(Vec::<StrategyContractWeekSummary>::new())
+        }
+        Err(error) => {
+            eprintln!("Strategy contract week DB error: {:?}", error);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
 }
 
 #[route("/candles", method = "GET", method = "POST")]

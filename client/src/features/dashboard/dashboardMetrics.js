@@ -21,6 +21,11 @@ export const METRIC_META = {
     axisLabel: 'Closed Trades',
     isPercent: false,
   },
+  closed_count: {
+    label: 'Closed Trades',
+    axisLabel: 'Closed Trades',
+    isPercent: false,
+  },
   closed_rate: {
     label: 'Closed %',
     axisLabel: 'Closed Coverage (%)',

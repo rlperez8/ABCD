@@ -15,6 +15,7 @@ import {
   fetchPatternDetail,
   fetchSetupComparison,
   fetchStrategyCandidates,
+  fetchStrategyContractWeeks,
   fetchStrategyTrades,
   getCandles,
   getSupportResistanceLines,
@@ -582,6 +583,8 @@ const App = () => {
   const [leaderChartStartIndex, setLeaderChartStartIndex] = useState(0);
   const [strategyTrades, setStrategyTrades] = useState([]);
   const [strategyTradeTotalCount, setStrategyTradeTotalCount] = useState(0);
+  const [strategyContractWeeks, setStrategyContractWeeks] = useState([]);
+  const [isLoadingStrategyContractWeeks, setLoadingStrategyContractWeeks] = useState(false);
   const [hasMoreStrategyTrades, setHasMoreStrategyTrades] = useState(false);
   const [isLoadingStrategyTrades, setLoadingStrategyTrades] = useState(false);
   const [isFetchingMoreStrategyTrades, setFetchingMoreStrategyTrades] = useState(false);
@@ -635,6 +638,7 @@ const App = () => {
   const patternDetailCacheRef = useRef(new Map());
   const patternDetailRequestCacheRef = useRef(new Map());
   const strategyComparisonCacheRef = useRef(new Map());
+  const strategyContractWeeksCacheRef = useRef(new Map());
   const hydratedStrategyIdsRef = useRef(new Set());
   const headerRef = useRef(null);
 
@@ -884,6 +888,44 @@ const App = () => {
       comparison: selectedStrategyComparison.comparison ?? selectedStrategy.comparison,
     };
   }, [selectedStrategy, selectedStrategyComparison]);
+
+  useEffect(() => {
+    if (
+      activeStrategyWorkspaceView !== STRATEGY_WORKSPACE_VIEW_GRAPHS ||
+      !selectedStrategy
+    ) {
+      return;
+    }
+
+    let isCancelled = false;
+    const cacheKey = selectedStrategy.propStrategyId ?? selectedStrategy.familyKey ?? selectedStrategy.id;
+    const cachedRows = strategyContractWeeksCacheRef.current.get(cacheKey);
+
+    if (cachedRows) {
+      setStrategyContractWeeks(cachedRows);
+      return;
+    }
+
+    setLoadingStrategyContractWeeks(true);
+    fetchStrategyContractWeeks(selectedStrategy)
+      .then((rows) => {
+        if (isCancelled) {
+          return;
+        }
+
+        strategyContractWeeksCacheRef.current.set(cacheKey, rows);
+        setStrategyContractWeeks(rows);
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setLoadingStrategyContractWeeks(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeStrategyWorkspaceView, selectedStrategy]);
   useEffect(() => {
     if (!strategyTableSnapshots.length) {
       if (selectedStrategyId) {
@@ -983,6 +1025,7 @@ const App = () => {
     setSelectedStrategyId('');
     setSelectedStrategyComparison(null);
     setStrategyTrades([]);
+    setStrategyContractWeeks([]);
     setStrategyTradeTotalCount(0);
     setHasMoreStrategyTrades(false);
     setSelectedStrategyTradeIndex(0);
@@ -1364,8 +1407,9 @@ const App = () => {
       strategyChartRequestIdRef.current += 1;
       latestStrategyTradesQueryKeyRef.current = '';
       requestedStrategyTradeOffsetsRef.current = new Set();
-      setStrategyTrades([]);
-      setStrategyTradeTotalCount(0);
+    setStrategyTrades([]);
+    setStrategyContractWeeks([]);
+    setStrategyTradeTotalCount(0);
       setHasMoreStrategyTrades(false);
       setSelectedStrategyTradeIndex(0);
       setSelectedStrategyTradeKey('');
@@ -2252,6 +2296,8 @@ const App = () => {
                               selectedStrategy={selectedStrategyForInsights}
                               selectedStrategyId={selectedStrategy?.id ?? ''}
                               isHydratingStrategy={isHydratingStrategy}
+                              contractWeeks={strategyContractWeeks}
+                              isLoadingContractWeeks={isLoadingStrategyContractWeeks}
                               leaderChartStartIndex={leaderChartStartIndex}
                               onSelectStrategy={handleSelectStrategyFromChart}
                               onHoverStrategy={setHoveredStrategyId}
