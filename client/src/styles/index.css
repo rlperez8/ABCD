@@ -3882,29 +3882,10 @@ canvas {
   white-space: nowrap;
 }
 
-.strategy-pool-group-actions {
-  display: inline-flex;
-  gap: 6px;
-}
-
-.strategy-pool-action {
-  min-height: 24px;
-  padding: 0 8px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 .strategy-pool-options {
   display: grid;
   grid-template-columns: 1fr;
   gap: 6px;
-}
-
-.strategy-pool-group-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
 }
 
 .strategy-pool-option {
@@ -3931,13 +3912,14 @@ canvas {
 }
 
 .strategy-pool-option--selected {
-  background: linear-gradient(180deg, rgba(28, 53, 69, 0.98), rgba(12, 20, 27, 0.98));
+  background: rgba(255, 255, 255, 0.025);
   color: #f8fbff;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.22);
 }
 
 .strategy-pool-option--selected {
-  border-color: #8f8f8f #090909 #090909 #8f8f8f;
-  background: linear-gradient(180deg, rgba(32, 32, 32, 0.98), rgba(18, 18, 18, 0.98));
+  border-color: #b8b8b8 #383838 #383838 #b8b8b8;
+  background: rgba(255, 255, 255, 0.03);
   color: #f5f5f5;
 }
 
@@ -5485,7 +5467,6 @@ button:active,
 }
 
 .strategies-station-shell .metric-button,
-.strategies-station-shell .strategy-pool-action,
 .strategies-station-shell .strategies-filter-select,
 .strategies-station-shell .chart-tool-button,
 .strategies-station-shell .chart-action-button {
@@ -5494,7 +5475,6 @@ button:active,
 }
 
 .strategies-station-shell .metric-button,
-.strategies-station-shell .strategy-pool-action,
 .strategies-station-shell .chart-tool-button,
 .strategies-station-shell .chart-action-button {
   background: linear-gradient(180deg, #272727 0%, #131313 100%);
@@ -5505,7 +5485,6 @@ button:active,
 }
 
 .strategies-station-shell .metric-button:hover,
-.strategies-station-shell .strategy-pool-action:hover,
 .strategies-station-shell .chart-tool-button:hover,
 .strategies-station-shell .chart-action-button:hover {
   background: linear-gradient(180deg, #313131 0%, #191919 100%);
@@ -5593,9 +5572,10 @@ button:active,
 }
 
 .strategies-station-shell .strategy-pool-option--selected {
-  border-color: #b2b2b2 #080808 #080808 #b2b2b2;
-  background: linear-gradient(180deg, #3a3a3a 0%, #1a1a1a 100%);
+  border-color: #d8d8d8 #464646 #464646 #d8d8d8;
+  background: rgba(255, 255, 255, 0.035);
   color: #ffffff;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.24);
 }
 
 .strategies-station-shell .strategy-pool-option input {

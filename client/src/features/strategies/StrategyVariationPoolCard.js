@@ -6,8 +6,6 @@ const FeatureGroup = ({
   options = [],
   selectedOptions = [],
   onToggleOption,
-  onSelectAll,
-  onClearAll,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -26,16 +24,6 @@ const FeatureGroup = ({
           </span>
           <span className="strategy-pool-group-icon">{isOpen ? '-' : '+'}</span>
         </button>
-        {isOpen ? (
-          <div className="strategy-pool-group-actions">
-            <button type="button" className="strategy-pool-action" onClick={onSelectAll}>
-              All
-            </button>
-            <button type="button" className="strategy-pool-action" onClick={onClearAll}>
-              None
-            </button>
-          </div>
-        ) : null}
       </div>
 
       {isOpen ? (
@@ -118,8 +106,6 @@ const StrategyVariationPoolCard = ({
                 options={group.options}
                 selectedOptions={group.selectedOptions}
                 onToggleOption={group.onToggleOption}
-                onSelectAll={group.onSelectAll}
-                onClearAll={group.onClearAll}
               />
             ))}
           </div>

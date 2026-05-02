@@ -1724,86 +1724,60 @@ const App = () => {
         options: STRATEGY_MARKET_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyMarketFeatures,
         onToggleOption: toggleStrategyMarketFeature,
-        onSelectAll: () => setSelectedStrategyMarketFeatures(STRATEGY_MARKET_FEATURE_OPTIONS),
-        onClearAll: () => setSelectedStrategyMarketFeatures([STRATEGY_MARKET_FEATURE_OPTIONS[0]]),
       },
       {
         title: 'Dominant Harmonic',
         options: STRATEGY_PATTERN_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyPatternFeatures,
         onToggleOption: toggleStrategyPatternFeature,
-        onSelectAll: () => setSelectedStrategyPatternFeatures(STRATEGY_PATTERN_FEATURE_OPTIONS),
-        onClearAll: () => setSelectedStrategyPatternFeatures([STRATEGY_PATTERN_FEATURE_OPTIONS[0]]),
       },
       {
         title: 'Price Ratio Accuracy',
         options: STRATEGY_BIN_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyBinFeatures,
         onToggleOption: toggleStrategyBinFeature,
-        onSelectAll: () => setSelectedStrategyBinFeatures(STRATEGY_BIN_FEATURE_OPTIONS),
-        onClearAll: () => setSelectedStrategyBinFeatures([STRATEGY_BIN_FEATURE_OPTIONS[0]]),
       },
       {
         title: 'Size',
         options: STRATEGY_SIZE_FEATURE_OPTIONS,
         selectedOptions: selectedStrategySizeFeatures,
         onToggleOption: toggleStrategySizeFeature,
-        onSelectAll: () => setSelectedStrategySizeFeatures(STRATEGY_SIZE_FEATURE_OPTIONS),
-        onClearAll: () => setSelectedStrategySizeFeatures([STRATEGY_SIZE_FEATURE_OPTIONS[0]]),
       },
       {
         title: 'Time Ratio Accuracy',
         options: STRATEGY_TIME_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyTimeFeatures,
         onToggleOption: toggleStrategyTimeFeature,
-        onSelectAll: () => setSelectedStrategyTimeFeatures(STRATEGY_TIME_FEATURE_OPTIONS),
-        onClearAll: () => setSelectedStrategyTimeFeatures([STRATEGY_TIME_FEATURE_OPTIONS[0]]),
       },
       {
         title: 'X Mode',
         options: STRATEGY_STRICTNESS_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyStrictnessFeatures,
         onToggleOption: toggleStrategyStrictnessFeature,
-        onSelectAll: () => setSelectedStrategyStrictnessFeatures(STRATEGY_STRICTNESS_FEATURE_OPTIONS),
-        onClearAll: () => setSelectedStrategyStrictnessFeatures([STRATEGY_STRICTNESS_FEATURE_OPTIONS[0]]),
       },
       {
         title: 'Reversal',
         options: STRATEGY_REVERSAL_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyReversalFeatures,
         onToggleOption: toggleStrategyReversalFeature,
-        onSelectAll: () => setSelectedStrategyReversalFeatures(STRATEGY_REVERSAL_FEATURE_OPTIONS),
-        onClearAll: () => setSelectedStrategyReversalFeatures([STRATEGY_REVERSAL_FEATURE_OPTIONS[0]]),
       },
       {
         title: '3M Trend',
         options: STRATEGY_TREND_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyThreeMonthTrendFeatures,
         onToggleOption: toggleStrategyThreeMonthTrendFeature,
-        onSelectAll: () =>
-          setSelectedStrategyThreeMonthTrendFeatures(STRATEGY_TREND_FEATURE_OPTIONS),
-        onClearAll: () =>
-          setSelectedStrategyThreeMonthTrendFeatures([STRATEGY_TREND_FEATURE_OPTIONS[0]]),
       },
       {
         title: '6M Trend',
         options: STRATEGY_TREND_FEATURE_OPTIONS,
         selectedOptions: selectedStrategySixMonthTrendFeatures,
         onToggleOption: toggleStrategySixMonthTrendFeature,
-        onSelectAll: () =>
-          setSelectedStrategySixMonthTrendFeatures(STRATEGY_TREND_FEATURE_OPTIONS),
-        onClearAll: () =>
-          setSelectedStrategySixMonthTrendFeatures([STRATEGY_TREND_FEATURE_OPTIONS[0]]),
       },
       {
         title: '12M Trend',
         options: STRATEGY_TREND_FEATURE_OPTIONS,
         selectedOptions: selectedStrategyTwelveMonthTrendFeatures,
         onToggleOption: toggleStrategyTwelveMonthTrendFeature,
-        onSelectAll: () =>
-          setSelectedStrategyTwelveMonthTrendFeatures(STRATEGY_TREND_FEATURE_OPTIONS),
-        onClearAll: () =>
-          setSelectedStrategyTwelveMonthTrendFeatures([STRATEGY_TREND_FEATURE_OPTIONS[0]]),
       },
     ],
     [
