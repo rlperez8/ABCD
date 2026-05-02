@@ -32,7 +32,8 @@ const FeatureGroup = ({
             const isSelected = selectedOptions.includes(option);
 
             return (
-              <label
+              <button
+                type="button"
                 key={option}
                 className={[
                   'strategy-pool-option',
@@ -40,14 +41,11 @@ const FeatureGroup = ({
                 ]
                   .filter(Boolean)
                   .join(' ')}
+                aria-pressed={isSelected}
+                onClick={() => onToggleOption?.(option)}
               >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => onToggleOption?.(option)}
-                />
                 <span>{option}</span>
-              </label>
+              </button>
             );
           })}
         </div>
