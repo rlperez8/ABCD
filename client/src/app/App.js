@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PatternTable from '../components/PatternTable';
 import Section from '../components/Section';
 import CandleChartPanel from '../features/candle-chart/CandleChartPanel';
-import StrategyLeaderboardCard from '../features/strategies/StrategyLeaderboardCard';
+import StrategyLeaderboardCard, { rankStrategies } from '../features/strategies/StrategyLeaderboardCard';
 import StrategyInsightCharts from '../features/strategies/StrategyInsightCharts';
+import StrategyFrequencyPanel from '../features/strategies/StrategyFrequencyPanel';
+import StrategyContractBreakdownPanel from '../features/strategies/StrategyContractBreakdownPanel';
 import StrategyVariationPoolCard from '../features/strategies/StrategyVariationPoolCard';
 import StrategyWorkbenchCard from '../features/strategies/StrategyWorkbenchCard';
 import TradeSimulatorPanel from '../features/simulator/TradeSimulatorPanel';
@@ -25,6 +27,7 @@ const ALL_PATTERNS_OPTION = 'All Patterns';
 const ALL_BINS_OPTION = 'All Bins';
 const STRATEGY_WORKSPACE_VIEW_CANVAS = 'canvas';
 const STRATEGY_WORKSPACE_VIEW_GRAPHS = 'graphs';
+const STRATEGY_WORKSPACE_VIEW_FREQUENCY = 'frequency';
 const STRATEGY_WORKSPACE_VIEW_SIMULATOR = 'simulator';
 const STRATEGY_LIBRARY_VIEW_MATCHED = 'matched-patterns';
 const STRATEGY_LIBRARY_VIEW_CURRENT = 'current-setups';
@@ -143,19 +146,69 @@ const HARMONIC_ACCURACY_FIELDS = [
   { label: 'Shark', key: 'shark_accuracy' },
 ];
 
+const formatDateTimeForServer = (value) => {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 19).replace('T', ' ');
+};
+
+const formatCandleDateForChart = (value) => {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toISOString().slice(0, 19).replace('T', ' ');
+};
+
+const buildPatternCandleWindow = (pattern = {}) => {
+  const dateValues = [
+    pattern.x_date,
+    pattern.a_date,
+    pattern.b_date,
+    pattern.c_date,
+    pattern.d_date,
+    pattern.d_confirm_date,
+    pattern.reversal_detect_date,
+    pattern.target_date,
+    pattern.trade_date,
+  ]
+    .map((value) => {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+    })
+    .filter((value) => Number.isFinite(value));
+
+  if (!dateValues.length) {
+    return {};
+  }
+
+  const paddingMs = 24 * 60 * 60 * 1000;
+
+  return {
+    startDate: formatDateTimeForServer(new Date(Math.min(...dateValues) - paddingMs)),
+    endDate: formatDateTimeForServer(new Date(Math.max(...dateValues) + paddingMs)),
+  };
+};
+
 const normalizeCandles = (candles = []) =>
   candles
     .slice()
     .sort((a, b) => new Date(b.candle_date) - new Date(a.candle_date))
     .map((item) => ({
       ...item,
-      candle_date: item.candle_date
-        ? new Date(item.candle_date).toISOString().split('T')[0]
-        : null,
+      candle_date: formatCandleDateForChart(item.candle_date),
     }));
 
-const handleCandles = async (symbol) => {
-  const candles = await getCandles(symbol);
+const handleCandles = async (symbol, options = {}) => {
+  const candles = await getCandles(symbol, options);
   return normalizeCandles(candles);
 };
 
@@ -236,16 +289,7 @@ const updateSelectedPattern = async (
     selectedPattern?.x_date || (!selectedPattern?.pattern_id && !selectedPattern?.pattern_group_id)
       ? Promise.resolve(selectedPattern)
       : getPatternDetail(selectedPattern);
-  const candlesPromise = selectedPattern?.symbol
-    ? getCandlesForSymbol(selectedPattern.symbol)
-    : null;
-  const snrLinesPromise = getSupportResistanceLines(selectedPattern?.symbol);
-
-  const [hydratedPattern, preloadedCandles, snrLines] = await Promise.all([
-    hydratedPatternPromise,
-    candlesPromise,
-    snrLinesPromise,
-  ]);
+  const hydratedPattern = await hydratedPatternPromise;
 
   if (!hydratedPattern) {
     throw new Error('Pattern detail not found');
@@ -270,7 +314,12 @@ const updateSelectedPattern = async (
     }
   });
 
-  const candles = preloadedCandles ?? (await getCandlesForSymbol(mergedPattern?.symbol));
+  const [candles, snrLines] = await Promise.all([
+    mergedPattern?.symbol
+      ? getCandlesForSymbol(mergedPattern.symbol, buildPatternCandleWindow(mergedPattern))
+      : Promise.resolve([]),
+    getSupportResistanceLines(mergedPattern?.symbol),
+  ]);
   formatPattern(candles, mergedPattern, snrLines, setChartData);
   return mergedPattern;
 };
@@ -366,6 +415,7 @@ const buildStrategySnapshot = ({
   outcomeModel = null,
   score = null,
   avgTargetRange = null,
+  weeklyCadence = null,
   market,
   harmonicType,
   bin,
@@ -422,6 +472,15 @@ const buildStrategySnapshot = ({
     outcomeModel,
     score,
     avgTargetRange,
+    weeklyCadence: weeklyCadence ?? {
+      totalCalendarWeeks: 0,
+      activeWeeks: 0,
+      zeroSetupWeeks: 0,
+      zeroSetupWeekRate: 0,
+      totalSetups: 0,
+      avgSetupsPerWeek: 0,
+      maxSetupsPerWeek: 0,
+    },
     name: `${market} ${harmonicType} ${bin} ${reversalType} ${sizeBucket}`,
     description: `${reversalType} ${sizeBucket.toLowerCase()} ${String(xStrictness ?? 'Loose').toLowerCase()} setups in ${timeBin} time fit with ${threeMonthTrend}/${sixMonthTrend}/${twelveMonthTrend} trend.`,
     thesis: `A ${harmonicType} cohort in the ${bin} price bin with ${reversalType} reversal context, ${sizeBucket.toLowerCase()} structure size, ${String(xStrictness ?? 'Loose').toLowerCase()} X strictness, ${timeBin} dominant time fit, and ${threeMonthTrend}/${sixMonthTrend}/${twelveMonthTrend} 3M/6M/12M trend context for ${market.toLowerCase()} setups.`,
@@ -520,6 +579,7 @@ const App = () => {
   const [selectedStrategyComparison, setSelectedStrategyComparison] = useState(null);
   const [hoveredStrategyId, setHoveredStrategyId] = useState('');
   const [strategySortState, setStrategySortState] = useState(DEFAULT_STRATEGY_SORT);
+  const [leaderChartStartIndex, setLeaderChartStartIndex] = useState(0);
   const [strategyTrades, setStrategyTrades] = useState([]);
   const [strategyTradeTotalCount, setStrategyTradeTotalCount] = useState(0);
   const [hasMoreStrategyTrades, setHasMoreStrategyTrades] = useState(false);
@@ -787,6 +847,14 @@ const App = () => {
   const strategyTableSnapshots = showingPropCurrentStrategies
     ? filteredCurrentSetupStrategySnapshots
     : filteredStrategySnapshots;
+  const rankedStrategyTableSnapshots = useMemo(
+    () => rankStrategies(strategyTableSnapshots, strategySortState),
+    [strategySortState, strategyTableSnapshots]
+  );
+
+  useEffect(() => {
+    setLeaderChartStartIndex(0);
+  }, [showingPropCurrentStrategies, strategySortState]);
   const totalStrategyUniverseCount = showingPropCurrentStrategies
     ? currentSetupStrategySnapshots.length
     : strategySnapshots.length;
@@ -926,31 +994,37 @@ const App = () => {
 
   }, [propOutcomeMode, strategyMode]);
 
-  const getCandlesForSymbol = useCallback(async (symbol) => {
+  const getCandlesForSymbol = useCallback(async (symbol, options = {}) => {
     if (!symbol) {
       return [];
     }
 
-    const cachedCandles = candleCacheRef.current.get(symbol);
+    const cacheKey = [
+      symbol,
+      options?.startDate ?? 'start',
+      options?.endDate ?? 'end',
+    ].join('|');
+
+    const cachedCandles = candleCacheRef.current.get(cacheKey);
     if (cachedCandles) {
       return cachedCandles;
     }
 
-    const pendingRequest = candleRequestCacheRef.current.get(symbol);
+    const pendingRequest = candleRequestCacheRef.current.get(cacheKey);
     if (pendingRequest) {
       return pendingRequest;
     }
 
-    const request = handleCandles(symbol)
+    const request = handleCandles(symbol, options)
       .then((candles) => {
-        candleCacheRef.current.set(symbol, candles);
+        candleCacheRef.current.set(cacheKey, candles);
         return candles;
       })
       .finally(() => {
-        candleRequestCacheRef.current.delete(symbol);
+        candleRequestCacheRef.current.delete(cacheKey);
       });
 
-    candleRequestCacheRef.current.set(symbol, request);
+    candleRequestCacheRef.current.set(cacheKey, request);
     return request;
   }, []);
 
@@ -1087,6 +1161,7 @@ const App = () => {
             outcomeModel: strategy.outcome_model ?? null,
             score: strategy.score ?? null,
             avgTargetRange: strategy.avg_target_range ?? null,
+            weeklyCadence: strategy.weeklyCadence ?? null,
             market: strategy.market,
             harmonicType: strategy.harmonic_type,
             bin: strategy.bin,
@@ -1842,6 +1917,9 @@ const App = () => {
                           sortState={strategySortState}
                           onSortChange={setStrategySortState}
                           onSelectStrategy={handleSelectStrategy}
+                          onVisibleRangeChange={({ startIndex }) => {
+                            setLeaderChartStartIndex(startIndex);
+                          }}
                           filtersContent={
                             <>
                               <div className="strategies-filter-shell strategy-library-filter-shell">
@@ -1973,6 +2051,12 @@ const App = () => {
                           }
                           bottomContent={
                             <div className="strategy-library-matches">
+                              <StrategyContractBreakdownPanel
+                                selectedStrategy={selectedStrategy}
+                                loadedTrades={strategyTrades}
+                                totalTradeCount={strategyTradeTotalCount}
+                              />
+
                               <div className="strategy-library-bottom-head">
                                 <div className="strategy-library-mode-tabs">
                                   <button
@@ -2101,6 +2185,19 @@ const App = () => {
                         <button
                           type="button"
                           className={
+                            activeStrategyWorkspaceView === STRATEGY_WORKSPACE_VIEW_FREQUENCY
+                              ? 'strategies-workspace-tab strategies-workspace-tab--active'
+                              : 'strategies-workspace-tab'
+                          }
+                          onClick={() =>
+                            setActiveStrategyWorkspaceView(STRATEGY_WORKSPACE_VIEW_FREQUENCY)
+                          }
+                        >
+                          Frequency
+                        </button>
+                        <button
+                          type="button"
+                          className={
                             activeStrategyWorkspaceView === STRATEGY_WORKSPACE_VIEW_SIMULATOR
                               ? 'strategies-workspace-tab strategies-workspace-tab--active'
                               : 'strategies-workspace-tab'
@@ -2151,13 +2248,18 @@ const App = () => {
                         ) : activeStrategyWorkspaceView === STRATEGY_WORKSPACE_VIEW_GRAPHS ? (
                           <div className="strategies-workspace-shell">
                             <StrategyInsightCharts
-                              strategies={strategyTableSnapshots}
+                              strategies={rankedStrategyTableSnapshots}
                               selectedStrategy={selectedStrategyForInsights}
                               selectedStrategyId={selectedStrategy?.id ?? ''}
                               isHydratingStrategy={isHydratingStrategy}
+                              leaderChartStartIndex={leaderChartStartIndex}
                               onSelectStrategy={handleSelectStrategyFromChart}
                               onHoverStrategy={setHoveredStrategyId}
                             />
+                          </div>
+                        ) : activeStrategyWorkspaceView === STRATEGY_WORKSPACE_VIEW_FREQUENCY ? (
+                          <div className="strategies-workspace-shell">
+                            <StrategyFrequencyPanel strategy={selectedStrategyForInsights} />
                           </div>
                         ) : (
                           <div className="strategies-workspace-shell">

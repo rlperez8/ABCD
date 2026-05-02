@@ -1,3 +1,7 @@
+function hasTimeComponent(value) {
+  return typeof value === 'string' && /[T\s]\d{2}:\d{2}/.test(value);
+}
+
 function normalizeDate(dateStr) {
   if (!dateStr) return null;
 
@@ -14,8 +18,33 @@ function normalizeDate(dateStr) {
   return null;
 }
 
+function normalizeDateTimeKey(dateStr) {
+  if (!dateStr) return null;
+
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.getTime();
+}
+
 function findIndexByDate(candles, patternDate) {
   if (!patternDate) return -1;
+
+  if (hasTimeComponent(patternDate)) {
+    const pivotTime = normalizeDateTimeKey(patternDate);
+    if (pivotTime === null) return -1;
+
+    const exactIndex = candles.findIndex((item) => {
+      const candleTime = normalizeDateTimeKey(item.date || item.candle_date);
+      return candleTime === pivotTime;
+    });
+
+    if (exactIndex >= 0) {
+      return exactIndex + 1;
+    }
+  }
 
   const pivotDate = normalizeDate(patternDate);
   if (!pivotDate) return -1;
@@ -47,8 +76,13 @@ const buildFormattedPattern = (candles, rustPattern) => {
     resolvedReversalDetect > 0 ? resolvedReversalDetect : resolvedDConfirm;
   const resolvedTarget =
     indexTarget > 0 ? indexTarget : targetAnchorIndex > 1 ? targetAnchorIndex - 1 : indexD > 2 ? indexD - 2 : -1;
-  const exit = findIndexByDate(candles, rustPattern?.trade_date);
+  const exit = findIndexByDate(candles, rustPattern?.trade_date ?? effectiveTargetDate);
   const isBearish = rustPattern?.market === 'Bearish';
+  const exitPrice =
+    rustPattern?.target_close ??
+    rustPattern?.target_open ??
+    rustPattern?.trade_current_price ??
+    rustPattern?.trade_reward_exit_price;
 
   return {
     ...rustPattern,
@@ -70,7 +104,7 @@ const buildFormattedPattern = (candles, rustPattern) => {
     stop_loss: parseFloat(rustPattern.trade_risk_exit_price),
     take_profit: parseFloat(rustPattern.trade_reward_exit_price),
     entered_price: parseFloat(rustPattern.trade_enter_price),
-    exit_price: parseFloat(rustPattern.trade_current_price),
+    exit_price: parseFloat(exitPrice),
     exit_date: exit > 0 ? exit : indexD,
   };
 };

@@ -467,8 +467,8 @@ fn scan_symbol(
                     continue;
                 };
 
-                pattern.d.length = current_index
-                    .saturating_sub(pattern.reversal_context.d_index) as i64;
+                pattern.d.length =
+                    current_index.saturating_sub(pattern.reversal_context.d_index) as i64;
                 pattern.trade.length = pattern.d.length;
 
                 let pnl = match pattern.market {
@@ -1172,6 +1172,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Refreshing prop strategy family summaries");
         db.refresh_prop_strategy_family_rollups(Some(&run_id))
             .await?;
+        println!("Refreshing prop contract week summary");
+        db.refresh_prop_contract_week_summary(Some(&run_id)).await?;
+        println!("Refreshing prop family weekly cadence");
+        db.refresh_prop_family_weekly_cadence(Some(&run_id)).await?;
         println!("Marked prop strategy family summaries ready");
     } else {
         println!("Skipped prop strategy family summaries refresh");

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DashboardCardFrame from '../dashboard/DashboardCardFrame';
 
 const formatPercent = (value) =>
@@ -125,6 +125,30 @@ const SORT_COLUMNS = {
     isNumeric: true,
     defaultDirection: 'desc',
   },
+  activeWeeks: {
+    label: 'Act Wks',
+    getValue: (strategy) => strategy?.weeklyCadence?.activeWeeks ?? Number.NEGATIVE_INFINITY,
+    isNumeric: true,
+    defaultDirection: 'desc',
+  },
+  avgSetupsPerWeek: {
+    label: 'Avg/Wk',
+    getValue: (strategy) => strategy?.weeklyCadence?.avgSetupsPerWeek ?? Number.NEGATIVE_INFINITY,
+    isNumeric: true,
+    defaultDirection: 'desc',
+  },
+  maxSetupsPerWeek: {
+    label: 'Max/Wk',
+    getValue: (strategy) => strategy?.weeklyCadence?.maxSetupsPerWeek ?? Number.NEGATIVE_INFINITY,
+    isNumeric: true,
+    defaultDirection: 'desc',
+  },
+  zeroWeekRate: {
+    label: 'Zero Wk',
+    getValue: (strategy) => strategy?.weeklyCadence?.zeroSetupWeekRate ?? Number.POSITIVE_INFINITY,
+    isNumeric: true,
+    defaultDirection: 'asc',
+  },
 };
 
 const compareValues = (leftValue, rightValue, isNumeric, direction) => {
@@ -137,6 +161,31 @@ const compareValues = (leftValue, rightValue, isNumeric, direction) => {
   return String(leftValue).localeCompare(String(rightValue)) * modifier;
 };
 
+export const rankStrategies = (strategies = [], sortState = { key: 'score', direction: 'desc' }) => {
+  const sortMeta = SORT_COLUMNS[sortState.key] ?? SORT_COLUMNS.expectancy;
+
+  return strategies
+    .map((strategy, originalIndex) => ({ strategy, originalIndex }))
+    .sort((left, right) => {
+      const primaryComparison = compareValues(
+        sortMeta.getValue(left.strategy, left.originalIndex),
+        sortMeta.getValue(right.strategy, right.originalIndex),
+        sortMeta.isNumeric,
+        sortState.direction
+      );
+
+      if (primaryComparison !== 0) {
+        return primaryComparison;
+      }
+
+      return (
+        (right.strategy?.comparison?.summary?.closed_count ?? 0) -
+        (left.strategy?.comparison?.summary?.closed_count ?? 0)
+      );
+    })
+    .map((entry) => entry.strategy);
+};
+
 const StrategyLeaderboardCard = ({
   strategies = [],
   selectedStrategyId = '',
@@ -145,10 +194,12 @@ const StrategyLeaderboardCard = ({
   sortState: controlledSortState = null,
   onSortChange,
   onSelectStrategy,
+  onVisibleRangeChange,
   filtersContent = null,
   bottomContent = null,
 }) => {
   const rowRefs = useRef(new Map());
+  const tableShellRef = useRef(null);
   const [localSortState, setLocalSortState] = useState({
     key: 'score',
     direction: 'desc',
@@ -156,29 +207,28 @@ const StrategyLeaderboardCard = ({
   const sortState = controlledSortState ?? localSortState;
 
   const rankedStrategies = useMemo(() => {
-    const sortMeta = SORT_COLUMNS[sortState.key] ?? SORT_COLUMNS.expectancy;
-
-    return strategies
-      .map((strategy, originalIndex) => ({ strategy, originalIndex }))
-      .sort((left, right) => {
-        const primaryComparison = compareValues(
-          sortMeta.getValue(left.strategy, left.originalIndex),
-          sortMeta.getValue(right.strategy, right.originalIndex),
-          sortMeta.isNumeric,
-          sortState.direction
-        );
-
-        if (primaryComparison !== 0) {
-          return primaryComparison;
-        }
-
-        return (
-          (right.strategy?.comparison?.summary?.closed_count ?? 0) -
-          (left.strategy?.comparison?.summary?.closed_count ?? 0)
-        );
-      })
-      .map((entry) => entry.strategy);
+    return rankStrategies(strategies, sortState);
   }, [sortState, strategies]);
+
+  const reportVisibleRange = useCallback(() => {
+    const shell = tableShellRef.current;
+    if (!shell || !rankedStrategies.length) {
+      onVisibleRangeChange?.({ startIndex: 0, endIndex: 0 });
+      return;
+    }
+
+    const firstRow = shell.querySelector('tbody tr');
+    const rowHeight = firstRow?.getBoundingClientRect().height || 28;
+    const startIndex = Math.max(0, Math.floor(shell.scrollTop / rowHeight));
+    const visibleCount = Math.max(1, Math.ceil(shell.clientHeight / rowHeight));
+    const endIndex = Math.min(rankedStrategies.length - 1, startIndex + visibleCount - 1);
+
+    onVisibleRangeChange?.({ startIndex, endIndex });
+  }, [onVisibleRangeChange, rankedStrategies.length]);
+
+  useEffect(() => {
+    reportVisibleRange();
+  }, [reportVisibleRange, sortState]);
 
   useEffect(() => {
     if (!selectedStrategyId) {
@@ -275,7 +325,11 @@ const StrategyLeaderboardCard = ({
             ) : null}
 
             {rankedStrategies.length ? (
-              <div className="strategy-library-table-shell">
+              <div
+                className="strategy-library-table-shell"
+                ref={tableShellRef}
+                onScroll={reportVisibleRange}
+              >
                 <table className="strategy-library-table">
                   <thead>
                     <tr>
@@ -298,6 +352,10 @@ const StrategyLeaderboardCard = ({
                         'winRate',
                         'avgReturn',
                         'closed',
+                        'activeWeeks',
+                        'avgSetupsPerWeek',
+                        'maxSetupsPerWeek',
+                        'zeroWeekRate',
                       ].map(renderHeader)}
                     </tr>
                   </thead>
@@ -367,6 +425,13 @@ const StrategyLeaderboardCard = ({
                           </td>
                           <td>{formatPercent(summary?.avg_return)}</td>
                           <td>{summary?.closed_count ?? 0}/{summary?.total_count ?? 0}</td>
+                          <td>
+                            {strategy.weeklyCadence?.activeWeeks ?? 0}/
+                            {strategy.weeklyCadence?.totalCalendarWeeks ?? 0}
+                          </td>
+                          <td>{(strategy.weeklyCadence?.avgSetupsPerWeek ?? 0).toFixed(2)}</td>
+                          <td>{strategy.weeklyCadence?.maxSetupsPerWeek ?? 0}</td>
+                          <td>{formatPercent((strategy.weeklyCadence?.zeroSetupWeekRate ?? 0) * 100)}</td>
                         </tr>
                       );
                     })}

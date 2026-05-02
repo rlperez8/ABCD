@@ -272,6 +272,15 @@ const parseStrategyCandidateRecord = (strategy) => ({
   avg_target_range: parseOptionalFloat(strategy?.avg_target_range) ?? 0,
   score: parseOptionalFloat(strategy?.score) ?? 0,
   x_strictness: strategy?.x_strictness ?? null,
+  weeklyCadence: {
+    totalCalendarWeeks: parseOptionalInt(strategy?.total_calendar_weeks) ?? 0,
+    activeWeeks: parseOptionalInt(strategy?.active_weeks) ?? 0,
+    zeroSetupWeeks: parseOptionalInt(strategy?.zero_setup_weeks) ?? 0,
+    zeroSetupWeekRate: parseOptionalFloat(strategy?.zero_setup_week_rate) ?? 0,
+    totalSetups: parseOptionalInt(strategy?.total_setups) ?? 0,
+    avgSetupsPerWeek: parseOptionalFloat(strategy?.avg_setups_per_week) ?? 0,
+    maxSetupsPerWeek: parseOptionalInt(strategy?.max_setups_per_week) ?? 0,
+  },
 });
 
 const parseSetupComparisonResponse = (comparison) => {
@@ -328,13 +337,17 @@ const parseSetupComparisonResponse = (comparison) => {
   };
 };
 
-export const getCandles = async (symbol) => {
+export const getCandles = async (symbol, { startDate = null, endDate = null } = {}) => {
   if (!symbol) {
     return [];
   }
 
   try {
-    const candles = await postJson('/candles', { symbol });
+    const candles = await postJson('/candles', {
+      symbol,
+      start_date: startDate,
+      end_date: endDate,
+    });
     return Array.isArray(candles) ? candles.map(parseCandleRecord).reverse() : [];
   } catch (error) {
     console.error(error);

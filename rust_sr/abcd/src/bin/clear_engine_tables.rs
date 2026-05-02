@@ -5,11 +5,13 @@ use sqlx::mysql::{MySqlPool, MySqlPoolOptions};
 use sqlx::MySqlConnection;
 use tokio::time::sleep;
 
-const ENGINE_TABLES: [&str; 4] = [
+const ENGINE_TABLES: [&str; 6] = [
     "pattern_setups",
     "pattern_outcomes_prop",
     "prop_strategy_family_yearly",
     "prop_strategy_family_summary",
+    "prop_strategy_contract_week_summary",
+    "prop_strategy_family_weekly_cadence",
 ];
 
 const CACHE_STATES: [&str; 1] = ["prop_strategy_family_rollups"];

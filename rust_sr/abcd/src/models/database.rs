@@ -690,6 +690,33 @@ fn prop_family_included_dimensions(spec: &PropFamilySpec) -> String {
     }
 }
 
+fn concrete_prop_family_key_expr(table_alias: &str) -> String {
+    let x_strictness = x_strictness_expr(
+        &format!("{table_alias}.x_bars_left"),
+        &format!("{table_alias}.x_length"),
+    );
+
+    format!(
+        "LEFT(MD5(CONCAT_WS('|',
+            'prop-family-v3',
+            'concrete_route',
+            LOWER({alias}.outcome_model),
+            LOWER({alias}.market),
+            LOWER({alias}.harmonic_type),
+            LOWER({alias}.bin),
+            LOWER(COALESCE(NULLIF({alias}.reversal_type, ''), 'None')),
+            LOWER({alias}.size_bucket),
+            LOWER({alias}.time_bin),
+            LOWER({x_strictness}),
+            LOWER({alias}.three_month_trend),
+            LOWER({alias}.six_month_trend),
+            LOWER({alias}.twelve_month_trend)
+        )), 16)",
+        alias = table_alias,
+        x_strictness = x_strictness,
+    )
+}
+
 fn swing_strategy_id_expr(
     harmonic_type_expr: &str,
     bin_expr: &str,
@@ -4236,6 +4263,90 @@ impl Database {
         Ok(())
     }
 
+    pub async fn ensure_prop_strategy_contract_week_summary_table(
+        &self,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS prop_strategy_contract_week_summary (
+                family_key CHAR(16) NOT NULL,
+                family_name VARCHAR(64) NOT NULL,
+                family_level INT NOT NULL,
+                included_dimensions VARCHAR(255) NOT NULL,
+                outcome_model VARCHAR(24) NOT NULL,
+                market VARCHAR(16) NOT NULL,
+                harmonic_type VARCHAR(24) NOT NULL,
+                bin VARCHAR(16) NOT NULL,
+                reversal_type VARCHAR(32) NOT NULL,
+                size_bucket VARCHAR(16) NOT NULL,
+                time_bin VARCHAR(16) NOT NULL,
+                x_strictness VARCHAR(16) NOT NULL,
+                three_month_trend VARCHAR(16) NOT NULL,
+                six_month_trend VARCHAR(16) NOT NULL,
+                twelve_month_trend VARCHAR(16) NOT NULL,
+                symbol VARCHAR(32) NOT NULL,
+                contract_week_index BIGINT NOT NULL,
+                total_count BIGINT NOT NULL DEFAULT 0,
+                closed_count BIGINT NOT NULL DEFAULT 0,
+                open_count BIGINT NOT NULL DEFAULT 0,
+                win_count BIGINT NOT NULL DEFAULT 0,
+                loss_count BIGINT NOT NULL DEFAULT 0,
+                expectancy DOUBLE NOT NULL DEFAULT 0,
+                avg_return DOUBLE NOT NULL DEFAULT 0,
+                win_rate DOUBLE NOT NULL DEFAULT 0,
+                PRIMARY KEY (family_key, symbol, contract_week_index),
+                INDEX idx_prop_contract_week_family (family_key, contract_week_index),
+                INDEX idx_prop_contract_week_symbol (symbol, contract_week_index)
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn ensure_prop_strategy_family_weekly_cadence_table(
+        &self,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS prop_strategy_family_weekly_cadence (
+                family_key CHAR(16) NOT NULL PRIMARY KEY,
+                family_name VARCHAR(64) NOT NULL,
+                family_level INT NOT NULL,
+                included_dimensions VARCHAR(255) NOT NULL,
+                outcome_model VARCHAR(24) NOT NULL,
+                market VARCHAR(16) NOT NULL,
+                harmonic_type VARCHAR(24) NOT NULL,
+                bin VARCHAR(16) NOT NULL,
+                reversal_type VARCHAR(32) NOT NULL,
+                size_bucket VARCHAR(16) NOT NULL,
+                time_bin VARCHAR(16) NOT NULL,
+                x_strictness VARCHAR(16) NOT NULL,
+                three_month_trend VARCHAR(16) NOT NULL,
+                six_month_trend VARCHAR(16) NOT NULL,
+                twelve_month_trend VARCHAR(16) NOT NULL,
+                total_calendar_weeks BIGINT NOT NULL DEFAULT 0,
+                active_weeks BIGINT NOT NULL DEFAULT 0,
+                zero_setup_weeks BIGINT NOT NULL DEFAULT 0,
+                zero_setup_week_rate DOUBLE NOT NULL DEFAULT 0,
+                total_setups BIGINT NOT NULL DEFAULT 0,
+                avg_setups_per_week DOUBLE NOT NULL DEFAULT 0,
+                max_setups_per_week BIGINT NOT NULL DEFAULT 0,
+                first_week_start DATE NULL,
+                last_week_start DATE NULL,
+                INDEX idx_prop_family_cadence_rate (zero_setup_week_rate, active_weeks),
+                INDEX idx_prop_family_cadence_activity (active_weeks, avg_setups_per_week)
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn ensure_dashboard_cache_state_table(&self) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
@@ -4292,6 +4403,10 @@ impl Database {
     pub async fn clear_generated_outputs(&self) -> Result<(), sqlx::Error> {
         self.ensure_prop_strategy_family_yearly_table().await?;
         self.ensure_prop_strategy_family_summary_table().await?;
+        self.ensure_prop_strategy_contract_week_summary_table()
+            .await?;
+        self.ensure_prop_strategy_family_weekly_cadence_table()
+            .await?;
         self.ensure_dashboard_cache_state_table().await?;
         self.ensure_pattern_mode_tables().await?;
 
@@ -4334,6 +4449,14 @@ impl Database {
             .await?;
 
         sqlx::query("TRUNCATE TABLE prop_strategy_family_summary")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query("TRUNCATE TABLE prop_strategy_contract_week_summary")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query("TRUNCATE TABLE prop_strategy_family_weekly_cadence")
             .execute(&self.pool)
             .await?;
 
@@ -6129,7 +6252,9 @@ impl Database {
             "refresh_prop_family_source",
             Some(rows_written),
             phase_started.elapsed(),
-            Some("temporary detailed aggregate built from pattern_outcomes_prop in id-range chunks"),
+            Some(
+                "temporary detailed aggregate built from pattern_outcomes_prop in id-range chunks",
+            ),
         )
         .await?;
 
@@ -6277,8 +6402,7 @@ impl Database {
         .await?;
 
         let phase_started = Instant::now();
-        let summary_sql =
-            r#"
+        let summary_sql = r#"
             INSERT INTO prop_strategy_family_summary (
                 family_key,
                 family_name,
@@ -6479,6 +6603,310 @@ impl Database {
             None,
             total_started.elapsed(),
             Some("total family rollup refresh"),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn refresh_prop_contract_week_summary(
+        &self,
+        run_id: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        let total_started = Instant::now();
+        self.ensure_prop_strategy_contract_week_summary_table()
+            .await?;
+
+        sqlx::query("TRUNCATE TABLE prop_strategy_contract_week_summary")
+            .execute(&self.pool)
+            .await?;
+
+        let phase_started = Instant::now();
+        let family_key_expr = concrete_prop_family_key_expr("p");
+        let sql = format!(
+            r#"
+            INSERT INTO prop_strategy_contract_week_summary (
+                family_key,
+                family_name,
+                family_level,
+                included_dimensions,
+                outcome_model,
+                market,
+                harmonic_type,
+                bin,
+                reversal_type,
+                size_bucket,
+                time_bin,
+                x_strictness,
+                three_month_trend,
+                six_month_trend,
+                twelve_month_trend,
+                symbol,
+                contract_week_index,
+                total_count,
+                closed_count,
+                open_count,
+                win_count,
+                loss_count,
+                expectancy,
+                avg_return,
+                win_rate
+            )
+            SELECT
+                s.family_key,
+                s.family_name,
+                s.family_level,
+                s.included_dimensions,
+                s.outcome_model,
+                s.market,
+                s.harmonic_type,
+                s.bin,
+                s.reversal_type,
+                s.size_bucket,
+                s.time_bin,
+                s.x_strictness,
+                s.three_month_trend,
+                s.six_month_trend,
+                s.twelve_month_trend,
+                p.symbol,
+                CAST(COALESCE(p.contract_week_index, 0) AS SIGNED) AS contract_week_index,
+                CAST(COUNT(*) AS SIGNED) AS total_count,
+                CAST(SUM(CASE WHEN p.prop_result IN (1, 2) THEN 1 ELSE 0 END) AS SIGNED) AS closed_count,
+                CAST(SUM(CASE WHEN p.prop_result NOT IN (1, 2) THEN 1 ELSE 0 END) AS SIGNED) AS open_count,
+                CAST(SUM(CASE WHEN p.prop_result = 1 THEN 1 ELSE 0 END) AS SIGNED) AS win_count,
+                CAST(SUM(CASE WHEN p.prop_result = 2 THEN 1 ELSE 0 END) AS SIGNED) AS loss_count,
+                COALESCE(AVG(
+                    CASE
+                        WHEN p.prop_result IN (1, 2) AND p.target_close_vs_open_pct IS NOT NULL THEN
+                            CASE
+                                WHEN p.market = 'Bearish' THEN -CAST(p.target_close_vs_open_pct AS DOUBLE)
+                                ELSE CAST(p.target_close_vs_open_pct AS DOUBLE)
+                            END
+                        ELSE NULL
+                    END
+                ), 0.0) AS expectancy,
+                COALESCE(AVG(
+                    CASE
+                        WHEN p.target_close_vs_open_pct IS NOT NULL THEN
+                            CASE
+                                WHEN p.market = 'Bearish' THEN -CAST(p.target_close_vs_open_pct AS DOUBLE)
+                                ELSE CAST(p.target_close_vs_open_pct AS DOUBLE)
+                            END
+                        ELSE NULL
+                    END
+                ), 0.0) AS avg_return,
+                COALESCE(
+                    CAST(SUM(CASE WHEN p.prop_result = 1 THEN 1 ELSE 0 END) AS DOUBLE)
+                    / NULLIF(CAST(SUM(CASE WHEN p.prop_result IN (1, 2) THEN 1 ELSE 0 END) AS DOUBLE), 0.0),
+                    0.0
+                ) AS win_rate
+            FROM pattern_outcomes_prop p
+            INNER JOIN prop_strategy_family_summary s
+                ON s.family_key = {family_key_expr}
+            WHERE p.contract_week_index IS NOT NULL
+              AND p.harmonic_type IS NOT NULL
+              AND p.bin IS NOT NULL
+              AND p.size_bucket IS NOT NULL
+              AND p.time_bin IS NOT NULL
+            GROUP BY
+                s.family_key,
+                s.family_name,
+                s.family_level,
+                s.included_dimensions,
+                s.outcome_model,
+                s.market,
+                s.harmonic_type,
+                s.bin,
+                s.reversal_type,
+                s.size_bucket,
+                s.time_bin,
+                s.x_strictness,
+                s.three_month_trend,
+                s.six_month_trend,
+                s.twelve_month_trend,
+                p.symbol,
+                p.contract_week_index
+            "#,
+            family_key_expr = family_key_expr,
+        );
+        let rows = sqlx::query(&sql).execute(&self.pool).await?.rows_affected() as i64;
+
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_contract_week_summary",
+            Some(rows),
+            phase_started.elapsed(),
+            Some("contract week rows aggregated by family and futures contract"),
+        )
+        .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_contract_week_summary_total",
+            None,
+            total_started.elapsed(),
+            Some("total contract week summary refresh"),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn refresh_prop_family_weekly_cadence(
+        &self,
+        run_id: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        let total_started = Instant::now();
+        self.ensure_prop_strategy_family_weekly_cadence_table()
+            .await?;
+
+        sqlx::query("TRUNCATE TABLE prop_strategy_family_weekly_cadence")
+            .execute(&self.pool)
+            .await?;
+
+        let mut conn = self.pool.acquire().await?;
+        let family_key_expr = concrete_prop_family_key_expr("p");
+
+        let phase_started = Instant::now();
+        sqlx::query("DROP TEMPORARY TABLE IF EXISTS prop_family_weekly_counts")
+            .execute(&mut *conn)
+            .await?;
+        let weekly_counts_sql = format!(
+            r#"
+            CREATE TEMPORARY TABLE prop_family_weekly_counts AS
+            SELECT
+                source.family_key,
+                source.week_start,
+                CAST(COUNT(*) AS SIGNED) AS setup_count
+            FROM (
+                SELECT
+                    {family_key_expr} AS family_key,
+                    DATE_SUB(DATE(p.d_date), INTERVAL WEEKDAY(p.d_date) DAY) AS week_start
+                FROM pattern_outcomes_prop p
+                WHERE p.d_date IS NOT NULL
+                  AND p.harmonic_type IS NOT NULL
+                  AND p.bin IS NOT NULL
+                  AND p.size_bucket IS NOT NULL
+                  AND p.time_bin IS NOT NULL
+            ) source
+            GROUP BY source.family_key, source.week_start
+            "#,
+            family_key_expr = family_key_expr,
+        );
+        sqlx::query(&weekly_counts_sql).execute(&mut *conn).await?;
+        sqlx::query(
+            "CREATE INDEX idx_prop_family_weekly_counts_family ON prop_family_weekly_counts (family_key, week_start)",
+        )
+        .execute(&mut *conn)
+        .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_family_weekly_counts",
+            None,
+            phase_started.elapsed(),
+            Some("temporary weekly family counts built from D dates"),
+        )
+        .await?;
+
+        let phase_started = Instant::now();
+        let insert_sql = r#"
+            INSERT INTO prop_strategy_family_weekly_cadence (
+                family_key,
+                family_name,
+                family_level,
+                included_dimensions,
+                outcome_model,
+                market,
+                harmonic_type,
+                bin,
+                reversal_type,
+                size_bucket,
+                time_bin,
+                x_strictness,
+                three_month_trend,
+                six_month_trend,
+                twelve_month_trend,
+                total_calendar_weeks,
+                active_weeks,
+                zero_setup_weeks,
+                zero_setup_week_rate,
+                total_setups,
+                avg_setups_per_week,
+                max_setups_per_week,
+                first_week_start,
+                last_week_start
+            )
+            SELECT
+                s.family_key,
+                s.family_name,
+                s.family_level,
+                s.included_dimensions,
+                s.outcome_model,
+                s.market,
+                s.harmonic_type,
+                s.bin,
+                s.reversal_type,
+                s.size_bucket,
+                s.time_bin,
+                s.x_strictness,
+                s.three_month_trend,
+                s.six_month_trend,
+                s.twelve_month_trend,
+                stats.total_calendar_weeks,
+                stats.active_weeks,
+                GREATEST(stats.total_calendar_weeks - stats.active_weeks, 0) AS zero_setup_weeks,
+                COALESCE(
+                    CAST(GREATEST(stats.total_calendar_weeks - stats.active_weeks, 0) AS DOUBLE)
+                    / NULLIF(CAST(stats.total_calendar_weeks AS DOUBLE), 0.0),
+                    0.0
+                ) AS zero_setup_week_rate,
+                stats.total_setups,
+                COALESCE(
+                    CAST(stats.total_setups AS DOUBLE)
+                    / NULLIF(CAST(stats.total_calendar_weeks AS DOUBLE), 0.0),
+                    0.0
+                ) AS avg_setups_per_week,
+                stats.max_setups_per_week,
+                stats.first_week_start,
+                stats.last_week_start
+            FROM prop_strategy_family_summary s
+            INNER JOIN (
+                SELECT
+                    family_key,
+                    CAST(TIMESTAMPDIFF(WEEK, MIN(week_start), MAX(week_start)) + 1 AS SIGNED) AS total_calendar_weeks,
+                    CAST(COUNT(*) AS SIGNED) AS active_weeks,
+                    CAST(COALESCE(SUM(setup_count), 0) AS SIGNED) AS total_setups,
+                    CAST(COALESCE(MAX(setup_count), 0) AS SIGNED) AS max_setups_per_week,
+                    MIN(week_start) AS first_week_start,
+                    MAX(week_start) AS last_week_start
+                FROM prop_family_weekly_counts
+                GROUP BY family_key
+            ) stats
+                ON stats.family_key = s.family_key
+            "#;
+        let rows = sqlx::query(insert_sql)
+            .execute(&mut *conn)
+            .await?
+            .rows_affected() as i64;
+
+        sqlx::query("DROP TEMPORARY TABLE IF EXISTS prop_family_weekly_counts")
+            .execute(&mut *conn)
+            .await?;
+        drop(conn);
+
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_family_weekly_cadence",
+            Some(rows),
+            phase_started.elapsed(),
+            Some("family weekly cadence rows inserted"),
+        )
+        .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_prop_family_weekly_cadence_total",
+            None,
+            total_started.elapsed(),
+            Some("total weekly cadence refresh"),
         )
         .await?;
 

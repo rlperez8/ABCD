@@ -142,16 +142,23 @@ const buildStrategyTooltipLines = (strategy, metricX, metricY) => {
   ];
 };
 
-function StrategyRankedChart({ strategies, selectedStrategyId, onSelectStrategy, onHoverStrategy }) {
+function StrategyRankedChart({
+  strategies,
+  selectedStrategyId,
+  onSelectStrategy,
+  onHoverStrategy,
+  leaderChartStartIndex = 0,
+}) {
   const [metric, setMetric] = useState('expectancy');
 
   const rankedStrategies = useMemo(() => {
     const filtered = strategies.filter((strategy) => getSummary(strategy));
+    const startIndex = Math.max(0, Math.min(leaderChartStartIndex, Math.max(0, filtered.length - 1)));
 
-    return [...filtered]
-      .sort((left, right) => getChartValue(right, metric) - getChartValue(left, metric))
-      .slice(0, 12);
-  }, [metric, strategies]);
+    return filtered.slice(startIndex, startIndex + 12);
+  }, [leaderChartStartIndex, strategies]);
+
+  const rankEnd = Math.min(strategies.length, leaderChartStartIndex + rankedStrategies.length);
 
   const chartData = useMemo(
     () => ({
@@ -250,7 +257,7 @@ function StrategyRankedChart({ strategies, selectedStrategyId, onSelectStrategy,
   return (
     <DashboardCardFrame
       title="Leaders"
-      subtitle="Top ranked cohorts"
+      subtitle={`Family table ranks ${leaderChartStartIndex + 1}-${rankEnd} of ${strategies.length}`}
       controls={<MetricToggleGroup activeMetric={metric} onChange={setMetric} metrics={METRICS} />}
       bodyClassName="strategy-chart-body"
     >
@@ -530,34 +537,70 @@ export default function StrategyInsightCharts({
   selectedStrategy = null,
   selectedStrategyId = '',
   isHydratingStrategy = false,
+  leaderChartStartIndex = 0,
   onSelectStrategy,
   onHoverStrategy,
 }) {
+  const [graphPage, setGraphPage] = useState('filtered');
+
   if (!strategies.length) {
     return null;
   }
 
   return (
-    <div className="strategy-chart-grid">
-      <div className="q">
-        <StrategyRankedChart
-          strategies={strategies}
-          selectedStrategyId={selectedStrategyId}
-          onSelectStrategy={onSelectStrategy}
-          onHoverStrategy={onHoverStrategy}
-        />
+    <div className="strategy-graphs-shell">
+      <div className="strategy-graphs-tabs">
+        <button
+          type="button"
+          className={
+            graphPage === 'filtered'
+              ? 'strategy-graphs-tab strategy-graphs-tab--active'
+              : 'strategy-graphs-tab'
+          }
+          onClick={() => setGraphPage('filtered')}
+        >
+          Filtered Strategies
+        </button>
+        <button
+          type="button"
+          className={
+            graphPage === 'selected'
+              ? 'strategy-graphs-tab strategy-graphs-tab--active'
+              : 'strategy-graphs-tab'
+          }
+          onClick={() => setGraphPage('selected')}
+        >
+          Selected Strategy
+        </button>
       </div>
-      <div className="q">
-        <StrategyYearlyChart strategy={selectedStrategy} isLoading={isHydratingStrategy} />
-      </div>
-      <div className="q">
-        <StrategyCohortMap
-          strategies={strategies}
-          selectedStrategyId={selectedStrategyId}
-          onSelectStrategy={onSelectStrategy}
-          onHoverStrategy={onHoverStrategy}
-        />
-      </div>
+
+      {graphPage === 'filtered' ? (
+        <div className="strategy-chart-grid">
+          <div className="q">
+            <StrategyRankedChart
+              strategies={strategies}
+              selectedStrategyId={selectedStrategyId}
+              leaderChartStartIndex={leaderChartStartIndex}
+              onSelectStrategy={onSelectStrategy}
+              onHoverStrategy={onHoverStrategy}
+            />
+          </div>
+          <div className="q">
+            <StrategyCohortMap
+              strategies={strategies}
+              selectedStrategyId={selectedStrategyId}
+              onSelectStrategy={onSelectStrategy}
+              onHoverStrategy={onHoverStrategy}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="strategy-chart-grid">
+          <div className="q">
+            <StrategyYearlyChart strategy={selectedStrategy} isLoading={isHydratingStrategy} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

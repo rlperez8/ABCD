@@ -11,6 +11,9 @@ const COLUMN_LABELS = {
   trade_enter_price: 'Enter Price',
 };
 
+const getColumnClassName = (columnKey) =>
+  `pattern-library-column--${columnKey.replace(/_/g, '-')}`;
+
 const HARMONIC_ACCURACY_FIELDS = [
   { label: 'Bat', key: 'bat_accuracy' },
   { label: 'Butterfly', key: 'butterfly_accuracy' },
@@ -79,65 +82,18 @@ const getColumnValue = (row, columnKey) => {
   return row[columnKey] ?? row[columnKey.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())];
 };
 
-const renderCellContent = (row, columnKey, isSelected) => {
+const renderCellContent = (row, columnKey) => {
   const content = getColumnValue(row, columnKey);
 
-  if (columnKey === 'trade_result' && content === 1) {
-    return <div className="first_column_box">Won</div>;
-  }
-
-  if (columnKey === 'trade_result' && content === 2) {
-    return <div className="lost_column_box">Lost</div>;
-  }
-
-  if (columnKey === 'trade_result') {
-    return <div className="open_column_box">Open</div>;
-  }
-
-  if (columnKey === 'symbol') {
-    return (
-      <div className="table_symbol_stack">
-        <div className="table_symbol_cell">{content}</div>
-        {isSelected ? <div className="table_row_indicator">In Chart</div> : null}
-      </div>
-    );
-  }
-
-  if (columnKey === 'market') {
-    const marketLabel = typeof content === 'string' ? content : 'Unknown';
-    const marketClassName =
-      marketLabel === 'Bullish'
-        ? 'table_market_badge table_market_badge--bullish'
-        : marketLabel === 'Bearish'
-        ? 'table_market_badge table_market_badge--bearish'
-        : 'table_market_badge';
-
-    return <div className={marketClassName}>{marketLabel}</div>;
-  }
-
-  if (columnKey === 'closest_pattern' || columnKey === 'size_bucket') {
-    return <div className="pattern_match_cell">{content ?? 'Unknown'}</div>;
-  }
-
-  if (columnKey === 'closest_accuracy') {
-    return (
-      <div className="table_accuracy_cell">
-        {Number.isFinite(content) ? `${content.toFixed(1)}%` : 'N/A'}
-      </div>
-    );
-  }
-
-  if (columnKey === 'd_date') {
-    return <div className="table_meta_cell">{content}</div>;
-  }
-
-  if (columnKey === 'trade_enter_price') {
-    return (
-      <div className="table_price_cell">
-        {typeof content === 'number' ? content.toFixed(2) : content}
-      </div>
-    );
-  }
+  if (columnKey === 'trade_result' && content === 1) return 'Won';
+  if (columnKey === 'trade_result' && content === 2) return 'Lost';
+  if (columnKey === 'trade_result') return 'Open';
+  if (columnKey === 'symbol') return content;
+  if (columnKey === 'market') return typeof content === 'string' ? content : 'Unknown';
+  if (columnKey === 'closest_pattern' || columnKey === 'size_bucket') return content ?? 'Unknown';
+  if (columnKey === 'closest_accuracy') return Number.isFinite(content) ? `${content.toFixed(1)}%` : 'N/A';
+  if (columnKey === 'd_date') return content ?? '';
+  if (columnKey === 'trade_enter_price') return typeof content === 'number' ? content.toFixed(2) : content;
 
   return typeof content === 'number' ? content.toFixed(2) : content;
 };
@@ -275,7 +231,7 @@ const PatternTable = ({
   return (
     <div
       className={[
-        'table_container',
+        'pattern-library-table-panel',
         density === 'compact' ? 'table_container--compact' : '',
         variant === 'retro' ? 'table_container--retro' : '',
       ]
@@ -291,22 +247,25 @@ const PatternTable = ({
       }
     >
       <div
-        className={['table_status_bar', density === 'compact' ? 'table_status_bar--compact' : '']
+        className={[
+          'pattern-library-status',
+          density === 'compact' ? 'pattern-library-status--compact' : '',
+        ]
           .filter(Boolean)
           .join(' ')}
       >
-        <div className="table_status_primary">
-          <span className="table_status_kicker">{statusLabel}</span>
-          <span className="table_status_value">
+        <div className="pattern-library-status__primary">
+          <span className="pattern-library-status__label">{statusLabel}</span>
+          <span className="pattern-library-status__count">
             {(hasResolvedTotalCount ? totalPatternCount : patterns.length).toLocaleString()}
           </span>
         </div>
-        <div className="table_status_secondary">
+        <div className="pattern-library-status__secondary">
           <span
             className={[
-              'table_status_hint',
-              isLoadingMorePatterns ? 'table_status_hint--loading' : '',
-              !isLoadingMorePatterns && !hasMorePatterns ? 'table_status_hint--complete' : '',
+              'pattern-library-status__hint',
+              isLoadingMorePatterns ? 'pattern-library-status__hint--loading' : '',
+              !isLoadingMorePatterns && !hasMorePatterns ? 'pattern-library-status__hint--complete' : '',
             ]
               .filter(Boolean)
               .join(' ')}
@@ -324,17 +283,26 @@ const PatternTable = ({
 
       <div
         ref={tableBodyRef}
-        className="table_body_shell table_body_shell--native"
+        className="strategy-library-table-shell pattern-library-table-shell"
         tabIndex={0}
         onKeyDown={handleTableKeyDown}
         onScroll={handleBodyScroll}
       >
         {patterns?.length > 0 ? (
-          <table className="pattern-table">
+          <table className="strategy-library-table pattern-table pattern-table--library">
             <thead>
               <tr>
                 {columns.map((column) => (
-                  <th className="ticker_column" key={column}>
+                  <th
+                    className={[
+                      'ticker_column',
+                      'pattern-library-header-cell',
+                      getColumnClassName(column),
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    key={column}
+                  >
                     {COLUMN_LABELS[column]}
                   </th>
                 ))}
@@ -356,10 +324,9 @@ const PatternTable = ({
                       }
                     }}
                     className={[
-                      'pattern-table-row',
-                      rowIndex % 2 === 0 ? 'pattern-table-row--even' : 'pattern-table-row--odd',
-                      isHovered ? 'pattern-table-row--hovered' : '',
-                      isSelected ? 'pattern-table-row--selected' : '',
+                      'strategy-library-row',
+                      isHovered ? 'strategy-library-row--hovered' : '',
+                      isSelected ? 'strategy-library-row--selected' : '',
                     ]
                       .filter(Boolean)
                       .join(' ')}
@@ -371,14 +338,18 @@ const PatternTable = ({
                       <td
                         key={column}
                         className={[
-                          'pattern-table-cell',
-                          columnIndex === 0 ? 'pattern-table-cell--first' : '',
-                          columnIndex === columns.length - 1 ? 'pattern-table-cell--last' : '',
+                          'pattern-library-cell',
+                          getColumnClassName(column),
+                          column === 'closest_accuracy' || column === 'trade_enter_price'
+                            ? 'pattern-library-cell--numeric'
+                            : '',
+                          columnIndex === 0 ? 'pattern-library-cell--first' : '',
+                          columnIndex === columns.length - 1 ? 'pattern-library-cell--last' : '',
                         ]
                           .filter(Boolean)
                           .join(' ')}
                       >
-                        {renderCellContent(pattern, column, isSelected)}
+                        {renderCellContent(pattern, column)}
                       </td>
                     ))}
                   </tr>
@@ -387,7 +358,7 @@ const PatternTable = ({
             </tbody>
           </table>
         ) : (
-          <div className="table_body_empty">{emptyMessage}</div>
+          <div className="strategy-empty pattern-library-empty">{emptyMessage}</div>
         )}
       </div>
     </div>

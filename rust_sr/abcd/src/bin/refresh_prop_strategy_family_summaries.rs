@@ -34,6 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Family refresh run id: {run_id}");
     db.refresh_prop_strategy_family_rollups(Some(&run_id))
         .await?;
+    db.refresh_prop_contract_week_summary(Some(&run_id)).await?;
+    db.refresh_prop_family_weekly_cadence(Some(&run_id)).await?;
     println!("Prop strategy family summaries refreshed");
 
     Ok(())

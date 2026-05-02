@@ -3177,10 +3177,149 @@ canvas {
 .strategy-library-matches-table .rp-section,
 .strategy-library-matches-table .margin-,
 .strategy-library-matches-table .table_body_main,
-.strategy-library-matches-table .table_container {
+.strategy-library-matches-table .table_container,
+.strategy-library-matches-table .pattern-library-table-panel {
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
+}
+
+.pattern-library-table-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pattern-library-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 30px;
+  padding: 0 2px;
+  color: #d7d7d7;
+}
+
+.pattern-library-status--compact {
+  min-height: 28px;
+}
+
+.pattern-library-status__primary,
+.pattern-library-status__secondary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.pattern-library-status__label,
+.pattern-library-status__hint {
+  color: #d7d7d7;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pattern-library-status__count {
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pattern-library-status__hint {
+  color: #8f8f8f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pattern-library-table-shell {
+  min-height: 0;
+  outline: none;
+}
+
+.pattern-table--library {
+  width: max-content;
+  min-width: 100%;
+}
+
+.pattern-table--library .ticker_column {
+  padding: 7px 8px;
+  color: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.pattern-table--library th,
+.pattern-table--library td {
+  box-sizing: border-box;
+}
+
+.pattern-table--library .pattern-library-column--trade-result {
+  width: 62px;
+  min-width: 62px;
+  max-width: 62px;
+}
+
+.pattern-table--library .pattern-library-column--symbol {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+}
+
+.pattern-table--library .pattern-library-column--market {
+  width: 74px;
+  min-width: 74px;
+  max-width: 74px;
+}
+
+.pattern-table--library .pattern-library-column--size-bucket {
+  width: 84px;
+  min-width: 84px;
+  max-width: 84px;
+}
+
+.pattern-table--library .pattern-library-column--closest-pattern {
+  width: 108px;
+  min-width: 108px;
+  max-width: 108px;
+}
+
+.pattern-table--library .pattern-library-column--closest-accuracy {
+  width: 76px;
+  min-width: 76px;
+  max-width: 76px;
+}
+
+.pattern-table--library .pattern-library-column--d-date {
+  width: 98px;
+  min-width: 98px;
+  max-width: 98px;
+}
+
+.pattern-table--library .pattern-library-column--trade-enter-price {
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+}
+
+.pattern-table--library .pattern-library-cell--numeric,
+.pattern-table--library th:nth-last-child(-n + 2) {
+  text-align: right;
+}
+
+.pattern-library-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
 }
 
 .strategy-library-split {
@@ -3303,7 +3442,15 @@ canvas {
 .strategy-library-table th:nth-child(17),
 .strategy-library-table td:nth-child(17),
 .strategy-library-table th:nth-child(18),
-.strategy-library-table td:nth-child(18) {
+.strategy-library-table td:nth-child(18),
+.strategy-library-table th:nth-child(19),
+.strategy-library-table td:nth-child(19),
+.strategy-library-table th:nth-child(20),
+.strategy-library-table td:nth-child(20),
+.strategy-library-table th:nth-child(21),
+.strategy-library-table td:nth-child(21),
+.strategy-library-table th:nth-child(22),
+.strategy-library-table td:nth-child(22) {
   text-align: right;
 }
 
@@ -5582,9 +5729,222 @@ button:active,
   accent-color: #d9d9d9;
 }
 
-.strategies-station-shell .strategy-library-table-shell,
-.strategies-station-shell .strategy-library-table {
+.strategy-frequency-shell {
+  width: min(100%, 880px);
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+
+.strategy-frequency-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(160, 160, 160, 0.22);
+}
+
+.strategy-frequency-kicker {
+  color: #a8a8a8;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.strategy-frequency-title {
+  margin: 4px 0 0;
+  color: #f3f3f3;
+  font-size: 1.28rem;
+  line-height: 1.2;
+}
+
+.strategy-frequency-rating {
+  min-width: 108px;
+  padding: 8px 10px;
+  border: 1px solid #848484;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.strategy-frequency-rating--steady {
+  background: rgba(67, 209, 122, 0.16);
+  border-color: rgba(102, 224, 153, 0.72);
+}
+
+.strategy-frequency-rating--intermittent {
+  background: rgba(223, 194, 92, 0.15);
+  border-color: rgba(230, 210, 127, 0.68);
+}
+
+.strategy-frequency-rating--sparse {
+  background: rgba(229, 115, 115, 0.13);
+  border-color: rgba(238, 150, 150, 0.62);
+}
+
+.strategy-frequency-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.strategy-frequency-metric {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #5c5c5c;
+  background: linear-gradient(180deg, #181818 0%, #101010 100%);
+}
+
+.strategy-frequency-metric__label {
+  color: #bcbcbc;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.strategy-frequency-metric__value {
+  margin-top: 8px;
+  color: #ffffff;
+  font-size: 1.36rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.strategy-frequency-metric__helper {
+  margin-top: 6px;
+  color: #a7a7a7;
+  font-size: 0.84rem;
+}
+
+.strategy-frequency-narrative {
+  display: grid;
+  gap: 8px;
+  color: #dedede;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.strategy-frequency-narrative p {
+  margin: 0;
+}
+
+.strategy-graphs-shell {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.strategy-graphs-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.strategy-graphs-tab {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #666666;
+  background: linear-gradient(180deg, #242424 0%, #121212 100%);
+  color: #d8d8d8;
   font-family: var(--ui-font);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.strategy-graphs-tab--active {
+  border-color: #d4d4d4 #454545 #454545 #d4d4d4;
+  color: #ffffff;
+}
+
+.strategy-contract-breakdown {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+}
+
+.strategy-contract-breakdown__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #626262;
+  background: linear-gradient(180deg, #232323 0%, #111111 100%);
+  color: #eeeeee;
+  font-family: var(--ui-font);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.strategy-contract-breakdown__body {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+}
+
+.strategy-contract-breakdown__meta {
+  color: #bcbcbc;
+  font-size: 0.82rem;
+}
+
+.strategy-contract-breakdown__table-shell {
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid #202020;
+  background: #0d0d0d;
+}
+
+.strategy-contract-breakdown__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.strategy-contract-breakdown__table th,
+.strategy-contract-breakdown__table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(70, 70, 70, 0.55);
+  color: #dddddd;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.strategy-contract-breakdown__table th {
+  position: sticky;
+  top: 0;
+  background: #242424;
+  color: #f2f2f2;
+  font-size: 0.74rem;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.strategy-contract-breakdown__table th:not(:first-child),
+.strategy-contract-breakdown__table td:not(:first-child) {
+  text-align: right;
+}
+
+.strategies-station-shell .strategy-library-table-shell,
+.strategies-station-shell .strategy-library-table,
+.strategies-station-shell .pattern-library-table-panel {
+  font-family: var(--ui-font);
+}
+
+.strategies-station-shell .pattern-library-status__label,
+.strategies-station-shell .pattern-library-status__hint {
+  color: #bbbbbb;
+}
+
+.strategies-station-shell .pattern-library-status__count {
+  color: #f3f3f3;
 }
 
 .strategies-station-shell .strategy-library-table-shell {

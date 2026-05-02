@@ -300,6 +300,13 @@ struct StrategyCandidateSummary {
     avg_loss: f64,
     avg_target_range: Option<f64>,
     score: Option<f64>,
+    total_calendar_weeks: i64,
+    active_weeks: i64,
+    zero_setup_weeks: i64,
+    zero_setup_week_rate: f64,
+    total_setups: i64,
+    avg_setups_per_week: f64,
+    max_setups_per_week: i64,
 }
 
 #[derive(Clone, sqlx::FromRow)]
@@ -322,8 +329,10 @@ struct PropStrategyFamilyFilter {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct Params {
+pub struct CandleParams {
     symbol: String,
+    start_date: Option<String>,
+    end_date: Option<String>,
 }
 
 fn accuracy_column_for_harmonic_type(harmonic_type: &str) -> Option<&'static str> {
@@ -424,7 +433,25 @@ fn prop_outcome_model_label(mode: PropOutcomeMode) -> &'static str {
     }
 }
 
-fn prop_family_sort_column(sort_by: Option<&str>, alias: &str) -> String {
+fn prop_family_sort_column(
+    sort_by: Option<&str>,
+    alias: &str,
+    cadence_alias: Option<&str>,
+) -> String {
+    if let Some(cadence_alias) = cadence_alias {
+        let cadence_column = match sort_by {
+            Some("activeWeeks") => Some("active_weeks"),
+            Some("zeroWeekRate") => Some("zero_setup_week_rate"),
+            Some("avgSetupsPerWeek") => Some("avg_setups_per_week"),
+            Some("maxSetupsPerWeek") => Some("max_setups_per_week"),
+            _ => None,
+        };
+
+        if let Some(column) = cadence_column {
+            return format!("{cadence_alias}.{column}");
+        }
+    }
+
     let column = match sort_by {
         Some("route") => "outcome_model",
         Some("family") => "family_name",
@@ -449,6 +476,54 @@ fn prop_family_sort_column(sort_by: Option<&str>, alias: &str) -> String {
     };
 
     format!("{alias}.{column}")
+}
+
+async fn table_exists(pool: &MySqlPool, table_name: &str) -> Result<bool, sqlx::Error> {
+    let count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+        "#,
+    )
+    .bind(table_name)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(count > 0)
+}
+
+fn cadence_select_fields(has_cadence: bool) -> &'static str {
+    if has_cadence {
+        r#"
+            CAST(COALESCE(c.total_calendar_weeks, 0) AS SIGNED) AS total_calendar_weeks,
+            CAST(COALESCE(c.active_weeks, 0) AS SIGNED) AS active_weeks,
+            CAST(COALESCE(c.zero_setup_weeks, 0) AS SIGNED) AS zero_setup_weeks,
+            CAST(COALESCE(c.zero_setup_week_rate, 0.0) AS DOUBLE) AS zero_setup_week_rate,
+            CAST(COALESCE(c.total_setups, 0) AS SIGNED) AS total_setups,
+            CAST(COALESCE(c.avg_setups_per_week, 0.0) AS DOUBLE) AS avg_setups_per_week,
+            CAST(COALESCE(c.max_setups_per_week, 0) AS SIGNED) AS max_setups_per_week
+        "#
+    } else {
+        r#"
+            CAST(0 AS SIGNED) AS total_calendar_weeks,
+            CAST(0 AS SIGNED) AS active_weeks,
+            CAST(0 AS SIGNED) AS zero_setup_weeks,
+            CAST(0.0 AS DOUBLE) AS zero_setup_week_rate,
+            CAST(0 AS SIGNED) AS total_setups,
+            CAST(0.0 AS DOUBLE) AS avg_setups_per_week,
+            CAST(0 AS SIGNED) AS max_setups_per_week
+        "#
+    }
+}
+
+fn cadence_join_clause(has_cadence: bool) -> &'static str {
+    if has_cadence {
+        "LEFT JOIN prop_strategy_family_weekly_cadence c ON c.family_key = s.family_key"
+    } else {
+        ""
+    }
 }
 
 fn prop_family_sort_direction(sort_direction: Option<&str>) -> &'static str {
@@ -860,31 +935,30 @@ async fn fetch_strategy_trades(
     pool: web::Data<MySqlPool>,
     params: web::Json<StrategyTradesParams>,
 ) -> impl Responder {
-        let Some(prop_strategy_id) = params
-            .prop_strategy_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
-            return HttpResponse::BadRequest().body("Missing prop strategy id");
-        };
+    let Some(prop_strategy_id) = params
+        .prop_strategy_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Missing prop strategy id");
+    };
 
-        let limit = params.limit.unwrap_or(50).clamp(1, 500);
-        let offset = params.offset.unwrap_or(0).max(0);
-        let include_count = params.include_count.unwrap_or(false);
-        let family = match fetch_prop_strategy_family_filter(pool.get_ref(), prop_strategy_id).await
-        {
-            Ok(Some(family)) => family,
-            Ok(None) => return HttpResponse::NotFound().body("Prop strategy family not found"),
-            Err(error) => {
-                eprintln!("Prop strategy family lookup DB error: {:?}", error);
-                return HttpResponse::InternalServerError().finish();
-            }
-        };
+    let limit = params.limit.unwrap_or(50).clamp(1, 500);
+    let offset = params.offset.unwrap_or(0).max(0);
+    let include_count = params.include_count.unwrap_or(false);
+    let family = match fetch_prop_strategy_family_filter(pool.get_ref(), prop_strategy_id).await {
+        Ok(Some(family)) => family,
+        Ok(None) => return HttpResponse::NotFound().body("Prop strategy family not found"),
+        Err(error) => {
+            eprintln!("Prop strategy family lookup DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
 
-        let route_x_strictness_expr = x_strictness_expr("p.x_bars_left", "p.x_length");
-        let family_where_clause = format!(
-            r#"
+    let route_x_strictness_expr = x_strictness_expr("p.x_bars_left", "p.x_length");
+    let family_where_clause = format!(
+        r#"
             WHERE p.outcome_model = ?
               AND p.market = ?
               AND p.harmonic_type = ?
@@ -897,20 +971,20 @@ async fn fetch_strategy_trades(
               AND p.six_month_trend = ?
               AND p.twelve_month_trend = ?
             "#,
-            route_x_strictness_expr = route_x_strictness_expr,
-        );
-        let count_sql = format!(
-            r#"
+        route_x_strictness_expr = route_x_strictness_expr,
+    );
+    let count_sql = format!(
+        r#"
             SELECT COUNT(*)
             FROM pattern_outcomes_prop p
             {family_where_clause}
         "#
-        );
+    );
 
-        let route_time_accuracy_expr = bin_midpoint_expr("p.time_bin");
-        let route_score_projection = route_harmonic_score_projection("p.harmonic_type", "p.bin");
-        let data_sql = format!(
-            r#"
+    let route_time_accuracy_expr = bin_midpoint_expr("p.time_bin");
+    let route_score_projection = route_harmonic_score_projection("p.harmonic_type", "p.bin");
+    let data_sql = format!(
+        r#"
             SELECT
                 p.symbol,
                 p.d_date,
@@ -952,42 +1026,14 @@ async fn fetch_strategy_trades(
                      p.trade_enter_price ASC
             LIMIT ? OFFSET ?
             "#,
-            route_time_accuracy_expr = route_time_accuracy_expr,
-            route_score_projection = route_score_projection,
-            route_x_strictness_expr_for_select = x_strictness_expr("p.x_bars_left", "p.x_length"),
-            family_where_clause = family_where_clause,
-        );
+        route_time_accuracy_expr = route_time_accuracy_expr,
+        route_score_projection = route_score_projection,
+        route_x_strictness_expr_for_select = x_strictness_expr("p.x_bars_left", "p.x_length"),
+        family_where_clause = family_where_clause,
+    );
 
-        let total_count = if include_count {
-            match sqlx::query_scalar::<_, i64>(&count_sql)
-                .bind(&family.outcome_model)
-                .bind(&family.market)
-                .bind(&family.harmonic_type)
-                .bind(&family.bin)
-                .bind(&family.reversal_type)
-                .bind(&family.size_bucket)
-                .bind(&family.time_bin)
-                .bind(family.x_strictness.as_deref().unwrap_or("Loose"))
-                .bind(&family.three_month_trend)
-                .bind(&family.six_month_trend)
-                .bind(&family.twelve_month_trend)
-                .fetch_one(pool.get_ref())
-                .await
-            {
-                Ok(count) => count,
-                Err(error) => {
-                    eprintln!("Prop strategy trades count DB error: {:?}", error);
-                    return HttpResponse::InternalServerError().finish();
-                }
-            }
-        } else {
-            -1
-        };
-
-        let fetch_limit = if include_count { limit } else { limit + 1 };
-
-        let mut patterns = match sqlx::query_as::<_, PatternSummary>(&data_sql)
-            .bind(prop_strategy_id)
+    let total_count = if include_count {
+        match sqlx::query_scalar::<_, i64>(&count_sql)
             .bind(&family.outcome_model)
             .bind(&family.market)
             .bind(&family.harmonic_type)
@@ -999,32 +1045,60 @@ async fn fetch_strategy_trades(
             .bind(&family.three_month_trend)
             .bind(&family.six_month_trend)
             .bind(&family.twelve_month_trend)
-            .bind(fetch_limit)
-            .bind(offset)
-            .fetch_all(pool.get_ref())
+            .fetch_one(pool.get_ref())
             .await
         {
-            Ok(rows) => rows,
+            Ok(count) => count,
             Err(error) => {
-                eprintln!("Prop strategy trades data DB error: {:?}", error);
+                eprintln!("Prop strategy trades count DB error: {:?}", error);
                 return HttpResponse::InternalServerError().finish();
             }
-        };
+        }
+    } else {
+        -1
+    };
 
-        let has_more = if include_count {
-            offset + limit < total_count
-        } else if patterns.len() as i64 > limit {
-            patterns.truncate(limit as usize);
-            true
-        } else {
-            false
-        };
+    let fetch_limit = if include_count { limit } else { limit + 1 };
 
-        return HttpResponse::Ok().json(PatternSummariesResponse {
-            patterns,
-            total_count,
-            has_more,
-        });
+    let mut patterns = match sqlx::query_as::<_, PatternSummary>(&data_sql)
+        .bind(prop_strategy_id)
+        .bind(&family.outcome_model)
+        .bind(&family.market)
+        .bind(&family.harmonic_type)
+        .bind(&family.bin)
+        .bind(&family.reversal_type)
+        .bind(&family.size_bucket)
+        .bind(&family.time_bin)
+        .bind(family.x_strictness.as_deref().unwrap_or("Loose"))
+        .bind(&family.three_month_trend)
+        .bind(&family.six_month_trend)
+        .bind(&family.twelve_month_trend)
+        .bind(fetch_limit)
+        .bind(offset)
+        .fetch_all(pool.get_ref())
+        .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("Prop strategy trades data DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let has_more = if include_count {
+        offset + limit < total_count
+    } else if patterns.len() as i64 > limit {
+        patterns.truncate(limit as usize);
+        true
+    } else {
+        false
+    };
+
+    return HttpResponse::Ok().json(PatternSummariesResponse {
+        patterns,
+        total_count,
+        has_more,
+    });
 }
 
 #[route("/current-open-setups", method = "GET", method = "POST")]
@@ -1340,7 +1414,13 @@ async fn fetch_current_setup_strategies(
         summary_filters.push_str(" AND s.score > ?");
     }
     append_prop_family_option_filters(&mut summary_filters, "s", &params);
-    let sort_column = prop_family_sort_column(params.sort_by.as_deref(), "s");
+    let has_cadence = table_exists(pool.get_ref(), "prop_strategy_family_weekly_cadence")
+        .await
+        .unwrap_or(false);
+    let cadence_select = cadence_select_fields(has_cadence);
+    let cadence_join = cadence_join_clause(has_cadence);
+    let sort_column =
+        prop_family_sort_column(params.sort_by.as_deref(), "s", has_cadence.then_some("c"));
     let sort_direction = prop_family_sort_direction(params.sort_direction.as_deref());
 
     let sql = format!(
@@ -1376,8 +1456,10 @@ async fn fetch_current_setup_strategies(
             CAST(s.avg_win AS DOUBLE) AS avg_win,
             CAST(s.avg_loss AS DOUBLE) AS avg_loss,
             CAST(s.avg_target_range AS DOUBLE) AS avg_target_range,
-            CAST(s.score AS DOUBLE) AS score
+            CAST(s.score AS DOUBLE) AS score,
+            {cadence_select}
         FROM prop_strategy_family_summary s
+        {cadence_join}
         WHERE s.outcome_model = ?
           {summary_filters}
         ORDER BY
@@ -1388,6 +1470,8 @@ async fn fetch_current_setup_strategies(
         LIMIT ?
         "#,
         summary_filters = summary_filters,
+        cadence_select = cadence_select,
+        cadence_join = cadence_join,
         sort_column = sort_column,
         sort_direction = sort_direction,
     );
@@ -2170,13 +2254,15 @@ async fn fetch_setup_decision_response(
         }
     };
 
-    let Some((summary, yearly_performance)) = (match try_fetch_setup_comparison_from_prop_strategy_rollup(pool, params).await {
-        Ok(result) => result,
-        Err(error) => {
-            eprintln!("Setup comparison family query error: {:?}", error);
-            return HttpResponse::InternalServerError().finish();
-        }
-    }) else {
+    let Some((summary, yearly_performance)) =
+        (match try_fetch_setup_comparison_from_prop_strategy_rollup(pool, params).await {
+            Ok(result) => result,
+            Err(error) => {
+                eprintln!("Setup comparison family query error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        })
+    else {
         return HttpResponse::NotFound().body("Strategy family not found in cache");
     };
 
@@ -2283,12 +2369,7 @@ async fn fetch_strategy_candidates(
     let min_closed_trades = params.min_closed_trades.unwrap_or(0).max(0);
     let limit = params.limit.unwrap_or(250).clamp(1, 1_000);
 
-    match is_rollup_cache_ready(
-        pool.get_ref(),
-        "prop_strategy_family_rollups",
-    )
-    .await
-    {
+    match is_rollup_cache_ready(pool.get_ref(), "prop_strategy_family_rollups").await {
         Ok(true) => {}
         Ok(false) => return HttpResponse::Ok().json(Vec::<StrategyCandidateSummary>::new()),
         Err(error) => {
@@ -2297,24 +2378,30 @@ async fn fetch_strategy_candidates(
         }
     }
 
-        let mut summary_filters = String::new();
-        if params.min_expectancy.is_some() {
-            summary_filters.push_str(" AND s.expectancy > ?");
-        }
-        if params.max_down_years.is_some() {
-            summary_filters.push_str(" AND s.down_years <= ?");
-        }
-        if params.min_worst_year_expectancy.is_some() {
-            summary_filters.push_str(" AND s.worst_year_expectancy > ?");
-        }
-        if params.min_score.is_some() {
-            summary_filters.push_str(" AND s.score > ?");
-        }
-        append_prop_family_candidate_option_filters(&mut summary_filters, "s", &params);
-        let sort_column = prop_family_sort_column(params.sort_by.as_deref(), "s");
-        let sort_direction = prop_family_sort_direction(params.sort_direction.as_deref());
-        let sql = format!(
-            r#"
+    let mut summary_filters = String::new();
+    if params.min_expectancy.is_some() {
+        summary_filters.push_str(" AND s.expectancy > ?");
+    }
+    if params.max_down_years.is_some() {
+        summary_filters.push_str(" AND s.down_years <= ?");
+    }
+    if params.min_worst_year_expectancy.is_some() {
+        summary_filters.push_str(" AND s.worst_year_expectancy > ?");
+    }
+    if params.min_score.is_some() {
+        summary_filters.push_str(" AND s.score > ?");
+    }
+    append_prop_family_candidate_option_filters(&mut summary_filters, "s", &params);
+    let has_cadence = table_exists(pool.get_ref(), "prop_strategy_family_weekly_cadence")
+        .await
+        .unwrap_or(false);
+    let cadence_select = cadence_select_fields(has_cadence);
+    let cadence_join = cadence_join_clause(has_cadence);
+    let sort_column =
+        prop_family_sort_column(params.sort_by.as_deref(), "s", has_cadence.then_some("c"));
+    let sort_direction = prop_family_sort_direction(params.sort_direction.as_deref());
+    let sql = format!(
+        r#"
         SELECT
             s.family_key AS prop_strategy_id,
             s.family_key,
@@ -2346,73 +2433,88 @@ async fn fetch_strategy_candidates(
             CAST(s.avg_win AS DOUBLE) AS avg_win,
             CAST(s.avg_loss AS DOUBLE) AS avg_loss,
             CAST(s.avg_target_range AS DOUBLE) AS avg_target_range,
-            CAST(s.score AS DOUBLE) AS score
+            CAST(s.score AS DOUBLE) AS score,
+            {cadence_select}
         FROM prop_strategy_family_summary s
+        {cadence_join}
         WHERE s.closed_count >= ?
           AND s.outcome_model = ?
           {summary_filters}
         ORDER BY {sort_column} {sort_direction}, s.score DESC, s.expectancy DESC, s.closed_count DESC
         LIMIT ?
         "#,
-            summary_filters = summary_filters,
-            sort_column = sort_column,
-            sort_direction = sort_direction,
-        );
+        summary_filters = summary_filters,
+        cadence_select = cadence_select,
+        cadence_join = cadence_join,
+        sort_column = sort_column,
+        sort_direction = sort_direction,
+    );
 
-        let mut query = sqlx::query_as::<_, StrategyCandidateSummary>(&sql)
-            .bind(min_closed_trades)
-            .bind(prop_outcome_model_label(prop_outcome_mode));
+    let mut query = sqlx::query_as::<_, StrategyCandidateSummary>(&sql)
+        .bind(min_closed_trades)
+        .bind(prop_outcome_model_label(prop_outcome_mode));
 
-        if let Some(min_expectancy) = params.min_expectancy {
-            query = query.bind(min_expectancy);
+    if let Some(min_expectancy) = params.min_expectancy {
+        query = query.bind(min_expectancy);
+    }
+    if let Some(max_down_years) = params.max_down_years {
+        query = query.bind(max_down_years);
+    }
+    if let Some(min_worst_year_expectancy) = params.min_worst_year_expectancy {
+        query = query.bind(min_worst_year_expectancy);
+    }
+    if let Some(min_score) = params.min_score {
+        query = query.bind(min_score);
+    }
+    for values in [
+        params.strategy_markets.as_ref(),
+        params.strategy_harmonic_types.as_ref(),
+        params.strategy_bins.as_ref(),
+        params.strategy_reversal_types.as_ref(),
+        params.strategy_size_buckets.as_ref(),
+        params.strategy_time_bins.as_ref(),
+        params.strategy_x_strictness.as_ref(),
+        params.strategy_three_month_trends.as_ref(),
+        params.strategy_six_month_trends.as_ref(),
+        params.strategy_twelve_month_trends.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        for value in values {
+            query = query.bind(value);
         }
-        if let Some(max_down_years) = params.max_down_years {
-            query = query.bind(max_down_years);
-        }
-        if let Some(min_worst_year_expectancy) = params.min_worst_year_expectancy {
-            query = query.bind(min_worst_year_expectancy);
-        }
-        if let Some(min_score) = params.min_score {
-            query = query.bind(min_score);
-        }
-        for values in [
-            params.strategy_markets.as_ref(),
-            params.strategy_harmonic_types.as_ref(),
-            params.strategy_bins.as_ref(),
-            params.strategy_reversal_types.as_ref(),
-            params.strategy_size_buckets.as_ref(),
-            params.strategy_time_bins.as_ref(),
-            params.strategy_x_strictness.as_ref(),
-            params.strategy_three_month_trends.as_ref(),
-            params.strategy_six_month_trends.as_ref(),
-            params.strategy_twelve_month_trends.as_ref(),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            for value in values {
-                query = query.bind(value);
-            }
-        }
+    }
 
-        return match query.bind(limit).fetch_all(pool.get_ref()).await {
-            Ok(rows) => HttpResponse::Ok().json(rows),
-            Err(error) if is_missing_table_error(&error) => {
-                HttpResponse::Ok().json(Vec::<StrategyCandidateSummary>::new())
-            }
-            Err(error) => {
-                eprintln!("Strategy candidate DB error: {:?}", error);
-                HttpResponse::InternalServerError().finish()
-            }
-        };
+    return match query.bind(limit).fetch_all(pool.get_ref()).await {
+        Ok(rows) => HttpResponse::Ok().json(rows),
+        Err(error) if is_missing_table_error(&error) => {
+            HttpResponse::Ok().json(Vec::<StrategyCandidateSummary>::new())
+        }
+        Err(error) => {
+            eprintln!("Strategy candidate DB error: {:?}", error);
+            HttpResponse::InternalServerError().finish()
+        }
+    };
 }
 
 #[route("/candles", method = "GET", method = "POST")]
-async fn fetch_candles(pool: web::Data<MySqlPool>, params: web::Json<Params>) -> impl Responder {
+async fn fetch_candles(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<CandleParams>,
+) -> impl Responder {
     // println!("🔔 Handler called: fetch_candles");
     // println!("{:?}", params);
 
-    let candles: Vec<Candle> = match sqlx::query_as::<_, Candle>(
+    let mut date_filters = String::new();
+    if params.start_date.is_some() {
+        date_filters.push_str(" AND date >= ?");
+    }
+    if params.end_date.is_some() {
+        date_filters.push_str(" AND date <= ?");
+    }
+
+    let sql = format!(
         r#"
         SELECT symbol, date, open, high, low, close, volume, three_month, six_month, twelve_month
         FROM (
@@ -2443,13 +2545,21 @@ async fn fetch_candles(pool: web::Data<MySqlPool>, params: web::Json<Params>) ->
             FROM futures_contract_1m_candles
         ) all_candles
         WHERE symbol = ?
+          {date_filters}
         ORDER BY date
         "#,
-    )
-    .bind(params.symbol.clone())
-    .fetch_all(pool.get_ref())
-    .await
-    {
+        date_filters = date_filters
+    );
+
+    let mut query = sqlx::query_as::<_, Candle>(&sql).bind(params.symbol.clone());
+    if let Some(start_date) = params.start_date.as_deref() {
+        query = query.bind(start_date);
+    }
+    if let Some(end_date) = params.end_date.as_deref() {
+        query = query.bind(end_date);
+    }
+
+    let candles: Vec<Candle> = match query.fetch_all(pool.get_ref()).await {
         Ok(c) => {
             println!("✅ Successfully fetched {} candles", c.len());
             c
