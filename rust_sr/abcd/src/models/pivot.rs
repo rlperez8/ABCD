@@ -1,12 +1,12 @@
 use crate::models::candle::Candle;
 use crate::models::pivot_type::PivotType;
-use chrono::NaiveDate;
+use chrono::NaiveDateTime;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Pivot {
     pub type_: PivotType,
-    pub date: NaiveDate,
+    pub date: NaiveDateTime,
     pub open: f64,
     pub high: f64,
     pub low: f64,

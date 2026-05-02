@@ -95,6 +95,33 @@ struct SymbolScanResult {
     bullish_count: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum CandleSource {
+    EquityCandles,
+    FuturesContracts,
+}
+
+impl CandleSource {
+    fn from_env() -> Self {
+        match env::var("ABCD_CANDLE_SOURCE")
+            .unwrap_or_else(|_| "candles".to_string())
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "futures_contracts" | "futures" | "contracts" => Self::FuturesContracts,
+            _ => Self::EquityCandles,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::EquityCandles => "candles",
+            Self::FuturesContracts => "futures_contracts",
+        }
+    }
+}
+
 fn engine_run_id() -> String {
     let started_at_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -125,6 +152,20 @@ fn apply_closed_trade_reversal(pattern: &mut PatternXABCD, candles: &[Candle], c
     pattern.trade.evening_star = reversal_signals.evening_star;
     pattern.trade.three_white_soldiers = reversal_signals.three_white_soldiers;
     pattern.trade.three_black_crows = reversal_signals.three_black_crows;
+}
+
+fn contract_age_fields(candles: &[Candle], d_candle: &Candle) -> (Option<i64>, Option<i64>) {
+    let Some(first_candle) = candles.first() else {
+        return (None, None);
+    };
+    let days_from_start = d_candle
+        .date
+        .date()
+        .signed_duration_since(first_candle.date.date())
+        .num_days()
+        .max(0);
+    let week_index = (days_from_start / 7) + 1;
+    (Some(week_index), Some(days_from_start))
 }
 
 fn scan_symbol(
@@ -367,6 +408,11 @@ fn scan_symbol(
                 let mut finalized_c = pattern.c;
                 finalized_c.length = prev1_index.saturating_sub(pattern.c_index) as i64;
 
+                let entry_index = current_index + 1;
+                let entry_candle = candles.get(entry_index);
+                let (contract_week_index, contract_days_from_start) =
+                    contract_age_fields(&candles, prev1);
+
                 let trade = Trade::new(
                     market,
                     &pattern.x,
@@ -374,6 +420,7 @@ fn scan_symbol(
                     &pattern.b,
                     &finalized_c,
                     prev1,
+                    entry_candle,
                     support_level,
                     ReversalType::None,
                 );
@@ -390,11 +437,14 @@ fn scan_symbol(
                     d: new_d,
                     market,
                     trade,
+                    entry_index: entry_candle.map(|_| entry_index),
                     reversal_context: ReversalPatternContext {
                         d_index: prev1_index,
                     },
                     d_confirm_date: current.date,
                     target_candle: None,
+                    contract_week_index,
+                    contract_days_from_start,
                     three_month: prev1.three_month,
                     six_month: prev1.six_month,
                     twelve_month: prev1.twelve_month,
@@ -407,11 +457,18 @@ fn scan_symbol(
 
         for pattern in &mut pattern_xabcd {
             if pattern.trade.open {
-                if pattern.target_candle.is_none() && current_index + 1 < candles.len() {
-                    pattern.target_candle = Some(TargetCandle::from_candle(current, &pattern.d));
+                let Some(entry_index) = pattern.entry_index else {
+                    continue;
+                };
+                if current_index < entry_index {
+                    continue;
                 }
+                let Some(entry_candle) = candles.get(entry_index) else {
+                    continue;
+                };
 
-                pattern.d.length += 1;
+                pattern.d.length = current_index
+                    .saturating_sub(pattern.reversal_context.d_index) as i64;
                 pattern.trade.length = pattern.d.length;
 
                 let pnl = match pattern.market {
@@ -434,6 +491,8 @@ fn scan_symbol(
                             pattern.trade.current_price = pattern.trade.reward_exit_price;
                             pattern.trade.result = 1;
                             pattern.trade.length = pattern.d.length;
+                            pattern.target_candle =
+                                Some(TargetCandle::from_candle(current, entry_candle));
                             apply_closed_trade_reversal(pattern, &candles, current_index);
                         }
 
@@ -447,6 +506,8 @@ fn scan_symbol(
                             pattern.trade.current_price = pattern.trade.risk_exit_price;
                             pattern.trade.result = 2;
                             pattern.trade.length = pattern.d.length;
+                            pattern.target_candle =
+                                Some(TargetCandle::from_candle(current, entry_candle));
                             apply_closed_trade_reversal(pattern, &candles, current_index);
                         }
                     }
@@ -460,6 +521,8 @@ fn scan_symbol(
                             pattern.trade.current_price = pattern.trade.reward_exit_price;
                             pattern.trade.result = 1;
                             pattern.trade.length = pattern.d.length;
+                            pattern.target_candle =
+                                Some(TargetCandle::from_candle(current, entry_candle));
                             apply_closed_trade_reversal(pattern, &candles, current_index);
                         }
 
@@ -473,6 +536,8 @@ fn scan_symbol(
                             pattern.trade.current_price = pattern.trade.risk_exit_price;
                             pattern.trade.result = 2;
                             pattern.trade.length = pattern.d.length;
+                            pattern.target_candle =
+                                Some(TargetCandle::from_candle(current, entry_candle));
                             apply_closed_trade_reversal(pattern, &candles, current_index);
                         }
                     }
@@ -535,14 +600,16 @@ fn spawn_symbol_scan(
     tasks: &mut JoinSet<Result<SymbolScanResult, String>>,
     pool: MySqlPool,
     symbol: String,
+    candle_source: CandleSource,
     max_x_bars_left: Option<i64>,
 ) {
     tasks.spawn(async move {
         let db = Database { pool };
-        let candles = db
-            .get_stored_candles(&symbol)
-            .await
-            .map_err(|error| format!("{}: failed to load candles: {}", symbol, error))?;
+        let candles = match candle_source {
+            CandleSource::EquityCandles => db.get_stored_candles(&symbol).await,
+            CandleSource::FuturesContracts => db.get_stored_futures_contract_candles(&symbol).await,
+        }
+        .map_err(|error| format!("{}: failed to load candles: {}", symbol, error))?;
         let candle_count = candles.len();
 
         let symbol_for_error = symbol.clone();
@@ -636,17 +703,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let reset_outputs = env_flag("ABCD_RESET_OUTPUTS");
     let use_build_tables = env_flag("ABCD_USE_BUILD_TABLES");
     let fast_rebuild = use_build_tables || reset_outputs || env_flag("ABCD_FAST_REBUILD");
-    let write_pattern_setups = true;
+    let write_pattern_setups = env_flag_or("ABCD_WRITE_PATTERN_SETUPS", true);
     let write_harmonic_scores = env_flag("ABCD_WRITE_HARMONIC_SCORES");
     let write_prop_outcomes = true;
     let target_ready_outcomes_only = env_flag_or("ABCD_TARGET_READY_OUTCOMES_ONLY", true)
         && !env_flag("ABCD_WRITE_OPEN_PROP_OUTCOMES");
+    let candle_source = CandleSource::from_env();
+    let futures_root = env::var("ABCD_FUTURES_ROOT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     let output_write_options = OutputWriteOptions {
         write_pattern_setups,
         write_harmonic_scores,
         write_swing_outcomes: false,
         write_prop_outcomes,
     };
+    let refresh_prop_family_summaries =
+        env_flag_or("ABCD_REFRESH_PROP_FAMILY_SUMMARIES", write_prop_outcomes)
+            && !env_flag("ABCD_SKIP_PROP_FAMILY_SUMMARIES");
     let scan_concurrency = cmp::max(1, env_usize("ABCD_SCAN_CONCURRENCY", 4)?);
     let write_batch_size = cmp::max(1, env_usize("ABCD_WRITE_BATCH_SIZE", 1000)?);
     let symbol_offset = env_usize("ABCD_SYMBOL_OFFSET", 0)?;
@@ -682,11 +757,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     let phase_started = Instant::now();
-    db.ensure_candle_trend_columns().await?;
+    if matches!(candle_source, CandleSource::EquityCandles) {
+        db.ensure_candle_trend_columns().await?;
+    }
     db.ensure_pattern_mode_tables().await?;
-    db.ensure_xabcd_trend_columns().await?;
-    db.ensure_xabcd_length_columns().await?;
-    db.ensure_xabcd_x_bars_left_column().await?;
+    db.drop_legacy_xabcd_patterns_table().await?;
     db.record_engine_phase_timing(
         &run_id,
         None,
@@ -766,9 +841,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let phase_started = Instant::now();
-    let mut symbols = db
-        .get_symbols_above_average_volume(minimum_average_volume)
-        .await?;
+    let mut symbols = match candle_source {
+        CandleSource::EquityCandles => {
+            db.get_symbols_above_average_volume(minimum_average_volume)
+                .await?
+        }
+        CandleSource::FuturesContracts => {
+            db.get_futures_contract_symbols(futures_root.as_deref())
+                .await?
+        }
+    };
 
     if symbol_offset > 0 {
         if symbol_offset >= symbols.len() {
@@ -791,11 +873,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
 
-    println!(
-        "Running xabcd scan on {} symbols with recent average volume >= {}",
-        symbols.len(),
-        minimum_average_volume
-    );
+    match candle_source {
+        CandleSource::EquityCandles => println!(
+            "Running xabcd scan on {} symbols with recent average volume >= {}",
+            symbols.len(),
+            minimum_average_volume
+        ),
+        CandleSource::FuturesContracts => println!(
+            "Running xabcd scan on {} futures contract symbols (root {}, filter none)",
+            symbols.len(),
+            futures_root.as_deref().unwrap_or("all")
+        ),
+    }
+    println!("Using candle source {}", candle_source.label());
     println!(
         "Using scan concurrency {}, write batch size {}, symbol limit {}",
         scan_concurrency,
@@ -840,7 +930,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut queued_symbols = 0i64;
     for _ in 0..scan_concurrency {
         if let Some(symbol) = symbol_iter.next() {
-            spawn_symbol_scan(&mut tasks, pool.clone(), symbol, max_x_bars_left);
+            spawn_symbol_scan(
+                &mut tasks,
+                pool.clone(),
+                symbol,
+                candle_source,
+                max_x_bars_left,
+            );
             queued_symbols += 1;
         }
     }
@@ -883,7 +979,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
                 let phase_started = Instant::now();
                 if let Some(symbol) = symbol_iter.next() {
-                    spawn_symbol_scan(&mut tasks, pool.clone(), symbol, max_x_bars_left);
+                    spawn_symbol_scan(
+                        &mut tasks,
+                        pool.clone(),
+                        symbol,
+                        candle_source,
+                        max_x_bars_left,
+                    );
                     db.record_engine_phase_timing(
                         &run_id,
                         None,
@@ -913,7 +1015,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
                 let phase_started = Instant::now();
                 if let Some(symbol) = symbol_iter.next() {
-                    spawn_symbol_scan(&mut tasks, pool.clone(), symbol, max_x_bars_left);
+                    spawn_symbol_scan(
+                        &mut tasks,
+                        pool.clone(),
+                        symbol,
+                        candle_source,
+                        max_x_bars_left,
+                    );
                     db.record_engine_phase_timing(
                         &run_id,
                         None,
@@ -972,7 +1080,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let phase_started = Instant::now();
         if let Some(symbol) = symbol_iter.next() {
-            spawn_symbol_scan(&mut tasks, pool.clone(), symbol, max_x_bars_left);
+            spawn_symbol_scan(
+                &mut tasks,
+                pool.clone(),
+                symbol,
+                candle_source,
+                max_x_bars_left,
+            );
             db.record_engine_phase_timing(
                 &run_id,
                 None,
@@ -1054,10 +1168,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Swapped build tables into final output table names");
     }
 
-    println!("Refreshing prop strategy family summaries");
-    db.refresh_prop_strategy_family_rollups(Some(&run_id))
-        .await?;
-    println!("Marked prop strategy family summaries ready");
+    if refresh_prop_family_summaries {
+        println!("Refreshing prop strategy family summaries");
+        db.refresh_prop_strategy_family_rollups(Some(&run_id))
+            .await?;
+        println!("Marked prop strategy family summaries ready");
+    } else {
+        println!("Skipped prop strategy family summaries refresh");
+    }
 
     println!(
         "Pattern setups total: {}, Prop reversal rows: {}, Bear: {}, Bull: {}, Failed symbols: {}",

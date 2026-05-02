@@ -5,7 +5,7 @@ use mysql::*;
 // use mysql::prelude::*;
 use crate::models::candle::*;
 // use chrono::NaiveDate;
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use futures_util::TryStreamExt;
 use sqlx::mysql::MySqlPool;
 // use std::fs::File;
@@ -42,7 +42,7 @@ const HARMONIC_SCORE_COLUMNS: [(&str, &str, &str); 7] = [
     ("Shark", "shark_accuracy", "shark_time_accuracy"),
 ];
 
-const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 24] = [
+const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 19] = [
     (
         "pattern_harmonic_scores",
         "uniq_pattern_harmonic_score",
@@ -134,34 +134,9 @@ const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 24] = [
         "CREATE INDEX idx_pattern_outcomes_prop_target_ready ON pattern_outcomes_prop (target_ready, entry_date)",
     ),
     (
-        "xabcd_patterns",
-        "idx_xabcd_pattern_id",
-        "CREATE INDEX idx_xabcd_pattern_id ON xabcd_patterns (pattern_id)",
-    ),
-    (
-        "xabcd_patterns",
-        "idx_xabcd_x_bars_left",
-        "CREATE INDEX idx_xabcd_x_bars_left ON xabcd_patterns (x_bars_left)",
-    ),
-    (
-        "xabcd_patterns",
-        "idx_xabcd_symbol_d_date",
-        "CREATE INDEX idx_xabcd_symbol_d_date ON xabcd_patterns (symbol, d_date)",
-    ),
-    (
-        "xabcd_patterns",
-        "idx_xabcd_pattern_group_d_date",
-        "CREATE INDEX idx_xabcd_pattern_group_d_date ON xabcd_patterns (pattern_group_id, d_date)",
-    ),
-    (
-        "xabcd_patterns",
-        "idx_xabcd_prop_strategy_id",
-        "CREATE INDEX idx_xabcd_prop_strategy_id ON xabcd_patterns (prop_strategy_id)",
-    ),
-    (
-        "xabcd_patterns",
-        "idx_xabcd_lookup",
-        "CREATE INDEX idx_xabcd_lookup ON xabcd_patterns (market, harmonic_type, d_date)",
+        "pattern_outcomes_prop",
+        "idx_pattern_outcomes_prop_contract_week",
+        "CREATE INDEX idx_pattern_outcomes_prop_contract_week ON pattern_outcomes_prop (symbol, contract_week_index)",
     ),
 ];
 
@@ -2115,35 +2090,35 @@ impl Database {
                 symbol VARCHAR(32) NOT NULL,
                 pattern_id CHAR(24) NULL,
                 x_bars_left BIGINT NOT NULL DEFAULT 0,
-                x_date DATE NOT NULL,
+                x_date DATETIME NOT NULL,
                 x_open DOUBLE NOT NULL,
                 x_high DOUBLE NOT NULL,
                 x_low DOUBLE NOT NULL,
                 x_close DOUBLE NOT NULL,
                 x_length BIGINT NOT NULL,
                 x_min_max DOUBLE NOT NULL,
-                a_date DATE NOT NULL,
+                a_date DATETIME NOT NULL,
                 a_open DOUBLE NOT NULL,
                 a_high DOUBLE NOT NULL,
                 a_low DOUBLE NOT NULL,
                 a_close DOUBLE NOT NULL,
                 a_length BIGINT NOT NULL,
                 a_min_max DOUBLE NOT NULL,
-                b_date DATE NOT NULL,
+                b_date DATETIME NOT NULL,
                 b_open DOUBLE NOT NULL,
                 b_high DOUBLE NOT NULL,
                 b_low DOUBLE NOT NULL,
                 b_close DOUBLE NOT NULL,
                 b_length BIGINT NOT NULL,
                 b_min_max DOUBLE NOT NULL,
-                c_date DATE NOT NULL,
+                c_date DATETIME NOT NULL,
                 c_open DOUBLE NOT NULL,
                 c_high DOUBLE NOT NULL,
                 c_low DOUBLE NOT NULL,
                 c_close DOUBLE NOT NULL,
                 c_length BIGINT NOT NULL,
                 c_min_max DOUBLE NOT NULL,
-                d_date DATE NOT NULL,
+                d_date DATETIME NOT NULL,
                 d_open DOUBLE NOT NULL,
                 d_high DOUBLE NOT NULL,
                 d_low DOUBLE NOT NULL,
@@ -2380,7 +2355,7 @@ impl Database {
 
             builder.push_values(chunk, |mut row, candle| {
                 row.push_bind(&candle.symbol)
-                    .push_bind(candle.date)
+                    .push_bind(candle.date.date())
                     .push_bind(candle.open)
                     .push_bind(candle.high)
                     .push_bind(candle.low)
@@ -2757,7 +2732,7 @@ impl Database {
                 trade_length BIGINT NOT NULL,
                 trade_pnl DOUBLE NOT NULL,
                 trade_result INT NOT NULL,
-                trade_date DATE NULL,
+                trade_date DATETIME NULL,
                 trade_symbol VARCHAR(32) NOT NULL,
                 trade_ab_price_retracement DOUBLE NOT NULL,
                 trade_bc_price_retracement DOUBLE NOT NULL,
@@ -2852,14 +2827,16 @@ impl Database {
                 outcome_model VARCHAR(24) NOT NULL,
                 has_reversal BOOLEAN NOT NULL,
                 reversal_type VARCHAR(32) NOT NULL DEFAULT 'None',
-                reversal_detect_date DATE NULL,
+                reversal_detect_date DATETIME NULL,
                 reversal_bars_after_d BIGINT NULL,
                 pattern_id CHAR(24) NULL,
                 pattern_group_id VARCHAR(64) NOT NULL,
                 x_bars_left BIGINT NOT NULL DEFAULT 0,
                 symbol VARCHAR(32) NOT NULL,
-                d_date DATE NOT NULL,
-                entry_date DATE NOT NULL,
+                d_date DATETIME NOT NULL,
+                contract_week_index BIGINT NULL,
+                contract_days_from_start BIGINT NULL,
+                entry_date DATETIME NOT NULL,
                 harmonic_type VARCHAR(24) NOT NULL DEFAULT 'Multi',
                 bin VARCHAR(16) NOT NULL DEFAULT 'Multi',
                 size_bucket VARCHAR(16) NOT NULL,
@@ -2877,9 +2854,9 @@ impl Database {
                 trade_enter_price DOUBLE NOT NULL,
                 trade_risk_exit_price DOUBLE NOT NULL,
                 trade_reward_exit_price DOUBLE NOT NULL,
-                d_confirm_date DATE NOT NULL,
+                d_confirm_date DATETIME NOT NULL,
                 target_ready BOOLEAN NOT NULL,
-                target_date DATE NULL,
+                target_date DATETIME NULL,
                 target_open DOUBLE NULL,
                 target_high DOUBLE NULL,
                 target_low DOUBLE NULL,
@@ -2929,6 +2906,22 @@ impl Database {
             "pattern_outcomes_prop",
             "x_bars_left",
             "x_bars_left BIGINT NOT NULL DEFAULT 0 AFTER pattern_group_id",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "contract_week_index",
+            "contract_week_index BIGINT NULL AFTER d_date",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "contract_days_from_start",
+            "contract_days_from_start BIGINT NULL AFTER contract_week_index",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_outcomes_prop_contract_week ON pattern_outcomes_prop (symbol, contract_week_index)",
         )
         .await?;
         self.create_index_if_missing(
@@ -4411,9 +4404,71 @@ impl Database {
         Ok(symbols)
     }
 
+    pub async fn get_futures_contract_symbols(
+        &self,
+        root_symbol: Option<&str>,
+    ) -> Result<Vec<String>, sqlx::Error> {
+        println!("Selecting futures contract symbols");
+
+        let symbols: Vec<String> = if let Some(root_symbol) = root_symbol {
+            sqlx::query_scalar(
+                r#"
+                SELECT DISTINCT symbol
+                FROM abcd.futures_contract_1m_candles
+                WHERE root_symbol = ?
+                ORDER BY symbol
+                "#,
+            )
+            .bind(root_symbol)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_scalar(
+                r#"
+                SELECT DISTINCT symbol
+                FROM abcd.futures_contract_1m_candles
+                ORDER BY symbol
+                "#,
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        Ok(symbols)
+    }
+
     pub async fn get_stored_candles(&self, symbol: &str) -> Result<Vec<Candle>, sqlx::Error> {
         self.get_stored_candles_with_trend_persist(symbol, false)
             .await
+    }
+
+    pub async fn get_stored_futures_contract_candles(
+        &self,
+        symbol: &str,
+    ) -> Result<Vec<Candle>, sqlx::Error> {
+        let candles: Vec<Candle> = sqlx::query_as::<_, Candle>(
+            r#"
+            SELECT
+                symbol,
+                ts_utc AS date,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                CAST(NULL AS SIGNED) AS three_month,
+                CAST(NULL AS SIGNED) AS six_month,
+                CAST(NULL AS SIGNED) AS twelve_month
+            FROM abcd.futures_contract_1m_candles
+            WHERE symbol = ?
+            ORDER BY ts_utc
+            "#,
+        )
+        .bind(symbol)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(candles)
     }
 
     pub async fn get_stored_candles_with_trend_persist(
@@ -4425,7 +4480,7 @@ impl Database {
             r#"
                 SELECT
                     symbol,
-                    date,
+                    CAST(date AS DATETIME) AS date,
                     open,
                     high,
                     low,
@@ -4531,6 +4586,16 @@ impl Database {
         Ok(())
     }
 
+    pub async fn drop_legacy_xabcd_patterns_table(&self) -> Result<(), sqlx::Error> {
+        for table in ["xabcd_patterns", "xabcd_patterns_build"] {
+            sqlx::query(&format!("DROP TABLE IF EXISTS {table}"))
+                .execute(&self.pool)
+                .await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn insert_patterns(&self, patterns: &[PatternXABCD]) -> Result<(), sqlx::Error> {
         self.insert_pattern_setups(patterns).await
     }
@@ -4623,6 +4688,8 @@ impl Database {
                     x_bars_left,
                     symbol,
                     d_date,
+                    contract_week_index,
+                    contract_days_from_start,
                     entry_date,
                     market,
                     harmonic_type,
@@ -4687,14 +4754,16 @@ impl Database {
                     .push_bind("D")
                     .push_bind(false)
                     .push_bind("None")
-                    .push_bind(None::<chrono::NaiveDate>)
+                    .push_bind(None::<NaiveDateTime>)
                     .push_bind(None::<i64>)
                     .push_bind(Some(setup_id.clone()))
                     .push_bind(pattern_group_id)
                     .push_bind(pattern.x_bars_left)
                     .push_bind(pattern.symbol.as_ref())
                     .push_bind(pattern.d.date)
-                    .push_bind(pattern.d_confirm_date)
+                    .push_bind(pattern.contract_week_index)
+                    .push_bind(pattern.contract_days_from_start)
+                    .push_bind(pattern.trade.entry_date)
                     .push_bind(market)
                     .push_bind(lens.harmonic_type)
                     .push_bind(lens.bin)
@@ -4719,10 +4788,7 @@ impl Database {
                     .push_bind(pattern.trade.risk_exit_price)
                     .push_bind(pattern.trade.reward_exit_price)
                     .push_bind(pattern.d_confirm_date)
-                    .push_bind(prop_result_from_market_target(
-                        pattern.market,
-                        target.map(|target| target.is_green),
-                    ))
+                    .push_bind(pattern.trade.result)
                     .push_bind(target.is_some())
                     .push_bind(target.map(|target| target.date))
                     .push_bind(target.map(|target| target.open))
@@ -4760,6 +4826,8 @@ impl Database {
                     x_bars_left,
                     symbol,
                     d_date,
+                    contract_week_index,
+                    contract_days_from_start,
                     entry_date,
                     market,
                     harmonic_type,
@@ -4818,7 +4886,9 @@ impl Database {
                     .push_bind(item.x_bars_left)
                     .push_bind(&item.symbol)
                     .push_bind(item.d_date)
-                    .push_bind(item.reversal_detect_date)
+                    .push_bind(item.contract_week_index)
+                    .push_bind(item.contract_days_from_start)
+                    .push_bind(item.entry_date)
                     .push_bind(&item.market)
                     .push_bind(&item.harmonic_type)
                     .push_bind(&item.bin)
@@ -4836,7 +4906,7 @@ impl Database {
                     .push_bind(item.trade_enter_price)
                     .push_bind(item.trade_risk_exit_price)
                     .push_bind(item.trade_reward_exit_price)
-                    .push_bind(item.d_date)
+                    .push_bind(item.d_confirm_date)
                     .push_bind(item.trade_result)
                     .push_bind(item.target_ready)
                     .push_bind(item.target_date)
@@ -5022,8 +5092,8 @@ impl Database {
             r#"
             SELECT
                 s.market,
-                MIN(s.d_date) AS min_d_date,
-                MAX(s.d_date) AS max_d_date
+                DATE(MIN(s.d_date)) AS min_d_date,
+                DATE(MAX(s.d_date)) AS max_d_date
             FROM pattern_setups s
             GROUP BY s.market
             "#,
@@ -5053,7 +5123,7 @@ impl Database {
                 let mut rows = sqlx::query_as::<_, AccuracySourceRow>(
                     r#"
                     SELECT
-                        s.d_date,
+                        DATE(s.d_date) AS d_date,
                         s.market,
                         sw.trade_result,
                         CAST(sw.trade_pnl AS DOUBLE) AS trade_pnl,

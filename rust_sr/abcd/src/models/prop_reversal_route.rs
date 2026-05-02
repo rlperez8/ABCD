@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::NaiveDateTime;
 
 use crate::models::{Candle, Market, PatternXABCD};
 
@@ -11,9 +11,13 @@ pub struct PropReversalOutcome {
     pub pattern_group_id: String,
     pub x_bars_left: i64,
     pub symbol: String,
-    pub d_date: NaiveDate,
+    pub d_date: NaiveDateTime,
+    pub entry_date: NaiveDateTime,
+    pub d_confirm_date: NaiveDateTime,
+    pub contract_week_index: Option<i64>,
+    pub contract_days_from_start: Option<i64>,
     pub reversal_type: String,
-    pub reversal_detect_date: NaiveDate,
+    pub reversal_detect_date: NaiveDateTime,
     pub reversal_bars_after_d: i64,
     pub market: String,
     pub harmonic_type: String,
@@ -34,7 +38,7 @@ pub struct PropReversalOutcome {
     pub trade_reward_exit_price: f64,
     pub trade_result: i32,
     pub target_ready: bool,
-    pub target_date: Option<NaiveDate>,
+    pub target_date: Option<NaiveDateTime>,
     pub target_open: Option<f64>,
     pub target_high: Option<f64>,
     pub target_low: Option<f64>,
@@ -69,6 +73,129 @@ fn range_pct(open: f64, high: f64, low: f64) -> f64 {
     } else {
         ((high - low) / open) * 100.0
     }
+}
+
+#[derive(Clone)]
+struct SimulatedTargetTrade {
+    entry_date: NaiveDateTime,
+    enter_price: f64,
+    risk_exit_price: f64,
+    reward_exit_price: f64,
+    result: i32,
+    d_length: i64,
+    target_candle: Option<Candle>,
+}
+
+fn simulate_c_target_trade(
+    pattern: &PatternXABCD,
+    candles: &[Candle],
+    entry_index: usize,
+) -> Option<SimulatedTargetTrade> {
+    let entry_candle = candles.get(entry_index)?.clone();
+    let (reward_exit_price, target_distance) = match pattern.market {
+        Market::Bullish => (pattern.c.high, pattern.c.high - entry_candle.open),
+        Market::Bearish => (pattern.c.low, entry_candle.open - pattern.c.low),
+    };
+
+    if target_distance <= f64::EPSILON {
+        return Some(SimulatedTargetTrade {
+            entry_date: entry_candle.date,
+            enter_price: entry_candle.open,
+            risk_exit_price: entry_candle.open,
+            reward_exit_price,
+            result: 0,
+            d_length: entry_index.saturating_sub(pattern.reversal_context.d_index) as i64,
+            target_candle: None,
+        });
+    }
+
+    let risk_exit_price = match pattern.market {
+        Market::Bullish => entry_candle.open - target_distance,
+        Market::Bearish => entry_candle.open + target_distance,
+    };
+    let mut d_length = entry_index.saturating_sub(pattern.reversal_context.d_index) as i64;
+
+    for (index, candle) in candles.iter().enumerate().skip(entry_index) {
+        d_length = index.saturating_sub(pattern.reversal_context.d_index) as i64;
+        match pattern.market {
+            Market::Bullish => {
+                if candle.high >= reward_exit_price
+                    || candle.close >= reward_exit_price
+                    || candle.open >= reward_exit_price
+                    || candle.low >= reward_exit_price
+                {
+                    return Some(SimulatedTargetTrade {
+                        entry_date: entry_candle.date,
+                        enter_price: entry_candle.open,
+                        risk_exit_price,
+                        reward_exit_price,
+                        result: 1,
+                        d_length,
+                        target_candle: Some(candle.clone()),
+                    });
+                }
+
+                if candle.low <= risk_exit_price
+                    || candle.close <= risk_exit_price
+                    || candle.open <= risk_exit_price
+                    || candle.high <= risk_exit_price
+                {
+                    return Some(SimulatedTargetTrade {
+                        entry_date: entry_candle.date,
+                        enter_price: entry_candle.open,
+                        risk_exit_price,
+                        reward_exit_price,
+                        result: 2,
+                        d_length,
+                        target_candle: Some(candle.clone()),
+                    });
+                }
+            }
+            Market::Bearish => {
+                if candle.low <= reward_exit_price
+                    || candle.close <= reward_exit_price
+                    || candle.open <= reward_exit_price
+                    || candle.high <= reward_exit_price
+                {
+                    return Some(SimulatedTargetTrade {
+                        entry_date: entry_candle.date,
+                        enter_price: entry_candle.open,
+                        risk_exit_price,
+                        reward_exit_price,
+                        result: 1,
+                        d_length,
+                        target_candle: Some(candle.clone()),
+                    });
+                }
+
+                if candle.high >= risk_exit_price
+                    || candle.close >= risk_exit_price
+                    || candle.open >= risk_exit_price
+                    || candle.low >= risk_exit_price
+                {
+                    return Some(SimulatedTargetTrade {
+                        entry_date: entry_candle.date,
+                        enter_price: entry_candle.open,
+                        risk_exit_price,
+                        reward_exit_price,
+                        result: 2,
+                        d_length,
+                        target_candle: Some(candle.clone()),
+                    });
+                }
+            }
+        }
+    }
+
+    Some(SimulatedTargetTrade {
+        entry_date: entry_candle.date,
+        enter_price: entry_candle.open,
+        risk_exit_price,
+        reward_exit_price,
+        result: 0,
+        d_length,
+        target_candle: None,
+    })
 }
 
 fn trend_bucket(value: Option<bool>) -> String {
@@ -227,32 +354,18 @@ pub fn build_prop_reversal_outcomes(
                 continue;
             };
 
-            let target_index = completion_index + 1;
-            let target_candle = if target_index + 1 < candles.len() {
-                candles.get(target_index)
-            } else {
-                None
+            let entry_index = std::cmp::max(d_index + 2, completion_index + 1);
+            let Some(simulated_trade) = simulate_c_target_trade(pattern, candles, entry_index)
+            else {
+                continue;
             };
+            let target_candle = simulated_trade.target_candle.as_ref();
             let target_ready = target_candle.is_some();
             let target_is_green = target_candle.map(|candle| candle.close > candle.open);
-            let trade_enter_price = target_candle
-                .map(|candle| candle.open)
-                .unwrap_or(reversal_candle.close);
-            let trade_risk_exit_price = match pattern.market {
-                Market::Bullish => reversal_candle.low,
-                Market::Bearish => reversal_candle.high,
-            };
-            let trade_reward_exit_price = target_candle
-                .map(|candle| candle.close)
-                .unwrap_or(reversal_candle.close);
-            let trade_result = match target_is_green {
-                None => 0,
-                Some(true) if pattern.market == Market::Bullish => 1,
-                Some(false) if pattern.market == Market::Bullish => 2,
-                Some(true) if pattern.market == Market::Bearish => 2,
-                Some(false) if pattern.market == Market::Bearish => 1,
-                _ => 0,
-            };
+            let trade_enter_price = simulated_trade.enter_price;
+            let trade_risk_exit_price = simulated_trade.risk_exit_price;
+            let trade_reward_exit_price = simulated_trade.reward_exit_price;
+            let trade_result = simulated_trade.result;
             let prop_strategy_id = build_prop_strategy_id(
                 &market,
                 lens.harmonic_type,
@@ -284,6 +397,10 @@ pub fn build_prop_reversal_outcomes(
                 x_bars_left: pattern.x_bars_left,
                 symbol: pattern.symbol.to_string(),
                 d_date: pattern.d.date,
+                entry_date: simulated_trade.entry_date,
+                d_confirm_date: pattern.d_confirm_date,
+                contract_week_index: pattern.contract_week_index,
+                contract_days_from_start: pattern.contract_days_from_start,
                 reversal_type: candidate.reversal_type.to_string(),
                 reversal_detect_date: reversal_candle.date,
                 reversal_bars_after_d: candidate.completion_offset as i64,
@@ -299,12 +416,12 @@ pub fn build_prop_reversal_outcomes(
                 a_length: pattern.a.length,
                 b_length: pattern.b.length,
                 c_length: pattern.c.length,
-                d_length: pattern.d.length,
+                d_length: simulated_trade.d_length,
                 full_pattern_length: pattern.x.length
                     + pattern.a.length
                     + pattern.b.length
                     + pattern.c.length
-                    + pattern.d.length,
+                    + simulated_trade.d_length,
                 trade_enter_price,
                 trade_risk_exit_price,
                 trade_reward_exit_price,
@@ -326,9 +443,9 @@ pub fn build_prop_reversal_outcomes(
                 target_range_pct: target_candle
                     .map(|candle| range_pct(candle.open, candle.high, candle.low)),
                 target_breaks_reversal_high: target_candle
-                    .map(|candle| candle.high > reversal_candle.high),
+                    .and_then(|candle| candles.get(entry_index).map(|entry| candle.high > entry.high)),
                 target_breaks_reversal_low: target_candle
-                    .map(|candle| candle.low < reversal_candle.low),
+                    .and_then(|candle| candles.get(entry_index).map(|entry| candle.low < entry.low)),
             });
         }
     }

@@ -4,14 +4,14 @@ use crate::models::market::Market;
 use crate::models::pivot::Pivot;
 use crate::models::reversal_candle::ReversalPatternContext;
 use crate::models::trade::Trade;
-use chrono::NaiveDate;
+use chrono::NaiveDateTime;
 use serde::Serialize;
 use std::fmt::Write as _;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct TargetCandle {
-    pub date: NaiveDate,
+    pub date: NaiveDateTime,
     pub open: f64,
     pub high: f64,
     pub low: f64,
@@ -43,7 +43,7 @@ impl TargetCandle {
         }
     }
 
-    pub fn from_candle(candle: &Candle, d: &Pivot) -> Self {
+    pub fn from_candle(candle: &Candle, entry: &Candle) -> Self {
         Self {
             date: candle.date,
             open: candle.open,
@@ -56,8 +56,8 @@ impl TargetCandle {
             high_vs_open_pct: Self::pct_change(candle.open, candle.high),
             low_vs_open_pct: Self::pct_change(candle.open, candle.low),
             range_pct: Self::range_pct(candle.open, candle.high, candle.low),
-            breaks_d_high: candle.high > d.high,
-            breaks_d_low: candle.low < d.low,
+            breaks_d_high: candle.high > entry.high,
+            breaks_d_low: candle.low < entry.low,
         }
     }
 }
@@ -77,9 +77,13 @@ pub struct PatternXABCD {
     pub market: Market,
     pub trade: Trade,
     #[serde(skip_serializing)]
+    pub entry_index: Option<usize>,
+    #[serde(skip_serializing)]
     pub reversal_context: ReversalPatternContext,
-    pub d_confirm_date: NaiveDate,
+    pub d_confirm_date: NaiveDateTime,
     pub target_candle: Option<TargetCandle>,
+    pub contract_week_index: Option<i64>,
+    pub contract_days_from_start: Option<i64>,
     pub three_month: Option<bool>,
     pub six_month: Option<bool>,
     pub twelve_month: Option<bool>,

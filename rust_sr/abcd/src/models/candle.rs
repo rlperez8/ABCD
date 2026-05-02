@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::NaiveDateTime;
 use serde::Serialize;
 // use sqlx::FromRow;
 use rust_decimal::Decimal;
@@ -6,7 +6,7 @@ use rust_decimal::Decimal;
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct CandleDecimal {
     pub symbol: String,
-    pub date: NaiveDate,
+    pub date: NaiveDateTime,
     pub open: Decimal,
     pub high: Decimal,
     pub low: Decimal,
@@ -20,7 +20,7 @@ pub struct CandleDecimal {
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct Candle {
     pub symbol: String,
-    pub date: NaiveDate,
+    pub date: NaiveDateTime,
     pub open: f64,
     pub high: f64,
     pub low: f64,

@@ -1,6 +1,6 @@
 use actix_cors::Cors;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use chrono::NaiveDate;
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 mod pattern;
 use crate::pattern::Pattern;
@@ -102,7 +102,7 @@ struct StrategyTradesParams {
 struct PatternDetailParams {
     pub pattern_id: Option<String>,
     pub pattern_group_id: String,
-    pub d_date: Option<NaiveDate>,
+    pub d_date: Option<NaiveDateTime>,
     pub market: Option<String>,
     pub harmonic_type: Option<String>,
     pub size_bucket: Option<String>,
@@ -119,10 +119,10 @@ struct PatternDetailParams {
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
 struct PatternSummary {
     pub symbol: String,
-    pub d_date: NaiveDate,
-    pub d_confirm_date: Option<NaiveDate>,
-    pub reversal_detect_date: Option<NaiveDate>,
-    pub target_date: Option<NaiveDate>,
+    pub d_date: NaiveDateTime,
+    pub d_confirm_date: Option<NaiveDateTime>,
+    pub reversal_detect_date: Option<NaiveDateTime>,
+    pub target_date: Option<NaiveDateTime>,
     pub target_open: Option<Decimal>,
     pub target_high: Option<Decimal>,
     pub target_low: Option<Decimal>,
@@ -180,7 +180,7 @@ struct SetupComparisonSummary {
 #[derive(sqlx::FromRow, serde::Serialize)]
 struct SetupComparisonExample {
     symbol: String,
-    d_date: NaiveDate,
+    d_date: NaiveDateTime,
     trade_result: i64,
     trade_pnl: f64,
     trade_length: f64,
@@ -1892,7 +1892,33 @@ async fn fetch_pattern_detail_from_prop_outcomes(
                 c.six_month,
                 c.twelve_month,
                 ROW_NUMBER() OVER (PARTITION BY c.symbol ORDER BY c.date) AS rn
-            FROM candles c
+            FROM (
+                SELECT
+                    symbol,
+                    CAST(date AS DATETIME) AS date,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume,
+                    three_month,
+                    six_month,
+                    twelve_month
+                FROM candles
+                UNION ALL
+                SELECT
+                    symbol,
+                    ts_utc AS date,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume,
+                    CAST(NULL AS SIGNED) AS three_month,
+                    CAST(NULL AS SIGNED) AS six_month,
+                    CAST(NULL AS SIGNED) AS twelve_month
+                FROM futures_contract_1m_candles
+            ) c
             INNER JOIN selected_outcome p
                 ON p.symbol = c.symbol
                AND c.date <= p.d_date
@@ -2387,10 +2413,38 @@ async fn fetch_candles(pool: web::Data<MySqlPool>, params: web::Json<Params>) ->
     // println!("{:?}", params);
 
     let candles: Vec<Candle> = match sqlx::query_as::<_, Candle>(
-        "SELECT symbol, date, open, high, low, close, volume, three_month, six_month, twelve_month
-        FROM candles
-        WHERE symbol =  ?
-        ORDER BY date",
+        r#"
+        SELECT symbol, date, open, high, low, close, volume, three_month, six_month, twelve_month
+        FROM (
+            SELECT
+                symbol,
+                CAST(date AS DATETIME) AS date,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                three_month,
+                six_month,
+                twelve_month
+            FROM candles
+            UNION ALL
+            SELECT
+                symbol,
+                ts_utc AS date,
+                open,
+                high,
+                low,
+                close,
+                volume,
+                CAST(NULL AS SIGNED) AS three_month,
+                CAST(NULL AS SIGNED) AS six_month,
+                CAST(NULL AS SIGNED) AS twelve_month
+            FROM futures_contract_1m_candles
+        ) all_candles
+        WHERE symbol = ?
+        ORDER BY date
+        "#,
     )
     .bind(params.symbol.clone())
     .fetch_all(pool.get_ref())

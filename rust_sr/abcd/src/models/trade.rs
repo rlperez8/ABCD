@@ -3,7 +3,7 @@ use crate::models::market::Market;
 use crate::models::pivot::Pivot;
 use crate::models::reversal_type::ReversalType;
 use chrono::Datelike;
-use chrono::NaiveDate;
+use chrono::NaiveDateTime;
 use serde::Serialize;
 #[derive(Debug, Clone, Copy, Serialize)]
 
@@ -16,7 +16,8 @@ pub struct Trade {
     pub length: i64,
     pub pnl: f64,
     pub result: i32,
-    pub date: NaiveDate,
+    pub date: NaiveDateTime,
+    pub entry_date: NaiveDateTime,
     pub ab_price_retracement: f64,
     pub bc_price_retracement: f64,
     pub cd_bc_price_retracement: f64,
@@ -57,34 +58,29 @@ impl Trade {
         candle_a: &Pivot,
         candle_b: &Pivot,
         candle_c: &Pivot,
-        prev1: &Candle,
+        candle_d: &Candle,
+        entry_candle: Option<&Candle>,
         snr: f64,
         candle_reversal: ReversalType,
     ) -> Trade {
-        // --- Basic prices ---
-        let enter_price = prev1.close;
-        let current_price = prev1.close;
+        let entry_date = entry_candle.map(|candle| candle.date).unwrap_or(candle_d.date);
+        let enter_price = entry_candle
+            .map(|candle| candle.open)
+            .unwrap_or(candle_d.close);
         let pnl = 0.0; // starting PnL
 
-        // --- Risk/Reward ---
-        let rrr = 1.0; // risk/reward ratio
-        let (target_pnl, risk_exit_price) = match market {
-            Market::Bearish => {
-                let tp = enter_price - candle_c.low;
-                let risk = enter_price + (tp / rrr);
-                (tp, risk)
-            }
-            Market::Bullish => {
-                let tp = candle_c.high - enter_price;
-                let risk = enter_price - (tp / rrr);
-                (tp, risk)
-            }
+        // Use the actual C level as the target, then mirror that distance from
+        // the delayed live entry for the stop.
+        let (reward_exit_price, target_distance) = match market {
+            Market::Bearish => (candle_c.low, enter_price - candle_c.low),
+            Market::Bullish => (candle_c.high, candle_c.high - enter_price),
         };
-
-        let reward_exit_price = match market {
-            Market::Bearish => enter_price - target_pnl,
-            Market::Bullish => enter_price + target_pnl,
+        let target_distance = target_distance.max(0.0);
+        let risk_exit_price = match market {
+            Market::Bearish => enter_price + target_distance,
+            Market::Bullish => enter_price - target_distance,
         };
+        let current_price = enter_price;
 
         // --- PRICE RETRACEMENT ---
         let (xa_price_length, ab_price_length, bc_price_length, cd_price_length) = match market {
@@ -92,13 +88,13 @@ impl Trade {
                 (candle_x.high - candle_a.low).abs(),
                 (candle_a.low - candle_b.high).abs(),
                 (candle_c.low - candle_b.high).abs(),
-                (candle_c.low - prev1.high).abs(),
+                (candle_c.low - candle_d.high).abs(),
             ),
             Market::Bullish => (
                 (candle_a.high - candle_x.low).abs(),
                 (candle_a.high - candle_b.low).abs(),
                 (candle_c.high - candle_b.low).abs(),
-                (candle_c.high - prev1.low).abs(),
+                (candle_c.high - candle_d.low).abs(),
             ),
         };
 
@@ -176,7 +172,7 @@ impl Trade {
 
         // --- Construct Trade ---
         Trade {
-            open: true,
+            open: target_distance > f64::EPSILON,
             enter_price,
             current_price,
             pnl,
@@ -184,16 +180,17 @@ impl Trade {
             reward_exit_price,
             length: 0,
             result: 0,
-            date: prev1.date,
+            date: entry_date,
+            entry_date,
             ab_price_retracement,
             bc_price_retracement,
             cd_bc_price_retracement,
             cd_price_retracement,
             cd_xa_price_retracement,
             snr,
-            year: prev1.date.year() as i64,
-            month: prev1.date.month() as i64,
-            day: prev1.date.day() as i64,
+            year: entry_date.year() as i64,
+            month: entry_date.month() as i64,
+            day: entry_date.day() as i64,
             reversal_type: candle_reversal,
             bullish_key_reversal: false,
             bearish_key_reversal: false,
