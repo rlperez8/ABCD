@@ -2000,34 +2000,37 @@ async fn fetch_pattern_detail_from_prop_outcomes(
                 ROW_NUMBER() OVER (PARTITION BY c.symbol ORDER BY c.date) AS rn
             FROM (
                 SELECT
-                    symbol,
-                    CAST(date AS DATETIME) AS date,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume,
-                    three_month,
-                    six_month,
-                    twelve_month
-                FROM candles
+                    candle.symbol,
+                    CAST(candle.date AS DATETIME) AS date,
+                    CAST(candle.open AS DECIMAL(18,6)) AS open,
+                    CAST(candle.high AS DECIMAL(18,6)) AS high,
+                    CAST(candle.low AS DECIMAL(18,6)) AS low,
+                    CAST(candle.close AS DECIMAL(18,6)) AS close,
+                    candle.volume,
+                    candle.three_month,
+                    candle.six_month,
+                    candle.twelve_month
+                FROM candles candle
+                INNER JOIN selected_outcome p
+                    ON p.symbol = candle.symbol
+                   AND candle.date <= p.d_date
                 UNION ALL
                 SELECT
-                    symbol,
-                    ts_utc AS date,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume,
+                    candle.symbol,
+                    candle.ts_utc AS date,
+                    CAST(candle.open AS DECIMAL(18,6)) AS open,
+                    CAST(candle.high AS DECIMAL(18,6)) AS high,
+                    CAST(candle.low AS DECIMAL(18,6)) AS low,
+                    CAST(candle.close AS DECIMAL(18,6)) AS close,
+                    candle.volume,
                     CAST(NULL AS SIGNED) AS three_month,
                     CAST(NULL AS SIGNED) AS six_month,
                     CAST(NULL AS SIGNED) AS twelve_month
-                FROM futures_contract_1m_candles
+                FROM futures_contract_1m_candles candle
+                INNER JOIN selected_outcome p
+                    ON p.symbol = candle.symbol
+                   AND candle.ts_utc <= p.d_date
             ) c
-            INNER JOIN selected_outcome p
-                ON p.symbol = c.symbol
-               AND c.date <= p.d_date
         ),
         indexed_outcome AS (
             SELECT
