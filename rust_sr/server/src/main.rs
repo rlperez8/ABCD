@@ -1,6 +1,6 @@
 use actix_cors::Cors;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 mod pattern;
 use crate::pattern::Pattern;
@@ -104,10 +104,79 @@ struct StrategyContractWeekParams {
     pub limit: Option<i64>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct SimulatorReplayParams {
+    pub prop_strategy_id: Option<String>,
+    pub first_start_date: Option<String>,
+    pub tests_to_chain: Option<i64>,
+    pub contracts: Option<i64>,
+    pub starting_balance: Option<f64>,
+    pub profit_target: Option<f64>,
+    pub max_drawdown: Option<f64>,
+    pub daily_loss_limit: Option<f64>,
+    pub one_trade_at_a_time: Option<bool>,
+}
+
+#[derive(Clone, sqlx::FromRow, serde::Serialize)]
+struct SimulatorReplaySourceTrade {
+    symbol: String,
+    pattern_id: Option<String>,
+    pattern_group_id: String,
+    d_date: NaiveDateTime,
+    d_confirm_date: Option<NaiveDateTime>,
+    reversal_detect_date: Option<NaiveDateTime>,
+    entry_date: NaiveDateTime,
+    target_date: Option<NaiveDateTime>,
+    trade_enter_price: f64,
+    trade_risk_exit_price: f64,
+    trade_reward_exit_price: f64,
+    trade_result: i64,
+}
+
+#[derive(serde::Serialize)]
+struct SimulatorReplayTradeEvent {
+    test_index: i64,
+    trade_index: i64,
+    symbol: String,
+    pattern_id: Option<String>,
+    pattern_group_id: String,
+    entry_date: NaiveDateTime,
+    target_date: Option<NaiveDateTime>,
+    trade_result: i64,
+    pnl: f64,
+    point_value: f64,
+    balance: f64,
+    drawdown: f64,
+    skipped_for_overlap: bool,
+}
+
+#[derive(serde::Serialize)]
+struct SimulatorReplayTestResult {
+    test_index: i64,
+    status: String,
+    start_date: NaiveDateTime,
+    end_date: Option<NaiveDateTime>,
+    starting_balance: f64,
+    ending_balance: f64,
+    peak_balance: f64,
+    max_drawdown: f64,
+    trade_count: i64,
+    skipped_overlap_count: i64,
+}
+
+#[derive(serde::Serialize)]
+struct SimulatorReplayResponse {
+    family_key: String,
+    tests: Vec<SimulatorReplayTestResult>,
+    trades: Vec<SimulatorReplayTradeEvent>,
+    eligible_trade_count: i64,
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 struct PatternDetailParams {
     pub pattern_id: Option<String>,
-    pub pattern_group_id: String,
+    pub pattern_group_id: Option<String>,
+    pub prop_outcome_mode: Option<String>,
     pub d_date: Option<NaiveDateTime>,
     pub market: Option<String>,
     pub harmonic_type: Option<String>,
@@ -1122,6 +1191,299 @@ async fn fetch_strategy_trades(
     });
 }
 
+fn parse_simulator_start_date(value: Option<&str>) -> Option<NaiveDateTime> {
+    let value = value?.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S")
+        .ok()
+        .or_else(|| {
+            NaiveDate::parse_from_str(value, "%Y-%m-%d")
+                .ok()
+                .and_then(|date| date.and_hms_opt(0, 0, 0))
+        })
+}
+
+fn futures_root(symbol: &str) -> String {
+    let uppercase = symbol.trim().to_uppercase();
+    for root in [
+        "MES", "MNQ", "MYM", "M2K", "MCL", "MGC", "SIL", "RTY", "ES", "NQ", "YM", "CL", "NG",
+        "GC", "SI", "6E", "6J", "ZN", "ZB",
+    ] {
+        if uppercase.starts_with(root) {
+            return root.to_string();
+        }
+    }
+
+    uppercase
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphabetic())
+        .collect::<String>()
+}
+
+fn futures_point_value(symbol: &str) -> f64 {
+    match futures_root(symbol).as_str() {
+        "ES" => 50.0,
+        "MES" => 5.0,
+        "NQ" => 20.0,
+        "MNQ" => 2.0,
+        "YM" => 5.0,
+        "MYM" => 0.5,
+        "RTY" => 50.0,
+        "M2K" => 5.0,
+        "CL" => 1000.0,
+        "MCL" => 100.0,
+        "NG" => 10000.0,
+        "GC" => 100.0,
+        "MGC" => 10.0,
+        "SI" => 5000.0,
+        "SIL" => 1000.0,
+        "6E" => 125000.0,
+        "6J" => 12500000.0,
+        "ZN" => 1000.0,
+        "ZB" => 1000.0,
+        _ => 1.0,
+    }
+}
+
+fn simulator_trade_pnl(trade: &SimulatorReplaySourceTrade, contracts: i64) -> f64 {
+    let point_move = match trade.trade_result {
+        1 => (trade.trade_reward_exit_price - trade.trade_enter_price).abs(),
+        2 => -(trade.trade_risk_exit_price - trade.trade_enter_price).abs(),
+        _ => 0.0,
+    };
+
+    point_move * contracts as f64 * futures_point_value(&trade.symbol)
+}
+
+#[route("/simulator/family-replay", method = "GET", method = "POST")]
+async fn fetch_simulator_family_replay(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<SimulatorReplayParams>,
+) -> impl Responder {
+    let Some(prop_strategy_id) = params
+        .prop_strategy_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Simulator replay requires family key");
+    };
+
+    let Some(first_start_date) = parse_simulator_start_date(params.first_start_date.as_deref())
+    else {
+        return HttpResponse::BadRequest().body("Simulator replay requires first start date");
+    };
+
+    let tests_to_chain = params.tests_to_chain.unwrap_or(1).clamp(1, 250);
+    let contracts = params.contracts.unwrap_or(1).clamp(1, 500);
+    let starting_balance = params.starting_balance.unwrap_or(50_000.0).max(0.0);
+    let profit_target = params.profit_target.unwrap_or(3_000.0).max(0.0);
+    let max_drawdown = params.max_drawdown.unwrap_or(2_000.0).max(0.0);
+    let daily_loss_limit = params.daily_loss_limit.filter(|value| *value > 0.0);
+    let one_trade_at_a_time = params.one_trade_at_a_time.unwrap_or(true);
+
+    let family = match fetch_prop_strategy_family_filter(pool.get_ref(), prop_strategy_id).await {
+        Ok(Some(family)) => family,
+        Ok(None) => return HttpResponse::NotFound().body("Prop strategy family not found"),
+        Err(error) => {
+            eprintln!("Simulator family lookup DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let route_x_strictness_expr = x_strictness_expr("p.x_bars_left", "p.x_length");
+    let sql = format!(
+        r#"
+            SELECT
+                p.symbol,
+                p.pattern_id,
+                p.pattern_group_id,
+                p.d_date,
+                p.d_confirm_date,
+                p.reversal_detect_date,
+                p.entry_date,
+                p.target_date,
+                CAST(p.trade_enter_price AS DOUBLE) AS trade_enter_price,
+                CAST(p.trade_risk_exit_price AS DOUBLE) AS trade_risk_exit_price,
+                CAST(p.trade_reward_exit_price AS DOUBLE) AS trade_reward_exit_price,
+                CAST(p.prop_result AS SIGNED) AS trade_result
+            FROM pattern_outcomes_prop p
+            WHERE p.outcome_model = ?
+              AND p.market = ?
+              AND p.harmonic_type = ?
+              AND p.bin = ?
+              AND COALESCE(NULLIF(p.reversal_type, ''), 'None') = ?
+              AND p.size_bucket = ?
+              AND p.time_bin = ?
+              AND {route_x_strictness_expr} = ?
+              AND p.three_month_trend = ?
+              AND p.six_month_trend = ?
+              AND p.twelve_month_trend = ?
+              AND p.target_date IS NOT NULL
+              AND p.entry_date >= ?
+            ORDER BY p.entry_date ASC,
+                     p.target_date ASC,
+                     p.trade_enter_price ASC
+            LIMIT 50000
+        "#,
+        route_x_strictness_expr = route_x_strictness_expr,
+    );
+
+    let rows = match sqlx::query_as::<_, SimulatorReplaySourceTrade>(&sql)
+        .bind(&family.outcome_model)
+        .bind(&family.market)
+        .bind(&family.harmonic_type)
+        .bind(&family.bin)
+        .bind(&family.reversal_type)
+        .bind(&family.size_bucket)
+        .bind(&family.time_bin)
+        .bind(family.x_strictness.as_deref().unwrap_or("Loose"))
+        .bind(&family.three_month_trend)
+        .bind(&family.six_month_trend)
+        .bind(&family.twelve_month_trend)
+        .bind(first_start_date)
+        .fetch_all(pool.get_ref())
+        .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Simulator replay DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let mut tests = Vec::new();
+    let mut events = Vec::new();
+    let mut cursor = 0usize;
+    let mut next_start_date = first_start_date;
+
+    for test_index in 1..=tests_to_chain {
+        while cursor < rows.len() && rows[cursor].entry_date < next_start_date {
+            cursor += 1;
+        }
+
+        let test_start_date = rows
+            .get(cursor)
+            .map(|trade| trade.entry_date)
+            .unwrap_or(next_start_date);
+        let mut balance = starting_balance;
+        let mut peak_balance = starting_balance;
+        let mut max_drawdown_seen = 0.0f64;
+        let mut trade_count = 0i64;
+        let mut skipped_overlap_count = 0i64;
+        let mut status = String::from("waiting");
+        let mut end_date = None;
+        let mut busy_until: Option<NaiveDateTime> = None;
+        let mut day = test_start_date.date();
+        let mut day_start_balance = starting_balance;
+
+        while cursor < rows.len() {
+            let trade = &rows[cursor];
+            cursor += 1;
+
+            if trade.entry_date.date() != day {
+                day = trade.entry_date.date();
+                day_start_balance = balance;
+            }
+
+            if one_trade_at_a_time
+                && busy_until
+                    .map(|date| trade.entry_date < date)
+                    .unwrap_or(false)
+            {
+                skipped_overlap_count += 1;
+                events.push(SimulatorReplayTradeEvent {
+                    test_index,
+                    trade_index: trade_count + skipped_overlap_count,
+                    symbol: trade.symbol.clone(),
+                    pattern_id: trade.pattern_id.clone(),
+                    pattern_group_id: trade.pattern_group_id.clone(),
+                    entry_date: trade.entry_date,
+                    target_date: trade.target_date,
+                    trade_result: trade.trade_result,
+                    pnl: 0.0,
+                    point_value: futures_point_value(&trade.symbol),
+                    balance,
+                    drawdown: balance - peak_balance,
+                    skipped_for_overlap: true,
+                });
+                continue;
+            }
+
+            let point_value = futures_point_value(&trade.symbol);
+            let pnl = simulator_trade_pnl(trade, contracts);
+            balance += pnl;
+            peak_balance = peak_balance.max(balance);
+            let drawdown = balance - peak_balance;
+            max_drawdown_seen = max_drawdown_seen.min(drawdown);
+            trade_count += 1;
+            busy_until = trade.target_date;
+            end_date = trade.target_date.or(Some(trade.entry_date));
+
+            events.push(SimulatorReplayTradeEvent {
+                test_index,
+                trade_index: trade_count,
+                symbol: trade.symbol.clone(),
+                pattern_id: trade.pattern_id.clone(),
+                pattern_group_id: trade.pattern_group_id.clone(),
+                entry_date: trade.entry_date,
+                target_date: trade.target_date,
+                trade_result: trade.trade_result,
+                pnl,
+                point_value,
+                balance,
+                drawdown,
+                skipped_for_overlap: false,
+            });
+
+            let trailing_floor = peak_balance - max_drawdown;
+            let daily_floor = daily_loss_limit.map(|limit| day_start_balance - limit);
+            if balance <= trailing_floor
+                || daily_floor
+                    .map(|floor| balance <= floor)
+                    .unwrap_or(false)
+            {
+                status = String::from("failed");
+                break;
+            }
+            if balance >= starting_balance + profit_target {
+                status = String::from("passed");
+                break;
+            }
+        }
+
+        tests.push(SimulatorReplayTestResult {
+            test_index,
+            status: status.clone(),
+            start_date: test_start_date,
+            end_date,
+            starting_balance,
+            ending_balance: balance,
+            peak_balance,
+            max_drawdown: max_drawdown_seen,
+            trade_count,
+            skipped_overlap_count,
+        });
+
+        if status == "waiting" {
+            break;
+        }
+
+        next_start_date = end_date.unwrap_or(test_start_date);
+    }
+
+    HttpResponse::Ok().json(SimulatorReplayResponse {
+        family_key: prop_strategy_id.to_string(),
+        tests,
+        trades: events,
+        eligible_trade_count: rows.len() as i64,
+    })
+}
+
 #[route("/current-open-setups", method = "GET", method = "POST")]
 async fn fetch_current_open_setups(
     pool: web::Data<MySqlPool>,
@@ -1833,6 +2195,7 @@ async fn create_index_if_missing(pool: &MySqlPool, sql: &str) -> Result<(), sqlx
 async fn ensure_canvas_load_indexes(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     for sql in [
         "CREATE INDEX idx_candles_symbol_date ON candles (symbol, date)",
+        "CREATE INDEX idx_futures_contract_1m_candles_symbol_ts_utc ON futures_contract_1m_candles (symbol, ts_utc)",
         "CREATE INDEX idx_pattern_outcomes_prop_pattern_id ON pattern_outcomes_prop (pattern_id, d_date)",
         "CREATE INDEX idx_pattern_outcomes_prop_group_detail ON pattern_outcomes_prop (pattern_group_id, d_date, market, harmonic_type, size_bucket)",
         "CREATE INDEX idx_pattern_outcomes_prop_symbol_d_date ON pattern_outcomes_prop (symbol, d_date)",
@@ -1878,6 +2241,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(fetch_candles)
             .service(fetch_strategy_trades)
+            .service(fetch_simulator_family_replay)
             .service(fetch_current_open_setups)
             .service(fetch_current_setup_strategies)
             .service(fetch_pattern_detail)
@@ -1912,6 +2276,22 @@ async fn fetch_pattern_detail(
     }
 }
 
+fn pattern_detail_candle_window_limit(params: &PatternDetailParams) -> i64 {
+    let fallback_limit = 20_000;
+    let Some(total_setup_length) = [
+        params.x_length,
+        params.a_length,
+        params.b_length,
+        params.c_length,
+    ]
+    .into_iter()
+    .try_fold(0_i64, |sum, value| value.map(|length| sum + length)) else {
+        return fallback_limit;
+    };
+
+    (total_setup_length + 8).clamp(16, fallback_limit)
+}
+
 async fn fetch_pattern_detail_from_prop_outcomes(
     pool: &MySqlPool,
     params: &PatternDetailParams,
@@ -1937,44 +2317,54 @@ async fn fetch_pattern_detail_from_prop_outcomes(
     } else {
         String::from("WHERE p.pattern_group_id = ?")
     };
+    let should_apply_exact_geometry_filters = !has_pattern_id;
+    let requested_outcome_model = params
+        .prop_outcome_mode
+        .as_deref()
+        .map(|mode| prop_outcome_model_label(normalize_prop_outcome_mode(Some(mode))));
 
-    if params.d_date.is_some() {
+    if requested_outcome_model.is_some() {
+        outcome_where.push_str(" AND p.outcome_model = ?");
+    }
+
+    if !has_pattern_id && params.d_date.is_some() {
         outcome_where.push_str(" AND p.d_date = ?");
     }
-    if params.market.is_some() {
+    if !has_pattern_id && params.market.is_some() {
         outcome_where.push_str(" AND p.market = ?");
     }
-    if params.harmonic_type.is_some() {
+    if !has_pattern_id && params.harmonic_type.is_some() {
         outcome_where.push_str(" AND p.harmonic_type = ?");
     }
-    if params.size_bucket.is_some() {
+    if !has_pattern_id && params.size_bucket.is_some() {
         outcome_where.push_str(" AND p.size_bucket = ?");
     }
-    if params.balance_bucket.is_some() {
+    if !has_pattern_id && params.balance_bucket.is_some() {
         outcome_where.push_str(&format!(" AND {balance_bucket_expr} = ?"));
     }
-    if params.trade_enter_price.is_some() {
+    if should_apply_exact_geometry_filters && params.trade_enter_price.is_some() {
         outcome_where.push_str(" AND p.trade_enter_price = ?");
     }
-    if params.trade_risk_exit_price.is_some() {
+    if should_apply_exact_geometry_filters && params.trade_risk_exit_price.is_some() {
         outcome_where.push_str(" AND p.trade_risk_exit_price = ?");
     }
-    if params.trade_reward_exit_price.is_some() {
+    if should_apply_exact_geometry_filters && params.trade_reward_exit_price.is_some() {
         outcome_where.push_str(" AND p.trade_reward_exit_price = ?");
     }
-    if params.x_length.is_some() {
+    if should_apply_exact_geometry_filters && params.x_length.is_some() {
         outcome_where.push_str(" AND p.x_length = ?");
     }
-    if params.a_length.is_some() {
+    if should_apply_exact_geometry_filters && params.a_length.is_some() {
         outcome_where.push_str(" AND p.a_length = ?");
     }
-    if params.b_length.is_some() {
+    if should_apply_exact_geometry_filters && params.b_length.is_some() {
         outcome_where.push_str(" AND p.b_length = ?");
     }
-    if params.c_length.is_some() {
+    if should_apply_exact_geometry_filters && params.c_length.is_some() {
         outcome_where.push_str(" AND p.c_length = ?");
     }
 
+    let candle_window_limit = pattern_detail_candle_window_limit(params);
     let sql = format!(
         r#"
         WITH selected_outcome AS (
@@ -1984,6 +2374,64 @@ async fn fetch_pattern_detail_from_prop_outcomes(
             ORDER BY COALESCE(p.reversal_detect_date, p.d_confirm_date, p.d_date) DESC,
                      p.trade_enter_price ASC
             LIMIT 1
+        ),
+        selected_source AS (
+            SELECT
+                p.*,
+                EXISTS (
+                    SELECT 1
+                    FROM candles d_check
+                    WHERE d_check.symbol = p.symbol
+                      AND d_check.date = p.d_date
+                    LIMIT 1
+                ) AS use_daily_candles
+            FROM selected_outcome p
+        ),
+        selected_candles AS (
+            SELECT *
+            FROM (
+                SELECT
+                    candle.symbol,
+                    CAST(candle.date AS DATETIME) AS date,
+                    CAST(candle.open AS DECIMAL(18,6)) AS open,
+                    CAST(candle.high AS DECIMAL(18,6)) AS high,
+                    CAST(candle.low AS DECIMAL(18,6)) AS low,
+                    CAST(candle.close AS DECIMAL(18,6)) AS close,
+                    candle.volume,
+                    candle.three_month,
+                    candle.six_month,
+                    candle.twelve_month
+                FROM candles candle
+                INNER JOIN selected_source p
+                    ON p.use_daily_candles
+                   AND p.symbol = candle.symbol
+                   AND candle.date <= p.d_date
+                ORDER BY candle.date DESC
+                LIMIT ?
+            ) daily_candles
+            UNION ALL
+            SELECT
+                *
+            FROM (
+                SELECT
+                    candle.symbol,
+                    candle.ts_utc AS date,
+                    CAST(candle.open AS DECIMAL(18,6)) AS open,
+                    CAST(candle.high AS DECIMAL(18,6)) AS high,
+                    CAST(candle.low AS DECIMAL(18,6)) AS low,
+                    CAST(candle.close AS DECIMAL(18,6)) AS close,
+                    candle.volume,
+                    CAST(NULL AS SIGNED) AS three_month,
+                    CAST(NULL AS SIGNED) AS six_month,
+                    CAST(NULL AS SIGNED) AS twelve_month
+                FROM futures_contract_1m_candles candle
+                INNER JOIN selected_source p
+                    ON NOT p.use_daily_candles
+                   AND p.symbol = candle.symbol
+                   AND candle.ts_utc <= p.d_date
+                ORDER BY candle.ts_utc DESC
+                LIMIT ?
+            ) futures_candles
         ),
         ranked_candles AS (
             SELECT
@@ -1998,39 +2446,7 @@ async fn fetch_pattern_detail_from_prop_outcomes(
                 c.six_month,
                 c.twelve_month,
                 ROW_NUMBER() OVER (PARTITION BY c.symbol ORDER BY c.date) AS rn
-            FROM (
-                SELECT
-                    candle.symbol,
-                    CAST(candle.date AS DATETIME) AS date,
-                    CAST(candle.open AS DECIMAL(18,6)) AS open,
-                    CAST(candle.high AS DECIMAL(18,6)) AS high,
-                    CAST(candle.low AS DECIMAL(18,6)) AS low,
-                    CAST(candle.close AS DECIMAL(18,6)) AS close,
-                    candle.volume,
-                    candle.three_month,
-                    candle.six_month,
-                    candle.twelve_month
-                FROM candles candle
-                INNER JOIN selected_outcome p
-                    ON p.symbol = candle.symbol
-                   AND candle.date <= p.d_date
-                UNION ALL
-                SELECT
-                    candle.symbol,
-                    candle.ts_utc AS date,
-                    CAST(candle.open AS DECIMAL(18,6)) AS open,
-                    CAST(candle.high AS DECIMAL(18,6)) AS high,
-                    CAST(candle.low AS DECIMAL(18,6)) AS low,
-                    CAST(candle.close AS DECIMAL(18,6)) AS close,
-                    candle.volume,
-                    CAST(NULL AS SIGNED) AS three_month,
-                    CAST(NULL AS SIGNED) AS six_month,
-                    CAST(NULL AS SIGNED) AS twelve_month
-                FROM futures_contract_1m_candles candle
-                INNER JOIN selected_outcome p
-                    ON p.symbol = candle.symbol
-                   AND candle.ts_utc <= p.d_date
-            ) c
+            FROM selected_candles c
         ),
         indexed_outcome AS (
             SELECT
@@ -2134,6 +2550,22 @@ async fn fetch_pattern_detail_from_prop_outcomes(
             CAST(p.full_pattern_length AS SIGNED) AS full_pattern_length,
             CAST(p.d_min_max AS DECIMAL(18,6)) AS d_min_max,
             CASE WHEN p.target_date IS NULL THEN TRUE ELSE FALSE END AS trade_open,
+            p.entry_date,
+            p.d_confirm_date,
+            p.reversal_detect_date,
+            p.target_date,
+            CAST(p.target_open AS DECIMAL(18,6)) AS target_open,
+            CAST(p.target_high AS DECIMAL(18,6)) AS target_high,
+            CAST(p.target_low AS DECIMAL(18,6)) AS target_low,
+            CAST(p.target_close AS DECIMAL(18,6)) AS target_close,
+            CAST(p.target_volume AS SIGNED) AS target_volume,
+            p.target_is_green,
+            CAST(p.target_close_vs_open_pct AS DECIMAL(18,6)) AS target_close_vs_open_pct,
+            CAST(p.target_high_vs_open_pct AS DECIMAL(18,6)) AS target_high_vs_open_pct,
+            CAST(p.target_low_vs_open_pct AS DECIMAL(18,6)) AS target_low_vs_open_pct,
+            CAST(p.target_range_pct AS DECIMAL(18,6)) AS target_range_pct,
+            p.target_breaks_entry_high,
+            p.target_breaks_entry_low,
             CAST(p.trade_risk_exit_price AS DECIMAL(18,6)) AS trade_risk_exit_price,
             CAST(p.trade_reward_exit_price AS DECIMAL(18,6)) AS trade_reward_exit_price,
             CAST(p.trade_enter_price AS DECIMAL(18,6)) AS trade_enter_price,
@@ -2200,46 +2632,76 @@ async fn fetch_pattern_detail_from_prop_outcomes(
         .filter(|value| !value.is_empty())
     {
         sqlx::query_as::<_, Pattern>(&sql).bind(pattern_id)
+    } else if let Some(pattern_group_id) = params
+        .pattern_group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        sqlx::query_as::<_, Pattern>(&sql).bind(pattern_group_id)
     } else {
-        sqlx::query_as::<_, Pattern>(&sql).bind(params.pattern_group_id.clone())
+        return Ok(None);
     };
 
-    if let Some(d_date) = params.d_date {
+    if let Some(outcome_model) = requested_outcome_model {
+        query = query.bind(outcome_model);
+    }
+
+    if !has_pattern_id && params.d_date.is_some() {
+        let Some(d_date) = params.d_date else {
+            unreachable!();
+        };
         query = query.bind(d_date);
     }
-    if let Some(market) = params.market.as_deref() {
+    if !has_pattern_id && params.market.is_some() {
+        let Some(market) = params.market.as_deref() else {
+            unreachable!();
+        };
         query = query.bind(market);
     }
-    if let Some(harmonic_type) = params.harmonic_type.as_deref() {
+    if !has_pattern_id && params.harmonic_type.is_some() {
+        let Some(harmonic_type) = params.harmonic_type.as_deref() else {
+            unreachable!();
+        };
         query = query.bind(harmonic_type);
     }
-    if let Some(size_bucket) = params.size_bucket.as_deref() {
+    if !has_pattern_id && params.size_bucket.is_some() {
+        let Some(size_bucket) = params.size_bucket.as_deref() else {
+            unreachable!();
+        };
         query = query.bind(size_bucket);
     }
-    if let Some(balance_bucket) = params.balance_bucket.as_deref() {
+    if !has_pattern_id && params.balance_bucket.is_some() {
+        let Some(balance_bucket) = params.balance_bucket.as_deref() else {
+            unreachable!();
+        };
         query = query.bind(balance_bucket);
     }
-    if let Some(trade_enter_price) = params.trade_enter_price {
-        query = query.bind(trade_enter_price);
+    if should_apply_exact_geometry_filters {
+        if let Some(trade_enter_price) = params.trade_enter_price {
+            query = query.bind(trade_enter_price);
+        }
+        if let Some(trade_risk_exit_price) = params.trade_risk_exit_price {
+            query = query.bind(trade_risk_exit_price);
+        }
+        if let Some(trade_reward_exit_price) = params.trade_reward_exit_price {
+            query = query.bind(trade_reward_exit_price);
+        }
+        if let Some(x_length) = params.x_length {
+            query = query.bind(x_length);
+        }
+        if let Some(a_length) = params.a_length {
+            query = query.bind(a_length);
+        }
+        if let Some(b_length) = params.b_length {
+            query = query.bind(b_length);
+        }
+        if let Some(c_length) = params.c_length {
+            query = query.bind(c_length);
+        }
     }
-    if let Some(trade_risk_exit_price) = params.trade_risk_exit_price {
-        query = query.bind(trade_risk_exit_price);
-    }
-    if let Some(trade_reward_exit_price) = params.trade_reward_exit_price {
-        query = query.bind(trade_reward_exit_price);
-    }
-    if let Some(x_length) = params.x_length {
-        query = query.bind(x_length);
-    }
-    if let Some(a_length) = params.a_length {
-        query = query.bind(a_length);
-    }
-    if let Some(b_length) = params.b_length {
-        query = query.bind(b_length);
-    }
-    if let Some(c_length) = params.c_length {
-        query = query.bind(c_length);
-    }
+
+    query = query.bind(candle_window_limit).bind(candle_window_limit);
 
     match query.fetch_optional(pool).await {
         Ok(row) => Ok(row),
@@ -2520,7 +2982,7 @@ async fn fetch_strategy_candidates(
             eprintln!("Strategy candidate DB error: {:?}", error);
             HttpResponse::InternalServerError().finish()
         }
-        };
+    };
 }
 
 #[route("/strategy-contract-weeks", method = "GET", method = "POST")]
@@ -2587,12 +3049,15 @@ async fn fetch_candles(
     // println!("🔔 Handler called: fetch_candles");
     // println!("{:?}", params);
 
-    let mut date_filters = String::new();
+    let mut daily_date_filters = String::new();
+    let mut futures_date_filters = String::new();
     if params.start_date.is_some() {
-        date_filters.push_str(" AND date >= ?");
+        daily_date_filters.push_str(" AND date >= ?");
+        futures_date_filters.push_str(" AND ts_utc >= ?");
     }
     if params.end_date.is_some() {
-        date_filters.push_str(" AND date <= ?");
+        daily_date_filters.push_str(" AND date <= ?");
+        futures_date_filters.push_str(" AND ts_utc <= ?");
     }
 
     let sql = format!(
@@ -2611,6 +3076,8 @@ async fn fetch_candles(
                 six_month,
                 twelve_month
             FROM candles
+            WHERE symbol = ?
+              {daily_date_filters}
             UNION ALL
             SELECT
                 symbol,
@@ -2624,15 +3091,23 @@ async fn fetch_candles(
                 CAST(NULL AS SIGNED) AS six_month,
                 CAST(NULL AS SIGNED) AS twelve_month
             FROM futures_contract_1m_candles
+            WHERE symbol = ?
+              {futures_date_filters}
         ) all_candles
-        WHERE symbol = ?
-          {date_filters}
         ORDER BY date
         "#,
-        date_filters = date_filters
+        daily_date_filters = daily_date_filters,
+        futures_date_filters = futures_date_filters
     );
 
     let mut query = sqlx::query_as::<_, Candle>(&sql).bind(params.symbol.clone());
+    if let Some(start_date) = params.start_date.as_deref() {
+        query = query.bind(start_date);
+    }
+    if let Some(end_date) = params.end_date.as_deref() {
+        query = query.bind(end_date);
+    }
+    query = query.bind(params.symbol.clone());
     if let Some(start_date) = params.start_date.as_deref() {
         query = query.bind(start_date);
     }

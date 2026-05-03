@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as canvasTools from './lib/canvasTools.js';
 import { Mouse, Chart, ABCD } from './lib/draw.js';
 import * as resize from './lib/resize.js';
@@ -32,6 +32,7 @@ export const CandleChart = ({
   const canvasChartRef = useRef(null);
   const hoveredCandleIndexRef = useRef(1);
   const chartStateRef = useRef(null);
+  const [chartReadyVersion, setChartReadyVersion] = useState(0);
   const selectedPattern = chartData?.rust_patterns ?? null;
   const hasCandles = Boolean(chartData?.candles?.length);
   const effectiveFocusMode = focusMode === 'prop' ? 'prop' : is_reversal_focus ? 'reversal' : 'pattern';
@@ -42,31 +43,100 @@ export const CandleChart = ({
       return undefined;
     }
 
-    const initializeChartState = () => {
+    let lastInitializedLayoutKey = '';
+
+    const initializeChartState = ({ force = false } = {}) => {
       if (!canvasChartRef.current || !canvasPriceRef.current || !canvasDatesRef.current) {
-        return;
+        return false;
       }
 
+      const canvasBounds = canvasChartRef.current.getBoundingClientRect();
+      const canvasWidth = Math.round(canvasBounds.width || canvasChartRef.current.offsetWidth || 0);
+      const canvasHeight = Math.round(canvasBounds.height || canvasChartRef.current.offsetHeight || 0);
+      const priceBounds = canvasPriceRef.current.getBoundingClientRect();
+      const dateBounds = canvasDatesRef.current.getBoundingClientRect();
+      const priceWidth = Math.round(priceBounds.width || canvasPriceRef.current.offsetWidth || 0);
+      const priceHeight = Math.round(priceBounds.height || canvasPriceRef.current.offsetHeight || 0);
+      const dateWidth = Math.round(dateBounds.width || canvasDatesRef.current.offsetWidth || 0);
+      const dateHeight = Math.round(dateBounds.height || canvasDatesRef.current.offsetHeight || 0);
+
+      if (
+        canvasWidth <= 0 ||
+        canvasHeight <= 0 ||
+        priceWidth <= 0 ||
+        priceHeight <= 0 ||
+        dateWidth <= 0 ||
+        dateHeight <= 0
+      ) {
+        return false;
+      }
+
+      const layoutKey = [
+        canvasWidth,
+        canvasHeight,
+        priceWidth,
+        priceHeight,
+        dateWidth,
+        dateHeight,
+      ].join('x');
+
+      if (!force && layoutKey === lastInitializedLayoutKey) {
+        return true;
+      }
+
+      lastInitializedLayoutKey = layoutKey;
       canvasTools.reset_candle_canvas(canvasChartRef);
       canvasTools.reset_price_canvas(canvasPriceRef);
       canvasTools.reset_date_canvas(canvasDatesRef);
 
       chartStateRef.current = createChartState({
-        canvasWidth: canvasChartRef.current.offsetWidth,
-        canvasHeight: canvasChartRef.current.offsetHeight,
+        canvasWidth,
+        canvasHeight,
         candles: chartData.candles,
       });
       resize.reposition_candles(chartStateRef, chartData.rust_patterns, {
         focusMode: effectiveFocusMode,
         activeReversalFilter,
       });
+      setChartReadyVersion((current) => current + 1);
+      return true;
     };
 
-    initializeChartState();
-    window.addEventListener('resize', initializeChartState);
+    let animationFrameId = null;
+    const requestInitializeChartState = () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+
+      animationFrameId = requestAnimationFrame(() => {
+        animationFrameId = null;
+        initializeChartState();
+      });
+    };
+
+    initializeChartState({ force: true });
+    requestInitializeChartState();
+
+    const ResizeObserverClass = window.ResizeObserver;
+    const resizeObserver = ResizeObserverClass
+      ? new ResizeObserverClass(requestInitializeChartState)
+      : null;
+
+    if (resizeObserver) {
+      resizeObserver.observe(canvasChartRef.current);
+      resizeObserver.observe(canvasPriceRef.current);
+      resizeObserver.observe(canvasDatesRef.current);
+    }
+
+    window.addEventListener('resize', requestInitializeChartState);
 
     return () => {
-      window.removeEventListener('resize', initializeChartState);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', requestInitializeChartState);
     };
   }, [activeReversalFilter, chartData, effectiveFocusMode]);
 
@@ -145,7 +215,6 @@ export const CandleChart = ({
       if (focusMode === 'prop') {
         patternLayer.drawSetupOverlay(ctx, chartData.rust_patterns);
         patternLayer.prop_events(ctx, chartData.rust_patterns);
-        patternLayer.target_candle(ctx, chartData.rust_patterns);
       }
 
       if (showPatternOverlay && focusMode !== 'prop') {
@@ -253,6 +322,7 @@ export const CandleChart = ({
     market,
     activeReversalFilter,
     set_hovered_candle,
+    chartReadyVersion,
   ]);
 
   const handleChartMouseDown = () => {

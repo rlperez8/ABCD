@@ -7,6 +7,11 @@ const CHART_FIT_PADDING = {
   verticalTop: 34,
   verticalBottom: 28,
 };
+const MIN_FIT_PRICE_SPAN_RATIO = 0.001;
+const MIN_FIT_PRICE_SPAN_ABSOLUTE = 0.01;
+
+const getMinimumFitPriceSpan = (referencePrice) =>
+  Math.max(Math.abs(referencePrice) * MIN_FIT_PRICE_SPAN_RATIO, MIN_FIT_PRICE_SPAN_ABSOLUTE);
 
 const REVERSAL_TYPE_TO_SIGNAL_KEY = {
   BullishKeyReversal: 'bullish_key_reversal',
@@ -97,7 +102,7 @@ const getReversalFocusBounds = (chartStateRef, rustPattern, activeReversalFilter
     chartState.candles.items.length,
     Math.max(...candles.map(({ index }) => index)) + 2
   );
-  const pricePadding = Math.max((maxPrice - minPrice) * 0.18, Math.max(Math.abs(maxPrice), 1) * 0.015);
+  const pricePadding = Math.max((maxPrice - minPrice) * 0.18, getMinimumFitPriceSpan(maxPrice));
 
   return {
     minPrice: minPrice - pricePadding,
@@ -114,45 +119,56 @@ const getReversalFocusBounds = (chartStateRef, rustPattern, activeReversalFilter
 };
 
 const getPropFocusBounds = (chartStateRef, rustPattern) => {
+  const chartState = chartStateRef.current;
   const baseBounds = getPatternBounds(rustPattern);
-  const dIndex = Number(rustPattern?.d);
   const dConfirmIndex = Number(rustPattern?.d_confirm);
   const reversalDetectIndex = Number(rustPattern?.reversal_detect);
-  const targetIndex = Number(rustPattern?.target);
+  const entryIndex = Number(rustPattern?.entry);
+  const exitIndex = Number(rustPattern?.exit_date);
 
   if (!baseBounds) {
     return baseBounds ?? null;
   }
 
-  const patternCenterIndex = (baseBounds.minIndex + baseBounds.maxIndex) / 2;
-  const patternSpan = Math.max(baseBounds.maxIndex - baseBounds.minIndex + 1, 1);
-  const nearbyEventRange = Math.max(12, Math.ceil(patternSpan * 0.35));
-  const nearbyEventIndexes = [dConfirmIndex, reversalDetectIndex, targetIndex].filter(
-    (value) =>
-      Number.isFinite(value) &&
-      value >= 1 &&
-      Number.isFinite(dIndex) &&
-      Math.abs(value - dIndex) <= nearbyEventRange
+  const eventIndexes = [dConfirmIndex, reversalDetectIndex, entryIndex, exitIndex].filter(
+    (value) => Number.isFinite(value) && value >= 1
   );
-  const maxFocusIndex = Math.max(
-    baseBounds.maxIndex,
-    ...nearbyEventIndexes
+  const focusIndexes = [baseBounds.minIndex, baseBounds.maxIndex, ...eventIndexes];
+  const eventPrices = eventIndexes.flatMap((index) => {
+    const candle = chartState?.candles?.items?.[index - 1];
+
+    return candle ? [candle.candle_low, candle.candle_high] : [];
+  });
+  const tradeLevelPrices = [
+    Number(rustPattern?.trade_enter_price),
+    Number(rustPattern?.trade_risk_exit_price),
+    Number(rustPattern?.trade_reward_exit_price),
+    Number(rustPattern?.exit_price),
+  ].filter((value) => Number.isFinite(value));
+  const focusPrices = [
+    baseBounds.minPrice,
+    baseBounds.maxPrice,
+    ...eventPrices,
+    ...tradeLevelPrices,
+  ];
+  const minFocusIndex = Math.max(1, Math.min(...focusIndexes));
+  const maxFocusIndex = Math.min(
+    chartState?.candles?.items?.length ?? Math.max(...focusIndexes),
+    Math.max(...focusIndexes)
   );
-  const minFocusIndex = Math.min(
-    baseBounds.minIndex,
-    ...nearbyEventIndexes
-  );
+  const minFocusPrice = Math.min(...focusPrices);
+  const maxFocusPrice = Math.max(...focusPrices);
   const pricePadding = Math.max(
-    (baseBounds.maxPrice - baseBounds.minPrice) * 0.18,
-    Math.max(Math.abs(baseBounds.maxPrice), 1) * 0.015
+    (maxFocusPrice - minFocusPrice) * 0.18,
+    getMinimumFitPriceSpan(maxFocusPrice)
   );
 
   return {
-    minPrice: baseBounds.minPrice - pricePadding,
-    maxPrice: baseBounds.maxPrice + pricePadding,
+    minPrice: minFocusPrice - pricePadding,
+    maxPrice: maxFocusPrice + pricePadding,
     minIndex: Math.max(1, minFocusIndex - 2),
     maxIndex: maxFocusIndex + 2,
-    anchorIndex: patternCenterIndex,
+    anchorIndex: (minFocusIndex + maxFocusIndex) / 2,
   };
 };
 
@@ -197,7 +213,7 @@ const applyHorizontalFit = (chartStateRef, minIndex, maxIndex, options = {}) => 
 
 const applyVerticalFit = (chartStateRef, minPrice, maxPrice) => {
   const chartState = chartStateRef.current;
-  const priceSpan = Math.max(maxPrice - minPrice, Math.max(Math.abs(maxPrice), 1) * 0.02);
+  const priceSpan = Math.max(maxPrice - minPrice, getMinimumFitPriceSpan(maxPrice));
   const verticalTopPadding = Math.min(
     CHART_FIT_PADDING.verticalTop,
     Math.max(chartState.canvas.height * 0.12, 18)
@@ -305,7 +321,8 @@ export const reposition_candles = (chartStateRef, rustPattern, options = {}) => 
       : getPatternBounds(rustPattern);
   const reversalAnchorIndex = Number(rustPattern?.d);
   const propAnchorIndex = [
-    Number(rustPattern?.target),
+    Number(rustPattern?.exit_date),
+    Number(rustPattern?.entry),
     Number(rustPattern?.reversal_detect),
     Number(rustPattern?.d_confirm),
     Number(rustPattern?.d),

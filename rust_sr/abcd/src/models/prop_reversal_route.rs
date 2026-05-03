@@ -98,15 +98,7 @@ fn simulate_c_target_trade(
     };
 
     if target_distance <= f64::EPSILON {
-        return Some(SimulatedTargetTrade {
-            entry_date: entry_candle.date,
-            enter_price: entry_candle.open,
-            risk_exit_price: entry_candle.open,
-            reward_exit_price,
-            result: 0,
-            d_length: entry_index.saturating_sub(pattern.reversal_context.d_index) as i64,
-            target_candle: None,
-        });
+        return None;
     }
 
     let risk_exit_price = match pattern.market {
@@ -442,10 +434,14 @@ pub fn build_prop_reversal_outcomes(
                     .map(|candle| pct_change(candle.open, candle.low)),
                 target_range_pct: target_candle
                     .map(|candle| range_pct(candle.open, candle.high, candle.low)),
-                target_breaks_reversal_high: target_candle
-                    .and_then(|candle| candles.get(entry_index).map(|entry| candle.high > entry.high)),
-                target_breaks_reversal_low: target_candle
-                    .and_then(|candle| candles.get(entry_index).map(|entry| candle.low < entry.low)),
+                target_breaks_reversal_high: target_candle.and_then(|candle| {
+                    candles
+                        .get(entry_index)
+                        .map(|entry| candle.high > entry.high)
+                }),
+                target_breaks_reversal_low: target_candle.and_then(|candle| {
+                    candles.get(entry_index).map(|entry| candle.low < entry.low)
+                }),
             });
         }
     }

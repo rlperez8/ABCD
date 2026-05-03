@@ -44,6 +44,8 @@ function findIndexByDate(candles, patternDate) {
     if (exactIndex >= 0) {
       return exactIndex + 1;
     }
+
+    return -1;
   }
 
   const pivotDate = normalizeDate(patternDate);
@@ -60,7 +62,9 @@ function findIndexByDate(candles, patternDate) {
 const buildFormattedPattern = (candles, rustPattern) => {
   const dConfirmDate = rustPattern?.d_confirm_date ?? null;
   const reversalDetectDate = rustPattern?.reversal_detect_date ?? null;
+  const entryDate = rustPattern?.entry_date ?? null;
   const effectiveTargetDate = rustPattern?.target_date ?? null;
+  const effectiveExitDate = rustPattern?.target_date ?? rustPattern?.trade_date ?? null;
   const indexX = findIndexByDate(candles, rustPattern?.x_date);
   const indexA = findIndexByDate(candles, rustPattern?.a_date);
   const indexB = findIndexByDate(candles, rustPattern?.b_date);
@@ -68,15 +72,14 @@ const buildFormattedPattern = (candles, rustPattern) => {
   const indexD = findIndexByDate(candles, rustPattern?.d_date);
   const indexDConfirm = findIndexByDate(candles, dConfirmDate);
   const indexReversalDetect = findIndexByDate(candles, reversalDetectDate);
+  const indexEntry = findIndexByDate(candles, entryDate);
   const indexTarget = findIndexByDate(candles, effectiveTargetDate);
   const resolvedDConfirm = indexDConfirm > 0 ? indexDConfirm : indexD > 1 ? indexD - 1 : -1;
   const resolvedReversalDetect =
     indexReversalDetect > 0 ? indexReversalDetect : -1;
-  const targetAnchorIndex =
-    resolvedReversalDetect > 0 ? resolvedReversalDetect : resolvedDConfirm;
-  const resolvedTarget =
-    indexTarget > 0 ? indexTarget : targetAnchorIndex > 1 ? targetAnchorIndex - 1 : indexD > 2 ? indexD - 2 : -1;
-  const exit = findIndexByDate(candles, rustPattern?.trade_date ?? effectiveTargetDate);
+  const resolvedEntry = indexEntry > 0 ? indexEntry : -1;
+  const resolvedTarget = indexTarget > 0 ? indexTarget : -1;
+  const exit = findIndexByDate(candles, effectiveExitDate);
   const isBearish = rustPattern?.market === 'Bearish';
   const exitPrice =
     rustPattern?.target_close ??
@@ -95,6 +98,7 @@ const buildFormattedPattern = (candles, rustPattern) => {
     d: indexD,
     d_confirm: resolvedDConfirm,
     reversal_detect: resolvedReversalDetect,
+    entry: resolvedEntry,
     target: resolvedTarget,
     x_price: parseFloat(isBearish ? rustPattern.x_high : rustPattern.x_low),
     a_price: parseFloat(isBearish ? rustPattern.a_low : rustPattern.a_high),
@@ -105,7 +109,7 @@ const buildFormattedPattern = (candles, rustPattern) => {
     take_profit: parseFloat(rustPattern.trade_reward_exit_price),
     entered_price: parseFloat(rustPattern.trade_enter_price),
     exit_price: parseFloat(exitPrice),
-    exit_date: exit > 0 ? exit : indexD,
+    exit_date: exit > 0 ? exit : -1,
   };
 };
 

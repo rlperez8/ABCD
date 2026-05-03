@@ -80,6 +80,7 @@ const STRATEGY_TIME_OPTIONS = [STRATEGY_ALL_TIME, ...STRATEGY_BIN_FEATURE_OPTION
 const STRATEGY_TIME_FEATURE_OPTIONS = STRATEGY_TIME_OPTIONS.filter((option) => option !== STRATEGY_ALL_TIME);
 const STRATEGY_STRICTNESS_FEATURE_OPTIONS = ['Loose', 'Normal', 'Strict'];
 const STRATEGY_FIT_BIN_OPTIONS = ['50-60', '60-70', '70-80', '80-90', '90-100'];
+const STRATEGY_FIT_TIME_OPTIONS = ['50-60', '60-70', '70-80', '80-90', '90-100'];
 const STRATEGY_FIT_SIZE_OPTIONS = ['Micro', 'Small', 'Normal'];
 const STRATEGY_FIT_STRICTNESS_OPTIONS = ['Strict'];
 const STRATEGY_REVERSAL_FEATURE_OPTIONS = [
@@ -177,6 +178,7 @@ const buildPatternCandleWindow = (pattern = {}) => {
     pattern.d_date,
     pattern.d_confirm_date,
     pattern.reversal_detect_date,
+    pattern.entry_date,
     pattern.target_date,
     pattern.trade_date,
   ]
@@ -300,6 +302,7 @@ const updateSelectedPattern = async (
     'prop_outcome_mode',
     'd_confirm_date',
     'reversal_detect_date',
+    'entry_date',
     'target_date',
     'target_open',
     'target_high',
@@ -1010,6 +1013,7 @@ const App = () => {
 
     const cacheKey = [
       pattern.pattern_id ?? 'unknown-pattern-id',
+      pattern.prop_outcome_mode ?? 'unknown-outcome-mode',
       pattern.pattern_group_id,
       pattern.d_date ?? 'unknown-date',
       pattern.market ?? 'unknown-market',
@@ -1575,6 +1579,11 @@ const App = () => {
             setStrategyChartData(nextChartData);
           }
         });
+      } catch (error) {
+        console.error('Current setup chart load failed:', error);
+        if (!isCancelled) {
+          setStrategyChartData({ candles: [], rust_patterns: null });
+        }
       } finally {
         if (!isCancelled) {
           setLoadingStrategyChart(false);
@@ -1708,7 +1717,7 @@ const App = () => {
   const isDefaultFitActive = useMemo(
     () =>
       sameOptionSet(selectedStrategyBinFeatures, STRATEGY_FIT_BIN_OPTIONS) &&
-      sameOptionSet(selectedStrategyTimeFeatures, STRATEGY_FIT_BIN_OPTIONS) &&
+      sameOptionSet(selectedStrategyTimeFeatures, STRATEGY_FIT_TIME_OPTIONS) &&
       sameOptionSet(selectedStrategySizeFeatures, STRATEGY_FIT_SIZE_OPTIONS) &&
       sameOptionSet(selectedStrategyStrictnessFeatures, STRATEGY_FIT_STRICTNESS_OPTIONS),
     [
@@ -1729,7 +1738,7 @@ const App = () => {
     }
 
     setSelectedStrategyBinFeatures(STRATEGY_FIT_BIN_OPTIONS);
-    setSelectedStrategyTimeFeatures(STRATEGY_FIT_BIN_OPTIONS);
+    setSelectedStrategyTimeFeatures(STRATEGY_FIT_TIME_OPTIONS);
     setSelectedStrategySizeFeatures(STRATEGY_FIT_SIZE_OPTIONS);
     setSelectedStrategyStrictnessFeatures(STRATEGY_FIT_STRICTNESS_OPTIONS);
   }, [isDefaultFitActive]);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CandleChart } from './CandleChart';
 import PatternTable from '../../components/PatternTable';
 import Section from '../../components/Section';
@@ -8,12 +8,24 @@ const formatDebugDate = (value) => {
     return '--';
   }
 
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+    if (match) {
+      return `${match[1]} ${match[2]}`;
+    }
+  }
+
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return String(value);
   }
 
-  return parsed.toISOString().slice(0, 10);
+  const year = parsed.getFullYear();
+  const month = `${parsed.getMonth() + 1}`.padStart(2, '0');
+  const day = `${parsed.getDate()}`.padStart(2, '0');
+  const hour = `${parsed.getHours()}`.padStart(2, '0');
+  const minute = `${parsed.getMinutes()}`.padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute}`;
 };
 
 const formatDebugPrice = (value) => {
@@ -26,6 +38,18 @@ const formatDebugPrice = (value) => {
 
 const formatDebugInteger = (value) =>
   Number.isFinite(value) ? `${value}` : '--';
+
+const splitDebugDateTime = (value) => {
+  if (!value || value === '--') {
+    return { date: '--', time: '--' };
+  }
+
+  const [date, time] = String(value).split(' ');
+  return {
+    date: date || '--',
+    time: time || '--',
+  };
+};
 
 const resolvePivotPrice = (pattern, pivot) => {
   const directValue = pattern?.[`${pivot}_price`];
@@ -53,6 +77,38 @@ const getTrendDisplayMeta = (value) => {
   return { valueLabel: '--', className: 'header_two header_two--trend-neutral' };
 };
 
+const PatternDataStack = ({ rows, labelKey = 'key', ariaLabel }) => (
+  <div className="pattern-data-stack" role="list" aria-label={ariaLabel}>
+    {rows.map((row) => {
+      const dateTime = splitDebugDateTime(row.date);
+
+      return (
+        <div className="pattern-data-row" role="listitem" key={row.key}>
+          <div className="pattern-data-row__title">{row[labelKey]}</div>
+          <div className="pattern-data-row__cells">
+            <div className="pattern-data-row__cell">
+              <span>Idx</span>
+              <strong>{row.index}</strong>
+            </div>
+            <div className="pattern-data-row__cell">
+              <span>Date</span>
+              <strong>{dateTime.date}</strong>
+            </div>
+            <div className="pattern-data-row__cell">
+              <span>Time</span>
+              <strong>{dateTime.time}</strong>
+            </div>
+            <div className="pattern-data-row__cell">
+              <span>Price</span>
+              <strong>{row.price}</strong>
+            </div>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+);
+
 const CandleChartPanel = ({
   chartData,
   isSectionsExpanded,
@@ -67,9 +123,7 @@ const CandleChartPanel = ({
   const [isAbcdPattern, setAbcdPattern] = useState(
     focusMode !== 'reversal' && focusMode !== 'prop'
   );
-  const [isPriceLevels, setPriceLevels] = useState(
-    focusMode !== 'reversal' && focusMode !== 'prop'
-  );
+  const [isPriceLevels, setPriceLevels] = useState(focusMode !== 'reversal');
   const [isRetracement, setRetracement] = useState(
     focusMode !== 'reversal' && focusMode !== 'prop'
   );
@@ -90,6 +144,14 @@ const CandleChartPanel = ({
   });
   const marketTone = market === 'Bearish' ? 'chart-market-bearish' : 'chart-market-bullish';
   const selectedPattern = chartData?.rust_patterns ?? null;
+  const trendLineToggles = useMemo(
+    () => ({
+      threeMonth: isTrend3M,
+      sixMonth: isTrend6M,
+      twelveMonth: isTrend12M,
+    }),
+    [isTrend3M, isTrend6M, isTrend12M]
+  );
   const hoveredPriceStats = [
     { label: 'H', value: hoveredCandle.high?.toFixed(2), color: hoveredCandle.color },
     { label: 'C', value: hoveredCandle.close?.toFixed(2), color: hoveredCandle.color },
@@ -150,6 +212,7 @@ const CandleChartPanel = ({
     selectedPattern?.prop_outcome_mode === 'reversal' || Boolean(selectedPattern?.reversal_detect_date);
   const dConfirmDate = selectedPattern?.d_confirm_date ?? null;
   const reversalDetectDate = selectedPattern?.reversal_detect_date ?? null;
+  const entryDate = selectedPattern?.entry_date ?? null;
   const hasDistinctReversalEvent =
     isPropReversalFocus &&
     (selectedPattern?.reversal_detect ?? null) !== (selectedPattern?.d_confirm ?? null);
@@ -170,13 +233,18 @@ const CandleChartPanel = ({
           price: '--',
         },
         {
+          key: 'EN',
+          label: 'Entry',
+          index: formatDebugInteger(selectedPattern?.entry),
+          date: formatDebugDate(entryDate),
+          price: formatDebugPrice(selectedPattern?.trade_enter_price),
+        },
+        {
           key: 'TG',
-          label: 'Rev Target',
-          index: formatDebugInteger(selectedPattern?.target),
+          label: 'Exit',
+          index: formatDebugInteger(selectedPattern?.exit_date),
           date: formatDebugDate(selectedPattern?.target_date),
-          price: formatDebugPrice(
-            selectedPattern?.target_close ?? selectedPattern?.target_open ?? selectedPattern?.trade_reward_exit_price
-          ),
+          price: formatDebugPrice(selectedPattern?.exit_price),
         },
       ]
     : [
@@ -188,13 +256,18 @@ const CandleChartPanel = ({
           price: '--',
         },
         {
+          key: 'EN',
+          label: 'Entry',
+          index: formatDebugInteger(selectedPattern?.entry),
+          date: formatDebugDate(entryDate),
+          price: formatDebugPrice(selectedPattern?.trade_enter_price),
+        },
+        {
           key: 'TG',
-          label: 'Target',
-          index: formatDebugInteger(selectedPattern?.target),
+          label: 'Exit',
+          index: formatDebugInteger(selectedPattern?.exit_date),
           date: formatDebugDate(selectedPattern?.target_date),
-          price: formatDebugPrice(
-            selectedPattern?.target_close ?? selectedPattern?.target_open ?? selectedPattern?.trade_reward_exit_price
-          ),
+          price: formatDebugPrice(selectedPattern?.exit_price),
         },
       ];
   const identityFields = [
@@ -206,6 +279,7 @@ const CandleChartPanel = ({
     { label: 'Market', value: selectedPattern?.market ?? '--' },
     { label: 'Loaded D', value: formatDebugDate(selectedPattern?.d_date) },
     { label: 'D Confirm', value: formatDebugDate(dConfirmDate) },
+    { label: 'Entry', value: formatDebugDate(entryDate) },
     ...(isPropReversalFocus
       ? [{ label: 'Reversal Detect', value: formatDebugDate(reversalDetectDate ?? dConfirmDate) }]
       : []),
@@ -239,44 +313,12 @@ const CandleChartPanel = ({
 
       <div className="pattern-identity-section">
         <div className="pattern-identity-section-title">XABCD pivots</div>
-        <div className="pattern-pivot-table" role="table" aria-label="Pattern pivot points">
-          <div className="pattern-pivot-table__header" role="row">
-            <span>Pt</span>
-            <span>Idx</span>
-            <span>Date</span>
-            <span>Price</span>
-          </div>
-
-          {pivotRows.map((row) => (
-            <div className="pattern-pivot-table__row" role="row" key={row.key}>
-              <span className="pattern-pivot-table__leg">{row.key}</span>
-              <span>{row.index}</span>
-              <span>{row.date}</span>
-              <span className="pattern-pivot-table__price">{row.price}</span>
-            </div>
-          ))}
-        </div>
+        <PatternDataStack rows={pivotRows} ariaLabel="Pattern pivot points" />
       </div>
 
       <div className="pattern-identity-section">
         <div className="pattern-identity-section-title">Confirm and target</div>
-        <div className="pattern-pivot-table" role="table" aria-label="Pattern checkpoints">
-          <div className="pattern-pivot-table__header" role="row">
-            <span>Evt</span>
-            <span>Idx</span>
-            <span>Date</span>
-            <span>Price</span>
-          </div>
-
-          {eventRows.map((row) => (
-            <div className="pattern-pivot-table__row" role="row" key={row.key}>
-              <span className="pattern-pivot-table__leg">{row.label}</span>
-              <span>{row.index}</span>
-              <span>{row.date}</span>
-              <span className="pattern-pivot-table__price">{row.price}</span>
-            </div>
-          ))}
-        </div>
+        <PatternDataStack rows={eventRows} labelKey="label" ariaLabel="Pattern checkpoints" />
       </div>
 
       <div className="pattern-identity-section">
@@ -304,12 +346,22 @@ const CandleChartPanel = ({
 
     if (focusMode === 'prop') {
       setAbcdPattern(false);
-      setPriceLevels(false);
+      setPriceLevels(true);
       setRetracement(false);
       setReversalFocus(false);
     }
   }, [focusMode]);
   const controlItems = [
+    ...(isPropFocus
+      ? [
+          {
+            active: isPriceLevels,
+            onClick: () => setPriceLevels(!isPriceLevels),
+            icon: '/images/prices.png',
+            label: 'Entry',
+          },
+        ]
+      : []),
     ...(!isPropFocus
       ? [
           {
@@ -377,7 +429,7 @@ const CandleChartPanel = ({
             <div className="chart-kicker">XABCD Terminal</div>
             <div className="chart-title-row">
               <h3 className="chart-panel-title">
-                {isPropFocus ? 'Target Candle Workspace' : 'Pattern Workspace'}
+                {isPropFocus ? 'Trade Workspace' : 'Pattern Workspace'}
               </h3>
               <div className={`chart-market-pill ${marketTone}`}>{market}</div>
             </div>
@@ -439,11 +491,7 @@ const CandleChartPanel = ({
               is_retracement={isRetracement}
               is_abcd_pattern={isAbcdPattern}
               is_reversal_focus={isReversalFocus}
-              trend_line_toggles={{
-                threeMonth: isTrend3M,
-                sixMonth: isTrend6M,
-                twelveMonth: isTrend12M,
-              }}
+              trend_line_toggles={trendLineToggles}
               focusMode={focusMode}
               market={market}
               activeReversalFilter={activeReversalFilter}

@@ -349,6 +349,36 @@ const parseStrategyContractWeekRecord = (row) => ({
   win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
 });
 
+const parseSimulatorReplayResponse = (data) => ({
+  family_key: data?.family_key ?? null,
+  eligible_trade_count: parseOptionalInt(data?.eligible_trade_count) ?? 0,
+  tests: Array.isArray(data?.tests)
+    ? data.tests.map((test) => ({
+        ...test,
+        test_index: parseOptionalInt(test?.test_index) ?? 0,
+        starting_balance: parseOptionalFloat(test?.starting_balance) ?? 0,
+        ending_balance: parseOptionalFloat(test?.ending_balance) ?? 0,
+        peak_balance: parseOptionalFloat(test?.peak_balance) ?? 0,
+        max_drawdown: parseOptionalFloat(test?.max_drawdown) ?? 0,
+        trade_count: parseOptionalInt(test?.trade_count) ?? 0,
+        skipped_overlap_count: parseOptionalInt(test?.skipped_overlap_count) ?? 0,
+      }))
+    : [],
+  trades: Array.isArray(data?.trades)
+    ? data.trades.map((trade) => ({
+        ...trade,
+        test_index: parseOptionalInt(trade?.test_index) ?? 0,
+        trade_index: parseOptionalInt(trade?.trade_index) ?? 0,
+        trade_result: parseOptionalInt(trade?.trade_result) ?? 0,
+        pnl: parseOptionalFloat(trade?.pnl) ?? 0,
+        point_value: parseOptionalFloat(trade?.point_value) ?? 0,
+        balance: parseOptionalFloat(trade?.balance) ?? 0,
+        drawdown: parseOptionalFloat(trade?.drawdown) ?? 0,
+        skipped_for_overlap: Boolean(trade?.skipped_for_overlap),
+      }))
+    : [],
+});
+
 export const getCandles = async (symbol, { startDate = null, endDate = null } = {}) => {
   if (!symbol) {
     return [];
@@ -426,6 +456,38 @@ export const fetchCurrentSetups = async (
   } catch (error) {
     console.error(error);
     return { patterns: [], total_count: 0, has_more: false };
+  }
+};
+
+export const fetchSimulatorFamilyReplay = async ({
+  familyId,
+  firstStartDate,
+  testsToChain,
+  contracts,
+  accountRules,
+  oneTradeAtATime,
+}) => {
+  if (!familyId) {
+    return null;
+  }
+
+  try {
+    const data = await postJson('/simulator/family-replay', {
+      prop_strategy_id: familyId,
+      first_start_date: firstStartDate,
+      tests_to_chain: testsToChain,
+      contracts,
+      starting_balance: accountRules?.startingBalance ?? null,
+      profit_target: accountRules?.profitTarget ?? null,
+      max_drawdown: accountRules?.maxDrawdown ?? null,
+      daily_loss_limit: accountRules?.dailyLossLimit ?? null,
+      one_trade_at_a_time: oneTradeAtATime,
+    });
+
+    return parseSimulatorReplayResponse(data);
+  } catch (error) {
+    console.error(error);
+    return null;
   }
 };
 
@@ -510,25 +572,34 @@ export const fetchPatternDetail = async (patternSummary) => {
     return null;
   }
 
-  const request = {
-    symbol: patternSummary.symbol ?? null,
-    pattern_id: patternSummary.pattern_id ?? null,
-    pattern_group_id: patternSummary.pattern_group_id,
-    x_date: patternSummary.x_date ?? null,
-    d_date: patternSummary.d_date ?? null,
-    market: patternSummary.market ?? null,
-    harmonic_type: patternSummary.harmonic_type ?? null,
-    size_bucket: patternSummary.size_bucket ?? null,
-    balance_bucket: patternSummary.balance_bucket ?? null,
-    trade_enter_price: patternSummary.trade_enter_price ?? null,
-    trade_risk_exit_price: patternSummary.trade_risk_exit_price ?? null,
-    trade_reward_exit_price: patternSummary.trade_reward_exit_price ?? null,
-    x_length: patternSummary.x_length ?? null,
-    a_length: patternSummary.a_length ?? null,
-    b_length: patternSummary.b_length ?? null,
-    c_length: patternSummary.c_length ?? null,
-    prop_outcome_mode: patternSummary.prop_outcome_mode ?? null,
-  };
+  const request = patternSummary.pattern_id
+    ? {
+        pattern_id: patternSummary.pattern_id,
+        pattern_group_id: patternSummary.pattern_group_id ?? '',
+        prop_outcome_mode: patternSummary.prop_outcome_mode ?? null,
+        x_length: patternSummary.x_length ?? null,
+        a_length: patternSummary.a_length ?? null,
+        b_length: patternSummary.b_length ?? null,
+        c_length: patternSummary.c_length ?? null,
+      }
+    : {
+        symbol: patternSummary.symbol ?? null,
+        pattern_group_id: patternSummary.pattern_group_id,
+        x_date: patternSummary.x_date ?? null,
+        d_date: patternSummary.d_date ?? null,
+        market: patternSummary.market ?? null,
+        harmonic_type: patternSummary.harmonic_type ?? null,
+        size_bucket: patternSummary.size_bucket ?? null,
+        balance_bucket: patternSummary.balance_bucket ?? null,
+        trade_enter_price: patternSummary.trade_enter_price ?? null,
+        trade_risk_exit_price: patternSummary.trade_risk_exit_price ?? null,
+        trade_reward_exit_price: patternSummary.trade_reward_exit_price ?? null,
+        x_length: patternSummary.x_length ?? null,
+        a_length: patternSummary.a_length ?? null,
+        b_length: patternSummary.b_length ?? null,
+        c_length: patternSummary.c_length ?? null,
+        prop_outcome_mode: patternSummary.prop_outcome_mode ?? null,
+      };
 
   try {
     const pattern = await postJson('/pattern-detail', request);

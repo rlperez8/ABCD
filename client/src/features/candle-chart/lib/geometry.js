@@ -60,7 +60,7 @@ export const getPatternAnchorPoints = (pattern) => {
 
   return [
     ...pivotPoints,
-    { key: 'enter', index: pattern.d, price: parseFloat(pattern.trade_enter_price) },
+    { key: 'enter', index: pattern.entry, price: parseFloat(pattern.trade_enter_price) },
     { key: 'exit', index: pattern.exit_date, price: parseFloat(pattern.exit_price) },
   ].filter((point) => Number.isFinite(point.index) && Number.isFinite(point.price));
 };

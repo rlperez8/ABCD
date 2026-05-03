@@ -24,6 +24,7 @@ const LABEL_BORDER_COLOR = 'rgba(114, 148, 206, 0.3)';
 const REVERSAL_D_CANDLE_COLOR = '#f3d33b';
 const PROP_CONFIRM_COLOR = '#6dc0ff';
 const PROP_REVERSAL_COLOR = '#f3d33b';
+const PROP_ENTRY_COLOR = '#ffffff';
 const TREND_LINE_SERIES = [
   {
     key: 'threeMonth',
@@ -160,26 +161,6 @@ const getReversalCandleIndexes = (pattern, activeReversalFilter) => {
 const getCandleStrokeColor = (candle) =>
   candle.candle_close > candle.candle_open ? BULLISH_COLOR : BEARISH_COLOR;
 
-const getPatternIndexMeta = (pattern) => {
-  if (!pattern) {
-    return null;
-  }
-
-  const pivotIndexes = [pattern.x, pattern.a, pattern.b, pattern.c, pattern.d]
-    .filter((value) => Number.isFinite(value))
-    .map((value) => Number(value));
-
-  if (!pivotIndexes.length) {
-    return null;
-  }
-
-  return {
-    start: Math.min(...pivotIndexes),
-    end: Math.max(...pivotIndexes),
-    pivotSet: new Set(pivotIndexes),
-  };
-};
-
 const DAY_MONTH_FORMATTER = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   day: 'numeric',
@@ -283,8 +264,7 @@ export class Mouse {
     ctx.restore();
 
     const hoveredCandle = chartState.candles.items[hoveredIndex - 1];
-    setHoveredCandle((previous) => ({
-      ...previous,
+    const nextHoveredCandle = {
       high: hoveredCandle?.candle_high,
       close: hoveredCandle?.candle_close,
       open: hoveredCandle?.candle_open,
@@ -299,7 +279,20 @@ export class Mouse {
           : hoveredCandle?.candle_open < hoveredCandle?.candle_close
           ? '#26a69a'
           : '',
-    }));
+    };
+
+    setHoveredCandle((previous) => {
+      const isUnchanged = Object.entries(nextHoveredCandle).every(
+        ([key, value]) => previous?.[key] === value
+      );
+
+      return isUnchanged
+        ? previous
+        : {
+            ...previous,
+            ...nextHoveredCandle,
+          };
+    });
   };
 
   mouse_price = (canvas, ctxPrice) => {
@@ -635,7 +628,6 @@ export class Chart {
   candles = (ctx, activePattern = null, options = {}) => {
     const chartState = this.chartStateRef.current;
     const { start, end } = this.getVisibleCandleRange(chartState.canvas.width, 4);
-    const patternMeta = getPatternIndexMeta(activePattern);
     const patternPalette =
       activePattern?.market === 'Bearish' ? BEARISH_PALETTE : BULLISH_PALETTE;
     const reversalFocusOnly = Boolean(options?.reversalFocusOnly);
@@ -646,62 +638,21 @@ export class Chart {
     for (let candleIndex = start; candleIndex <= end; candleIndex += 1) {
       const candle = chartState.candles.items[candleIndex - 1];
       const x = getCanvasX(chartState, candleIndex);
-      const isPatternSpan = reversalFocusOnly
-        ? reversalIndexes?.has(candleIndex) ?? false
-        : patternMeta && candleIndex >= patternMeta.start && candleIndex <= patternMeta.end;
       const isReversalSignalCandle = reversalFocusOnly && (reversalIndexes?.has(candleIndex) ?? false);
-      const isPivot = reversalFocusOnly
-        ? false
-        : patternMeta?.pivotSet?.has(candleIndex) ?? false;
-
-      if (isPatternSpan && !isReversalSignalCandle) {
-        this.drawPatternCandleAccent(ctx, candle, x, patternPalette, isPivot);
-      }
 
       this.drawCandle(ctx, candle, x, {
-        isPatternSpan,
-        isPivot,
+        isPatternSpan: isReversalSignalCandle,
+        isPivot: false,
         isReversalSignalCandle,
         palette: patternPalette,
       });
       this.drawWick(ctx, candle, x, {
-        isPatternSpan,
-        isPivot,
+        isPatternSpan: isReversalSignalCandle,
+        isPivot: false,
         isReversalSignalCandle,
         palette: patternPalette,
       });
     }
-  };
-
-  drawPatternCandleAccent = (ctx, candle, x, palette, isPivot = false) => {
-    const {
-      candleLeftX,
-      candleRenderWidth,
-      highY,
-      lowY,
-      candleTopY,
-      candleHeight,
-    } = this.getCandleGeometry(candle, x);
-    const accentTop = Math.min(highY, candleTopY) - (isPivot ? 10 : 6);
-    const accentBottom = Math.max(lowY, candleTopY + candleHeight) + (isPivot ? 10 : 6);
-    const accentHeight = Math.max(accentBottom - accentTop, candleHeight + 12);
-    const accentWidth = candleRenderWidth + (isPivot ? 14 : 8);
-    const accentX = candleLeftX - (accentWidth - candleRenderWidth) / 2;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.fillStyle = isPivot ? palette.zone : palette.fill;
-    ctx.roundRect(accentX, accentTop, accentWidth, accentHeight, 10);
-    ctx.fill();
-
-    if (isPivot) {
-      ctx.beginPath();
-      ctx.strokeStyle = palette.line;
-      ctx.lineWidth = 1.5;
-      ctx.roundRect(accentX, accentTop, accentWidth, accentHeight, 10);
-      ctx.stroke();
-    }
-    ctx.restore();
   };
 
   drawCandle = (ctx, candle, x, highlight = {}) => {
@@ -1125,6 +1076,7 @@ export class ABCD {
     const dIndex = Number(pattern?.d);
     const dConfirmIndex = Number(pattern?.d_confirm);
     const reversalDetectIndex = Number(pattern?.reversal_detect);
+    const entryIndex = Number(pattern?.entry);
     const isPropReversalFocus =
       pattern?.prop_outcome_mode === 'reversal' || Boolean(pattern?.reversal_detect_date);
 
@@ -1134,6 +1086,21 @@ export class ABCD {
         label: 'D Confirm',
         color: PROP_CONFIRM_COLOR,
         guideFromIndex: Number.isFinite(dIndex) ? dIndex : undefined,
+      });
+    }
+
+    if (Number.isFinite(entryIndex) && entryIndex >= 1) {
+      this.drawEventMarker(ctx, pattern, {
+        index: entryIndex,
+        label: 'Entry',
+        color: PROP_ENTRY_COLOR,
+        guideFromIndex:
+          isPropReversalFocus && Number.isFinite(reversalDetectIndex)
+            ? reversalDetectIndex
+            : Number.isFinite(dConfirmIndex)
+              ? dConfirmIndex
+              : dIndex,
+        stackOrder: 1,
       });
     }
 
@@ -1156,132 +1123,24 @@ export class ABCD {
     }
   };
 
-  target_candle = (ctx, pattern) => {
-    const chartState = this.chartStateRef.current;
-    const targetIndex = Number(pattern?.target);
-    const isPropReversalFocus =
-      pattern?.prop_outcome_mode === 'reversal' || Boolean(pattern?.reversal_detect_date);
-    const guideAnchorIndex = Number(
-      isPropReversalFocus ? pattern?.reversal_detect ?? pattern?.d_confirm : pattern?.d_confirm ?? pattern?.d
-    );
-
-    if (!Number.isFinite(targetIndex) || targetIndex < 1) {
-      return;
-    }
-
-    const candle = chartState?.candles?.items?.[targetIndex - 1];
-    const x = getCanvasX(chartState, targetIndex);
-    const palette = this.getOverlayPalette(pattern);
-    const label = isPropReversalFocus ? 'Reversal Target' : 'Target Candle';
-    const candleRenderWidth = Math.max(
-      1,
-      Math.min(Math.round(chartState.candles.width), Math.floor(chartState.candles.completeWidth - 1))
-    );
-    const candleLeftX = Math.round(Math.round(x) + 0.5 - candleRenderWidth / 2);
-
-    let highlightTop;
-    let highlightBottom;
-    let highlightHeight;
-    let highlightX;
-    let highlightWidth;
-
-    if (candle) {
-      const { candleTopY, candleHeight, highY, lowY } = new Chart(this.chartStateRef).getCandleGeometry(
-        candle,
-        x
-      );
-      highlightTop = Math.min(highY, candleTopY) - 12;
-      highlightBottom = Math.max(lowY, candleTopY + candleHeight) + 12;
-      highlightHeight = Math.max(highlightBottom - highlightTop, candleHeight + 24);
-      highlightX = candleLeftX - 10;
-      highlightWidth = candleRenderWidth + 20;
-    } else {
-      highlightTop = 20;
-      highlightBottom = chartState.canvas.height - 20;
-      highlightHeight = highlightBottom - highlightTop;
-      highlightX = candleLeftX - 10;
-      highlightWidth = candleRenderWidth + 20;
-    }
-
-    const labelY = Math.max(18, highlightTop - 12);
-
-    ctx.save();
-    if (Number.isFinite(guideAnchorIndex) && guideAnchorIndex >= 1) {
-      const dX = getCanvasX(chartState, guideAnchorIndex);
-      const guideY = Math.max(36, highlightTop - 18);
-      ctx.beginPath();
-      ctx.strokeStyle = palette.line;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6, 4]);
-      ctx.moveTo(dX, guideY);
-      ctx.lineTo(x, guideY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    ctx.beginPath();
-    ctx.fillStyle = palette.zone;
-    ctx.roundRect(highlightX, highlightTop, highlightWidth, highlightHeight, 14);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.strokeStyle = palette.line;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([8, 4]);
-    ctx.roundRect(highlightX, highlightTop, highlightWidth, highlightHeight, 14);
-    ctx.stroke();
-
-    ctx.setLineDash([]);
-    if (candle) {
-      const { candleTopY, candleHeight, highY, lowY } = new Chart(this.chartStateRef).getCandleGeometry(
-        candle,
-        x
-      );
-      ctx.beginPath();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.roundRect(
-        candleLeftX - 2,
-        Math.min(highY, candleTopY) - 2,
-        candleRenderWidth + 4,
-        Math.max(lowY, candleTopY + candleHeight) - Math.min(highY, candleTopY) + 4,
-        8
-      );
-      ctx.stroke();
-    }
-
-    ctx.font = '600 12px "Segoe UI"';
-    const textWidth = ctx.measureText(label).width;
-    const pillWidth = textWidth + 18;
-    const pillHeight = 24;
-    const pillX = Math.min(
-      Math.max(highlightX + highlightWidth / 2 - pillWidth / 2, 8),
-      chartState.canvas.width - pillWidth - 8
-    );
-
-    ctx.beginPath();
-    ctx.fillStyle = LABEL_BACKGROUND;
-    ctx.strokeStyle = palette.line;
-    ctx.lineWidth = 1;
-    ctx.roundRect(pillX, labelY, pillWidth, pillHeight, 12);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = LABEL_TEXT_COLOR;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, pillX + pillWidth / 2, labelY + pillHeight / 2);
-    ctx.restore();
-  };
-
   price_levels = (ctxPrice, ctx, canvas, pattern) => {
     const chartState = this.chartStateRef.current;
     const palette = this.getOverlayPalette(pattern);
-    const startX = getCanvasX(chartState, pattern.d);
-    const endX = getCanvasX(chartState, pattern.exit_date);
+    const entryIndex = Number.isFinite(Number(pattern?.entry)) ? Number(pattern.entry) : Number(pattern?.d);
+    const exitIndex = Number(pattern?.exit_date);
+    if (!Number.isFinite(entryIndex) || entryIndex < 1 || !Number.isFinite(exitIndex) || exitIndex < 1) {
+      return;
+    }
+
+    const startX = getCanvasX(chartState, entryIndex);
+    const endX = getCanvasX(chartState, exitIndex);
     const stopLossY = getCanvasY(chartState, pattern.trade_risk_exit_price);
     const takeProfitY = getCanvasY(chartState, pattern.trade_reward_exit_price);
     const enteredPriceY = getCanvasY(chartState, pattern.trade_enter_price);
+
+    if (![startX, endX, stopLossY, takeProfitY, enteredPriceY].every(Number.isFinite)) {
+      return;
+    }
 
     ctx.save();
 
