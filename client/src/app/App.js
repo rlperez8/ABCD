@@ -7,7 +7,6 @@ import StrategyInsightCharts from '../features/strategies/StrategyInsightCharts'
 import StrategyFrequencyPanel from '../features/strategies/StrategyFrequencyPanel';
 import StrategyContractBreakdownPanel from '../features/strategies/StrategyContractBreakdownPanel';
 import StrategyVariationPoolCard from '../features/strategies/StrategyVariationPoolCard';
-import StrategyWorkbenchCard from '../features/strategies/StrategyWorkbenchCard';
 import TradeSimulatorPanel from '../features/simulator/TradeSimulatorPanel';
 import {
   fetchCurrentSetupStrategies,
@@ -99,7 +98,7 @@ const STRATEGY_REVERSAL_FEATURE_OPTIONS = [
   'ShootingStar',
 ];
 const DEFAULT_STRATEGY_SORT = {
-  key: 'score',
+  key: 'closed',
   direction: 'desc',
 };
 const INITIAL_STRATEGY_FILTERS = {
@@ -1813,12 +1812,6 @@ const App = () => {
           <div className="app-header" ref={headerRef} />
 
               <div className="strategies-station-shell">
-                <div className="strategies-scoreboard-zone">
-                  <StrategyWorkbenchCard
-                    strategy={selectedStrategy}
-                    isLoading={isHydratingStrategy}
-                  />
-                </div>
                 <div className="strategies-station-layout">
                   <div className="strategies-left-column">
                     <div className="strategies-feature-column">
@@ -2195,6 +2188,7 @@ const App = () => {
                             <TradeSimulatorPanel
                               selectedStrategy={selectedStrategy}
                               loadedTrades={strategyTrades}
+                              loadedCandles={strategyChartData.candles}
                               totalTradeCount={strategyTradeTotalCount}
                             />
                           </div>

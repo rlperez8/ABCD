@@ -93,6 +93,7 @@ const SIMULATOR_TABS = [
 
 const SIMULATOR_PLAYBACK_INTERVAL_MS = 70;
 const SIMULATOR_PLAYBACK_EVENTS_PER_TICK = 3;
+const SIMULATOR_START_DATE = '2021-01-01';
 
 const formatMoney = (value) =>
   new Intl.NumberFormat('en-US', {
@@ -121,10 +122,117 @@ const formatShortDate = (value) => {
   });
 };
 
+const normalizeDateInput = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  const rawValue = String(value);
+  const isoMatch = rawValue.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) {
+    return isoMatch[1];
+  }
+
+  const date = new Date(rawValue);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatDateOption = (value) => {
+  const normalizedDate = normalizeDateInput(value);
+  if (!normalizedDate) {
+    return 'Select date';
+  }
+
+  const [year, month, day] = normalizedDate.split('-').map((part) => Number.parseInt(part, 10));
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) {
+    return normalizedDate;
+  }
+
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
 const getTradeDate = (trade = {}) =>
   trade.entry_date ?? trade.reversal_detect_date ?? trade.d_confirm_date ?? trade.d_date ?? null;
 
 const getTradeEndDate = (trade = {}) => trade.target_date ?? getTradeDate(trade);
+
+const getCandleDate = (candle = {}) =>
+  candle.candle_date ?? candle.date ?? candle.ts_utc ?? null;
+
+const getDateTime = (value) => {
+  const normalizedDate = normalizeDateInput(value);
+  if (!normalizedDate) {
+    return null;
+  }
+
+  const [year, month, day] = normalizedDate.split('-').map((part) => Number.parseInt(part, 10));
+  const time = new Date(year, month - 1, day).getTime();
+  return Number.isFinite(time) ? time : null;
+};
+
+const getLatestDateValue = (values = []) => {
+  let latest = null;
+  let latestTime = null;
+
+  values.forEach((value) => {
+    const normalizedDate = normalizeDateInput(value);
+    const time = getDateTime(normalizedDate);
+    if (normalizedDate && time !== null && (latestTime === null || time > latestTime)) {
+      latest = normalizedDate;
+      latestTime = time;
+    }
+  });
+
+  return latest;
+};
+
+const getLatestLoadedDate = (candles = [], trades = []) => {
+  const latestCandleDate = getLatestDateValue(candles.map(getCandleDate));
+  if (latestCandleDate) {
+    return latestCandleDate;
+  }
+
+  return getLatestDateValue(
+    trades.flatMap((trade) => [
+      getTradeDate(trade),
+      getTradeEndDate(trade),
+      trade.entry_date,
+      trade.target_date,
+    ])
+  );
+};
+
+const buildDateRangeOptions = (startDate, endDate) => {
+  const dates = [];
+  const startTime = getDateTime(startDate);
+  const endTime = getDateTime(endDate);
+  const safeEndTime = Math.max(endTime ?? startTime ?? 0, startTime ?? 0);
+
+  if (startTime === null) {
+    return dates;
+  }
+
+  const cursor = new Date(startTime);
+
+  while (cursor.getTime() <= safeEndTime) {
+    dates.push(normalizeDateInput(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return dates;
+};
 
 const getTradeResultLabel = (trade = {}) => {
   const result = Number(trade.trade_result);
@@ -512,6 +620,7 @@ const EvaluationSnapshot = ({ accountRules, drawdownModel }) => {
 const TradeSimulatorPanel = ({
   selectedStrategy = null,
   loadedTrades = [],
+  loadedCandles = [],
   totalTradeCount = 0,
 }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -572,6 +681,17 @@ const TradeSimulatorPanel = ({
   const accountRules = APEX_ACCOUNT_RULES[accountSize] ?? APEX_ACCOUNT_RULES['50K'];
   const contracts = Math.max(1, Number.parseInt(String(contractsPerTrade), 10) || 1);
   const dailyLossLimit = drawdownModel === 'eod' ? accountRules.eodDailyLossLimit : null;
+  const latestLoadedDate = useMemo(
+    () => getLatestLoadedDate(loadedCandles, loadedTrades),
+    [loadedCandles, loadedTrades]
+  );
+  const startDateOptions = useMemo(
+    () => buildDateRangeOptions(SIMULATOR_START_DATE, latestLoadedDate ?? SIMULATOR_START_DATE),
+    [latestLoadedDate]
+  );
+  const normalizedFirstStartDate = normalizeDateInput(firstStartDate) || firstStartDate;
+  const isSelectedStartLoaded = startDateOptions.includes(normalizedFirstStartDate);
+  const startDateRangeEnd = startDateOptions[startDateOptions.length - 1] ?? SIMULATOR_START_DATE;
 
   const visibleReplayTrades = useMemo(
     () => (simulatorReplay?.trades ?? []).slice(0, playbackEventCount),
@@ -874,13 +994,36 @@ const TradeSimulatorPanel = ({
               <span>Run</span>
               <strong>{testsToChain} {Number(testsToChain) === 1 ? 'Test' : 'Tests'}</strong>
             </div>
-            <label className="simulator-field">
+            <label className="simulator-field simulator-date-select">
               <span>First Start</span>
-              <input
-                type="date"
-                value={firstStartDate}
-                onChange={(event) => setFirstStartDate(event.target.value)}
-              />
+              {startDateOptions.length ? (
+                <select
+                  value={normalizedFirstStartDate}
+                  onChange={(event) => setFirstStartDate(event.target.value)}
+                >
+                  {!isSelectedStartLoaded ? (
+                    <option value={normalizedFirstStartDate}>
+                      {formatDateOption(normalizedFirstStartDate)} / current
+                    </option>
+                  ) : null}
+                  {startDateOptions.map((dateValue) => (
+                    <option value={dateValue} key={dateValue}>
+                      {formatDateOption(dateValue)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="date"
+                  value={normalizedFirstStartDate}
+                  onChange={(event) => setFirstStartDate(event.target.value)}
+                />
+              )}
+              <small>
+                {startDateOptions.length
+                  ? `${formatDateOption(SIMULATOR_START_DATE)} to ${formatDateOption(startDateRangeEnd)}`
+                  : 'No start dates available'}
+              </small>
             </label>
 
             <div className="simulator-field-row">

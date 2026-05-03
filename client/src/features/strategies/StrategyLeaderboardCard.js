@@ -143,7 +143,7 @@ const compareValues = (leftValue, rightValue, isNumeric, direction) => {
   return String(leftValue).localeCompare(String(rightValue)) * modifier;
 };
 
-export const rankStrategies = (strategies = [], sortState = { key: 'score', direction: 'desc' }) => {
+export const rankStrategies = (strategies = [], sortState = { key: 'closed', direction: 'desc' }) => {
   const sortMeta = SORT_COLUMNS[sortState.key] ?? SORT_COLUMNS.expectancy;
 
   return strategies
@@ -183,7 +183,7 @@ const StrategyLeaderboardCard = ({
   const rowRefs = useRef(new Map());
   const tableShellRef = useRef(null);
   const [localSortState, setLocalSortState] = useState({
-    key: 'score',
+    key: 'closed',
     direction: 'desc',
   });
   const sortState = controlledSortState ?? localSortState;
@@ -343,6 +343,7 @@ const StrategyLeaderboardCard = ({
                       const summary = strategy?.comparison?.summary;
                       const isSelected = strategy.id === selectedStrategyId;
                       const isHovered = strategy.id === hoveredStrategyId;
+                      const marketTone = String(strategy.market ?? '').toLowerCase();
 
                       return (
                         <tr
@@ -356,6 +357,9 @@ const StrategyLeaderboardCard = ({
                           }}
                           className={[
                             'strategy-library-row',
+                            'strategy-family-row',
+                            marketTone === 'bullish' ? 'strategy-family-row--bullish' : '',
+                            marketTone === 'bearish' ? 'strategy-family-row--bearish' : '',
                             isHovered ? 'strategy-library-row--hovered' : '',
                             isSelected ? 'strategy-library-row--selected' : '',
                           ]

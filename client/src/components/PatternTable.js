@@ -312,6 +312,7 @@ const PatternTable = ({
               {patterns.map((pattern, rowIndex) => {
                 const isSelected = rowIndex === selectedRowIndex;
                 const isHovered = rowIndex === hoveredRowIndex;
+                const result = Number(pattern?.trade_result);
 
                 return (
                   <tr
@@ -325,6 +326,10 @@ const PatternTable = ({
                     }}
                     className={[
                       'strategy-library-row',
+                      'pattern-library-row',
+                      result === 1 ? 'pattern-library-row--won' : '',
+                      result === 2 ? 'pattern-library-row--lost' : '',
+                      result !== 1 && result !== 2 ? 'pattern-library-row--open' : '',
                       isHovered ? 'strategy-library-row--hovered' : '',
                       isSelected ? 'strategy-library-row--selected' : '',
                     ]
