@@ -65,18 +65,6 @@ const StrategyWorkbenchCard = ({ strategy, isLoading = false }) => {
       value: strategy.timeBin,
     },
     {
-      label: '3M Trend',
-      value: strategy.threeMonthTrend,
-    },
-    {
-      label: '6M Trend',
-      value: strategy.sixMonthTrend,
-    },
-    {
-      label: '12M Trend',
-      value: strategy.twelveMonthTrend,
-    },
-    {
       label: 'Worst Year',
       value: formatPercent(strategy.worstYearExpectancy),
       helper: `${strategy.downYears ?? 0} down years`,

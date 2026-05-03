@@ -3419,10 +3419,6 @@ canvas {
   width: 86px;
 }
 
-.strategy-library-table th:nth-child(7),
-.strategy-library-table td:nth-child(7),
-.strategy-library-table th:nth-child(8),
-.strategy-library-table td:nth-child(8),
 .strategy-library-table th:nth-child(9),
 .strategy-library-table td:nth-child(9),
 .strategy-library-table th:nth-child(10),
@@ -3444,13 +3440,7 @@ canvas {
 .strategy-library-table th:nth-child(18),
 .strategy-library-table td:nth-child(18),
 .strategy-library-table th:nth-child(19),
-.strategy-library-table td:nth-child(19),
-.strategy-library-table th:nth-child(20),
-.strategy-library-table td:nth-child(20),
-.strategy-library-table th:nth-child(21),
-.strategy-library-table td:nth-child(21),
-.strategy-library-table th:nth-child(22),
-.strategy-library-table td:nth-child(22) {
+.strategy-library-table td:nth-child(19) {
   text-align: right;
 }
 

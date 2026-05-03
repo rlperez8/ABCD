@@ -97,7 +97,6 @@ const STRATEGY_REVERSAL_FEATURE_OPTIONS = [
   'Hammer',
   'ShootingStar',
 ];
-const STRATEGY_TREND_FEATURE_OPTIONS = ['Bullish', 'Bearish', 'Unknown'];
 const DEFAULT_STRATEGY_SORT = {
   key: 'score',
   direction: 'desc',
@@ -370,11 +369,8 @@ const buildStrategyId = ({
   sizeBucket,
   timeBin,
   xStrictness,
-  threeMonthTrend,
-  sixMonthTrend,
-  twelveMonthTrend,
 }) =>
-  `${market}-${harmonicType}-${bin}-${reversalType}-${sizeBucket}-${timeBin}-${xStrictness}-${threeMonthTrend}-${sixMonthTrend}-${twelveMonthTrend}`
+  `${market}-${harmonicType}-${bin}-${reversalType}-${sizeBucket}-${timeBin}-${xStrictness}`
     .toLowerCase()
     .replace(/\s+/g, '-');
 
@@ -424,9 +420,6 @@ const buildStrategySnapshot = ({
   sizeBucket,
   timeBin,
   xStrictness = null,
-  threeMonthTrend,
-  sixMonthTrend,
-  twelveMonthTrend,
   comparison = null,
   worstYearExpectancy = null,
   downYears = null,
@@ -447,9 +440,6 @@ const buildStrategySnapshot = ({
         sizeBucket,
         timeBin,
         xStrictness,
-        threeMonthTrend,
-        sixMonthTrend,
-        twelveMonthTrend,
       }),
     propStrategyId:
       familyKey ??
@@ -462,9 +452,6 @@ const buildStrategySnapshot = ({
         sizeBucket,
         timeBin,
         xStrictness,
-        threeMonthTrend,
-        sixMonthTrend,
-        twelveMonthTrend,
       }),
     familyKey,
     familyName,
@@ -483,8 +470,8 @@ const buildStrategySnapshot = ({
       maxSetupsPerWeek: 0,
     },
     name: `${market} ${harmonicType} ${bin} ${reversalType} ${sizeBucket}`,
-    description: `${reversalType} ${sizeBucket.toLowerCase()} ${String(xStrictness ?? 'Loose').toLowerCase()} setups in ${timeBin} time fit with ${threeMonthTrend}/${sixMonthTrend}/${twelveMonthTrend} trend.`,
-    thesis: `A ${harmonicType} cohort in the ${bin} price bin with ${reversalType} reversal context, ${sizeBucket.toLowerCase()} structure size, ${String(xStrictness ?? 'Loose').toLowerCase()} X strictness, ${timeBin} dominant time fit, and ${threeMonthTrend}/${sixMonthTrend}/${twelveMonthTrend} 3M/6M/12M trend context for ${market.toLowerCase()} setups.`,
+    description: `${reversalType} ${sizeBucket.toLowerCase()} ${String(xStrictness ?? 'Loose').toLowerCase()} setups in ${timeBin} time fit.`,
+    thesis: `A ${harmonicType} cohort in the ${bin} price bin with ${reversalType} reversal context, ${sizeBucket.toLowerCase()} structure size, ${String(xStrictness ?? 'Loose').toLowerCase()} X strictness, and ${timeBin} dominant time fit for ${market.toLowerCase()} setups.`,
     harmonicType,
     market,
     bin,
@@ -492,9 +479,6 @@ const buildStrategySnapshot = ({
     sizeBucket,
     timeBin,
     xStrictness,
-    threeMonthTrend,
-    sixMonthTrend,
-    twelveMonthTrend,
     worstYearExpectancy: worstYearExpectancy ?? performanceSummary.worstYearExpectancy,
     downYears: downYears ?? performanceSummary.downYears,
     comparison: normalizedComparison,
@@ -524,9 +508,6 @@ const getPatternStrategyDefinition = (pattern = {}) => {
     sizeBucket: pattern.size_bucket,
     timeBin: pattern.time_bin,
     xStrictness: pattern.x_strictness ?? null,
-    threeMonthTrend: pattern.three_month_trend ?? 'Unknown',
-    sixMonthTrend: pattern.six_month_trend ?? 'Unknown',
-    twelveMonthTrend: pattern.twelve_month_trend ?? 'Unknown',
   };
 };
 
@@ -615,12 +596,6 @@ const App = () => {
   const [selectedStrategyReversalFeatures, setSelectedStrategyReversalFeatures] = useState(
     STRATEGY_REVERSAL_FEATURE_OPTIONS
   );
-  const [selectedStrategyThreeMonthTrendFeatures, setSelectedStrategyThreeMonthTrendFeatures] =
-    useState(STRATEGY_TREND_FEATURE_OPTIONS);
-  const [selectedStrategySixMonthTrendFeatures, setSelectedStrategySixMonthTrendFeatures] =
-    useState(STRATEGY_TREND_FEATURE_OPTIONS);
-  const [selectedStrategyTwelveMonthTrendFeatures, setSelectedStrategyTwelveMonthTrendFeatures] =
-    useState(STRATEGY_TREND_FEATURE_OPTIONS);
   const [activeStrategyWorkspaceView, setActiveStrategyWorkspaceView] = useState(
     STRATEGY_WORKSPACE_VIEW_CANVAS
   );
@@ -668,18 +643,6 @@ const App = () => {
         selectedStrategyReversalFeatures,
         STRATEGY_REVERSAL_FEATURE_OPTIONS
       ),
-      threeMonthTrends: selectedServerOptions(
-        selectedStrategyThreeMonthTrendFeatures,
-        STRATEGY_TREND_FEATURE_OPTIONS
-      ),
-      sixMonthTrends: selectedServerOptions(
-        selectedStrategySixMonthTrendFeatures,
-        STRATEGY_TREND_FEATURE_OPTIONS
-      ),
-      twelveMonthTrends: selectedServerOptions(
-        selectedStrategyTwelveMonthTrendFeatures,
-        STRATEGY_TREND_FEATURE_OPTIONS
-      ),
     }),
     [
       selectedStrategyBinFeatures,
@@ -688,10 +651,7 @@ const App = () => {
       selectedStrategyReversalFeatures,
       selectedStrategySizeFeatures,
       selectedStrategyStrictnessFeatures,
-      selectedStrategySixMonthTrendFeatures,
-      selectedStrategyThreeMonthTrendFeatures,
       selectedStrategyTimeFeatures,
-      selectedStrategyTwelveMonthTrendFeatures,
     ]
   );
   const currentSetupsMaxDaysOpen = parseStrategyMaxDaysOpen(strategyFilters.maxDaysOpen);
@@ -743,20 +703,6 @@ const App = () => {
         return false;
       }
 
-      if (!strategyFeatureMatches(selectedStrategyThreeMonthTrendFeatures, STRATEGY_TREND_FEATURE_OPTIONS, strategyDefinition.threeMonthTrend)) {
-        return false;
-      }
-
-      if (!strategyFeatureMatches(selectedStrategySixMonthTrendFeatures, STRATEGY_TREND_FEATURE_OPTIONS, strategyDefinition.sixMonthTrend)) {
-        return false;
-      }
-
-      if (
-        !strategyFeatureMatches(selectedStrategyTwelveMonthTrendFeatures, STRATEGY_TREND_FEATURE_OPTIONS, strategyDefinition.twelveMonthTrend)
-      ) {
-        return false;
-      }
-
       return true;
     });
   }, [
@@ -767,10 +713,7 @@ const App = () => {
     selectedStrategyId,
     selectedStrategyStrictnessFeatures,
     selectedStrategySizeFeatures,
-    selectedStrategySixMonthTrendFeatures,
-    selectedStrategyThreeMonthTrendFeatures,
     selectedStrategyTimeFeatures,
-    selectedStrategyTwelveMonthTrendFeatures,
     sortedStrategyCurrentSetups,
   ]);
   const filterStrategyUniverse = useCallback(
@@ -804,18 +747,6 @@ const App = () => {
           return false;
         }
 
-        if (!strategyFeatureMatches(selectedStrategyThreeMonthTrendFeatures, STRATEGY_TREND_FEATURE_OPTIONS, strategy.threeMonthTrend)) {
-          return false;
-        }
-
-        if (!strategyFeatureMatches(selectedStrategySixMonthTrendFeatures, STRATEGY_TREND_FEATURE_OPTIONS, strategy.sixMonthTrend)) {
-          return false;
-        }
-
-        if (!strategyFeatureMatches(selectedStrategyTwelveMonthTrendFeatures, STRATEGY_TREND_FEATURE_OPTIONS, strategy.twelveMonthTrend)) {
-          return false;
-        }
-
         if (!strategyPassesBestPickFilters(strategy, strategyFilters)) {
           return false;
         }
@@ -830,10 +761,7 @@ const App = () => {
       selectedStrategyReversalFeatures,
       selectedStrategyStrictnessFeatures,
       selectedStrategySizeFeatures,
-      selectedStrategySixMonthTrendFeatures,
-      selectedStrategyThreeMonthTrendFeatures,
       selectedStrategyTimeFeatures,
-      selectedStrategyTwelveMonthTrendFeatures,
       strategyFilters,
     ]
   );
@@ -1212,9 +1140,6 @@ const App = () => {
             sizeBucket: strategy.size_bucket,
             timeBin: strategy.time_bin,
             xStrictness: strategy.x_strictness ?? null,
-            threeMonthTrend: strategy.three_month_trend,
-            sixMonthTrend: strategy.six_month_trend,
-            twelveMonthTrend: strategy.twelve_month_trend,
           };
           const strategyId =
             strategyDefinition.familyKey ??
@@ -1355,9 +1280,6 @@ const App = () => {
           reversalType: selectedStrategy.reversalType,
           sizeBucket: selectedStrategy.sizeBucket,
           timeBin: selectedStrategy.timeBin,
-          threeMonthTrend: selectedStrategy.threeMonthTrend,
-          sixMonthTrend: selectedStrategy.sixMonthTrend,
-          twelveMonthTrend: selectedStrategy.twelveMonthTrend,
           includeExamples: false,
           propMode: strategyMode === STRATEGY_MODE_PROP,
           propOutcomeMode,
@@ -1783,30 +1705,6 @@ const App = () => {
     toggleStrategyFeature(setSelectedStrategySizeFeatures, STRATEGY_SIZE_FEATURE_OPTIONS, value);
   }, [toggleStrategyFeature]);
 
-  const toggleStrategyThreeMonthTrendFeature = useCallback((value) => {
-    toggleStrategyFeature(
-      setSelectedStrategyThreeMonthTrendFeatures,
-      STRATEGY_TREND_FEATURE_OPTIONS,
-      value
-    );
-  }, [toggleStrategyFeature]);
-
-  const toggleStrategySixMonthTrendFeature = useCallback((value) => {
-    toggleStrategyFeature(
-      setSelectedStrategySixMonthTrendFeatures,
-      STRATEGY_TREND_FEATURE_OPTIONS,
-      value
-    );
-  }, [toggleStrategyFeature]);
-
-  const toggleStrategyTwelveMonthTrendFeature = useCallback((value) => {
-    toggleStrategyFeature(
-      setSelectedStrategyTwelveMonthTrendFeatures,
-      STRATEGY_TREND_FEATURE_OPTIONS,
-      value
-    );
-  }, [toggleStrategyFeature]);
-
   const isDefaultFitActive = useMemo(
     () =>
       sameOptionSet(selectedStrategyBinFeatures, STRATEGY_FIT_BIN_OPTIONS) &&
@@ -1880,24 +1778,6 @@ const App = () => {
         selectedOptions: selectedStrategyReversalFeatures,
         onToggleOption: toggleStrategyReversalFeature,
       },
-      {
-        title: '3M Trend',
-        options: STRATEGY_TREND_FEATURE_OPTIONS,
-        selectedOptions: selectedStrategyThreeMonthTrendFeatures,
-        onToggleOption: toggleStrategyThreeMonthTrendFeature,
-      },
-      {
-        title: '6M Trend',
-        options: STRATEGY_TREND_FEATURE_OPTIONS,
-        selectedOptions: selectedStrategySixMonthTrendFeatures,
-        onToggleOption: toggleStrategySixMonthTrendFeature,
-      },
-      {
-        title: '12M Trend',
-        options: STRATEGY_TREND_FEATURE_OPTIONS,
-        selectedOptions: selectedStrategyTwelveMonthTrendFeatures,
-        onToggleOption: toggleStrategyTwelveMonthTrendFeature,
-      },
     ],
     [
       selectedStrategyBinFeatures,
@@ -1906,20 +1786,14 @@ const App = () => {
       selectedStrategyReversalFeatures,
       selectedStrategyStrictnessFeatures,
       selectedStrategySizeFeatures,
-      selectedStrategySixMonthTrendFeatures,
-      selectedStrategyThreeMonthTrendFeatures,
       selectedStrategyTimeFeatures,
-      selectedStrategyTwelveMonthTrendFeatures,
       toggleStrategyBinFeature,
       toggleStrategyMarketFeature,
       toggleStrategyPatternFeature,
       toggleStrategyReversalFeature,
       toggleStrategyStrictnessFeature,
-      toggleStrategySixMonthTrendFeature,
       toggleStrategySizeFeature,
-      toggleStrategyThreeMonthTrendFeature,
       toggleStrategyTimeFeature,
-      toggleStrategyTwelveMonthTrendFeature,
     ]
   );
 

@@ -65,24 +65,6 @@ const SORT_COLUMNS = {
     isNumeric: false,
     defaultDirection: 'asc',
   },
-  trend3m: {
-    label: '3M',
-    getValue: (strategy) => strategy.threeMonthTrend ?? '',
-    isNumeric: false,
-    defaultDirection: 'asc',
-  },
-  trend6m: {
-    label: '6M',
-    getValue: (strategy) => strategy.sixMonthTrend ?? '',
-    isNumeric: false,
-    defaultDirection: 'asc',
-  },
-  trend12m: {
-    label: '12M',
-    getValue: (strategy) => strategy.twelveMonthTrend ?? '',
-    isNumeric: false,
-    defaultDirection: 'asc',
-  },
   worstYear: {
     label: 'Worst',
     getValue: (strategy) => strategy.worstYearExpectancy ?? Number.NEGATIVE_INFINITY,
@@ -342,9 +324,6 @@ const StrategyLeaderboardCard = ({
                         'size',
                         'time',
                         'xMode',
-                        'trend3m',
-                        'trend6m',
-                        'trend12m',
                         'worstYear',
                         'downYears',
                         'score',
@@ -411,9 +390,6 @@ const StrategyLeaderboardCard = ({
                           <td>{strategy.sizeBucket}</td>
                           <td>{strategy.timeBin}</td>
                           <td>{strategy.xStrictness ?? 'N/A'}</td>
-                          <td>{strategy.threeMonthTrend}</td>
-                          <td>{strategy.sixMonthTrend}</td>
-                          <td>{strategy.twelveMonthTrend}</td>
                           <td>{formatPercent(strategy.worstYearExpectancy)}</td>
                           <td>{strategy.downYears ?? 0}</td>
                           <td>{formatPercent(strategy.score)}</td>
