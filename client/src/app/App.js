@@ -9,6 +9,7 @@ import StrategyFrequencyPanel from '../features/strategies/StrategyFrequencyPane
 import StrategyContractBreakdownPanel from '../features/strategies/StrategyContractBreakdownPanel';
 import StrategyVariationPoolCard from '../features/strategies/StrategyVariationPoolCard';
 import TradeSimulatorPanel from '../features/simulator/TradeSimulatorPanel';
+import StorageDashboardPage from '../features/storage/StorageDashboardPage';
 import {
   fetchCurrentSetupStrategies,
   fetchCurrentSetups,
@@ -30,6 +31,8 @@ const STRATEGY_WORKSPACE_VIEW_CANVAS = 'canvas';
 const STRATEGY_WORKSPACE_VIEW_GRAPHS = 'graphs';
 const STRATEGY_WORKSPACE_VIEW_FREQUENCY = 'frequency';
 const STRATEGY_WORKSPACE_VIEW_SIMULATOR = 'simulator';
+const APP_VIEW_SIMULATOR = 'simulator';
+const APP_VIEW_STORAGE = 'storage';
 const STRATEGY_LIBRARY_VIEW_MATCHED = 'matched-patterns';
 const STRATEGY_LIBRARY_VIEW_CURRENT = 'current-setups';
 const STRATEGY_MODE_PROP = 'prop';
@@ -610,6 +613,7 @@ const parseStrategyMaxDaysOpen = (value) => {
 };
 
 const App = () => {
+  const [activeAppView, setActiveAppView] = useState(APP_VIEW_SIMULATOR);
   const [currentSetups, setCurrentSetups] = useState([]);
   const [isLoadingCurrentSetups, setLoadingCurrentSetups] = useState(false);
   const strategyMode = STRATEGY_MODE_PROP;
@@ -1914,8 +1918,36 @@ const App = () => {
     <div className="App">
       <div className="app-inner">
         <div className="main">
-          <div className="app-header" ref={headerRef} />
+          <div className="app-header" ref={headerRef}>
+            <div className="station-switcher" aria-label="Main workspace">
+              <button
+                type="button"
+                className={
+                  activeAppView === APP_VIEW_SIMULATOR
+                    ? 'station-button station-button--active'
+                    : 'station-button'
+                }
+                onClick={() => setActiveAppView(APP_VIEW_SIMULATOR)}
+              >
+                Simulator
+              </button>
+              <button
+                type="button"
+                className={
+                  activeAppView === APP_VIEW_STORAGE
+                    ? 'station-button station-button--active'
+                    : 'station-button'
+                }
+                onClick={() => setActiveAppView(APP_VIEW_STORAGE)}
+              >
+                Storage
+              </button>
+            </div>
+          </div>
 
+          {activeAppView === APP_VIEW_STORAGE ? (
+            <StorageDashboardPage />
+          ) : (
               <div className="strategies-station-shell">
                 <div className="strategies-station-layout">
                   <div className="strategies-left-column">
@@ -2361,6 +2393,7 @@ const App = () => {
                   </div>
                 </div>
               </div>
+          )}
         </div>
       </div>
     </div>

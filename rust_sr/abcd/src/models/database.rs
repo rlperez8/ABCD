@@ -42,7 +42,7 @@ const HARMONIC_SCORE_COLUMNS: [(&str, &str, &str); 7] = [
     ("Shark", "shark_accuracy", "shark_time_accuracy"),
 ];
 
-const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 20] = [
+const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 22] = [
     (
         "pattern_harmonic_scores",
         "uniq_pattern_harmonic_score",
@@ -72,6 +72,11 @@ const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 20] = [
         "pattern_setups",
         "idx_pattern_setups_symbol_d_date",
         "CREATE INDEX idx_pattern_setups_symbol_d_date ON pattern_setups (symbol, d_date)",
+    ),
+    (
+        "pattern_setups",
+        "idx_pattern_setups_source_contract",
+        "CREATE INDEX idx_pattern_setups_source_contract ON pattern_setups (source_table, source_timeframe, root_symbol, contract_symbol)",
     ),
     (
         "pattern_setups",
@@ -122,6 +127,11 @@ const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 20] = [
         "pattern_outcomes_prop",
         "idx_pattern_outcomes_prop_symbol_d_date",
         "CREATE INDEX idx_pattern_outcomes_prop_symbol_d_date ON pattern_outcomes_prop (symbol, d_date)",
+    ),
+    (
+        "pattern_outcomes_prop",
+        "idx_pattern_outcomes_prop_source_contract",
+        "CREATE INDEX idx_pattern_outcomes_prop_source_contract ON pattern_outcomes_prop (source_table, source_timeframe, root_symbol, contract_symbol)",
     ),
     (
         "pattern_outcomes_prop",
@@ -805,6 +815,10 @@ pub struct Database {
 #[derive(Serialize)]
 pub struct XABCD_CSV {
     symbol: String,
+    root_symbol: Option<String>,
+    contract_symbol: Option<String>,
+    source_table: String,
+    source_timeframe: String,
     pattern_id: String,
     x_bars_left: i64,
     x_date: String,
@@ -2607,6 +2621,10 @@ impl Database {
                 setup_id CHAR(24) NOT NULL,
                 pattern_id CHAR(24) NOT NULL,
                 symbol VARCHAR(32) NOT NULL,
+                root_symbol VARCHAR(16) NULL,
+                contract_symbol VARCHAR(32) NULL,
+                source_table VARCHAR(64) NULL,
+                source_timeframe VARCHAR(16) NULL,
                 pattern_group_id VARCHAR(64) NOT NULL,
                 x_bars_left BIGINT NOT NULL DEFAULT 0,
                 market VARCHAR(16) NOT NULL,
@@ -2673,6 +2691,12 @@ impl Database {
                 INDEX idx_pattern_setups_pattern_id (pattern_id),
                 INDEX idx_pattern_setups_x_bars_left (x_bars_left),
                 INDEX idx_pattern_setups_symbol_d_date (symbol, d_date),
+                INDEX idx_pattern_setups_source_contract (
+                    source_table,
+                    source_timeframe,
+                    root_symbol,
+                    contract_symbol
+                ),
                 INDEX idx_pattern_setups_prop_strategy_id (prop_strategy_id)
             )
             "#,
@@ -2706,8 +2730,36 @@ impl Database {
             "x_bars_left BIGINT NOT NULL DEFAULT 0 AFTER pattern_group_id",
         )
         .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "root_symbol",
+            "root_symbol VARCHAR(16) NULL AFTER symbol",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "contract_symbol",
+            "contract_symbol VARCHAR(32) NULL AFTER root_symbol",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "source_table",
+            "source_table VARCHAR(64) NULL AFTER contract_symbol",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "source_timeframe",
+            "source_timeframe VARCHAR(16) NULL AFTER source_table",
+        )
+        .await?;
         self.create_index_if_missing(
             "CREATE INDEX idx_pattern_setups_x_bars_left ON pattern_setups (x_bars_left)",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_setups_source_contract ON pattern_setups (source_table, source_timeframe, root_symbol, contract_symbol)",
         )
         .await?;
         sqlx::query(
@@ -2865,6 +2917,10 @@ impl Database {
                 pattern_group_id VARCHAR(64) NOT NULL,
                 x_bars_left BIGINT NOT NULL DEFAULT 0,
                 symbol VARCHAR(32) NOT NULL,
+                root_symbol VARCHAR(16) NULL,
+                contract_symbol VARCHAR(32) NULL,
+                source_table VARCHAR(64) NULL,
+                source_timeframe VARCHAR(16) NULL,
                 d_date DATETIME NOT NULL,
                 contract_week_index BIGINT NULL,
                 contract_days_from_start BIGINT NULL,
@@ -2928,6 +2984,12 @@ impl Database {
                     size_bucket
                 ),
                 INDEX idx_pattern_outcomes_prop_symbol_d_date (symbol, d_date),
+                INDEX idx_pattern_outcomes_prop_source_contract (
+                    source_table,
+                    source_timeframe,
+                    root_symbol,
+                    contract_symbol
+                ),
                 INDEX idx_pattern_outcomes_prop_lookup (
                     outcome_model,
                     market,
@@ -2960,6 +3022,30 @@ impl Database {
             "pattern_outcomes_prop",
             "x_bars_left",
             "x_bars_left BIGINT NOT NULL DEFAULT 0 AFTER pattern_group_id",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "root_symbol",
+            "root_symbol VARCHAR(16) NULL AFTER symbol",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "contract_symbol",
+            "contract_symbol VARCHAR(32) NULL AFTER root_symbol",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "source_table",
+            "source_table VARCHAR(64) NULL AFTER contract_symbol",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "source_timeframe",
+            "source_timeframe VARCHAR(16) NULL AFTER source_table",
         )
         .await?;
         self.add_column_if_missing(
@@ -3058,6 +3144,10 @@ impl Database {
         .await?;
         self.create_index_if_missing(
             "CREATE INDEX idx_pattern_outcomes_prop_symbol_d_date ON pattern_outcomes_prop (symbol, d_date)",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_outcomes_prop_source_contract ON pattern_outcomes_prop (source_table, source_timeframe, root_symbol, contract_symbol)",
         )
         .await?;
         sqlx::query(
@@ -3362,7 +3452,8 @@ impl Database {
                 let mut setup_builder = QueryBuilder::<MySql>::new(format!(
                     r#"
                     INSERT INTO {} (
-                        setup_id, pattern_id, symbol, pattern_group_id, x_bars_left, market, harmonic_type, prop_strategy_id,
+                        setup_id, pattern_id, symbol, root_symbol, contract_symbol, source_table, source_timeframe,
+                        pattern_group_id, x_bars_left, market, harmonic_type, prop_strategy_id,
                         x_date, x_open, x_high, x_low, x_close, x_length, x_min_max,
                         a_date, a_open, a_high, a_low, a_close, a_length, a_min_max, xa_price_length,
                         b_date, b_open, b_high, b_low, b_close, b_length, b_min_max, ab_price_length,
@@ -3385,6 +3476,10 @@ impl Database {
                     row.push_bind(pattern_id.clone())
                         .push_bind(pattern_id)
                         .push_bind(&p.symbol)
+                        .push_bind(p.root_symbol.as_deref())
+                        .push_bind(p.contract_symbol.as_deref())
+                        .push_bind(&p.source_table)
+                        .push_bind(&p.source_timeframe)
                         .push_bind(&p.pattern_group_id)
                         .push_bind(p.x_bars_left)
                         .push_bind(format!("{:?}", p.market))
@@ -3452,6 +3547,10 @@ impl Database {
                         r#"
                         ON DUPLICATE KEY UPDATE
                             pattern_id = VALUES(pattern_id),
+                            root_symbol = VALUES(root_symbol),
+                            contract_symbol = VALUES(contract_symbol),
+                            source_table = VALUES(source_table),
+                            source_timeframe = VALUES(source_timeframe),
                             x_bars_left = VALUES(x_bars_left),
                             prop_strategy_id = VALUES(prop_strategy_id),
                             bullish_key_reversal = VALUES(bullish_key_reversal),
@@ -4915,6 +5014,10 @@ impl Database {
                     pattern_group_id,
                     x_bars_left,
                     symbol,
+                    root_symbol,
+                    contract_symbol,
+                    source_table,
+                    source_timeframe,
                     d_date,
                     contract_week_index,
                     contract_days_from_start,
@@ -4999,6 +5102,10 @@ impl Database {
                     .push_bind(pattern_group_id)
                     .push_bind(pattern.x_bars_left)
                     .push_bind(pattern.symbol.as_ref())
+                    .push_bind(pattern.root_symbol.as_deref())
+                    .push_bind(pattern.contract_symbol.as_deref())
+                    .push_bind(pattern.source_table.as_ref())
+                    .push_bind(pattern.source_timeframe.as_ref())
                     .push_bind(pattern.d.date)
                     .push_bind(pattern.contract_week_index)
                     .push_bind(pattern.contract_days_from_start)
@@ -5075,6 +5182,10 @@ impl Database {
                     pattern_group_id,
                     x_bars_left,
                     symbol,
+                    root_symbol,
+                    contract_symbol,
+                    source_table,
+                    source_timeframe,
                     d_date,
                     contract_week_index,
                     contract_days_from_start,
@@ -5146,6 +5257,10 @@ impl Database {
                     .push_bind(&item.pattern_group_id)
                     .push_bind(item.x_bars_left)
                     .push_bind(&item.symbol)
+                    .push_bind(item.root_symbol.as_deref())
+                    .push_bind(item.contract_symbol.as_deref())
+                    .push_bind(&item.source_table)
+                    .push_bind(&item.source_timeframe)
                     .push_bind(item.d_date)
                     .push_bind(item.contract_week_index)
                     .push_bind(item.contract_days_from_start)
@@ -5209,6 +5324,10 @@ impl Database {
         let harmonic_lens = p.dominant_harmonic_lens();
         let mut csv = XABCD_CSV {
             symbol: p.symbol.to_string(),
+            root_symbol: p.root_symbol.as_deref().map(str::to_string),
+            contract_symbol: p.contract_symbol.as_deref().map(str::to_string),
+            source_table: p.source_table.to_string(),
+            source_timeframe: p.source_timeframe.to_string(),
             pattern_id: p.pattern_id.clone(),
             x_bars_left: p.x_bars_left,
             x_date: p.x.date.to_string(),

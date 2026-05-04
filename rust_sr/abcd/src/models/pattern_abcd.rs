@@ -65,6 +65,10 @@ impl TargetCandle {
 #[derive(Debug, Clone, Serialize)]
 pub struct PatternXABCD {
     pub symbol: Arc<str>,
+    pub root_symbol: Option<Arc<str>>,
+    pub contract_symbol: Option<Arc<str>>,
+    pub source_table: Arc<str>,
+    pub source_timeframe: Arc<str>,
     pub pattern_id: String,
     pub x_bars_left: i64,
     #[serde(skip_serializing)]

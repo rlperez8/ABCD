@@ -9,8 +9,20 @@ mod models;
 use crate::models::candles::Candle;
 use actix_web::dev::Service;
 use actix_web::route;
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
-use sqlx::MySqlPool;
+use sqlx::{MySqlPool, Row};
+use std::collections::BTreeMap;
+
+const CANDLE_STORAGE_TABLES: [&str; 2] =
+    ["futures_contract_1m_candles", "futures_contract_3m_candles"];
+const ENGINE_STORAGE_TABLES: [&str; 2] = ["pattern_setups", "pattern_outcomes_prop"];
+const ROLLUP_STORAGE_TABLES: [&str; 4] = [
+    "prop_strategy_family_summary",
+    "prop_strategy_family_yearly",
+    "prop_strategy_contract_week_summary",
+    "prop_strategy_family_weekly_cadence",
+];
 
 #[derive(Serialize)]
 struct PatternSummariesResponse {
@@ -103,6 +115,80 @@ struct StrategyTradesParams {
 struct StrategyContractWeekParams {
     pub prop_strategy_id: Option<String>,
     pub limit: Option<i64>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct CandleStorageParams {}
+
+#[derive(Serialize)]
+struct CandleStorageResponse {
+    tables: Vec<CandleTableStorage>,
+    total_rows: i64,
+    total_bytes: u64,
+    bytes_per_row: f64,
+    futures_roots: Vec<FuturesRootCandleStorage>,
+    engine_tables: Vec<CandleTableStorage>,
+    engine_total_rows: i64,
+    engine_total_bytes: u64,
+    engine_bytes_per_row: f64,
+    rollup_tables: Vec<CandleTableStorage>,
+    rollup_total_rows: i64,
+    rollup_total_bytes: u64,
+    rollup_bytes_per_row: f64,
+    setup_tables: Vec<CandleTableStorage>,
+    setup_total_rows: i64,
+    setup_total_bytes: u64,
+    setup_bytes_per_row: f64,
+    setup_roots: Vec<PatternSetupRootStorage>,
+    setup_markets: Vec<PatternSetupMarketStorage>,
+}
+
+#[derive(Clone, Serialize)]
+struct CandleTableStorage {
+    table_name: String,
+    exact_rows: i64,
+    data_bytes: u64,
+    index_bytes: u64,
+    total_bytes: u64,
+    bytes_per_row: f64,
+}
+
+#[derive(Serialize)]
+struct FuturesRootCandleStorage {
+    table_name: String,
+    root_symbol: String,
+    contract_count: i64,
+    candle_count: i64,
+    first_ts: Option<String>,
+    last_ts: Option<String>,
+    estimated_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct PatternSetupRootStorage {
+    table_name: String,
+    root_symbol: String,
+    contract_count: i64,
+    setup_count: i64,
+    first_d_date: Option<String>,
+    last_d_date: Option<String>,
+    estimated_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct PatternSetupMarketStorage {
+    table_name: String,
+    market: String,
+    harmonic_type: String,
+    setup_count: i64,
+    estimated_bytes: u64,
+}
+
+struct PatternSetupRootAggregate {
+    contract_count: i64,
+    setup_count: i64,
+    first_d_date: Option<String>,
+    last_d_date: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -613,6 +699,378 @@ async fn table_exists(pool: &MySqlPool, table_name: &str) -> Result<bool, sqlx::
     Ok(count > 0)
 }
 
+fn read_i64_or_zero(row: &sqlx::mysql::MySqlRow, column: &str) -> i64 {
+    row.try_get::<i64, _>(column)
+        .or_else(|_| row.try_get::<u64, _>(column).map(|value| value as i64))
+        .or_else(|_| {
+            row.try_get::<Decimal, _>(column)
+                .map(|value| value.to_i64().unwrap_or(0))
+        })
+        .unwrap_or(0)
+}
+
+async fn count_storage_table_rows(pool: &MySqlPool, table_name: &str) -> Result<i64, sqlx::Error> {
+    let count_sql = format!("SELECT COUNT(*) AS count FROM {table_name}");
+    sqlx::query_scalar::<_, i64>(&count_sql)
+        .fetch_one(pool)
+        .await
+}
+
+async fn fetch_storage_table_bytes(
+    pool: &MySqlPool,
+    table_name: &str,
+) -> Result<(u64, u64), sqlx::Error> {
+    let stats = sqlx::query(
+        r#"
+        SELECT
+            CAST(COALESCE(data_length, 0) AS SIGNED) AS data_length,
+            CAST(COALESCE(index_length, 0) AS SIGNED) AS index_length
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+        "#,
+    )
+    .bind(table_name)
+    .fetch_optional(pool)
+    .await?;
+
+    let data_bytes = stats
+        .as_ref()
+        .map(|row| read_i64_or_zero(row, "data_length").max(0) as u64)
+        .unwrap_or(0);
+    let index_bytes = stats
+        .as_ref()
+        .map(|row| read_i64_or_zero(row, "index_length").max(0) as u64)
+        .unwrap_or(0);
+
+    Ok((data_bytes, index_bytes))
+}
+
+async fn fetch_candle_table_storage(
+    pool: &MySqlPool,
+    table_name: &str,
+) -> Result<CandleTableStorage, sqlx::Error> {
+    let exact_rows = count_storage_table_rows(pool, table_name).await?;
+    let (data_bytes, index_bytes) = fetch_storage_table_bytes(pool, table_name).await?;
+    let total_bytes = data_bytes + index_bytes;
+    let bytes_per_row = if exact_rows > 0 {
+        total_bytes as f64 / exact_rows as f64
+    } else {
+        0.0
+    };
+
+    Ok(CandleTableStorage {
+        table_name: table_name.to_string(),
+        exact_rows,
+        data_bytes,
+        index_bytes,
+        total_bytes,
+        bytes_per_row,
+    })
+}
+
+async fn fetch_futures_root_candle_storage(
+    pool: &MySqlPool,
+    table: &CandleTableStorage,
+) -> Result<Vec<FuturesRootCandleStorage>, sqlx::Error> {
+    let sql = format!(
+        r#"
+        SELECT
+            root_symbol,
+            COUNT(DISTINCT symbol) AS contract_count,
+            COUNT(*) AS candle_count,
+            CAST(MIN(ts_utc) AS CHAR) AS first_ts,
+            CAST(MAX(ts_utc) AS CHAR) AS last_ts
+        FROM {}
+        GROUP BY root_symbol
+        ORDER BY candle_count DESC, root_symbol ASC
+        "#,
+        table.table_name
+    );
+
+    let rows = sqlx::query(&sql).fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let candle_count = read_i64_or_zero(&row, "candle_count");
+            let estimated_bytes =
+                (candle_count as f64 * table.bytes_per_row).round().max(0.0) as u64;
+
+            FuturesRootCandleStorage {
+                table_name: table.table_name.clone(),
+                root_symbol: row.try_get("root_symbol").unwrap_or_default(),
+                contract_count: read_i64_or_zero(&row, "contract_count"),
+                candle_count,
+                first_ts: row.try_get("first_ts").ok(),
+                last_ts: row.try_get("last_ts").ok(),
+                estimated_bytes,
+            }
+        })
+        .collect())
+}
+
+fn futures_storage_root(symbol: &str) -> String {
+    let uppercase = symbol.trim().to_uppercase();
+    let chars = uppercase.chars().collect::<Vec<_>>();
+    let month_codes = ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z'];
+
+    if chars.len() >= 3
+        && chars[chars.len() - 2].is_ascii_digit()
+        && chars[chars.len() - 1].is_ascii_digit()
+        && month_codes.contains(&chars[chars.len() - 3])
+    {
+        return chars[..chars.len() - 3].iter().collect();
+    }
+
+    if chars.len() >= 2
+        && chars[chars.len() - 1].is_ascii_digit()
+        && month_codes.contains(&chars[chars.len() - 2])
+    {
+        return chars[..chars.len() - 2].iter().collect();
+    }
+
+    if uppercase.len() >= 2 && uppercase.starts_with('6') {
+        return uppercase.chars().take(2).collect();
+    }
+
+    let root = uppercase
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphabetic())
+        .collect::<String>();
+
+    if root.is_empty() {
+        uppercase
+    } else {
+        root
+    }
+}
+
+async fn fetch_pattern_setup_root_storage(
+    pool: &MySqlPool,
+    table: &CandleTableStorage,
+) -> Result<Vec<PatternSetupRootStorage>, sqlx::Error> {
+    let has_root_symbol = table_column_exists(pool, &table.table_name, "root_symbol").await?;
+    let has_contract_symbol =
+        table_column_exists(pool, &table.table_name, "contract_symbol").await?;
+    let root_projection = if has_root_symbol {
+        "NULLIF(root_symbol, '')"
+    } else {
+        "NULL"
+    };
+    let contract_projection = if has_contract_symbol {
+        "COALESCE(NULLIF(contract_symbol, ''), symbol)"
+    } else {
+        "symbol"
+    };
+    let sql = format!(
+        r#"
+        SELECT
+            {root_projection} AS stored_root_symbol,
+            {contract_projection} AS contract_symbol,
+            COUNT(*) AS setup_count,
+            CAST(MIN(d_date) AS CHAR) AS first_d_date,
+            CAST(MAX(d_date) AS CHAR) AS last_d_date
+        FROM {}
+        GROUP BY stored_root_symbol, contract_symbol
+        ORDER BY setup_count DESC, contract_symbol ASC
+        "#,
+        table.table_name,
+        root_projection = root_projection,
+        contract_projection = contract_projection,
+    );
+
+    let rows = sqlx::query(&sql).fetch_all(pool).await?;
+    let mut by_root: BTreeMap<String, PatternSetupRootAggregate> = BTreeMap::new();
+
+    for row in rows {
+        let contract_symbol: String = row.try_get("contract_symbol").unwrap_or_default();
+        let stored_root_symbol: Option<String> = row.try_get("stored_root_symbol").ok().flatten();
+        let root_symbol = stored_root_symbol
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| futures_storage_root(&contract_symbol));
+        let setup_count = read_i64_or_zero(&row, "setup_count");
+        let first_d_date: Option<String> = row.try_get("first_d_date").ok();
+        let last_d_date: Option<String> = row.try_get("last_d_date").ok();
+        let aggregate = by_root
+            .entry(root_symbol)
+            .or_insert_with(|| PatternSetupRootAggregate {
+                contract_count: 0,
+                setup_count: 0,
+                first_d_date: None,
+                last_d_date: None,
+            });
+
+        aggregate.contract_count += 1;
+        aggregate.setup_count += setup_count;
+        if let Some(first_d_date) = first_d_date {
+            if aggregate
+                .first_d_date
+                .as_ref()
+                .map(|current| first_d_date < *current)
+                .unwrap_or(true)
+            {
+                aggregate.first_d_date = Some(first_d_date);
+            }
+        }
+        if let Some(last_d_date) = last_d_date {
+            if aggregate
+                .last_d_date
+                .as_ref()
+                .map(|current| last_d_date > *current)
+                .unwrap_or(true)
+            {
+                aggregate.last_d_date = Some(last_d_date);
+            }
+        }
+    }
+
+    let mut roots = by_root
+        .into_iter()
+        .map(|(root_symbol, aggregate)| {
+            let estimated_bytes = (aggregate.setup_count as f64 * table.bytes_per_row)
+                .round()
+                .max(0.0) as u64;
+
+            PatternSetupRootStorage {
+                table_name: table.table_name.clone(),
+                root_symbol,
+                contract_count: aggregate.contract_count,
+                setup_count: aggregate.setup_count,
+                first_d_date: aggregate.first_d_date,
+                last_d_date: aggregate.last_d_date,
+                estimated_bytes,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    roots.sort_by(|left, right| {
+        right
+            .setup_count
+            .cmp(&left.setup_count)
+            .then_with(|| left.root_symbol.cmp(&right.root_symbol))
+    });
+
+    Ok(roots)
+}
+
+async fn fetch_pattern_setup_market_storage(
+    pool: &MySqlPool,
+    table: &CandleTableStorage,
+) -> Result<Vec<PatternSetupMarketStorage>, sqlx::Error> {
+    let sql = format!(
+        r#"
+        SELECT
+            market,
+            harmonic_type,
+            COUNT(*) AS setup_count
+        FROM {}
+        GROUP BY market, harmonic_type
+        ORDER BY setup_count DESC, market ASC, harmonic_type ASC
+        "#,
+        table.table_name
+    );
+
+    let rows = sqlx::query(&sql).fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let setup_count = read_i64_or_zero(&row, "setup_count");
+            let estimated_bytes =
+                (setup_count as f64 * table.bytes_per_row).round().max(0.0) as u64;
+
+            PatternSetupMarketStorage {
+                table_name: table.table_name.clone(),
+                market: row.try_get("market").unwrap_or_default(),
+                harmonic_type: row.try_get("harmonic_type").unwrap_or_default(),
+                setup_count,
+                estimated_bytes,
+            }
+        })
+        .collect())
+}
+
+async fn fetch_storage_table_group(
+    pool: &MySqlPool,
+    table_names: &[&str],
+) -> Result<Vec<CandleTableStorage>, sqlx::Error> {
+    let mut tables = Vec::new();
+    for table_name in table_names {
+        tables.push(fetch_candle_table_storage(pool, table_name).await?);
+    }
+
+    Ok(tables)
+}
+
+fn summarize_storage_tables(tables: &[CandleTableStorage]) -> (i64, u64, f64) {
+    let total_rows = tables.iter().map(|table| table.exact_rows).sum::<i64>();
+    let total_bytes = tables.iter().map(|table| table.total_bytes).sum::<u64>();
+    let bytes_per_row = if total_rows > 0 {
+        total_bytes as f64 / total_rows as f64
+    } else {
+        0.0
+    };
+
+    (total_rows, total_bytes, bytes_per_row)
+}
+
+async fn build_candle_storage_response(
+    pool: &MySqlPool,
+    _params: &CandleStorageParams,
+) -> Result<CandleStorageResponse, sqlx::Error> {
+    let tables = fetch_storage_table_group(pool, &CANDLE_STORAGE_TABLES).await?;
+    let engine_tables = fetch_storage_table_group(pool, &ENGINE_STORAGE_TABLES).await?;
+    let rollup_tables = fetch_storage_table_group(pool, &ROLLUP_STORAGE_TABLES).await?;
+    let setup_tables = engine_tables
+        .iter()
+        .filter(|table| table.table_name == "pattern_setups")
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let (total_rows, total_bytes, bytes_per_row) = summarize_storage_tables(&tables);
+    let (engine_total_rows, engine_total_bytes, engine_bytes_per_row) =
+        summarize_storage_tables(&engine_tables);
+    let (rollup_total_rows, rollup_total_bytes, rollup_bytes_per_row) =
+        summarize_storage_tables(&rollup_tables);
+    let (setup_total_rows, setup_total_bytes, setup_bytes_per_row) =
+        summarize_storage_tables(&setup_tables);
+
+    let mut futures_roots = Vec::new();
+    for table in tables
+        .iter()
+        .filter(|table| table.table_name.starts_with("futures_contract_"))
+    {
+        futures_roots.extend(fetch_futures_root_candle_storage(pool, table).await?);
+    }
+    let mut setup_roots = Vec::new();
+    let mut setup_markets = Vec::new();
+    for table in &setup_tables {
+        setup_roots.extend(fetch_pattern_setup_root_storage(pool, table).await?);
+        setup_markets.extend(fetch_pattern_setup_market_storage(pool, table).await?);
+    }
+
+    Ok(CandleStorageResponse {
+        tables,
+        total_rows,
+        total_bytes,
+        bytes_per_row,
+        futures_roots,
+        engine_tables,
+        engine_total_rows,
+        engine_total_bytes,
+        engine_bytes_per_row,
+        rollup_tables,
+        rollup_total_rows,
+        rollup_total_bytes,
+        rollup_bytes_per_row,
+        setup_tables,
+        setup_total_rows,
+        setup_total_bytes,
+        setup_bytes_per_row,
+        setup_roots,
+        setup_markets,
+    })
+}
+
 fn cadence_select_fields(has_cadence: bool) -> &'static str {
     if has_cadence {
         r#"
@@ -729,6 +1187,28 @@ fn is_missing_table_error(error: &sqlx::Error) -> bool {
         error,
         sqlx::Error::Database(db_error) if db_error.code().as_deref() == Some("1146")
     )
+}
+
+async fn table_column_exists(
+    pool: &MySqlPool,
+    table: &str,
+    column: &str,
+) -> Result<bool, sqlx::Error> {
+    let exists: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+        "#,
+    )
+    .bind(table)
+    .bind(column)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(exists > 0)
 }
 
 async fn is_rollup_cache_ready(pool: &MySqlPool, cache_name: &str) -> Result<bool, sqlx::Error> {
@@ -2307,6 +2787,20 @@ fn build_current_open_setups_where_clause(
     ))
 }
 
+#[route("/storage/candle-summary", method = "GET", method = "POST")]
+async fn fetch_candle_storage_summary(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<CandleStorageParams>,
+) -> impl Responder {
+    match build_candle_storage_response(pool.get_ref(), &params).await {
+        Ok(response) => HttpResponse::Ok().json(response),
+        Err(error) => {
+            eprintln!("Candle storage summary DB error: {:?}", error);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("🔹 Starting server...");
@@ -2343,6 +2837,7 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_current_open_setups)
             .service(fetch_current_setup_strategies)
             .service(fetch_pattern_detail)
+            .service(fetch_candle_storage_summary)
             .service(fetch_setup_comparison)
             .service(fetch_strategy_candidates)
             .service(fetch_strategy_contract_weeks)

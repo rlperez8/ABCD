@@ -120,6 +120,77 @@ impl CandleSource {
             Self::FuturesContracts => "futures_contracts",
         }
     }
+
+    fn source_table(self) -> &'static str {
+        match self {
+            Self::EquityCandles => "candles",
+            Self::FuturesContracts => "futures_contract_1m_candles",
+        }
+    }
+
+    fn source_timeframe(self) -> &'static str {
+        match self {
+            Self::EquityCandles => "daily",
+            Self::FuturesContracts => "1m",
+        }
+    }
+}
+
+#[derive(Clone)]
+struct PatternSourceContext {
+    root_symbol: Option<Arc<str>>,
+    contract_symbol: Option<Arc<str>>,
+    source_table: Arc<str>,
+    source_timeframe: Arc<str>,
+}
+
+fn futures_root_symbol(symbol: &str) -> String {
+    let uppercase = symbol.trim().to_uppercase();
+    let clean_symbol = uppercase
+        .split(['.', ' ', '_'])
+        .next()
+        .unwrap_or(uppercase.as_str());
+    let known_roots = [
+        "M6A", "M6B", "M6C", "M6E", "M6J", "M6S", "M6N", "MES", "MNQ", "MYM", "M2K", "MGC", "MCL",
+        "MBT", "MET", "RTY", "EMD", "NKD", "6A", "6B", "6C", "6E", "6J", "6S", "6N", "ES", "NQ",
+        "YM", "CL", "QM", "NG", "QG", "HO", "RB", "GC", "SI", "HG", "PL", "PA", "QI", "QO", "ZC",
+        "ZW", "ZS", "ZM", "ZL", "HE", "LE", "GF",
+    ];
+
+    if let Some(root) = known_roots
+        .iter()
+        .find(|root| clean_symbol.starts_with(**root))
+    {
+        return (*root).to_string();
+    }
+
+    let root = clean_symbol
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphabetic() || ch.is_ascii_digit())
+        .collect::<String>();
+
+    if root.is_empty() {
+        uppercase
+    } else {
+        root
+    }
+}
+
+fn pattern_source_context(symbol: &str, candle_source: CandleSource) -> PatternSourceContext {
+    match candle_source {
+        CandleSource::EquityCandles => PatternSourceContext {
+            root_symbol: None,
+            contract_symbol: None,
+            source_table: Arc::from(candle_source.source_table()),
+            source_timeframe: Arc::from(candle_source.source_timeframe()),
+        },
+        CandleSource::FuturesContracts => PatternSourceContext {
+            root_symbol: Some(Arc::from(futures_root_symbol(symbol))),
+            contract_symbol: Some(Arc::from(symbol.to_string())),
+            source_table: Arc::from(candle_source.source_table()),
+            source_timeframe: Arc::from(candle_source.source_timeframe()),
+        },
+    }
 }
 
 fn engine_run_id() -> String {
@@ -171,6 +242,7 @@ fn contract_age_fields(candles: &[Candle], d_candle: &Candle) -> (Option<i64>, O
 fn scan_symbol(
     symbol: String,
     candles: Vec<Candle>,
+    source_context: PatternSourceContext,
     max_x_bars_left: Option<i64>,
 ) -> SymbolScanResult {
     let symbol = Arc::<str>::from(symbol);
@@ -427,6 +499,10 @@ fn scan_symbol(
 
                 pattern_xabcd_holder.push(PatternXABCD {
                     symbol: Arc::clone(&symbol),
+                    root_symbol: source_context.root_symbol.clone(),
+                    contract_symbol: source_context.contract_symbol.clone(),
+                    source_table: Arc::clone(&source_context.source_table),
+                    source_timeframe: Arc::clone(&source_context.source_timeframe),
                     pattern_id: String::new(),
                     x_bars_left: 0,
                     x_index: pattern.x_index,
@@ -618,12 +694,12 @@ fn spawn_symbol_scan(
         let candle_count = candles.len();
 
         let symbol_for_error = symbol.clone();
-        let mut result =
-            tokio::task::spawn_blocking(move || scan_symbol(symbol, candles, max_x_bars_left))
-                .await
-                .map_err(|error| {
-                    format!("{}: scanner worker failed: {}", symbol_for_error, error)
-                })?;
+        let source_context = pattern_source_context(&symbol, candle_source);
+        let mut result = tokio::task::spawn_blocking(move || {
+            scan_symbol(symbol, candles, source_context, max_x_bars_left)
+        })
+        .await
+        .map_err(|error| format!("{}: scanner worker failed: {}", symbol_for_error, error))?;
         result.candle_count = candle_count;
         Ok(result)
     });

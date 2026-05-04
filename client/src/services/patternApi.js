@@ -414,6 +414,98 @@ export const getCandles = async (symbol, { startDate = null, endDate = null } = 
   }
 };
 
+export const fetchCandleStorageSummary = async ({
+  includeStockSymbols = false,
+} = {}) => {
+  try {
+    const data = await postJson('/storage/candle-summary', {
+      include_stock_symbols: includeStockSymbols,
+    });
+
+    return {
+      ...data,
+      total_rows: parseOptionalInt(data?.total_rows) ?? 0,
+      total_bytes: parseOptionalInt(data?.total_bytes) ?? 0,
+      bytes_per_row: parseOptionalFloat(data?.bytes_per_row) ?? 0,
+      tables: Array.isArray(data?.tables)
+        ? data.tables.map((table) => ({
+            ...table,
+            exact_rows: parseOptionalInt(table?.exact_rows) ?? 0,
+            data_bytes: parseOptionalInt(table?.data_bytes) ?? 0,
+            index_bytes: parseOptionalInt(table?.index_bytes) ?? 0,
+            total_bytes: parseOptionalInt(table?.total_bytes) ?? 0,
+            bytes_per_row: parseOptionalFloat(table?.bytes_per_row) ?? 0,
+          }))
+        : [],
+      futures_roots: Array.isArray(data?.futures_roots)
+        ? data.futures_roots.map((root) => ({
+            ...root,
+            contract_count: parseOptionalInt(root?.contract_count) ?? 0,
+            candle_count: parseOptionalInt(root?.candle_count) ?? 0,
+            estimated_bytes: parseOptionalInt(root?.estimated_bytes) ?? 0,
+          }))
+        : [],
+      engine_tables: Array.isArray(data?.engine_tables)
+        ? data.engine_tables.map((table) => ({
+            ...table,
+            exact_rows: parseOptionalInt(table?.exact_rows) ?? 0,
+            data_bytes: parseOptionalInt(table?.data_bytes) ?? 0,
+            index_bytes: parseOptionalInt(table?.index_bytes) ?? 0,
+            total_bytes: parseOptionalInt(table?.total_bytes) ?? 0,
+            bytes_per_row: parseOptionalFloat(table?.bytes_per_row) ?? 0,
+          }))
+        : [],
+      engine_total_rows: parseOptionalInt(data?.engine_total_rows) ?? 0,
+      engine_total_bytes: parseOptionalInt(data?.engine_total_bytes) ?? 0,
+      engine_bytes_per_row: parseOptionalFloat(data?.engine_bytes_per_row) ?? 0,
+      rollup_tables: Array.isArray(data?.rollup_tables)
+        ? data.rollup_tables.map((table) => ({
+            ...table,
+            exact_rows: parseOptionalInt(table?.exact_rows) ?? 0,
+            data_bytes: parseOptionalInt(table?.data_bytes) ?? 0,
+            index_bytes: parseOptionalInt(table?.index_bytes) ?? 0,
+            total_bytes: parseOptionalInt(table?.total_bytes) ?? 0,
+            bytes_per_row: parseOptionalFloat(table?.bytes_per_row) ?? 0,
+          }))
+        : [],
+      rollup_total_rows: parseOptionalInt(data?.rollup_total_rows) ?? 0,
+      rollup_total_bytes: parseOptionalInt(data?.rollup_total_bytes) ?? 0,
+      rollup_bytes_per_row: parseOptionalFloat(data?.rollup_bytes_per_row) ?? 0,
+      setup_tables: Array.isArray(data?.setup_tables)
+        ? data.setup_tables.map((table) => ({
+            ...table,
+            exact_rows: parseOptionalInt(table?.exact_rows) ?? 0,
+            data_bytes: parseOptionalInt(table?.data_bytes) ?? 0,
+            index_bytes: parseOptionalInt(table?.index_bytes) ?? 0,
+            total_bytes: parseOptionalInt(table?.total_bytes) ?? 0,
+            bytes_per_row: parseOptionalFloat(table?.bytes_per_row) ?? 0,
+          }))
+        : [],
+      setup_total_rows: parseOptionalInt(data?.setup_total_rows) ?? 0,
+      setup_total_bytes: parseOptionalInt(data?.setup_total_bytes) ?? 0,
+      setup_bytes_per_row: parseOptionalFloat(data?.setup_bytes_per_row) ?? 0,
+      setup_roots: Array.isArray(data?.setup_roots)
+        ? data.setup_roots.map((root) => ({
+            ...root,
+            symbol_count: parseOptionalInt(root?.symbol_count) ?? 0,
+            setup_count: parseOptionalInt(root?.setup_count) ?? 0,
+            estimated_bytes: parseOptionalInt(root?.estimated_bytes) ?? 0,
+          }))
+        : [],
+      setup_markets: Array.isArray(data?.setup_markets)
+        ? data.setup_markets.map((market) => ({
+            ...market,
+            setup_count: parseOptionalInt(market?.setup_count) ?? 0,
+            estimated_bytes: parseOptionalInt(market?.estimated_bytes) ?? 0,
+          }))
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
 export const fetchStrategyContractWeeks = async (strategy, { limit = 2000 } = {}) => {
   if (!strategy) {
     return [];
