@@ -23,6 +23,7 @@ export const CandleChart = ({
   is_reversal_focus,
   trend_line_toggles,
   focusMode = 'pattern',
+  propFocusScope = 'trade',
   market,
   activeReversalFilter,
   set_hovered_candle,
@@ -35,7 +36,14 @@ export const CandleChart = ({
   const [chartReadyVersion, setChartReadyVersion] = useState(0);
   const selectedPattern = chartData?.rust_patterns ?? null;
   const hasCandles = Boolean(chartData?.candles?.length);
-  const effectiveFocusMode = focusMode === 'prop' ? 'prop' : is_reversal_focus ? 'reversal' : 'pattern';
+  const effectiveFocusMode =
+    focusMode === 'prop'
+      ? propFocusScope === 'trade'
+        ? 'propTrade'
+        : 'prop'
+      : is_reversal_focus
+        ? 'reversal'
+        : 'pattern';
 
   useEffect(() => {
     if (!hasRenderablePattern(chartData)) {
@@ -173,7 +181,8 @@ export const CandleChart = ({
     const patternLayer = new ABCD(chartStateRef);
     const showPatternOverlay = is_abcd_pattern;
     const showRetracementOverlay = is_retracement;
-    const showPriceLevelsOverlay = is_price_levels;
+    const showPriceLevelRays = is_price_levels;
+    const showPriceLevelTags = focusMode === 'prop' || is_price_levels;
 
     let animationFrameId = null;
 
@@ -233,8 +242,11 @@ export const CandleChart = ({
         patternLayer.reversal_signal(ctx, chartData.rust_patterns, activeReversalFilter);
       }
 
-      if (showPriceLevelsOverlay) {
-        patternLayer.price_levels(ctx_price, ctx, canvas, chartData.rust_patterns);
+      if (showPriceLevelRays || showPriceLevelTags) {
+        patternLayer.price_levels(ctx_price, ctx, canvas, chartData.rust_patterns, {
+          showRays: showPriceLevelRays,
+          showTags: showPriceLevelTags,
+        });
       }
 
       animationFrameId = null;
@@ -318,6 +330,7 @@ export const CandleChart = ({
     is_reversal_focus,
     trend_line_toggles,
     focusMode,
+    propFocusScope,
     effectiveFocusMode,
     market,
     activeReversalFilter,

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PatternTable from '../components/PatternTable';
 import Section from '../components/Section';
 import CandleChartPanel from '../features/candle-chart/CandleChartPanel';
+import DashboardCardFrame from '../features/dashboard/DashboardCardFrame';
 import StrategyLeaderboardCard, { rankStrategies } from '../features/strategies/StrategyLeaderboardCard';
 import StrategyInsightCharts from '../features/strategies/StrategyInsightCharts';
 import StrategyFrequencyPanel from '../features/strategies/StrategyFrequencyPanel';
@@ -146,29 +147,62 @@ const HARMONIC_ACCURACY_FIELDS = [
   { label: 'Shark', key: 'shark_accuracy' },
 ];
 
+const DATE_TIME_TEXT_PATTERN = /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}:\d{2}(?::\d{2})?))?/;
+const padDatePart = (value) => String(value).padStart(2, '0');
+
 const formatDateTimeForServer = (value) => {
   if (!value) return null;
+
+  if (typeof value === 'string') {
+    const match = value.match(DATE_TIME_TEXT_PATTERN);
+    if (match) {
+      const time = match[2] ? (match[2].length === 5 ? `${match[2]}:00` : match[2]) : '00:00:00';
+      return `${match[1]} ${time}`;
+    }
+  }
 
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return null;
   }
 
-  return parsed.toISOString().slice(0, 19).replace('T', ' ');
+  return [
+    parsed.getFullYear(),
+    padDatePart(parsed.getMonth() + 1),
+    padDatePart(parsed.getDate()),
+  ].join('-') + ` ${[
+    padDatePart(parsed.getHours()),
+    padDatePart(parsed.getMinutes()),
+    padDatePart(parsed.getSeconds()),
+  ].join(':')}`;
 };
 
 const formatCandleDateForChart = (value) => {
   if (!value) return null;
+
+  if (typeof value === 'string') {
+    const match = value.match(DATE_TIME_TEXT_PATTERN);
+    if (match) {
+      const time = match[2] ? (match[2].length === 5 ? `${match[2]}:00` : match[2]) : '00:00:00';
+      return `${match[1]} ${time}`;
+    }
+  }
 
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return value;
   }
 
-  return parsed.toISOString().slice(0, 19).replace('T', ' ');
+  return formatDateTimeForServer(parsed);
 };
 
 const buildPatternCandleWindow = (pattern = {}) => {
+  const exitDateValue = pattern.target_date ?? pattern.trade_date ?? null;
+  const parsedExitDate = exitDateValue ? new Date(exitDateValue) : null;
+  const exitTime =
+    parsedExitDate && !Number.isNaN(parsedExitDate.getTime())
+      ? parsedExitDate.getTime()
+      : null;
   const dateValues = [
     pattern.x_date,
     pattern.a_date,
@@ -195,7 +229,10 @@ const buildPatternCandleWindow = (pattern = {}) => {
 
   return {
     startDate: formatDateTimeForServer(new Date(Math.min(...dateValues) - paddingMs)),
-    endDate: formatDateTimeForServer(new Date(Math.max(...dateValues) + paddingMs)),
+    endDate:
+      exitTime !== null
+        ? formatDateTimeForServer(new Date(exitTime))
+        : formatDateTimeForServer(new Date(Math.max(...dateValues) + paddingMs)),
   };
 };
 
@@ -211,6 +248,28 @@ const normalizeCandles = (candles = []) =>
 const handleCandles = async (symbol, options = {}) => {
   const candles = await getCandles(symbol, options);
   return normalizeCandles(candles);
+};
+
+const getDateTimeForCompare = (value) => {
+  const formattedValue = formatDateTimeForServer(value);
+  if (!formattedValue) {
+    return null;
+  }
+
+  const parsed = new Date(formattedValue.replace(' ', 'T'));
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+};
+
+const clipCandlesAfterTradeExit = (candles = [], pattern = {}) => {
+  const exitTime = getDateTimeForCompare(pattern.target_date ?? pattern.trade_date);
+  if (exitTime === null) {
+    return candles;
+  }
+
+  return candles.filter((candle) => {
+    const candleTime = getDateTimeForCompare(candle.candle_date ?? candle.date);
+    return candleTime === null || candleTime <= exitTime;
+  });
 };
 
 const sortStrategyTrades = (patterns = []) =>
@@ -322,7 +381,7 @@ const updateSelectedPattern = async (
       : Promise.resolve([]),
     getSupportResistanceLines(mergedPattern?.symbol),
   ]);
-  formatPattern(candles, mergedPattern, snrLines, setChartData);
+  formatPattern(clipCandlesAfterTradeExit(candles, mergedPattern), mergedPattern, snrLines, setChartData);
   return mergedPattern;
 };
 
@@ -556,6 +615,7 @@ const App = () => {
   const strategyMode = STRATEGY_MODE_PROP;
   const [propOutcomeMode] = useState(PROP_OUTCOME_MODE_REVERSAL);
   const [strategySnapshots, setStrategySnapshots] = useState([]);
+  const [historicalStrategyFamilyTotalCount, setHistoricalStrategyFamilyTotalCount] = useState(0);
   const [currentSetupStrategySnapshots, setCurrentSetupStrategySnapshots] = useState([]);
   const [isLoadingCurrentSetupStrategies, setLoadingCurrentSetupStrategies] = useState(false);
   const [isHydratingStrategy, setHydratingStrategy] = useState(false);
@@ -599,11 +659,12 @@ const App = () => {
     STRATEGY_REVERSAL_FEATURE_OPTIONS
   );
   const [activeStrategyWorkspaceView, setActiveStrategyWorkspaceView] = useState(
-    STRATEGY_WORKSPACE_VIEW_CANVAS
+    STRATEGY_WORKSPACE_VIEW_SIMULATOR
   );
   const [strategyLibraryPatternView, setStrategyLibraryPatternView] = useState(
     STRATEGY_LIBRARY_VIEW_MATCHED
   );
+  const [isMatchedPatternsTableOpen, setMatchedPatternsTableOpen] = useState(true);
   const [selectedStrategyCurrentSetupIndex, setSelectedStrategyCurrentSetupIndex] = useState(-1);
   const [selectedCurrentSetupKey, setSelectedCurrentSetupKey] = useState('');
   const [chartOverlayTop, setChartOverlayTop] = useState(0);
@@ -658,7 +719,6 @@ const App = () => {
   );
   const currentSetupsMaxDaysOpen = parseStrategyMaxDaysOpen(strategyFilters.maxDaysOpen);
   const isPropStrategyMode = strategyMode === STRATEGY_MODE_PROP;
-  const isPropReversalMode = isPropStrategyMode && propOutcomeMode === PROP_OUTCOME_MODE_REVERSAL;
   const sortedStrategyCurrentSetups = useMemo(
     () => sortStrategyTrades(currentSetups),
     [currentSetups]
@@ -791,7 +851,7 @@ const App = () => {
   }, [showingPropCurrentStrategies, strategySortState]);
   const totalStrategyUniverseCount = showingPropCurrentStrategies
     ? currentSetupStrategySnapshots.length
-    : strategySnapshots.length;
+    : historicalStrategyFamilyTotalCount;
   const isLoadingStrategyUniverse =
     showingPropCurrentStrategies
       ? isLoadingCurrentSetupStrategies ||
@@ -886,8 +946,22 @@ const App = () => {
     [propOutcomeMode, selectedStrategy, strategyMode]
   );
 
+  const setStrategyUniverseMode = useCallback(
+    (nextView) => {
+      const nextLibraryView =
+        nextView === STRATEGY_LIBRARY_VIEW_CURRENT && strategyMode !== STRATEGY_MODE_PROP
+          ? STRATEGY_LIBRARY_VIEW_MATCHED
+          : nextView;
+
+      setStrategyLibraryPatternView(nextLibraryView);
+      setMatchedPatternsTableOpen(true);
+    },
+    [strategyMode]
+  );
+
   const handleSelectStrategyCurrentSetup = useCallback(
     (setup, rowIndex) => {
+      setStrategyUniverseMode(STRATEGY_LIBRARY_VIEW_CURRENT);
       setSelectedStrategyCurrentSetupIndex(rowIndex);
       setSelectedCurrentSetupKey(getPatternSelectionKey(setup));
 
@@ -900,14 +974,15 @@ const App = () => {
       setSelectedStrategyId(setupStrategyId);
       setActiveStrategyWorkspaceView(STRATEGY_WORKSPACE_VIEW_CANVAS);
     },
-    []
+    [setStrategyUniverseMode]
   );
 
   const handleSelectStrategyTrade = useCallback((trade, rowIndex) => {
+    setStrategyUniverseMode(STRATEGY_LIBRARY_VIEW_MATCHED);
     setSelectedStrategyTradeIndex(rowIndex);
     setSelectedStrategyTradeKey(getPatternSelectionKey(trade));
     setActiveStrategyWorkspaceView(STRATEGY_WORKSPACE_VIEW_CANVAS);
-  }, []);
+  }, [setStrategyUniverseMode]);
 
   const handleSelectStrategy = useCallback(
     (strategyId) => {
@@ -926,9 +1001,14 @@ const App = () => {
       setHasMoreStrategyTrades(false);
       setSelectedStrategyTradeIndex(0);
       setSelectedStrategyTradeKey('');
-      setStrategyChartData({ candles: [], rust_patterns: null });
+      if (
+        strategyMode !== STRATEGY_MODE_PROP ||
+        strategyLibraryPatternView !== STRATEGY_LIBRARY_VIEW_CURRENT
+      ) {
+        setStrategyChartData({ candles: [], rust_patterns: null });
+      }
     },
-    [selectedStrategyId]
+    [selectedStrategyId, strategyLibraryPatternView, strategyMode]
   );
 
   const handleSelectStrategyFromChart = useCallback(
@@ -944,9 +1024,14 @@ const App = () => {
       setHasMoreStrategyTrades(false);
       setSelectedStrategyTradeIndex(0);
       setSelectedStrategyTradeKey('');
-      setStrategyChartData({ candles: [], rust_patterns: null });
+      if (
+        strategyMode !== STRATEGY_MODE_PROP ||
+        strategyLibraryPatternView !== STRATEGY_LIBRARY_VIEW_CURRENT
+      ) {
+        setStrategyChartData({ candles: [], rust_patterns: null });
+      }
     },
-    [selectedStrategyId]
+    [selectedStrategyId, strategyLibraryPatternView, strategyMode]
   );
 
   useEffect(() => {
@@ -1076,6 +1161,13 @@ const App = () => {
     [getCandlesForSymbol, getPatternDetail]
   );
 
+  const handleLoadSimulatorTradeChart = useCallback(
+    async (trade) => {
+      await updateStrategyPatternForChart(trade, setStrategyChartData);
+    },
+    [updateStrategyPatternForChart]
+  );
+
   useEffect(() => {
     const updateChartOverlayTop = () => {
       if (!headerRef.current) {
@@ -1100,7 +1192,7 @@ const App = () => {
     const loadCurrentSetupStrategies = async () => {
       try {
         setLoadingCurrentSetupStrategies(true);
-        const currentStrategies =
+        const strategyResponse =
           showingPropCurrentStrategies
             ? await fetchCurrentSetupStrategies(currentSetupFilters, stationActiveFilters, {
                 maxDaysOpen: currentSetupsMaxDaysOpen,
@@ -1113,12 +1205,16 @@ const App = () => {
                 minClosedTrades:
                   Number.parseInt(String(strategyFilters.bestPickMinClosedTrades), 10) || 0,
                 limit: 500,
+                includeCount: true,
                 propMode: strategyMode === STRATEGY_MODE_PROP,
                 propOutcomeMode,
                 sort: strategySortState,
                 familyFilters: strategyServerFilters,
                 bestPickFilters: strategyFilters,
               });
+        const currentStrategies = Array.isArray(strategyResponse)
+          ? strategyResponse
+          : strategyResponse?.strategies ?? [];
 
         if (isCancelled) {
           return;
@@ -1190,6 +1286,11 @@ const App = () => {
             setCurrentSetupStrategySnapshots(nextSnapshots);
           } else {
             setStrategySnapshots(nextSnapshots);
+            setHistoricalStrategyFamilyTotalCount(
+              Number.isFinite(strategyResponse?.total_count)
+                ? strategyResponse.total_count
+                : nextSnapshots.length
+            );
           }
           setSelectedStrategyId((currentSelected) => {
             if (nextSnapshots.some((strategy) => strategy.id === currentSelected)) {
@@ -1332,13 +1433,18 @@ const App = () => {
       strategyChartRequestIdRef.current += 1;
       latestStrategyTradesQueryKeyRef.current = '';
       requestedStrategyTradeOffsetsRef.current = new Set();
-    setStrategyTrades([]);
-    setStrategyContractWeeks([]);
-    setStrategyTradeTotalCount(0);
+      setStrategyTrades([]);
+      setStrategyContractWeeks([]);
+      setStrategyTradeTotalCount(0);
       setHasMoreStrategyTrades(false);
       setSelectedStrategyTradeIndex(0);
       setSelectedStrategyTradeKey('');
-      setStrategyChartData({ candles: [], rust_patterns: null });
+      if (
+        strategyMode !== STRATEGY_MODE_PROP ||
+        strategyLibraryPatternView !== STRATEGY_LIBRARY_VIEW_CURRENT
+      ) {
+        setStrategyChartData({ candles: [], rust_patterns: null });
+      }
       setLoadingStrategyTrades(false);
       setFetchingMoreStrategyTrades(false);
       return undefined;
@@ -1550,7 +1656,6 @@ const App = () => {
       strategyChartRequestIdRef.current += 1;
       setSelectedStrategyCurrentSetupIndex(-1);
       setSelectedCurrentSetupKey('');
-      setStrategyChartData({ candles: [], rust_patterns: null });
       return undefined;
     }
 
@@ -1842,14 +1947,51 @@ const App = () => {
                           }}
                           filtersContent={
                             <>
-                              <div className="strategies-filter-shell strategy-library-filter-shell">
-                                <div className="strategies-filter-copy">
-                                  <div className="strategies-filter-title">Strategy Filters</div>
-                                  <div className="strategies-filter-subtitle">
-                                    Narrow the prop family universe, then inspect the strongest cohorts.
+                              {isPropStrategyMode ? (
+                                <div
+                                  className="strategy-universe-mode-bar"
+                                  aria-label="Family universe mode"
+                                  role="group"
+                                >
+                                  <div className="strategy-library-mode-tabs strategy-universe-mode-tabs">
+                                    <button
+                                      type="button"
+                                      className={
+                                        strategyLibraryPatternView === STRATEGY_LIBRARY_VIEW_MATCHED
+                                          ? 'strategy-library-mode-tab strategy-library-mode-tab--active'
+                                          : 'strategy-library-mode-tab'
+                                      }
+                                      onClick={() =>
+                                        setStrategyUniverseMode(STRATEGY_LIBRARY_VIEW_MATCHED)
+                                      }
+                                    >
+                                      Historical
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={
+                                        strategyLibraryPatternView === STRATEGY_LIBRARY_VIEW_CURRENT
+                                          ? 'strategy-library-mode-tab strategy-library-mode-tab--active'
+                                          : 'strategy-library-mode-tab'
+                                      }
+                                      onClick={() =>
+                                        setStrategyUniverseMode(STRATEGY_LIBRARY_VIEW_CURRENT)
+                                      }
+                                    >
+                                      Live
+                                    </button>
+                                  </div>
+                                  <div className="strategy-universe-mode-copy">
+                                    {strategyLibraryPatternView === STRATEGY_LIBRARY_VIEW_CURRENT
+                                      ? 'Families with open setups now'
+                                      : `${strategyTableSnapshots.length} of ${totalStrategyUniverseCount} historical ${
+                                          totalStrategyUniverseCount === 1 ? 'family' : 'families'
+                                        } shown`}
                                   </div>
                                 </div>
+                              ) : null}
 
+                              <div className="strategies-filter-shell strategy-library-filter-shell">
                                 <div className="strategies-filter-grid">
                                   <label className="strategies-filter-field">
                                     <span className="strategies-filter-label">Closed &gt;=</span>
@@ -1953,19 +2095,6 @@ const App = () => {
                                     </label>
                                   ) : null}
                                 </div>
-
-                                <div className="strategies-filter-summary">
-                                  <span className="strategies-summary-pill">
-                                    {strategyTableSnapshots.length} / {totalStrategyUniverseCount} shown
-                                  </span>
-                                  <span className="strategies-summary-pill">
-                                    Closed &gt;= {strategyFilters.bestPickMinClosedTrades || 0},
-                                    Exp &gt; {strategyFilters.bestPickMinExpectancy || 0},
-                                    Down &lt;= {strategyFilters.bestPickMaxDownYears || 0},
-                                    Worst &gt; {strategyFilters.bestPickMinWorstYearExpectancy || 0},
-                                    Score &gt; {strategyFilters.bestPickMinScore || 0}
-                                  </span>
-                                </div>
                               </div>
                             </>
                           }
@@ -1977,95 +2106,99 @@ const App = () => {
                                 totalTradeCount={strategyTradeTotalCount}
                               />
 
-                              <div className="strategy-library-bottom-head">
-                                <div className="strategy-library-mode-tabs">
-                                  <button
-                                    type="button"
-                                    className={
-                                      strategyLibraryPatternView === STRATEGY_LIBRARY_VIEW_MATCHED
-                                        ? 'strategy-library-mode-tab strategy-library-mode-tab--active'
-                                        : 'strategy-library-mode-tab'
-                                    }
-                                    onClick={() => {
-                                      setStrategyLibraryPatternView(STRATEGY_LIBRARY_VIEW_MATCHED);
-                                    }}
-                                  >
-                                    Matched Patterns
-                                  </button>
-                                  {isPropStrategyMode ? (
+                              <DashboardCardFrame
+                                title="Patterns"
+                                subtitle={
+                                  showingPropCurrentStrategies
+                                    ? 'Open setups for the selected family'
+                                    : 'Historical trades for the selected family'
+                                }
+                                controls={
+                                  <>
+                                    <span className="dashboard-card-label">
+                                      {showingPropCurrentStrategies ? 'Live' : 'Historical'}
+                                    </span>
                                     <button
                                       type="button"
-                                      className={
-                                        strategyLibraryPatternView === STRATEGY_LIBRARY_VIEW_CURRENT
-                                          ? 'strategy-library-mode-tab strategy-library-mode-tab--active'
-                                          : 'strategy-library-mode-tab'
+                                      className="dashboard-card-collapse-button"
+                                      aria-expanded={isMatchedPatternsTableOpen}
+                                      onClick={() =>
+                                        setMatchedPatternsTableOpen((current) => !current)
                                       }
-                                      onClick={() => {
-                                        setStrategyLibraryPatternView(STRATEGY_LIBRARY_VIEW_CURRENT);
-                                      }}
                                     >
-                                      Current Setups
+                                      {isMatchedPatternsTableOpen ? '-' : '+'}
                                     </button>
-                                  ) : null}
+                                  </>
+                                }
+                                bodyClassName="strategy-library-card-body"
+                                isCollapsed={!isMatchedPatternsTableOpen}
+                              >
+                                <div className="strategy-library-matches-table">
+                                  <Section>
+                                    <PatternTable
+                                      key={`${
+                                        showingPropCurrentStrategies ? 'current' : 'matched'
+                                      }-${selectedStrategy?.id ?? 'none'}`}
+                                      density="compact"
+                                      includeSizeColumn
+                                      statusLabel={
+                                        showingPropCurrentStrategies
+                                          ? 'Current Setups'
+                                          : 'Matched Patterns'
+                                      }
+                                      emptyMessage={
+                                        showingPropCurrentStrategies
+                                          ? 'No current setups are available right now.'
+                                          : 'No matched patterns are loaded yet.'
+                                      }
+                                      patterns={
+                                        showingPropCurrentStrategies
+                                          ? filteredStrategyCurrentSetups
+                                          : strategyTrades
+                                      }
+                                      totalPatternCount={
+                                        showingPropCurrentStrategies
+                                          ? filteredStrategyCurrentSetups.length
+                                          : strategyTradeTotalCount
+                                      }
+                                      hasMorePatterns={
+                                        showingPropCurrentStrategies ? false : hasMoreStrategyTrades
+                                      }
+                                      isLoadingMorePatterns={
+                                        showingPropCurrentStrategies
+                                          ? isLoadingCurrentSetups
+                                          : isFetchingMoreStrategyTrades
+                                      }
+                                      onLoadMorePatterns={
+                                        showingPropCurrentStrategies ? null : loadMoreStrategyTrades
+                                      }
+                                      onSelectPattern={
+                                        showingPropCurrentStrategies
+                                          ? handleSelectStrategyCurrentSetup
+                                          : handleSelectStrategyTrade
+                                      }
+                                      setLoadingPatterns={setLoadingStrategyChart}
+                                      setChartData={setStrategyChartData}
+                                      selectedRowIndex={
+                                        showingPropCurrentStrategies
+                                          ? selectedStrategyCurrentSetupIndex
+                                          : selectedStrategyTradeIndex
+                                      }
+                                      selectedPatternKey={
+                                        showingPropCurrentStrategies
+                                          ? selectedCurrentSetupKey
+                                          : selectedStrategyTradeKey
+                                      }
+                                      setSelectedRowIndex={
+                                        showingPropCurrentStrategies
+                                          ? setSelectedStrategyCurrentSetupIndex
+                                          : setSelectedStrategyTradeIndex
+                                      }
+                                      updateSelectedPattern={updateStrategyPatternForChart}
+                                    />
+                                  </Section>
                                 </div>
-
-                              </div>
-
-                              <div className="strategy-library-subtitle">
-                                {isPropStrategyMode &&
-                                strategyLibraryPatternView === STRATEGY_LIBRARY_VIEW_CURRENT
-                                  ? isPropReversalMode
-                                    ? 'Current Reversal Setups'
-                                    : 'Current D Setups'
-                                  : isPropReversalMode
-                                  ? 'Matched Reversal Patterns'
-                                  : 'Matched Patterns'}
-                              </div>
-
-                              <div className="strategy-library-matches-table">
-                                <Section>
-                                  {isPropStrategyMode &&
-                                  strategyLibraryPatternView === STRATEGY_LIBRARY_VIEW_CURRENT ? (
-                                    <PatternTable
-                                      key={`current-${selectedStrategy?.id ?? 'none'}`}
-                                      density="compact"
-                                      fixedHeight="420px"
-                                      includeSizeColumn
-                                      statusLabel="Current Setups"
-                                      emptyMessage="No current setups are available right now."
-                                      patterns={filteredStrategyCurrentSetups}
-                                      totalPatternCount={filteredStrategyCurrentSetups.length}
-                                      hasMorePatterns={false}
-                                      isLoadingMorePatterns={isLoadingCurrentSetups}
-                                      onLoadMorePatterns={null}
-                                      onSelectPattern={handleSelectStrategyCurrentSetup}
-                                      setLoadingPatterns={setLoadingStrategyChart}
-                                      setChartData={setStrategyChartData}
-                                      selectedRowIndex={selectedStrategyCurrentSetupIndex}
-                                      setSelectedRowIndex={setSelectedStrategyCurrentSetupIndex}
-                                      updateSelectedPattern={updateStrategyPatternForChart}
-                                    />
-                                  ) : (
-                                    <PatternTable
-                                      key={`matched-${selectedStrategy?.id ?? 'none'}`}
-                                      density="compact"
-                                      fixedHeight="420px"
-                                      includeSizeColumn
-                                      patterns={strategyTrades}
-                                      totalPatternCount={strategyTradeTotalCount}
-                                      hasMorePatterns={hasMoreStrategyTrades}
-                                      isLoadingMorePatterns={isFetchingMoreStrategyTrades}
-                                      onLoadMorePatterns={loadMoreStrategyTrades}
-                                      onSelectPattern={handleSelectStrategyTrade}
-                                      setLoadingPatterns={setLoadingStrategyChart}
-                                      setChartData={setStrategyChartData}
-                                      selectedRowIndex={selectedStrategyTradeIndex}
-                                      setSelectedRowIndex={setSelectedStrategyTradeIndex}
-                                      updateSelectedPattern={updateStrategyPatternForChart}
-                                    />
-                                  )}
-                                </Section>
-                              </div>
+                              </DashboardCardFrame>
                             </div>
                           }
                         />
@@ -2149,16 +2282,41 @@ const App = () => {
                                   overlayTableProps={{
                                     density: 'compact',
                                     includeSizeColumn: true,
-                                    patterns: strategyTrades,
-                                    totalPatternCount: strategyTradeTotalCount,
-                                    hasMorePatterns: hasMoreStrategyTrades,
-                                    isLoadingMorePatterns: isFetchingMoreStrategyTrades,
-                                    onLoadMorePatterns: loadMoreStrategyTrades,
-                                    onSelectPattern: handleSelectStrategyTrade,
+                                    statusLabel: showingPropCurrentStrategies
+                                      ? 'Current Setups'
+                                      : 'Matched Patterns',
+                                    emptyMessage: showingPropCurrentStrategies
+                                      ? 'No current setups are available right now.'
+                                      : 'No matched patterns are loaded yet.',
+                                    patterns: showingPropCurrentStrategies
+                                      ? filteredStrategyCurrentSetups
+                                      : strategyTrades,
+                                    totalPatternCount: showingPropCurrentStrategies
+                                      ? filteredStrategyCurrentSetups.length
+                                      : strategyTradeTotalCount,
+                                    hasMorePatterns: showingPropCurrentStrategies
+                                      ? false
+                                      : hasMoreStrategyTrades,
+                                    isLoadingMorePatterns: showingPropCurrentStrategies
+                                      ? isLoadingCurrentSetups
+                                      : isFetchingMoreStrategyTrades,
+                                    onLoadMorePatterns: showingPropCurrentStrategies
+                                      ? null
+                                      : loadMoreStrategyTrades,
+                                    onSelectPattern: showingPropCurrentStrategies
+                                      ? handleSelectStrategyCurrentSetup
+                                      : handleSelectStrategyTrade,
                                     setLoadingPatterns: setLoadingStrategyChart,
                                     setChartData: setStrategyChartData,
-                                    selectedRowIndex: selectedStrategyTradeIndex,
-                                    setSelectedRowIndex: setSelectedStrategyTradeIndex,
+                                    selectedRowIndex: showingPropCurrentStrategies
+                                      ? selectedStrategyCurrentSetupIndex
+                                      : selectedStrategyTradeIndex,
+                                    selectedPatternKey: showingPropCurrentStrategies
+                                      ? selectedCurrentSetupKey
+                                      : selectedStrategyTradeKey,
+                                    setSelectedRowIndex: showingPropCurrentStrategies
+                                      ? setSelectedStrategyCurrentSetupIndex
+                                      : setSelectedStrategyTradeIndex,
                                     updateSelectedPattern: updateStrategyPatternForChart,
                                   }}
                                 />
@@ -2189,6 +2347,11 @@ const App = () => {
                               selectedStrategy={selectedStrategy}
                               loadedTrades={strategyTrades}
                               loadedCandles={strategyChartData.candles}
+                              tradeChartData={strategyChartData}
+                              isTradeChartExpanded={isStrategyChartExpanded}
+                              setTradeChartExpanded={setStrategyChartExpanded}
+                              chartOverlayTop={chartOverlayTop}
+                              onLoadTradeChart={handleLoadSimulatorTradeChart}
                               totalTradeCount={strategyTradeTotalCount}
                             />
                           </div>

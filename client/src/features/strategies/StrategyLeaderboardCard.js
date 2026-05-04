@@ -182,6 +182,7 @@ const StrategyLeaderboardCard = ({
 }) => {
   const rowRefs = useRef(new Map());
   const tableShellRef = useRef(null);
+  const [isFamilyOpen, setIsFamilyOpen] = useState(true);
   const [localSortState, setLocalSortState] = useState({
     key: 'closed',
     direction: 'desc',
@@ -285,18 +286,31 @@ const StrategyLeaderboardCard = ({
   };
 
   return (
-    <DashboardCardFrame
-      title="Library"
-      subtitle="Ranked strategy cohorts"
-      controls={<span className="dashboard-card-label">Universe</span>}
-      bodyClassName="strategy-leaderboard-body"
-    >
-      <div className="strategy-leaderboard-list">
-        {filtersContent ? (
-          <div className="strategy-library-toolbar">{filtersContent}</div>
-        ) : null}
+    <div className="strategy-leaderboard-stack">
+      <DashboardCardFrame
+        title="Family Universe"
+        subtitle="Ranked family cohorts"
+        controls={
+          <>
+            <span className="dashboard-card-label">Universe</span>
+            <button
+              type="button"
+              className="dashboard-card-collapse-button"
+              aria-expanded={isFamilyOpen}
+              onClick={() => setIsFamilyOpen((current) => !current)}
+            >
+              {isFamilyOpen ? '-' : '+'}
+            </button>
+          </>
+        }
+        bodyClassName="strategy-leaderboard-body strategy-library-card-body"
+        isCollapsed={!isFamilyOpen}
+      >
+        <div className="strategy-leaderboard-list">
+          {filtersContent ? (
+            <div className="strategy-library-toolbar">{filtersContent}</div>
+          ) : null}
 
-        <div className="strategy-library-split">
           <div className="strategy-library-pane">
             {isLoading && !rankedStrategies.length ? (
               <div className="strategy-empty">Loading strategy cohorts...</div>
@@ -362,9 +376,11 @@ const StrategyLeaderboardCard = ({
                             marketTone === 'bearish' ? 'strategy-family-row--bearish' : '',
                             isHovered ? 'strategy-library-row--hovered' : '',
                             isSelected ? 'strategy-library-row--selected' : '',
+                            isSelected ? 'strategy-family-row--selected' : '',
                           ]
                             .filter(Boolean)
                             .join(' ')}
+                          aria-selected={isSelected}
                           onClick={() => handleSelectStrategyAtIndex(index)}
                           onKeyDown={(event) => {
                             if (event.key === 'Enter' || event.key === ' ') {
@@ -420,13 +436,11 @@ const StrategyLeaderboardCard = ({
               </div>
             ) : null}
           </div>
-
-          <div className="strategy-library-pane">
-            {bottomContent ? <div className="strategy-library-bottom">{bottomContent}</div> : null}
-          </div>
         </div>
-      </div>
-    </DashboardCardFrame>
+      </DashboardCardFrame>
+
+      {bottomContent ? <div className="strategy-library-bottom">{bottomContent}</div> : null}
+    </div>
   );
 };
 

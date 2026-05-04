@@ -13,6 +13,14 @@ pub struct Trade {
     pub reward_exit_price: f64,
     pub enter_price: f64,
     pub current_price: f64,
+    pub lowest_price: f64,
+    pub highest_price: f64,
+    pub adverse_price: f64,
+    pub favorable_price: f64,
+    pub max_adverse_points: f64,
+    pub max_favorable_points: f64,
+    pub bars_held: i64,
+    pub minutes_held: i64,
     pub length: i64,
     pub pnl: f64,
     pub result: i32,
@@ -52,6 +60,64 @@ pub fn truncate_to_2_decimals(value: f64) -> f64 {
 }
 
 impl Trade {
+    fn excursion_points(
+        market: Market,
+        enter_price: f64,
+        lowest_price: f64,
+        highest_price: f64,
+    ) -> (f64, f64, f64, f64) {
+        match market {
+            Market::Bullish => {
+                let adverse_price = lowest_price;
+                let favorable_price = highest_price;
+                let max_adverse_points = (enter_price - lowest_price).max(0.0);
+                let max_favorable_points = (highest_price - enter_price).max(0.0);
+                (
+                    adverse_price,
+                    favorable_price,
+                    max_adverse_points,
+                    max_favorable_points,
+                )
+            }
+            Market::Bearish => {
+                let adverse_price = highest_price;
+                let favorable_price = lowest_price;
+                let max_adverse_points = (highest_price - enter_price).max(0.0);
+                let max_favorable_points = (enter_price - lowest_price).max(0.0);
+                (
+                    adverse_price,
+                    favorable_price,
+                    max_adverse_points,
+                    max_favorable_points,
+                )
+            }
+        }
+    }
+
+    pub fn record_trade_candle(&mut self, market: Market, candle: &Candle, bars_held: i64) {
+        self.lowest_price = self.lowest_price.min(candle.low);
+        self.highest_price = self.highest_price.max(candle.high);
+
+        let (adverse_price, favorable_price, max_adverse_points, max_favorable_points) =
+            Self::excursion_points(
+                market,
+                self.enter_price,
+                self.lowest_price,
+                self.highest_price,
+            );
+
+        self.adverse_price = adverse_price;
+        self.favorable_price = favorable_price;
+        self.max_adverse_points = max_adverse_points;
+        self.max_favorable_points = max_favorable_points;
+        self.bars_held = bars_held.max(0);
+        self.minutes_held = candle
+            .date
+            .signed_duration_since(self.entry_date)
+            .num_minutes()
+            .max(0);
+    }
+
     pub fn new(
         market: Market,
         candle_x: &Pivot,
@@ -63,7 +129,9 @@ impl Trade {
         snr: f64,
         candle_reversal: ReversalType,
     ) -> Trade {
-        let entry_date = entry_candle.map(|candle| candle.date).unwrap_or(candle_d.date);
+        let entry_date = entry_candle
+            .map(|candle| candle.date)
+            .unwrap_or(candle_d.date);
         let enter_price = entry_candle
             .map(|candle| candle.open)
             .unwrap_or(candle_d.close);
@@ -81,6 +149,12 @@ impl Trade {
             Market::Bullish => enter_price - target_distance,
         };
         let current_price = enter_price;
+        let lowest_price = entry_candle.map(|candle| candle.low).unwrap_or(enter_price);
+        let highest_price = entry_candle
+            .map(|candle| candle.high)
+            .unwrap_or(enter_price);
+        let (adverse_price, favorable_price, max_adverse_points, max_favorable_points) =
+            Self::excursion_points(market, enter_price, lowest_price, highest_price);
 
         // --- PRICE RETRACEMENT ---
         let (xa_price_length, ab_price_length, bc_price_length, cd_price_length) = match market {
@@ -175,6 +249,14 @@ impl Trade {
             open: target_distance > f64::EPSILON,
             enter_price,
             current_price,
+            lowest_price,
+            highest_price,
+            adverse_price,
+            favorable_price,
+            max_adverse_points,
+            max_favorable_points,
+            bars_held: 0,
+            minutes_held: 0,
             pnl,
             risk_exit_price,
             reward_exit_price,

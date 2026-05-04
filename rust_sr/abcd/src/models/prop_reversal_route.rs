@@ -36,6 +36,17 @@ pub struct PropReversalOutcome {
     pub trade_enter_price: f64,
     pub trade_risk_exit_price: f64,
     pub trade_reward_exit_price: f64,
+    pub trade_open: bool,
+    pub trade_current_price: f64,
+    pub trade_pnl: f64,
+    pub trade_lowest_price: f64,
+    pub trade_highest_price: f64,
+    pub trade_adverse_price: f64,
+    pub trade_favorable_price: f64,
+    pub max_adverse_points: f64,
+    pub max_favorable_points: f64,
+    pub bars_held: i64,
+    pub minutes_held: i64,
     pub trade_result: i32,
     pub target_ready: bool,
     pub target_date: Option<NaiveDateTime>,
@@ -81,9 +92,60 @@ struct SimulatedTargetTrade {
     enter_price: f64,
     risk_exit_price: f64,
     reward_exit_price: f64,
+    current_price: f64,
+    pnl: f64,
+    lowest_price: f64,
+    highest_price: f64,
+    adverse_price: f64,
+    favorable_price: f64,
+    max_adverse_points: f64,
+    max_favorable_points: f64,
+    bars_held: i64,
+    minutes_held: i64,
     result: i32,
     d_length: i64,
     target_candle: Option<Candle>,
+}
+
+fn trade_excursion(
+    market: Market,
+    enter_price: f64,
+    lowest_price: f64,
+    highest_price: f64,
+) -> (f64, f64, f64, f64) {
+    match market {
+        Market::Bullish => {
+            let adverse_price = lowest_price;
+            let favorable_price = highest_price;
+            let max_adverse_points = (enter_price - lowest_price).max(0.0);
+            let max_favorable_points = (highest_price - enter_price).max(0.0);
+            (
+                adverse_price,
+                favorable_price,
+                max_adverse_points,
+                max_favorable_points,
+            )
+        }
+        Market::Bearish => {
+            let adverse_price = highest_price;
+            let favorable_price = lowest_price;
+            let max_adverse_points = (highest_price - enter_price).max(0.0);
+            let max_favorable_points = (enter_price - lowest_price).max(0.0);
+            (
+                adverse_price,
+                favorable_price,
+                max_adverse_points,
+                max_favorable_points,
+            )
+        }
+    }
+}
+
+fn trade_pnl_points(market: Market, enter_price: f64, current_price: f64) -> f64 {
+    match market {
+        Market::Bullish => current_price - enter_price,
+        Market::Bearish => enter_price - current_price,
+    }
 }
 
 fn simulate_c_target_trade(
@@ -106,9 +168,33 @@ fn simulate_c_target_trade(
         Market::Bearish => entry_candle.open + target_distance,
     };
     let mut d_length = entry_index.saturating_sub(pattern.reversal_context.d_index) as i64;
+    let mut lowest_price = entry_candle.low;
+    let mut highest_price = entry_candle.high;
+    let mut bars_held = 0_i64;
+    let mut minutes_held = 0_i64;
+    let mut current_price = entry_candle.close;
+    let mut pnl = trade_pnl_points(pattern.market, entry_candle.open, current_price);
 
     for (index, candle) in candles.iter().enumerate().skip(entry_index) {
         d_length = index.saturating_sub(pattern.reversal_context.d_index) as i64;
+        lowest_price = lowest_price.min(candle.low);
+        highest_price = highest_price.max(candle.high);
+        bars_held = index.saturating_sub(entry_index) as i64 + 1;
+        minutes_held = candle
+            .date
+            .signed_duration_since(entry_candle.date)
+            .num_minutes()
+            .max(0);
+        current_price = candle.close;
+        pnl = trade_pnl_points(pattern.market, entry_candle.open, current_price);
+        let (adverse_price, favorable_price, max_adverse_points, max_favorable_points) =
+            trade_excursion(
+                pattern.market,
+                entry_candle.open,
+                lowest_price,
+                highest_price,
+            );
+
         match pattern.market {
             Market::Bullish => {
                 if candle.high >= reward_exit_price
@@ -121,6 +207,16 @@ fn simulate_c_target_trade(
                         enter_price: entry_candle.open,
                         risk_exit_price,
                         reward_exit_price,
+                        current_price: reward_exit_price,
+                        pnl: trade_pnl_points(pattern.market, entry_candle.open, reward_exit_price),
+                        lowest_price,
+                        highest_price,
+                        adverse_price,
+                        favorable_price,
+                        max_adverse_points,
+                        max_favorable_points,
+                        bars_held,
+                        minutes_held,
                         result: 1,
                         d_length,
                         target_candle: Some(candle.clone()),
@@ -137,6 +233,16 @@ fn simulate_c_target_trade(
                         enter_price: entry_candle.open,
                         risk_exit_price,
                         reward_exit_price,
+                        current_price: risk_exit_price,
+                        pnl: trade_pnl_points(pattern.market, entry_candle.open, risk_exit_price),
+                        lowest_price,
+                        highest_price,
+                        adverse_price,
+                        favorable_price,
+                        max_adverse_points,
+                        max_favorable_points,
+                        bars_held,
+                        minutes_held,
                         result: 2,
                         d_length,
                         target_candle: Some(candle.clone()),
@@ -154,6 +260,16 @@ fn simulate_c_target_trade(
                         enter_price: entry_candle.open,
                         risk_exit_price,
                         reward_exit_price,
+                        current_price: reward_exit_price,
+                        pnl: trade_pnl_points(pattern.market, entry_candle.open, reward_exit_price),
+                        lowest_price,
+                        highest_price,
+                        adverse_price,
+                        favorable_price,
+                        max_adverse_points,
+                        max_favorable_points,
+                        bars_held,
+                        minutes_held,
                         result: 1,
                         d_length,
                         target_candle: Some(candle.clone()),
@@ -170,6 +286,16 @@ fn simulate_c_target_trade(
                         enter_price: entry_candle.open,
                         risk_exit_price,
                         reward_exit_price,
+                        current_price: risk_exit_price,
+                        pnl: trade_pnl_points(pattern.market, entry_candle.open, risk_exit_price),
+                        lowest_price,
+                        highest_price,
+                        adverse_price,
+                        favorable_price,
+                        max_adverse_points,
+                        max_favorable_points,
+                        bars_held,
+                        minutes_held,
                         result: 2,
                         d_length,
                         target_candle: Some(candle.clone()),
@@ -179,11 +305,29 @@ fn simulate_c_target_trade(
         }
     }
 
+    let (adverse_price, favorable_price, max_adverse_points, max_favorable_points) =
+        trade_excursion(
+            pattern.market,
+            entry_candle.open,
+            lowest_price,
+            highest_price,
+        );
+
     Some(SimulatedTargetTrade {
         entry_date: entry_candle.date,
         enter_price: entry_candle.open,
         risk_exit_price,
         reward_exit_price,
+        current_price,
+        pnl,
+        lowest_price,
+        highest_price,
+        adverse_price,
+        favorable_price,
+        max_adverse_points,
+        max_favorable_points,
+        bars_held,
+        minutes_held,
         result: 0,
         d_length,
         target_candle: None,
@@ -357,6 +501,17 @@ pub fn build_prop_reversal_outcomes(
             let trade_enter_price = simulated_trade.enter_price;
             let trade_risk_exit_price = simulated_trade.risk_exit_price;
             let trade_reward_exit_price = simulated_trade.reward_exit_price;
+            let trade_open = simulated_trade.result == 0;
+            let trade_current_price = simulated_trade.current_price;
+            let trade_pnl = simulated_trade.pnl;
+            let trade_lowest_price = simulated_trade.lowest_price;
+            let trade_highest_price = simulated_trade.highest_price;
+            let trade_adverse_price = simulated_trade.adverse_price;
+            let trade_favorable_price = simulated_trade.favorable_price;
+            let max_adverse_points = simulated_trade.max_adverse_points;
+            let max_favorable_points = simulated_trade.max_favorable_points;
+            let bars_held = simulated_trade.bars_held;
+            let minutes_held = simulated_trade.minutes_held;
             let trade_result = simulated_trade.result;
             let prop_strategy_id = build_prop_strategy_id(
                 &market,
@@ -417,6 +572,17 @@ pub fn build_prop_reversal_outcomes(
                 trade_enter_price,
                 trade_risk_exit_price,
                 trade_reward_exit_price,
+                trade_open,
+                trade_current_price,
+                trade_pnl,
+                trade_lowest_price,
+                trade_highest_price,
+                trade_adverse_price,
+                trade_favorable_price,
+                max_adverse_points,
+                max_favorable_points,
+                bars_held,
+                minutes_held,
                 trade_result,
                 target_ready,
                 target_date: target_candle.map(|candle| candle.date),

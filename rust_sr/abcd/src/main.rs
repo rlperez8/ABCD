@@ -470,6 +470,11 @@ fn scan_symbol(
                 pattern.d.length =
                     current_index.saturating_sub(pattern.reversal_context.d_index) as i64;
                 pattern.trade.length = pattern.d.length;
+                pattern.trade.record_trade_candle(
+                    pattern.market,
+                    current,
+                    current_index.saturating_sub(entry_index) as i64 + 1,
+                );
 
                 let pnl = match pattern.market {
                     Market::Bullish => current.close - pattern.trade.enter_price,
@@ -706,7 +711,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let write_pattern_setups = env_flag_or("ABCD_WRITE_PATTERN_SETUPS", true);
     let write_harmonic_scores = env_flag("ABCD_WRITE_HARMONIC_SCORES");
     let write_prop_outcomes = true;
-    let target_ready_outcomes_only = env_flag_or("ABCD_TARGET_READY_OUTCOMES_ONLY", true)
+    let target_ready_outcomes_only = env_flag_or("ABCD_TARGET_READY_OUTCOMES_ONLY", false)
         && !env_flag("ABCD_WRITE_OPEN_PROP_OUTCOMES");
     let candle_source = CandleSource::from_env();
     let futures_root = env::var("ABCD_FUTURES_ROOT")

@@ -371,9 +371,26 @@ const parseSimulatorReplayResponse = (data) => ({
         trade_index: parseOptionalInt(trade?.trade_index) ?? 0,
         trade_result: parseOptionalInt(trade?.trade_result) ?? 0,
         pnl: parseOptionalFloat(trade?.pnl) ?? 0,
+        closed_pnl: parseOptionalFloat(trade?.closed_pnl) ?? parseOptionalFloat(trade?.pnl) ?? 0,
         point_value: parseOptionalFloat(trade?.point_value) ?? 0,
+        balance_before: parseOptionalFloat(trade?.balance_before) ?? null,
         balance: parseOptionalFloat(trade?.balance) ?? 0,
+        closed_balance: parseOptionalFloat(trade?.closed_balance) ?? parseOptionalFloat(trade?.balance) ?? 0,
+        intratrade_low_balance:
+          parseOptionalFloat(trade?.intratrade_low_balance) ?? parseOptionalFloat(trade?.balance) ?? 0,
+        intratrade_high_balance:
+          parseOptionalFloat(trade?.intratrade_high_balance) ?? parseOptionalFloat(trade?.balance) ?? 0,
+        intratrade_adverse_pnl: parseOptionalFloat(trade?.intratrade_adverse_pnl) ?? 0,
+        intratrade_favorable_pnl: parseOptionalFloat(trade?.intratrade_favorable_pnl) ?? 0,
         drawdown: parseOptionalFloat(trade?.drawdown) ?? 0,
+        trade_lowest_price: parseOptionalFloat(trade?.trade_lowest_price),
+        trade_highest_price: parseOptionalFloat(trade?.trade_highest_price),
+        trade_adverse_price: parseOptionalFloat(trade?.trade_adverse_price),
+        trade_favorable_price: parseOptionalFloat(trade?.trade_favorable_price),
+        max_adverse_points: parseOptionalFloat(trade?.max_adverse_points) ?? 0,
+        max_favorable_points: parseOptionalFloat(trade?.max_favorable_points) ?? 0,
+        failed_intratrade_drawdown: Boolean(trade?.failed_intratrade_drawdown),
+        failure_reason: trade?.failure_reason ?? null,
         skipped_for_overlap: Boolean(trade?.skipped_for_overlap),
       }))
     : [],
@@ -647,6 +664,7 @@ export const fetchSetupComparison = async ({
 export const fetchStrategyCandidates = async ({
   minClosedTrades = 100,
   limit = 250,
+  includeCount = false,
   propMode = false,
   propOutcomeMode = DEFAULT_PROP_OUTCOME_MODE,
   sort = null,
@@ -656,6 +674,7 @@ export const fetchStrategyCandidates = async ({
   const filter = {
     min_closed_trades: minClosedTrades,
     limit,
+    include_count: includeCount,
     prop_mode: Boolean(propMode),
     prop_outcome_mode: propOutcomeMode,
     ...buildFamilyStrategyRequestOptions({ sort, familyFilters }),
@@ -664,10 +683,27 @@ export const fetchStrategyCandidates = async ({
 
   try {
     const data = await postJson('/strategy-candidates', filter);
-    return Array.isArray(data) ? data.map(parseStrategyCandidateRecord) : [];
+    if (Array.isArray(data)) {
+      const strategies = data.map(parseStrategyCandidateRecord);
+      return {
+        strategies,
+        total_count: strategies.length,
+        has_more: false,
+      };
+    }
+
+    const strategies = Array.isArray(data?.strategies)
+      ? data.strategies.map(parseStrategyCandidateRecord)
+      : [];
+
+    return {
+      strategies,
+      total_count: parseOptionalInt(data?.total_count) ?? strategies.length,
+      has_more: Boolean(data?.has_more),
+    };
   } catch (error) {
     console.error(error);
-    return [];
+    return { strategies: [], total_count: 0, has_more: false };
   }
 };
 

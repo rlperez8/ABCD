@@ -1,6 +1,21 @@
 import { commitInteractionState, setCandleSpacing } from './chartState.js';
 import { clamp, getCanvasX } from './geometry.js';
 
+const MIN_COMPLETE_CANDLE_WIDTH = 0.18;
+const MAX_COMPLETE_CANDLE_WIDTH = 260;
+
+const getCandleSlotParts = (completeWidth) => {
+  if (completeWidth <= 1.1) {
+    return { width: completeWidth, spacing: 0 };
+  }
+
+  const spacing = Math.min(completeWidth * 0.16, 56);
+  return {
+    width: Math.max(completeWidth - spacing, Math.min(completeWidth, 0.12)),
+    spacing,
+  };
+};
+
 export const setMousePosition = (chartState, canvasElement, event) => {
   const rect = canvasElement.getBoundingClientRect();
   chartState.mouse.pos.x = event.clientX - rect.left;
@@ -34,12 +49,16 @@ export const zoomCandleWidth = (chartState, deltaY, hoveredIndex, fallbackIndex 
   const anchorScreenX = getCanvasX(chartState, anchorIndex);
   const direction = deltaY < 0 ? 1 : -1;
   const zoomAmount = clamp(Math.abs(deltaY) / 120, 0.65, 2.4);
-  const widthStep = 0.8 * zoomAmount;
-  const spacingStep = 0.35 * zoomAmount;
-  const nextWidth = clamp(chartState.candles.width + direction * widthStep, 2, 72);
-  const nextSpacing = clamp(chartState.candles.spacing + direction * spacingStep, 1, 20);
+  const currentCompleteWidth = chartState.candles.completeWidth || 1;
+  const zoomRatio = Math.pow(1.16, zoomAmount * direction);
+  const nextCompleteWidth = clamp(
+    currentCompleteWidth * zoomRatio,
+    MIN_COMPLETE_CANDLE_WIDTH,
+    MAX_COMPLETE_CANDLE_WIDTH
+  );
+  const { width, spacing } = getCandleSlotParts(nextCompleteWidth);
 
-  setCandleSpacing(chartState, nextWidth, nextSpacing);
+  setCandleSpacing(chartState, width, spacing);
 
   chartState.viewport.xOrigin =
     -chartState.candles.completeWidth * anchorIndex +

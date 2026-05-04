@@ -1,15 +1,23 @@
-const GRID_LEVELS = [
-  { minWidth: 24, increaser: 5 },
-  { minWidth: 16, increaser: 8 },
-  { minWidth: 10, increaser: 10 },
-  { minWidth: 6, increaser: 15 },
-  { minWidth: 0, increaser: 20 },
-];
+const HORIZONTAL_GRID_TARGET_PX = 108;
 const MIN_VISIBLE_CANDLE_GAP = 0;
 const TREND_SMA_PERIODS = {
   threeMonth: 63,
   sixMonth: 126,
   twelveMonth: 252,
+};
+
+const getNiceCandleIncrement = (rawIncrement) => {
+  if (!Number.isFinite(rawIncrement) || rawIncrement <= 1) {
+    return 1;
+  }
+
+  const magnitude = 10 ** Math.floor(Math.log10(rawIncrement));
+  const normalized = rawIncrement / magnitude;
+
+  if (normalized <= 1) return magnitude;
+  if (normalized <= 2) return magnitude * 2;
+  if (normalized <= 5) return magnitude * 5;
+  return magnitude * 10;
 };
 
 const buildTrendSeries = (candles, period) => {
@@ -33,11 +41,11 @@ const buildTrendSeries = (candles, period) => {
 };
 
 export const syncHorizontalGrid = (chartState) => {
-  const matchingGridLevel = GRID_LEVELS.find(
-    (level) => chartState.candles.completeWidth >= level.minWidth
-  );
+  const completeWidth = Math.max(chartState.candles.completeWidth, 0.01);
+  const targetGridPx = completeWidth >= 42 ? 42 : HORIZONTAL_GRID_TARGET_PX;
+  const rawGridIncrement = targetGridPx / completeWidth;
 
-  chartState.viewport.xGridIncrement = matchingGridLevel?.increaser ?? 10;
+  chartState.viewport.xGridIncrement = getNiceCandleIncrement(rawGridIncrement);
   chartState.viewport.xGridWidth =
     chartState.candles.completeWidth * chartState.viewport.xGridIncrement;
 };

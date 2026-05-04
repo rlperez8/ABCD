@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import CandleChartPanel from '../candle-chart/CandleChartPanel';
 import { fetchSimulatorFamilyReplay } from '../../services/patternApi';
 
 const APEX_ACCOUNT_RULES = {
@@ -241,11 +242,75 @@ const getTradeResultLabel = (trade = {}) => {
   return 'Open';
 };
 
+const getSimulatorTradeKey = (trade = {}, fallback = '') =>
+  [
+    trade.pattern_id ?? '',
+    trade.pattern_group_id ?? '',
+    trade.entry_date ?? '',
+    trade.test_index ?? '',
+    trade.trade_index ?? fallback,
+  ].join('|');
+
+const sameTradeDate = (left, right) =>
+  Boolean(left && right && normalizeDateInput(left) === normalizeDateInput(right));
+
+const findLoadedPatternForTrade = (trade = {}, patterns = []) =>
+  patterns.find((pattern) => {
+    if (trade.pattern_id && pattern.pattern_id === trade.pattern_id) {
+      return true;
+    }
+
+    if (!trade.pattern_group_id || pattern.pattern_group_id !== trade.pattern_group_id) {
+      return false;
+    }
+
+    return (
+      sameTradeDate(pattern.entry_date, trade.entry_date) ||
+      sameTradeDate(pattern.target_date, trade.target_date) ||
+      sameTradeDate(pattern.d_date, trade.entry_date)
+    );
+  }) ?? null;
+
+const buildTradeChartPayload = (trade = {}, selectedStrategy = null, loadedTrades = []) => {
+  const matchedPattern = findLoadedPatternForTrade(trade, loadedTrades);
+
+  return {
+    ...matchedPattern,
+    ...trade,
+    prop_outcome_mode: trade.prop_outcome_mode ?? matchedPattern?.prop_outcome_mode ?? 'reversal',
+    market: trade.market ?? matchedPattern?.market ?? selectedStrategy?.market ?? null,
+    harmonic_type:
+      trade.harmonic_type ?? matchedPattern?.harmonic_type ?? selectedStrategy?.harmonicType ?? null,
+    size_bucket:
+      trade.size_bucket ?? matchedPattern?.size_bucket ?? selectedStrategy?.sizeBucket ?? null,
+    bin: trade.bin ?? matchedPattern?.bin ?? selectedStrategy?.bin ?? null,
+    time_bin: trade.time_bin ?? matchedPattern?.time_bin ?? selectedStrategy?.timeBin ?? null,
+    reversal_type:
+      trade.reversal_type ?? matchedPattern?.reversal_type ?? selectedStrategy?.reversalType ?? 'None',
+  };
+};
+
 const getTestTone = (status = '') => {
   if (status === 'passed') return 'passed';
   if (status === 'failed') return 'failed';
   if (status === 'running') return 'running';
   return 'waiting';
+};
+
+const getScoreTone = (score) => {
+  if (!Number.isFinite(score)) return 'waiting';
+  if (score >= 85) return 'strong';
+  if (score >= 70) return 'good';
+  if (score >= 55) return 'watch';
+  return 'weak';
+};
+
+const getScoreLabel = (score) => {
+  if (!Number.isFinite(score)) return 'Waiting';
+  if (score >= 85) return 'Strong run';
+  if (score >= 70) return 'Good run';
+  if (score >= 55) return 'Needs review';
+  return 'Weak run';
 };
 
 const toTime = (value) => {
@@ -265,6 +330,11 @@ const buildServerReplay = (trades = [], startingBalance = 0, maxDrawdown = 0) =>
       pnl: 0,
       previousTotal: 0,
       total: 0,
+      closedTotal: 0,
+      intratradeLowTotal: 0,
+      intratradeHighTotal: 0,
+      intratradeLowPnl: 0,
+      intratradeHighPnl: 0,
       drawdown: 0,
       drawdownLevel: -drawdownDistance,
       isStart: true,
@@ -274,17 +344,37 @@ const buildServerReplay = (trades = [], startingBalance = 0, maxDrawdown = 0) =>
   trades
     .filter((trade) => !trade.skipped_for_overlap)
     .forEach((trade, index) => {
+      const balanceBefore = Number.isFinite(Number(trade.balance_before))
+        ? Number(trade.balance_before)
+        : startingBalance + previousTotal;
       const total = (Number(trade.balance) || startingBalance) - startingBalance;
+      const closedTotal = Number.isFinite(Number(trade.closed_balance))
+        ? Number(trade.closed_balance) - startingBalance
+        : total;
+      const intratradeLowTotal = Number.isFinite(Number(trade.intratrade_low_balance))
+        ? Number(trade.intratrade_low_balance) - startingBalance
+        : Math.min(previousTotal, total);
+      const intratradeHighTotal = Number.isFinite(Number(trade.intratrade_high_balance))
+        ? Number(trade.intratrade_high_balance) - startingBalance
+        : Math.max(previousTotal, closedTotal, total);
       peak = Math.max(peak, total);
       const drawdownLevel = peak - drawdownDistance;
       points.push({
         index: index + 1,
         trade,
         pnl: Number(trade.pnl) || 0,
+        closedPnl: Number(trade.closed_pnl) || Number(trade.pnl) || 0,
         previousTotal,
+        balanceBefore,
         total,
+        closedTotal,
+        intratradeLowTotal,
+        intratradeHighTotal,
+        intratradeLowPnl: Number(trade.intratrade_adverse_pnl) || 0,
+        intratradeHighPnl: Number(trade.intratrade_favorable_pnl) || 0,
         drawdown: total - peak,
         drawdownLevel,
+        failedIntratradeDrawdown: Boolean(trade.failed_intratrade_drawdown),
       });
       previousTotal = total;
     });
@@ -311,6 +401,8 @@ function SimulatorChart({
   maxDrawdown = null,
   showThresholds = false,
   totalPointCount = null,
+  selectedTradeKey = '',
+  onSelectTrade = null,
 }) {
   const width = 1000;
   const height = 330;
@@ -324,21 +416,49 @@ function SimulatorChart({
     ...point,
     total: Number(point.total) || 0,
     pnl: Number(point.pnl) || 0,
+    closedPnl: Number(point.closedPnl) || Number(point.pnl) || 0,
     previousTotal: Number(point.previousTotal) || 0,
+    closedTotal: Number(point.closedTotal) || Number(point.total) || 0,
+    intratradeLowTotal: Number.isFinite(Number(point.intratradeLowTotal))
+      ? Number(point.intratradeLowTotal)
+      : Math.min(Number(point.previousTotal) || 0, Number(point.total) || 0),
+    intratradeHighTotal: Number.isFinite(Number(point.intratradeHighTotal))
+      ? Number(point.intratradeHighTotal)
+      : Math.max(Number(point.previousTotal) || 0, Number(point.total) || 0),
+    intratradeLowPnl: Number.isFinite(Number(point.intratradeLowPnl))
+      ? Number(point.intratradeLowPnl)
+      : Math.min(0, Number(point.pnl) || 0),
+    intratradeHighPnl: Number.isFinite(Number(point.intratradeHighPnl))
+      ? Number(point.intratradeHighPnl)
+      : Math.max(0, Number(point.pnl) || 0),
     drawdownLevel: Number.isFinite(Number(point.drawdownLevel))
       ? Number(point.drawdownLevel)
       : -drawdownDistance,
   }));
   const chartPoints = points.length
     ? points
-    : [{ index: 0, total: 0, pnl: 0, previousTotal: 0, drawdownLevel: -drawdownDistance, isStart: true }];
+    : [{
+        index: 0,
+        total: 0,
+        pnl: 0,
+        previousTotal: 0,
+        closedTotal: 0,
+        intratradeLowTotal: 0,
+        intratradeHighTotal: 0,
+        intratradeLowPnl: 0,
+        intratradeHighPnl: 0,
+        drawdownLevel: -drawdownDistance,
+        isStart: true,
+      }];
   const valueKey = totalMode ? 'total' : 'pnl';
   const tradePoints = chartPoints.filter((point) => !point.isStart);
   const plotWidth = width - plot.left - plot.right;
   const plotHeight = height - plot.top - plot.bottom;
   const xSpan = Math.max(Number(totalPointCount) || chartPoints.length - 1, 1);
   const values = chartPoints.flatMap((point) =>
-    totalMode ? [point.total, point.drawdownLevel] : [point.pnl]
+    totalMode
+      ? [point.total, point.drawdownLevel, point.intratradeLowTotal, point.intratradeHighTotal]
+      : [point.pnl, point.intratradeLowPnl, point.intratradeHighPnl]
   );
   values.push(0);
   if (targetLine !== null) values.push(targetLine);
@@ -450,21 +570,31 @@ function SimulatorChart({
           const pointX = xForPoint(point);
           const previousY = yForValue(totalMode ? point.previousTotal : 0);
           const pointY = yForValue(point[valueKey]);
+          const lowValue = totalMode ? point.intratradeLowTotal : point.intratradeLowPnl;
+          const highValue = totalMode ? point.intratradeHighTotal : point.intratradeHighPnl;
+          const lowY = yForValue(lowValue);
+          const highY = yForValue(highValue);
+          const rangeTop = Math.min(lowY, highY);
+          const rangeBottom = Math.max(lowY, highY);
           const stemTop = Math.min(previousY, pointY);
           const stemBottom = Math.max(previousY, pointY);
-          const tooltipWidth = 226;
-          const tooltipHeight = totalMode ? 94 : 78;
+          const tooltipWidth = 244;
+          const tooltipHeight = totalMode ? 126 : 112;
           const tooltipX = Math.min(pointX + 12, width - plot.right - tooltipWidth);
           const tooltipY = Math.max(plot.top + 8, stemTop - tooltipHeight - 10);
           const result = getTradeResultLabel(point.trade);
           const symbol = point.trade?.symbol ?? `Trade ${point.index}`;
           const exit = formatShortDate(point.trade?.target_date);
-          const tradeTone = point.pnl >= 0 ? 'win' : 'loss';
+          const tradeTone = point.failedIntratradeDrawdown ? 'drawdown' : point.pnl >= 0 ? 'win' : 'loss';
+          const tradeKey = getSimulatorTradeKey(point.trade, point.index);
+          const isSelected = tradeKey === selectedTradeKey;
+          const resultLine = point.failedIntratradeDrawdown ? 'DD fail' : `Result ${result}`;
 
           return (
             <g
-              className={`simulator-live-chart__trade simulator-live-chart__trade--${tradeTone}`}
+              className={`simulator-live-chart__trade simulator-live-chart__trade--${tradeTone}${isSelected ? ' simulator-live-chart__trade--selected' : ''}`}
               key={`${point.index}-${point.total}-${point.pnl}`}
+              onClick={() => onSelectTrade?.(point.trade, point.index)}
             >
               <line
                 className="simulator-live-chart__trade-hit"
@@ -472,6 +602,27 @@ function SimulatorChart({
                 y1={plot.top}
                 x2={pointX}
                 y2={height - plot.bottom}
+              />
+              <line
+                className="simulator-live-chart__trade-range"
+                x1={pointX}
+                y1={rangeTop}
+                x2={pointX}
+                y2={rangeBottom}
+              />
+              <line
+                className="simulator-live-chart__trade-range-cap simulator-live-chart__trade-range-cap--high"
+                x1={pointX - 6}
+                y1={highY}
+                x2={pointX + 6}
+                y2={highY}
+              />
+              <line
+                className="simulator-live-chart__trade-range-cap simulator-live-chart__trade-range-cap--low"
+                x1={pointX - 6}
+                y1={lowY}
+                x2={pointX + 6}
+                y2={lowY}
               />
               <line
                 className="simulator-live-chart__trade-stem"
@@ -485,12 +636,16 @@ function SimulatorChart({
               <g className="simulator-live-chart__tooltip">
                 <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} rx="5" />
                 <text x={tooltipX + 10} y={tooltipY + 18}>{symbol} / Trade {point.index}</text>
-                <text x={tooltipX + 10} y={tooltipY + 36}>Result {result} / {formatChartMoney(point.pnl)}</text>
-                <text x={tooltipX + 10} y={tooltipY + 54}>Test P/L {formatChartMoney(point.total)}</text>
+                <text x={tooltipX + 10} y={tooltipY + 36}>
+                  {resultLine} / {formatChartMoney(point.pnl)}
+                </text>
+                <text x={tooltipX + 10} y={tooltipY + 54}>Trade low {formatChartMoney(lowValue)}</text>
+                <text x={tooltipX + 10} y={tooltipY + 72}>Trade high {formatChartMoney(highValue)}</text>
+                <text x={tooltipX + 10} y={tooltipY + 90}>Test P/L {formatChartMoney(point.total)}</text>
                 {totalMode ? (
-                  <text x={tooltipX + 10} y={tooltipY + 72}>Trailing DD {formatChartMoney(point.drawdownLevel)}</text>
+                  <text x={tooltipX + 10} y={tooltipY + 108}>Trailing DD {formatChartMoney(point.drawdownLevel)}</text>
                 ) : null}
-                <text x={tooltipX + 10} y={tooltipY + (totalMode ? 88 : 70)}>Exit {exit}</text>
+                <text x={tooltipX + 10} y={tooltipY + (totalMode ? 122 : 106)}>Exit {exit}</text>
               </g>
             </g>
           );
@@ -516,7 +671,7 @@ function SimulatorChart({
         ) : null}
 
         <text x={plot.left} y={height - 16} className="simulator-live-chart__caption">
-          Each dot is one completed trade in the selected test. The red trail rises only after new P/L highs.
+          Each dot is the trade result. The vertical wick shows the low/high reached while that trade was open.
         </text>
       </svg>
     </div>
@@ -617,10 +772,205 @@ const EvaluationSnapshot = ({ accountRules, drawdownModel }) => {
   );
 };
 
+const formatTradePrice = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : 'N/A';
+};
+
+const TradeCanvasDetails = ({
+  trade = null,
+  tradePattern = null,
+  selectedReplayTest = null,
+  accountRules,
+  contracts = 1,
+}) => {
+  const pnl = Number(trade?.pnl) || 0;
+  const closedPnl = Number(trade?.closed_pnl ?? trade?.pnl) || 0;
+  const balanceAfter = Number(trade?.balance);
+  const hasBalanceAfter = Number.isFinite(balanceAfter);
+  const balanceBefore = Number.isFinite(Number(trade?.balance_before))
+    ? Number(trade.balance_before)
+    : hasBalanceAfter
+    ? balanceAfter - pnl
+    : null;
+  const closedBalance = Number.isFinite(Number(trade?.closed_balance))
+    ? Number(trade.closed_balance)
+    : hasBalanceAfter
+    ? balanceAfter
+    : null;
+  const intratradeLowBalance = Number.isFinite(Number(trade?.intratrade_low_balance))
+    ? Number(trade.intratrade_low_balance)
+    : null;
+  const intratradeHighBalance = Number.isFinite(Number(trade?.intratrade_high_balance))
+    ? Number(trade.intratrade_high_balance)
+    : null;
+  const testStartingBalance = Number(
+    selectedReplayTest?.starting_balance ?? accountRules?.startingBalance
+  );
+  const runningPnl =
+    hasBalanceAfter && Number.isFinite(testStartingBalance)
+      ? balanceAfter - testStartingBalance
+      : null;
+  const profitRemaining =
+    Number.isFinite(runningPnl) ? (Number(accountRules?.profitTarget) || 0) - runningPnl : null;
+  const drawdown = Number(trade?.drawdown);
+  const peakBalance =
+    hasBalanceAfter && Number.isFinite(drawdown) ? balanceAfter - drawdown : null;
+  const trailingFloor =
+    Number.isFinite(peakBalance) ? peakBalance - (Number(accountRules?.maxDrawdown) || 0) : null;
+  const drawdownRoom =
+    hasBalanceAfter && Number.isFinite(trailingFloor) ? balanceAfter - trailingFloor : null;
+  const pointValue = Number(trade?.point_value);
+  const contractCount = Math.max(1, Number(contracts) || 1);
+  const points =
+    Number.isFinite(pointValue) && pointValue > 0 ? closedPnl / (pointValue * contractCount) : null;
+  const resultTone = trade?.failed_intratrade_drawdown || pnl < 0 ? 'negative' : 'positive';
+
+  const priceRows = [
+    { label: 'Entry', value: formatTradePrice(tradePattern?.trade_enter_price) },
+    { label: 'Stop', value: formatTradePrice(tradePattern?.trade_risk_exit_price) },
+    { label: 'Target', value: formatTradePrice(tradePattern?.trade_reward_exit_price) },
+    { label: 'Exit', value: formatTradePrice(tradePattern?.exit_price) },
+    {
+      label: 'Low',
+      value: formatTradePrice(trade?.trade_lowest_price ?? tradePattern?.trade_lowest_price),
+    },
+    {
+      label: 'High',
+      value: formatTradePrice(trade?.trade_highest_price ?? tradePattern?.trade_highest_price),
+    },
+    {
+      label: 'Against',
+      value: formatTradePrice(trade?.trade_adverse_price ?? tradePattern?.trade_adverse_price),
+    },
+    {
+      label: 'With',
+      value: formatTradePrice(trade?.trade_favorable_price ?? tradePattern?.trade_favorable_price),
+    },
+  ];
+  const accountRows = [
+    { label: 'Before', value: Number.isFinite(balanceBefore) ? formatMoney(balanceBefore) : 'N/A' },
+    {
+      label: 'Low Water',
+      value: Number.isFinite(intratradeLowBalance) ? formatMoney(intratradeLowBalance) : 'N/A',
+      tone:
+        Number.isFinite(intratradeLowBalance) &&
+        Number.isFinite(trailingFloor) &&
+        intratradeLowBalance <= trailingFloor
+          ? 'negative'
+          : undefined,
+    },
+    {
+      label: 'High Water',
+      value: Number.isFinite(intratradeHighBalance) ? formatMoney(intratradeHighBalance) : 'N/A',
+      tone: Number.isFinite(intratradeHighBalance) ? 'positive' : undefined,
+    },
+    {
+      label: 'Close Bal',
+      value: Number.isFinite(closedBalance) ? formatMoney(closedBalance) : 'N/A',
+    },
+    { label: 'After', value: hasBalanceAfter ? formatMoney(balanceAfter) : 'N/A' },
+    {
+      label: 'Run P/L',
+      value: Number.isFinite(runningPnl) ? formatMoney(runningPnl) : 'N/A',
+      tone: Number(runningPnl) >= 0 ? 'positive' : 'negative',
+    },
+    {
+      label: 'Target Left',
+      value: Number.isFinite(profitRemaining) ? formatMoney(Math.max(0, profitRemaining)) : 'N/A',
+    },
+    {
+      label: 'Trail Floor',
+      value: Number.isFinite(trailingFloor) ? formatMoney(trailingFloor) : 'N/A',
+    },
+    {
+      label: 'DD Room',
+      value: Number.isFinite(drawdownRoom) ? formatMoney(drawdownRoom) : 'N/A',
+      tone: Number(drawdownRoom) <= 0 ? 'negative' : 'positive',
+    },
+    {
+      label: 'Closed P/L',
+      value: trade ? formatMoney(closedPnl) : 'N/A',
+      tone: closedPnl >= 0 ? 'positive' : 'negative',
+    },
+  ];
+
+  return (
+    <div className="simulator-trade-detail-rail">
+      <div className="simulator-trade-detail-head">
+        <span>Trade Details</span>
+        <strong>{trade?.symbol ?? 'N/A'}</strong>
+      </div>
+
+      <div className="simulator-trade-detail-hero">
+        <span>
+          {trade?.failed_intratrade_drawdown ? 'Drawdown Fail' : trade ? getTradeResultLabel(trade) : 'No Trade'} / Test {trade?.test_index ?? selectedReplayTest?.test_index ?? '-'}
+        </span>
+        <strong className={trade ? `simulator-value-${resultTone}` : undefined}>
+          {trade ? formatMoney(pnl) : formatMoney(0)}
+        </strong>
+        <small>
+          {trade ? `${formatShortDate(trade.entry_date)} to ${formatShortDate(trade.target_date)}` : 'N/A to N/A'}
+        </small>
+      </div>
+
+      <div className="simulator-trade-detail-mini-grid">
+        <div>
+          <span>Contracts</span>
+          <strong>{contractCount}</strong>
+        </div>
+        <div>
+          <span>Points</span>
+          <strong>{Number.isFinite(points) ? points.toFixed(2) : 'N/A'}</strong>
+        </div>
+        <div>
+          <span>Point Value</span>
+          <strong>{Number.isFinite(pointValue) ? formatMoney(pointValue) : 'N/A'}</strong>
+        </div>
+        <div>
+          <span>Trade #</span>
+          <strong>{trade?.trade_index ?? '-'}</strong>
+        </div>
+      </div>
+
+      <div className="simulator-trade-detail-section">
+        <span>Prices</span>
+        <div className="simulator-trade-detail-grid">
+          {priceRows.map((row) => (
+            <div key={row.label}>
+              <span>{row.label}</span>
+              <strong>{row.value}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="simulator-trade-detail-section">
+        <span>Account State</span>
+        <div className="simulator-trade-detail-grid">
+          {accountRows.map((row) => (
+            <div key={row.label}>
+              <span>{row.label}</span>
+              <strong className={row.tone ? `simulator-value-${row.tone}` : undefined}>
+                {row.value}
+              </strong>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TradeSimulatorPanel = ({
   selectedStrategy = null,
   loadedTrades = [],
   loadedCandles = [],
+  tradeChartData = { candles: [], rust_patterns: null },
+  isTradeChartExpanded = false,
+  setTradeChartExpanded = () => {},
+  chartOverlayTop = 0,
+  onLoadTradeChart = null,
   totalTradeCount = 0,
 }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -632,6 +982,7 @@ const TradeSimulatorPanel = ({
   const [accountSize, setAccountSize] = useState('50K');
   const [drawdownModel, setDrawdownModel] = useState('intraday');
   const [pnlMode, setPnlMode] = useState('total');
+  const [chartPanelView, setChartPanelView] = useState('pnl');
   const [overviewPanel, setOverviewPanel] = useState('trades');
   const [simulatorReplay, setSimulatorReplay] = useState(null);
   const [selectedReplayTestIndex, setSelectedReplayTestIndex] = useState(1);
@@ -639,6 +990,10 @@ const TradeSimulatorPanel = ({
   const [isPlaybackRunning, setPlaybackRunning] = useState(false);
   const [isRunningReplay, setRunningReplay] = useState(false);
   const [replayError, setReplayError] = useState('');
+  const [selectedCanvasTradeKey, setSelectedCanvasTradeKey] = useState('');
+  const [selectedCanvasTrade, setSelectedCanvasTrade] = useState(null);
+  const [isLoadingTradeCanvas, setLoadingTradeCanvas] = useState(false);
+  const [tradeCanvasError, setTradeCanvasError] = useState('');
 
   const selectedFamilyId = selectedStrategy?.propStrategyId ?? selectedStrategy?.id ?? '';
 
@@ -649,12 +1004,17 @@ const TradeSimulatorPanel = ({
   useEffect(() => {
     setActiveTab('overview');
     setPnlMode('total');
+    setChartPanelView('pnl');
     setOverviewPanel('trades');
     setTestsToChain(1);
     setSimulatorReplay(null);
     setSelectedReplayTestIndex(1);
     setPlaybackEventCount(0);
     setPlaybackRunning(false);
+    setSelectedCanvasTradeKey('');
+    setSelectedCanvasTrade(null);
+    setLoadingTradeCanvas(false);
+    setTradeCanvasError('');
   }, [selectedFamilyId]);
 
   useEffect(() => {
@@ -768,6 +1128,48 @@ const TradeSimulatorPanel = ({
       trades: tradePoints.length,
     };
   }, [testReplayPoints]);
+  const overallRunScore = useMemo(() => {
+    const requestedTests = Math.max(1, Number(testsToChain) || 1);
+    const completedTests = (simulatorReplay?.tests ?? []).filter((test) =>
+      ['passed', 'failed'].includes(test.status)
+    );
+
+    if (!completedTests.length) {
+      return {
+        score: null,
+        label: 'Waiting',
+        detail: 'Run replay',
+        coverage: `${requestedTests} requested`,
+        tone: 'waiting',
+      };
+    }
+
+    const passed = completedTests.filter((test) => test.status === 'passed').length;
+    const passRate = passed / requestedTests;
+    const drawdownLimit = Math.max(Math.abs(Number(accountRules.maxDrawdown) || 0), 1);
+    const averageDrawdownUse =
+      completedTests.reduce((total, test) => {
+        const drawdownUsed = Math.min(Math.abs(Number(test.max_drawdown) || 0) / drawdownLimit, 1);
+        return total + drawdownUsed;
+      }, 0) / completedTests.length;
+    const averageTrades =
+      completedTests.reduce((total, test) => total + Math.max(0, Number(test.trade_count) || 0), 0) /
+      completedTests.length;
+    const drawdownControl = 1 - averageDrawdownUse;
+    const speedScore = averageTrades > 0 ? Math.max(0, 1 - Math.max(0, averageTrades - 3) / 17) : 0;
+    const score = Math.max(
+      0,
+      Math.min(100, Math.round(passRate * 70 + drawdownControl * 20 + speedScore * 10))
+    );
+
+    return {
+      score,
+      label: getScoreLabel(score),
+      detail: `${passed}/${requestedTests} passed`,
+      coverage: `${completedTests.length}/${requestedTests} scored`,
+      tone: getScoreTone(score),
+    };
+  }, [accountRules.maxDrawdown, simulatorReplay, testsToChain]);
   const displayedFamilyRows =
     Number.isFinite(totalTradeCount) && totalTradeCount >= 0
       ? totalTradeCount
@@ -787,14 +1189,6 @@ const TradeSimulatorPanel = ({
     return isReplayComplete ? 'Complete' : 'Paused';
   }, [hasSimulatorReplay, isPlaybackRunning, isReplayComplete, totalReplayTakenTrades, visibleReplayTakenTrades]);
 
-  const replayStatusCounts = useMemo(
-    () => ({
-      passed: replayTestProgress.filter((test) => test.status === 'passed').length,
-      failed: replayTestProgress.filter((test) => test.status === 'failed').length,
-      running: replayTestProgress.filter((test) => test.status === 'running').length,
-    }),
-    [replayTestProgress]
-  );
   const selectedReplayTest = useMemo(
     () =>
       replayTestProgress.find((test) => test.test_index === selectedReplayTestIndex) ??
@@ -820,6 +1214,40 @@ const TradeSimulatorPanel = ({
     ? (Number(selectedReplayTest.ending_balance) || 0) -
       (Number(selectedReplayTest.starting_balance) || 0)
     : 0;
+  const tradeChartCandles = tradeChartData?.candles ?? [];
+  const tradeChartPattern = tradeChartData?.rust_patterns ?? null;
+  const tradeChartMarket =
+    tradeChartPattern?.market ?? selectedCanvasTrade?.market ?? selectedStrategy?.market ?? 'Bullish';
+  const isUsingSelectedFamily = Boolean(familyId && selectedFamilyId && familyId === selectedFamilyId);
+  const handleSelectCanvasTrade = async (trade, fallbackIndex = '') => {
+    if (!trade || trade.skipped_for_overlap) {
+      return;
+    }
+
+    const tradeKey = getSimulatorTradeKey(trade, fallbackIndex);
+    const chartPayload = buildTradeChartPayload(trade, selectedStrategy, loadedTrades);
+    setSelectedCanvasTradeKey(tradeKey);
+    setSelectedCanvasTrade(trade);
+    setChartPanelView('canvas');
+    setOverviewPanel('trades');
+    setTradeCanvasError('');
+
+    if (!onLoadTradeChart) {
+      setTradeCanvasError('Canvas loader is not connected yet.');
+      return;
+    }
+
+    try {
+      setLoadingTradeCanvas(true);
+      await onLoadTradeChart(chartPayload);
+    } catch (error) {
+      console.error('Simulator trade canvas load failed:', error);
+      setTradeCanvasError('Could not load this trade on the canvas.');
+    } finally {
+      setLoadingTradeCanvas(false);
+    }
+  };
+
   const restartReplayPlayback = () => {
     if (!simulatorReplay?.trades?.length) {
       return;
@@ -912,6 +1340,12 @@ const TradeSimulatorPanel = ({
     setPlaybackEventCount(result.trades?.length ?? 0);
     setPlaybackRunning(false);
     setPnlMode('total');
+    setChartPanelView('pnl');
+    setOverviewPanel('trades');
+    setSelectedCanvasTradeKey('');
+    setSelectedCanvasTrade(null);
+    setLoadingTradeCanvas(false);
+    setTradeCanvasError('');
     setActiveTab('overview');
   };
 
@@ -933,24 +1367,6 @@ const TradeSimulatorPanel = ({
 
   return (
     <div className="simulator-panel">
-      <div className="simulator-topbar">
-        <div className="simulator-title-block">
-          <div className="simulator-kicker">Trade Simulator</div>
-          <div className="simulator-title">{selectedStrategy?.familyName ?? selectedStrategy?.name ?? 'Family Replay'}</div>
-        </div>
-        <div className="simulator-status-strip">
-          <span className="simulator-status-badge simulator-status-badge--passed">
-            {hasSimulatorReplay ? `${replayStatusCounts.passed} Passed` : 'Passed'}
-          </span>
-          <span className="simulator-status-badge simulator-status-badge--failed">
-            {hasSimulatorReplay ? `${replayStatusCounts.failed} Failed` : 'Failed'}
-          </span>
-          <span className="simulator-status-badge">
-            {hasSimulatorReplay ? replayRunLabel : 'Waiting'}
-          </span>
-        </div>
-      </div>
-
       <div className="simulator-tabs">
         {SIMULATOR_TABS.map((tab) => (
           <button
@@ -966,10 +1382,16 @@ const TradeSimulatorPanel = ({
 
       <div className="simulator-body">
         <aside className="simulator-config-rail simulator-config-rail--compact">
-          <div className="simulator-rail-card simulator-rail-card--hero">
+          <div
+            className={[
+              'simulator-rail-card',
+              'simulator-rail-card--hero',
+              isUsingSelectedFamily ? 'simulator-rail-card--selected-family' : '',
+            ].filter(Boolean).join(' ')}
+          >
             <div className="simulator-rail-card-head">
               <span>Setup</span>
-              <strong>{selectedStrategy?.market ?? 'Family'}</strong>
+              <strong>{isUsingSelectedFamily ? 'Selected' : selectedStrategy?.market ?? 'Family'}</strong>
             </div>
             <label className="simulator-field simulator-field--wide">
               <span>Strategy Family</span>
@@ -1214,6 +1636,14 @@ const TradeSimulatorPanel = ({
                 </div>
 
                 <div className="simulator-result-summary-grid">
+                  <div className={`simulator-run-score-card simulator-run-score-card--${overallRunScore.tone}`}>
+                    <span>{Math.max(1, Number(testsToChain) || 1)} Test Score</span>
+                    <strong>
+                      {Number.isFinite(overallRunScore.score) ? overallRunScore.score : 'N/A'}
+                    </strong>
+                    <small>{overallRunScore.detail}</small>
+                    <small>{overallRunScore.coverage}</small>
+                  </div>
                   <div>
                     <span>Net P/L</span>
                     <strong className={selectedReplayTestNetPnl >= 0 ? 'simulator-value-positive' : 'simulator-value-negative'}>
@@ -1243,10 +1673,16 @@ const TradeSimulatorPanel = ({
                 <div className="simulator-result-header">
                   <div className="simulator-chart-title-block">
                     <div className="simulator-section-title">
-                      Test {selectedReplayTest?.test_index ?? 1} PnL Replay
+                      {chartPanelView === 'canvas'
+                        ? 'Trade Canvas'
+                        : `Test ${selectedReplayTest?.test_index ?? 1} PnL Replay`}
                     </div>
                     <div className="simulator-chart-subtitle">
-                      {hasSimulatorReplay
+                      {chartPanelView === 'canvas'
+                        ? selectedCanvasTrade
+                          ? `${selectedCanvasTrade.symbol ?? 'N/A'} / ${formatMoney(selectedCanvasTrade.pnl)}`
+                          : 'Click a trade row or graph dot to load the candle chart'
+                        : hasSimulatorReplay
                         ? `${replaySummary.trades}/${selectedReplayTest?.totalTrades ?? 0} trades shown`
                         : 'Run the test replay to reveal each trade on the graph'}
                     </div>
@@ -1254,46 +1690,100 @@ const TradeSimulatorPanel = ({
                   <div className="simulator-toggle-group">
                     <button
                       type="button"
-                      className={pnlMode === 'trade' ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
-                      onClick={() => setPnlMode('trade')}
+                      className={chartPanelView === 'pnl' ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
+                      onClick={() => setChartPanelView('pnl')}
                     >
-                      Trade PnL
+                      PnL
                     </button>
                     <button
                       type="button"
-                      className={pnlMode === 'total' ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
-                      onClick={() => setPnlMode('total')}
+                      className={chartPanelView === 'canvas' ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
+                      onClick={() => setChartPanelView('canvas')}
                     >
-                      Total PnL
+                      Canvas
                     </button>
-                    {hasSimulatorReplay ? (
+                    {chartPanelView === 'pnl' ? (
                       <>
                         <button
                           type="button"
-                          className={isPlaybackRunning ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
-                          onClick={toggleReplayPlayback}
+                          className={pnlMode === 'trade' ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
+                          onClick={() => setPnlMode('trade')}
                         >
-                          {isPlaybackRunning ? 'Pause Tests' : isReplayComplete ? 'Replay Tests' : 'Play Tests'}
+                          Trade PnL
                         </button>
                         <button
                           type="button"
-                          className="simulator-toggle"
-                          onClick={restartReplayPlayback}
+                          className={pnlMode === 'total' ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
+                          onClick={() => setPnlMode('total')}
                         >
-                          Restart Tests
+                          Total PnL
                         </button>
+                        {hasSimulatorReplay ? (
+                          <>
+                            <button
+                              type="button"
+                              className={isPlaybackRunning ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
+                              onClick={toggleReplayPlayback}
+                            >
+                              {isPlaybackRunning ? 'Pause Tests' : isReplayComplete ? 'Replay Tests' : 'Play Tests'}
+                            </button>
+                            <button
+                              type="button"
+                              className="simulator-toggle"
+                              onClick={restartReplayPlayback}
+                            >
+                              Restart Tests
+                            </button>
+                          </>
+                        ) : null}
                       </>
                     ) : null}
                   </div>
                 </div>
-                <SimulatorChart
-                  replayPoints={testReplayPoints}
-                  mode={pnlMode}
-                  profitTarget={accountRules.profitTarget}
-                  maxDrawdown={accountRules.maxDrawdown}
-                  showThresholds={pnlMode === 'total'}
-                  totalPointCount={Math.max(selectedReplayTest?.totalTrades ?? 0, 1)}
-                />
+                <div className="simulator-chart-canvas-panel">
+                  <div className="simulator-trade-canvas-layout">
+                    <TradeCanvasDetails
+                      trade={selectedCanvasTrade}
+                      tradePattern={tradeChartPattern}
+                      selectedReplayTest={selectedReplayTest}
+                      accountRules={accountRules}
+                      contracts={contracts}
+                    />
+                    <div className="simulator-trade-canvas-stage">
+                      {chartPanelView === 'canvas' ? (
+                        tradeChartCandles.length && selectedCanvasTrade && !isLoadingTradeCanvas && !tradeCanvasError ? (
+                          <div className="simulator-chart-canvas-shell">
+                            <CandleChartPanel
+                              chartData={tradeChartData}
+                              isSectionsExpanded={isTradeChartExpanded}
+                              setSectionsExpanded={setTradeChartExpanded}
+                              focusMode="prop"
+                              market={tradeChartMarket}
+                              overlayTopOffset={chartOverlayTop}
+                            />
+                          </div>
+                        ) : (
+                          <div className="simulator-chart-canvas-shell simulator-chart-canvas-shell--empty">
+                            <div className="simulator-canvas-placeholder">
+                              <div className="simulator-canvas-placeholder-grid" />
+                            </div>
+                          </div>
+                        )
+                      ) : (
+                        <SimulatorChart
+                          replayPoints={testReplayPoints}
+                          mode={pnlMode}
+                          profitTarget={accountRules.profitTarget}
+                          maxDrawdown={accountRules.maxDrawdown}
+                          showThresholds={pnlMode === 'total'}
+                          totalPointCount={Math.max(selectedReplayTest?.totalTrades ?? 0, 1)}
+                          selectedTradeKey={selectedCanvasTradeKey}
+                          onSelectTrade={handleSelectCanvasTrade}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="simulator-overview-tests">
@@ -1396,7 +1886,7 @@ const TradeSimulatorPanel = ({
                   )
                 ) : null}
 
-                {overviewPanel !== 'summary' ? (
+                {overviewPanel === 'trades' ? (
                   <div className="simulator-selected-trades simulator-selected-trades--inline">
                     <div className="simulator-selected-trades-head">
                       <span>Trades It Took</span>
@@ -1405,15 +1895,24 @@ const TradeSimulatorPanel = ({
                     {selectedReplayTestTrades.length ? (
                       <div className="simulator-selected-trade-list">
                         {selectedReplayTestTrades.map((trade, index) => {
-                          const isWin = Number(trade.pnl) >= 0;
+                          const isDrawdownFail = Boolean(trade.failed_intratrade_drawdown);
+                          const isWin = !isDrawdownFail && Number(trade.pnl) >= 0;
+                          const tradeKey = getSimulatorTradeKey(trade, index + 1);
+                          const isSelected = tradeKey === selectedCanvasTradeKey;
                           return (
-                            <div
-                              className={isWin ? 'simulator-selected-trade simulator-selected-trade--win' : 'simulator-selected-trade simulator-selected-trade--loss'}
+                            <button
+                              type="button"
+                              className={[
+                                'simulator-selected-trade',
+                                isWin ? 'simulator-selected-trade--win' : 'simulator-selected-trade--loss',
+                                isSelected ? 'simulator-selected-trade--selected' : '',
+                              ].filter(Boolean).join(' ')}
                               key={`${trade.pattern_group_id}-${trade.entry_date}-${index}`}
+                              onClick={() => handleSelectCanvasTrade(trade, index + 1)}
                             >
                               <div className="simulator-selected-trade-index">
                                 <span>#{index + 1}</span>
-                                <strong>{getTradeResultLabel(trade)}</strong>
+                                <strong>{isDrawdownFail ? 'DD Fail' : getTradeResultLabel(trade)}</strong>
                               </div>
                               <div className="simulator-selected-trade-main">
                                 <strong>{trade.symbol ?? 'N/A'}</strong>
@@ -1421,9 +1920,11 @@ const TradeSimulatorPanel = ({
                               </div>
                               <div className="simulator-selected-trade-values">
                                 <strong>{formatMoney(trade.pnl)}</strong>
-                                <span>Balance {formatMoney(trade.balance)}</span>
+                                <span>
+                                  Low {formatMoney(trade.intratrade_low_balance ?? trade.balance)}
+                                </span>
                               </div>
-                            </div>
+                            </button>
                           );
                         })}
                       </div>

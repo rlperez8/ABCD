@@ -42,7 +42,7 @@ const HARMONIC_SCORE_COLUMNS: [(&str, &str, &str); 7] = [
     ("Shark", "shark_accuracy", "shark_time_accuracy"),
 ];
 
-const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 19] = [
+const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 20] = [
     (
         "pattern_harmonic_scores",
         "uniq_pattern_harmonic_score",
@@ -132,6 +132,11 @@ const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 19] = [
         "pattern_outcomes_prop",
         "idx_pattern_outcomes_prop_target_ready",
         "CREATE INDEX idx_pattern_outcomes_prop_target_ready ON pattern_outcomes_prop (target_ready, entry_date)",
+    ),
+    (
+        "pattern_outcomes_prop",
+        "idx_pattern_outcomes_prop_live_lookup",
+        "CREATE INDEX idx_pattern_outcomes_prop_live_lookup ON pattern_outcomes_prop (outcome_model, prop_result, d_confirm_date, d_date, market, harmonic_type, bin, reversal_type, size_bucket)",
     ),
     (
         "pattern_outcomes_prop",
@@ -2881,6 +2886,17 @@ impl Database {
                 trade_enter_price DOUBLE NOT NULL,
                 trade_risk_exit_price DOUBLE NOT NULL,
                 trade_reward_exit_price DOUBLE NOT NULL,
+                trade_open BOOLEAN NOT NULL DEFAULT FALSE,
+                trade_current_price DOUBLE NULL,
+                trade_pnl DOUBLE NULL,
+                trade_lowest_price DOUBLE NULL,
+                trade_highest_price DOUBLE NULL,
+                trade_adverse_price DOUBLE NULL,
+                trade_favorable_price DOUBLE NULL,
+                max_adverse_points DOUBLE NULL,
+                max_favorable_points DOUBLE NULL,
+                bars_held BIGINT NULL,
+                minutes_held BIGINT NULL,
                 d_confirm_date DATETIME NOT NULL,
                 target_ready BOOLEAN NOT NULL,
                 target_date DATETIME NULL,
@@ -2922,7 +2938,18 @@ impl Database {
                     size_bucket,
                     time_bin
                 ),
-                INDEX idx_pattern_outcomes_prop_target_ready (target_ready, entry_date)
+                INDEX idx_pattern_outcomes_prop_target_ready (target_ready, entry_date),
+                INDEX idx_pattern_outcomes_prop_live_lookup (
+                    outcome_model,
+                    prop_result,
+                    d_confirm_date,
+                    d_date,
+                    market,
+                    harmonic_type,
+                    bin,
+                    reversal_type,
+                    size_bucket
+                )
             )
             "#,
         )
@@ -2945,6 +2972,72 @@ impl Database {
             "pattern_outcomes_prop",
             "contract_days_from_start",
             "contract_days_from_start BIGINT NULL AFTER contract_week_index",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "trade_open",
+            "trade_open BOOLEAN NOT NULL DEFAULT FALSE AFTER trade_reward_exit_price",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "trade_current_price",
+            "trade_current_price DOUBLE NULL AFTER trade_open",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "trade_pnl",
+            "trade_pnl DOUBLE NULL AFTER trade_current_price",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "trade_lowest_price",
+            "trade_lowest_price DOUBLE NULL AFTER trade_pnl",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "trade_highest_price",
+            "trade_highest_price DOUBLE NULL AFTER trade_lowest_price",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "trade_adverse_price",
+            "trade_adverse_price DOUBLE NULL AFTER trade_highest_price",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "trade_favorable_price",
+            "trade_favorable_price DOUBLE NULL AFTER trade_adverse_price",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "max_adverse_points",
+            "max_adverse_points DOUBLE NULL AFTER trade_favorable_price",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "max_favorable_points",
+            "max_favorable_points DOUBLE NULL AFTER max_adverse_points",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "bars_held",
+            "bars_held BIGINT NULL AFTER max_favorable_points",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_outcomes_prop",
+            "minutes_held",
+            "minutes_held BIGINT NULL AFTER bars_held",
         )
         .await?;
         self.create_index_if_missing(
@@ -4266,6 +4359,18 @@ impl Database {
     pub async fn ensure_prop_strategy_contract_week_summary_table(
         &self,
     ) -> Result<(), sqlx::Error> {
+        if self
+            .table_exists("prop_strategy_contract_week_summary")
+            .await?
+            && !self
+                .table_column_exists("prop_strategy_contract_week_summary", "symbol")
+                .await?
+        {
+            sqlx::query("DROP TABLE prop_strategy_contract_week_summary")
+                .execute(&self.pool)
+                .await?;
+        }
+
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS prop_strategy_contract_week_summary (
@@ -4831,6 +4936,17 @@ impl Database {
                     trade_enter_price,
                     trade_risk_exit_price,
                     trade_reward_exit_price,
+                    trade_open,
+                    trade_current_price,
+                    trade_pnl,
+                    trade_lowest_price,
+                    trade_highest_price,
+                    trade_adverse_price,
+                    trade_favorable_price,
+                    max_adverse_points,
+                    max_favorable_points,
+                    bars_held,
+                    minutes_held,
                     d_confirm_date,
                     prop_result,
                     target_ready,
@@ -4910,6 +5026,17 @@ impl Database {
                     .push_bind(pattern.trade.enter_price)
                     .push_bind(pattern.trade.risk_exit_price)
                     .push_bind(pattern.trade.reward_exit_price)
+                    .push_bind(pattern.trade.open)
+                    .push_bind(pattern.trade.current_price)
+                    .push_bind(pattern.trade.pnl)
+                    .push_bind(pattern.trade.lowest_price)
+                    .push_bind(pattern.trade.highest_price)
+                    .push_bind(pattern.trade.adverse_price)
+                    .push_bind(pattern.trade.favorable_price)
+                    .push_bind(pattern.trade.max_adverse_points)
+                    .push_bind(pattern.trade.max_favorable_points)
+                    .push_bind(pattern.trade.bars_held)
+                    .push_bind(pattern.trade.minutes_held)
                     .push_bind(pattern.d_confirm_date)
                     .push_bind(pattern.trade.result)
                     .push_bind(target.is_some())
@@ -4969,6 +5096,17 @@ impl Database {
                     trade_enter_price,
                     trade_risk_exit_price,
                     trade_reward_exit_price,
+                    trade_open,
+                    trade_current_price,
+                    trade_pnl,
+                    trade_lowest_price,
+                    trade_highest_price,
+                    trade_adverse_price,
+                    trade_favorable_price,
+                    max_adverse_points,
+                    max_favorable_points,
+                    bars_held,
+                    minutes_held,
                     d_confirm_date,
                     prop_result,
                     target_ready,
@@ -5029,6 +5167,17 @@ impl Database {
                     .push_bind(item.trade_enter_price)
                     .push_bind(item.trade_risk_exit_price)
                     .push_bind(item.trade_reward_exit_price)
+                    .push_bind(item.trade_open)
+                    .push_bind(item.trade_current_price)
+                    .push_bind(item.trade_pnl)
+                    .push_bind(item.trade_lowest_price)
+                    .push_bind(item.trade_highest_price)
+                    .push_bind(item.trade_adverse_price)
+                    .push_bind(item.trade_favorable_price)
+                    .push_bind(item.max_adverse_points)
+                    .push_bind(item.max_favorable_points)
+                    .push_bind(item.bars_held)
+                    .push_bind(item.minutes_held)
                     .push_bind(item.d_confirm_date)
                     .push_bind(item.trade_result)
                     .push_bind(item.target_ready)
@@ -6881,7 +7030,7 @@ impl Database {
                 FROM prop_family_weekly_counts
                 GROUP BY family_key
             ) stats
-                ON stats.family_key = s.family_key
+                ON stats.family_key COLLATE utf8mb4_unicode_ci = s.family_key COLLATE utf8mb4_unicode_ci
             "#;
         let rows = sqlx::query(insert_sql)
             .execute(&mut *conn)

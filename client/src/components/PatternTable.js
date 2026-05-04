@@ -82,6 +82,24 @@ const getColumnValue = (row, columnKey) => {
   return row[columnKey] ?? row[columnKey.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())];
 };
 
+const getPatternSelectionKey = (pattern = {}) => {
+  if (!pattern) {
+    return '';
+  }
+
+  if (pattern.pattern_id) {
+    return `pattern:${pattern.pattern_id}`;
+  }
+
+  return [
+    pattern.pattern_group_id ?? '',
+    pattern.symbol ?? '',
+    pattern.d_date ?? '',
+    pattern.trade_enter_price ?? '',
+    pattern.market ?? '',
+  ].join('|');
+};
+
 const renderCellContent = (row, columnKey) => {
   const content = getColumnValue(row, columnKey);
 
@@ -107,6 +125,7 @@ const PatternTable = ({
   setLoadingPatterns,
   setChartData,
   selectedRowIndex,
+  selectedPatternKey = '',
   setSelectedRowIndex,
   updateSelectedPattern,
   density = 'default',
@@ -158,11 +177,17 @@ const PatternTable = ({
       return;
     }
 
-    rowRefs.current.get(Math.min(selectedRowIndex, patterns.length - 1))?.scrollIntoView({
+    const selectedKeyIndex = selectedPatternKey
+      ? patterns.findIndex((pattern) => getPatternSelectionKey(pattern) === selectedPatternKey)
+      : -1;
+    const nextScrollIndex =
+      selectedKeyIndex >= 0 ? selectedKeyIndex : Math.min(selectedRowIndex, patterns.length - 1);
+
+    rowRefs.current.get(nextScrollIndex)?.scrollIntoView({
       block: 'nearest',
       inline: 'nearest',
     });
-  }, [patterns.length, selectedRowIndex]);
+  }, [patterns, patterns.length, selectedPatternKey, selectedRowIndex]);
 
   const handleSelectRow = async (rowIndex) => {
     const nextIndex = Math.max(0, Math.min(rowIndex, (patterns?.length ?? 1) - 1));
@@ -310,7 +335,10 @@ const PatternTable = ({
             </thead>
             <tbody>
               {patterns.map((pattern, rowIndex) => {
-                const isSelected = rowIndex === selectedRowIndex;
+                const rowSelectionKey = getPatternSelectionKey(pattern);
+                const isSelected = selectedPatternKey
+                  ? rowSelectionKey === selectedPatternKey
+                  : rowIndex === selectedRowIndex;
                 const isHovered = rowIndex === hoveredRowIndex;
                 const result = Number(pattern?.trade_result);
 
@@ -332,6 +360,7 @@ const PatternTable = ({
                       result !== 1 && result !== 2 ? 'pattern-library-row--open' : '',
                       isHovered ? 'strategy-library-row--hovered' : '',
                       isSelected ? 'strategy-library-row--selected' : '',
+                      isSelected ? 'pattern-library-row--selected' : '',
                     ]
                       .filter(Boolean)
                       .join(' ')}

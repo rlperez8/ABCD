@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import DashboardCardFrame from '../dashboard/DashboardCardFrame';
 
 const formatPercent = (value) =>
   Number.isFinite(value) ? `${value.toFixed(2)}%` : 'N/A';
@@ -49,58 +50,66 @@ export default function StrategyContractBreakdownPanel({
     });
   }, [loadedTrades]);
 
-  if (!selectedStrategy) {
-    return null;
-  }
-
   return (
-    <div className="strategy-contract-breakdown">
-      <button
-        type="button"
-        className="strategy-contract-breakdown__toggle"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((current) => !current)}
-      >
-        <span>Contract Breakdown</span>
-        <span>{isOpen ? '-' : '+'}</span>
-      </button>
-
-      {isOpen ? (
-        <div className="strategy-contract-breakdown__body">
-          <div className="strategy-contract-breakdown__meta">
-            Showing {loadedTrades.length} loaded trades from {totalTradeCount} total family trades.
-          </div>
-
-          {rows.length ? (
-            <div className="strategy-contract-breakdown__table-shell">
-              <table className="strategy-contract-breakdown__table">
-                <thead>
-                  <tr>
-                    <th>Contract</th>
-                    <th>Total</th>
-                    <th>Closed</th>
-                    <th>Win %</th>
-                    <th>PnL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.symbol}>
-                      <td>{row.symbol}</td>
-                      <td>{row.total}</td>
-                      <td>{row.closed}</td>
-                      <td>{formatPercent(row.closed ? (row.wins / row.closed) * 100 : 0)}</td>
-                      <td>{row.pnl.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+    <DashboardCardFrame
+      title="Contract Breakdown"
+      subtitle="Loaded family trades by contract"
+      controls={
+        <>
+          <span className="dashboard-card-label">Contracts</span>
+          <button
+            type="button"
+            className="dashboard-card-collapse-button"
+            aria-expanded={isOpen}
+            onClick={() => setIsOpen((current) => !current)}
+          >
+            {isOpen ? '-' : '+'}
+          </button>
+        </>
+      }
+      bodyClassName="strategy-library-card-body"
+      isCollapsed={!isOpen}
+    >
+      <div className="strategy-contract-breakdown">
+        {!selectedStrategy ? (
+          <div className="strategy-empty-row">Choose a family to inspect its contracts.</div>
+        ) : (
+          <>
+            <div className="strategy-contract-breakdown__meta">
+              Showing {loadedTrades.length} loaded trades from {totalTradeCount} total family trades.
             </div>
-          ) : (
-            <div className="strategy-empty-row">No loaded trades to break down yet.</div>
-          )}
-        </div>
-      ) : null}
-    </div>
+
+            {rows.length ? (
+              <div className="strategy-contract-breakdown__table-shell">
+                <table className="strategy-contract-breakdown__table">
+                  <thead>
+                    <tr>
+                      <th>Contract</th>
+                      <th>Total</th>
+                      <th>Closed</th>
+                      <th>Win %</th>
+                      <th>PnL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.symbol}>
+                        <td>{row.symbol}</td>
+                        <td>{row.total}</td>
+                        <td>{row.closed}</td>
+                        <td>{formatPercent(row.closed ? (row.wins / row.closed) * 100 : 0)}</td>
+                        <td>{row.pnl.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="strategy-empty-row">No loaded trades to break down yet.</div>
+            )}
+          </>
+        )}
+      </div>
+    </DashboardCardFrame>
   );
 }

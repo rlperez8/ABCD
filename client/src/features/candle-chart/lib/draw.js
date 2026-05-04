@@ -17,14 +17,17 @@ const DATE_PANEL_BACKGROUND = 'rgba(15, 21, 34, 0.96)';
 const TAG_BORDER_COLOR = 'rgba(91, 118, 158, 0.46)';
 const AXIS_TEXT_COLOR = 'rgba(189, 205, 229, 0.78)';
 const AXIS_MUTED_TEXT_COLOR = 'rgba(149, 170, 201, 0.62)';
+const TARGET_PRICE_GRID_PX = 58;
 const RETRACEMENT_COLOR = 'rgba(226, 234, 245, 0.62)';
 const LABEL_BACKGROUND = 'rgba(18, 29, 45, 0.92)';
 const LABEL_TEXT_COLOR = '#f8fbff';
 const LABEL_BORDER_COLOR = 'rgba(114, 148, 206, 0.3)';
 const REVERSAL_D_CANDLE_COLOR = '#f3d33b';
-const PROP_CONFIRM_COLOR = '#6dc0ff';
-const PROP_REVERSAL_COLOR = '#f3d33b';
 const PROP_ENTRY_COLOR = '#ffffff';
+const TRADE_TARGET_COLOR = '#53f0a7';
+const TRADE_STOP_COLOR = '#ff5f6d';
+const TRADE_PROFIT_ZONE = 'rgba(83, 240, 167, 0.14)';
+const TRADE_LOSS_ZONE = 'rgba(255, 95, 109, 0.14)';
 const TREND_LINE_SERIES = [
   {
     key: 'threeMonth',
@@ -176,6 +179,24 @@ const MONTH_YEAR_FORMATTER = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   year: '2-digit',
 });
+const YEAR_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+});
+
+const getNiceAxisStep = (rawStep) => {
+  if (!Number.isFinite(rawStep) || rawStep <= 0) {
+    return 1;
+  }
+
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalized = rawStep / magnitude;
+
+  if (normalized <= 1) return magnitude;
+  if (normalized <= 2) return magnitude * 2;
+  if (normalized <= 2.5) return magnitude * 2.5;
+  if (normalized <= 5) return magnitude * 5;
+  return magnitude * 10;
+};
 
 const parseAxisDate = (value) => {
   if (!value) {
@@ -187,19 +208,23 @@ const parseAxisDate = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const formatAxisDateLabel = (value, completeWidth) => {
+const formatAxisDateLabel = (value, completeWidth, gridIncrement = 1) => {
   const parsedDate = parseAxisDate(value);
 
   if (!parsedDate) {
     return formatCandleDate(value);
   }
 
-  if (completeWidth >= 24) {
+  if (completeWidth >= 24 || gridIncrement <= 5) {
     return DAY_MONTH_YEAR_FORMATTER.format(parsedDate);
   }
 
-  if (completeWidth >= 10) {
+  if (completeWidth >= 10 || gridIncrement <= 25) {
     return DAY_MONTH_FORMATTER.format(parsedDate);
+  }
+
+  if (gridIncrement >= 500) {
+    return YEAR_FORMATTER.format(parsedDate);
   }
 
   return MONTH_YEAR_FORMATTER.format(parsedDate);
@@ -222,6 +247,42 @@ const formatAxisPrice = (price, unitAmount) => {
   }
 
   return price.toFixed(decimals);
+};
+
+const getPriceAxisTicks = (chartState, height) => {
+  const priceScale = chartState.price.pixelsPerGrid / chartState.price.unitAmount;
+
+  if (!Number.isFinite(priceScale) || priceScale <= 0) {
+    return [];
+  }
+
+  const visibleTopPrice = getPriceAtCanvasY(chartState, 0);
+  const visibleBottomPrice = getPriceAtCanvasY(chartState, height);
+  const minPrice = Math.min(visibleTopPrice, visibleBottomPrice);
+  const maxPrice = Math.max(visibleTopPrice, visibleBottomPrice);
+  const rawPriceStep = TARGET_PRICE_GRID_PX / priceScale;
+  const priceStep = getNiceAxisStep(rawPriceStep);
+  const firstPrice = Math.ceil(minPrice / priceStep) * priceStep;
+  const ticks = [];
+
+  for (let price = firstPrice; price <= maxPrice + priceStep * 0.5; price += priceStep) {
+    const y = getCanvasY(chartState, price);
+
+    if (y >= -1 && y <= height + 1) {
+      ticks.push({
+        price,
+        priceStep,
+        y: Math.round(y) + 0.5,
+        isBaseline: Math.abs(price) < priceStep * 0.001,
+      });
+    }
+
+    if (ticks.length > 80) {
+      break;
+    }
+  }
+
+  return ticks;
 };
 
 export class Mouse {
@@ -477,61 +538,50 @@ export class Chart {
 
   grid_Y = (ctx, canvas) => {
     const chartState = this.chartStateRef.current;
+    const ticks = getPriceAxisTicks(chartState, canvas.height);
 
     ctx.save();
     ctx.beginPath();
     ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 1;
 
-    for (let y = chartState.viewport.baselineY; y >= 0; y -= chartState.price.pixelsPerGrid) {
-      const snappedY = Math.round(y) + 0.5;
-      ctx.moveTo(0, snappedY);
-      ctx.lineTo(canvas.width, snappedY);
-    }
-
-    for (
-      let y = chartState.viewport.baselineY + chartState.price.pixelsPerGrid;
-      y <= canvas.height;
-      y += chartState.price.pixelsPerGrid
-    ) {
-      const snappedY = Math.round(y) + 0.5;
-      ctx.moveTo(0, snappedY);
-      ctx.lineTo(canvas.width, snappedY);
-    }
+    ticks.forEach((tick) => {
+      ctx.moveTo(0, tick.y);
+      ctx.lineTo(canvas.width, tick.y);
+    });
 
     ctx.stroke();
+
+    const baselineTick = ticks.find((tick) => tick.isBaseline);
+    if (baselineTick) {
+      ctx.beginPath();
+      ctx.strokeStyle = GRID_MAJOR_COLOR;
+      ctx.moveTo(0, baselineTick.y);
+      ctx.lineTo(canvas.width, baselineTick.y);
+      ctx.stroke();
+    }
+
     ctx.restore();
   };
 
   prices = (ctxPrice, canvasPrice) => {
     const chartState = this.chartStateRef.current;
-    const startY =
-      chartState.viewport.baselineY -
-      Math.ceil(chartState.viewport.baselineY / chartState.price.pixelsPerGrid) *
-        chartState.price.pixelsPerGrid;
+    const ticks = getPriceAxisTicks(chartState, canvasPrice.height);
 
     ctxPrice.save();
-    ctxPrice.font = '600 13px "Segoe UI"';
+    ctxPrice.font = '850 16px "Segoe UI"';
     ctxPrice.fillStyle = AXIS_TEXT_COLOR;
     ctxPrice.textAlign = 'center';
     ctxPrice.textBaseline = 'middle';
 
-    for (let y = startY; y <= canvasPrice.height; y += chartState.price.pixelsPerGrid) {
-      if (y < 0) {
-        continue;
-      }
-
-      const snappedY = Math.round(y) + 0.5;
-      const price = getPriceAtCanvasY(chartState, snappedY);
-      const isBaseline = Math.abs(snappedY - chartState.viewport.baselineY) < 1;
-
-      ctxPrice.fillStyle = isBaseline ? AXIS_TEXT_COLOR : AXIS_MUTED_TEXT_COLOR;
+    ticks.forEach((tick) => {
+      ctxPrice.fillStyle = tick.isBaseline ? AXIS_TEXT_COLOR : AXIS_MUTED_TEXT_COLOR;
       ctxPrice.fillText(
-        formatAxisPrice(price, chartState.price.unitAmount),
+        formatAxisPrice(tick.price, tick.priceStep),
         canvasPrice.width / 2,
-        snappedY
+        tick.y
       );
-    }
+    });
 
     ctxPrice.restore();
   };
@@ -555,7 +605,11 @@ export class Chart {
 
     for (let candleIndex = alignedStart; candleIndex <= end; candleIndex += gridIncrement) {
       const candle = chartState.candles.items[candleIndex - 1];
-      const label = formatAxisDateLabel(candle?.candle_date, chartState.candles.completeWidth);
+      const label = formatAxisDateLabel(
+        candle?.candle_date,
+        chartState.candles.completeWidth,
+        gridIncrement
+      );
 
       if (!label) {
         continue;
@@ -634,22 +688,31 @@ export class Chart {
     const reversalIndexes = reversalFocusOnly
       ? getReversalCandleIndexes(activePattern, options?.activeReversalFilter)
       : null;
+    const exitIndex = Number(activePattern?.exit_date);
+    const shouldHighlightExitCandle =
+      Boolean(options?.highlightExitCandle) && Number.isFinite(exitIndex) && exitIndex >= 1;
+    const exitColor = Number(activePattern?.trade_result) === 2 ? TRADE_STOP_COLOR : TRADE_TARGET_COLOR;
 
     for (let candleIndex = start; candleIndex <= end; candleIndex += 1) {
       const candle = chartState.candles.items[candleIndex - 1];
       const x = getCanvasX(chartState, candleIndex);
       const isReversalSignalCandle = reversalFocusOnly && (reversalIndexes?.has(candleIndex) ?? false);
+      const isExitCandle = shouldHighlightExitCandle && candleIndex === Math.round(exitIndex);
 
       this.drawCandle(ctx, candle, x, {
         isPatternSpan: isReversalSignalCandle,
         isPivot: false,
         isReversalSignalCandle,
+        isExitCandle,
+        exitColor,
         palette: patternPalette,
       });
       this.drawWick(ctx, candle, x, {
         isPatternSpan: isReversalSignalCandle,
         isPivot: false,
         isReversalSignalCandle,
+        isExitCandle,
+        exitColor,
         palette: patternPalette,
       });
     }
@@ -664,20 +727,30 @@ export class Chart {
       isPatternSpan = false,
       isPivot = false,
       isReversalSignalCandle = false,
+      isExitCandle = false,
+      exitColor = null,
       palette = BULLISH_PALETTE,
     } = highlight;
 
     ctx.save();
-    ctx.fillStyle = isReversalSignalCandle ? REVERSAL_D_CANDLE_COLOR : getCandleStrokeColor(candle);
+    ctx.fillStyle = isReversalSignalCandle
+      ? REVERSAL_D_CANDLE_COLOR
+      : isExitCandle && exitColor
+      ? exitColor
+      : getCandleStrokeColor(candle);
+    ctx.globalAlpha = isExitCandle && !isReversalSignalCandle ? 0.96 : 1;
     ctx.fillRect(candleLeftX, candleTopY, candleRenderWidth, candleHeight);
+    ctx.globalAlpha = 1;
 
-    if (isPatternSpan) {
+    if (isPatternSpan || isExitCandle) {
       ctx.strokeStyle = isReversalSignalCandle
         ? REVERSAL_D_CANDLE_COLOR
+        : isExitCandle && exitColor
+        ? exitColor
         : isPivot
         ? palette.line
         : 'rgba(220, 234, 255, 0.36)';
-      ctx.lineWidth = isReversalSignalCandle ? 2 : isPivot ? 2 : 1;
+      ctx.lineWidth = isExitCandle ? 3.2 : isReversalSignalCandle ? 2 : isPivot ? 2 : 1;
       ctx.strokeRect(
         candleLeftX - 0.5,
         candleTopY - 0.5,
@@ -697,16 +770,20 @@ export class Chart {
       isPatternSpan = false,
       isPivot = false,
       isReversalSignalCandle = false,
+      isExitCandle = false,
+      exitColor = null,
       palette = BULLISH_PALETTE,
     } = highlight;
 
     ctx.save();
     ctx.strokeStyle = isReversalSignalCandle
       ? REVERSAL_D_CANDLE_COLOR
+      : isExitCandle && exitColor
+      ? exitColor
       : isPatternSpan && isPivot
       ? palette.line
       : getCandleStrokeColor(candle);
-    ctx.lineWidth = isReversalSignalCandle ? 2 : isPatternSpan && isPivot ? 1.5 : 1;
+    ctx.lineWidth = isExitCandle ? 2 : isReversalSignalCandle ? 2 : isPatternSpan && isPivot ? 1.5 : 1;
 
     if (highY < candleTopY) {
       ctx.beginPath();
@@ -1073,115 +1150,169 @@ export class ABCD {
   };
 
   prop_events = (ctx, pattern) => {
-    const dIndex = Number(pattern?.d);
-    const dConfirmIndex = Number(pattern?.d_confirm);
-    const reversalDetectIndex = Number(pattern?.reversal_detect);
     const entryIndex = Number(pattern?.entry);
-    const isPropReversalFocus =
-      pattern?.prop_outcome_mode === 'reversal' || Boolean(pattern?.reversal_detect_date);
-
-    if (Number.isFinite(dConfirmIndex) && dConfirmIndex >= 1) {
-      this.drawEventMarker(ctx, pattern, {
-        index: dConfirmIndex,
-        label: 'D Confirm',
-        color: PROP_CONFIRM_COLOR,
-        guideFromIndex: Number.isFinite(dIndex) ? dIndex : undefined,
-      });
-    }
 
     if (Number.isFinite(entryIndex) && entryIndex >= 1) {
       this.drawEventMarker(ctx, pattern, {
         index: entryIndex,
         label: 'Entry',
         color: PROP_ENTRY_COLOR,
-        guideFromIndex:
-          isPropReversalFocus && Number.isFinite(reversalDetectIndex)
-            ? reversalDetectIndex
-            : Number.isFinite(dConfirmIndex)
-              ? dConfirmIndex
-              : dIndex,
         stackOrder: 1,
-      });
-    }
-
-    if (isPropReversalFocus) {
-      const hasDistinctReversalDetect =
-        Number.isFinite(reversalDetectIndex) &&
-        reversalDetectIndex >= 1 &&
-        reversalDetectIndex !== dConfirmIndex;
-
-      this.drawEventMarker(ctx, pattern, {
-        index:
-          Number.isFinite(reversalDetectIndex) && reversalDetectIndex >= 1
-            ? reversalDetectIndex
-            : dConfirmIndex,
-        label: hasDistinctReversalDetect ? 'Reversal Detect' : 'D + Reversal',
-        color: PROP_REVERSAL_COLOR,
-        guideFromIndex: Number.isFinite(dConfirmIndex) ? dConfirmIndex : dIndex,
-        stackOrder: hasDistinctReversalDetect ? 0 : 1,
       });
     }
   };
 
-  price_levels = (ctxPrice, ctx, canvas, pattern) => {
+  price_levels = (ctxPrice, ctx, canvas, pattern, options = {}) => {
     const chartState = this.chartStateRef.current;
-    const palette = this.getOverlayPalette(pattern);
+    const showRays = options?.showRays !== false;
+    const showTags = options?.showTags !== false;
+    const levels = [
+      {
+        key: 'stop',
+        label: 'SL',
+        price: Number(pattern?.trade_risk_exit_price),
+        color: TRADE_STOP_COLOR,
+        dash: [7, 6],
+      },
+      {
+        key: 'entry',
+        label: 'ENT',
+        price: Number(pattern?.trade_enter_price),
+        color: '#ffffff',
+        dash: [3, 5],
+      },
+      {
+        key: 'target',
+        label: 'TP',
+        price: Number(pattern?.trade_reward_exit_price),
+        color: TRADE_TARGET_COLOR,
+        dash: [7, 6],
+      },
+    ].filter((level) => Number.isFinite(level.price));
+
+    if (!levels.length || !chartState?.canvas) {
+      return;
+    }
+
+    const visibleYs = levels
+      .map((level) => ({ ...level, y: getCanvasY(chartState, level.price) }))
+      .filter((level) => Number.isFinite(level.y));
+    const entryLevel = visibleYs.find((level) => level.key === 'entry');
+    const stopLevel = visibleYs.find((level) => level.key === 'stop');
+    const targetLevel = visibleYs.find((level) => level.key === 'target');
     const entryIndex = Number.isFinite(Number(pattern?.entry)) ? Number(pattern.entry) : Number(pattern?.d);
-    const exitIndex = Number(pattern?.exit_date);
-    if (!Number.isFinite(entryIndex) || entryIndex < 1 || !Number.isFinite(exitIndex) || exitIndex < 1) {
+    const entryCandle = Number.isFinite(entryIndex)
+      ? chartState?.candles?.items?.[Math.round(entryIndex) - 1]
+      : null;
+    const entryCandleGeometry = entryCandle
+      ? new Chart(this.chartStateRef).getCandleGeometry(entryCandle, getCanvasX(chartState, entryIndex))
+      : null;
+    const leftX = Number.isFinite(entryCandleGeometry?.candleLeftX)
+      ? entryCandleGeometry.candleLeftX
+      : Math.max(0, chartState.canvas.width * 0.04);
+    const rightX = chartState.canvas.width - 1;
+
+    if (showRays) {
+      ctx.save();
+
+      if (entryLevel && targetLevel) {
+        const top = Math.min(entryLevel.y, targetLevel.y);
+        const height = Math.abs(entryLevel.y - targetLevel.y);
+        if (height > 0) {
+          ctx.fillStyle = TRADE_PROFIT_ZONE;
+          ctx.fillRect(leftX, top, rightX - leftX, height);
+        }
+      }
+
+      if (entryLevel && stopLevel) {
+        const top = Math.min(entryLevel.y, stopLevel.y);
+        const height = Math.abs(entryLevel.y - stopLevel.y);
+        if (height > 0) {
+          ctx.fillStyle = TRADE_LOSS_ZONE;
+          ctx.fillRect(leftX, top, rightX - leftX, height);
+        }
+      }
+
+      visibleYs.forEach((level) => {
+        ctx.beginPath();
+        ctx.strokeStyle = level.color;
+        ctx.lineWidth = level.key === 'entry' ? 2.6 : 2.2;
+        ctx.setLineDash(level.dash);
+        ctx.moveTo(leftX, level.y);
+        ctx.lineTo(rightX, level.y);
+        ctx.stroke();
+      });
+
+      ctx.restore();
+    }
+
+    if (!showTags) {
+      void canvas;
       return;
     }
 
-    const startX = getCanvasX(chartState, entryIndex);
-    const endX = getCanvasX(chartState, exitIndex);
-    const stopLossY = getCanvasY(chartState, pattern.trade_risk_exit_price);
-    const takeProfitY = getCanvasY(chartState, pattern.trade_reward_exit_price);
-    const enteredPriceY = getCanvasY(chartState, pattern.trade_enter_price);
+    ctxPrice.save();
+    ctxPrice.font = '950 16px "Segoe UI"';
+    ctxPrice.textAlign = 'center';
+    ctxPrice.textBaseline = 'middle';
+    const tagHeight = 32;
+    const tagWidth = Math.max(58, ctxPrice.canvas.width - 6);
+    const tagX = Math.max(4, (ctxPrice.canvas.width - tagWidth) / 2);
+    const tagGap = 4;
+    const sortedTags = [...visibleYs]
+      .sort((left, right) => left.y - right.y)
+      .map((level) => ({
+        ...level,
+        tagY: Math.min(
+          Math.max(level.y - tagHeight / 2, 4),
+          ctxPrice.canvas.height - tagHeight - 4
+        ),
+      }));
 
-    if (![startX, endX, stopLossY, takeProfitY, enteredPriceY].every(Number.isFinite)) {
-      return;
+    sortedTags.forEach((level, index) => {
+      if (index === 0) {
+        return;
+      }
+
+      const previous = sortedTags[index - 1];
+      level.tagY = Math.max(level.tagY, previous.tagY + tagHeight + tagGap);
+    });
+
+    const overflow = sortedTags.length
+      ? sortedTags[sortedTags.length - 1].tagY + tagHeight + 4 - ctxPrice.canvas.height
+      : 0;
+    if (overflow > 0) {
+      for (let index = sortedTags.length - 1; index >= 0; index -= 1) {
+        sortedTags[index].tagY -= overflow;
+      }
     }
 
-    ctx.save();
+    sortedTags.forEach((level) => {
+      const tagCenterY = level.tagY + tagHeight / 2;
 
-    ctx.beginPath();
-    ctx.strokeStyle = '#ef5350';
-    ctx.lineWidth = 3;
-    ctx.moveTo(startX, stopLossY);
-    ctx.lineTo(endX, stopLossY);
-    ctx.stroke();
+      ctxPrice.beginPath();
+      ctxPrice.strokeStyle = level.color;
+      ctxPrice.lineWidth = 1;
+      ctxPrice.setLineDash([3, 3]);
+      ctxPrice.moveTo(4, level.y);
+      ctxPrice.lineTo(tagX, tagCenterY);
+      ctxPrice.stroke();
+      ctxPrice.setLineDash([]);
 
-    ctx.beginPath();
-    ctx.strokeStyle = palette.line;
-    ctx.lineWidth = 3;
-    ctx.moveTo(startX, takeProfitY);
-    ctx.lineTo(endX, takeProfitY);
-    ctx.stroke();
+      ctxPrice.beginPath();
+      ctxPrice.fillStyle = LABEL_BACKGROUND;
+      ctxPrice.strokeStyle = level.color;
+      ctxPrice.lineWidth = 1;
+      ctxPrice.roundRect(tagX, level.tagY, tagWidth, tagHeight, 7);
+      ctxPrice.fill();
+      ctxPrice.stroke();
 
-    ctx.beginPath();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
-    ctx.moveTo(startX, enteredPriceY);
-    ctx.lineTo(endX, enteredPriceY);
-    ctx.stroke();
+      ctxPrice.fillStyle = LABEL_TEXT_COLOR;
+      ctxPrice.font = '950 16px "Segoe UI"';
+      ctxPrice.fillText(level.price.toFixed(2), tagX + tagWidth / 2, level.tagY + tagHeight / 2);
+    });
 
-    const profitZoneTop = Math.min(takeProfitY, enteredPriceY);
-    const profitZoneHeight = Math.abs(enteredPriceY - takeProfitY);
-    if (profitZoneHeight > 0) {
-      ctx.fillStyle = palette.zone;
-      ctx.fillRect(startX, profitZoneTop, endX - startX, profitZoneHeight);
-    }
-
-    const lossZoneTop = Math.min(stopLossY, enteredPriceY);
-    const lossZoneHeight = Math.abs(stopLossY - enteredPriceY);
-    if (lossZoneHeight > 0) {
-      ctx.fillStyle = 'rgba(239, 83, 80, 0.2)';
-      ctx.fillRect(startX, lossZoneTop, endX - startX, lossZoneHeight);
-    }
-
-    ctx.restore();
-
-    ctxPrice.beginPath();
+    ctxPrice.restore();
     void canvas;
   };
 

@@ -74,6 +74,7 @@ struct StrategyCandidateParams {
     pub max_down_years: Option<i64>,
     pub min_worst_year_expectancy: Option<f64>,
     pub min_score: Option<f64>,
+    pub include_count: Option<bool>,
     pub limit: Option<i64>,
     pub prop_outcome_mode: Option<String>,
     pub sort_by: Option<String>,
@@ -130,6 +131,12 @@ struct SimulatorReplaySourceTrade {
     trade_enter_price: f64,
     trade_risk_exit_price: f64,
     trade_reward_exit_price: f64,
+    trade_lowest_price: Option<f64>,
+    trade_highest_price: Option<f64>,
+    trade_adverse_price: Option<f64>,
+    trade_favorable_price: Option<f64>,
+    max_adverse_points: Option<f64>,
+    max_favorable_points: Option<f64>,
     trade_result: i64,
 }
 
@@ -144,9 +151,24 @@ struct SimulatorReplayTradeEvent {
     target_date: Option<NaiveDateTime>,
     trade_result: i64,
     pnl: f64,
+    closed_pnl: f64,
     point_value: f64,
+    balance_before: f64,
     balance: f64,
+    closed_balance: f64,
+    intratrade_low_balance: f64,
+    intratrade_high_balance: f64,
+    intratrade_adverse_pnl: f64,
+    intratrade_favorable_pnl: f64,
     drawdown: f64,
+    trade_lowest_price: Option<f64>,
+    trade_highest_price: Option<f64>,
+    trade_adverse_price: Option<f64>,
+    trade_favorable_price: Option<f64>,
+    max_adverse_points: f64,
+    max_favorable_points: f64,
+    failed_intratrade_drawdown: bool,
+    failure_reason: Option<String>,
     skipped_for_overlap: bool,
 }
 
@@ -382,6 +404,13 @@ struct StrategyCandidateSummary {
     total_setups: i64,
     avg_setups_per_week: f64,
     max_setups_per_week: i64,
+}
+
+#[derive(Serialize)]
+struct StrategyCandidatesResponse {
+    strategies: Vec<StrategyCandidateSummary>,
+    total_count: i64,
+    has_more: bool,
 }
 
 #[derive(sqlx::FromRow, serde::Serialize)]
@@ -1209,8 +1238,8 @@ fn parse_simulator_start_date(value: Option<&str>) -> Option<NaiveDateTime> {
 fn futures_root(symbol: &str) -> String {
     let uppercase = symbol.trim().to_uppercase();
     for root in [
-        "MES", "MNQ", "MYM", "M2K", "MCL", "MGC", "SIL", "RTY", "ES", "NQ", "YM", "CL", "NG",
-        "GC", "SI", "6E", "6J", "ZN", "ZB",
+        "MES", "MNQ", "MYM", "M2K", "MCL", "MGC", "SIL", "RTY", "ES", "NQ", "YM", "CL", "NG", "GC",
+        "SI", "6E", "6J", "ZN", "ZB",
     ] {
         if uppercase.starts_with(root) {
             return root.to_string();
@@ -1256,6 +1285,39 @@ fn simulator_trade_pnl(trade: &SimulatorReplaySourceTrade, contracts: i64) -> f6
     };
 
     point_move * contracts as f64 * futures_point_value(&trade.symbol)
+}
+
+fn simulator_trade_excursion(
+    trade: &SimulatorReplaySourceTrade,
+    contracts: i64,
+    point_value: f64,
+) -> (f64, f64, f64, f64) {
+    let fallback_adverse_points = if trade.trade_result == 2 {
+        (trade.trade_risk_exit_price - trade.trade_enter_price).abs()
+    } else {
+        0.0
+    };
+    let fallback_favorable_points = if trade.trade_result == 1 {
+        (trade.trade_reward_exit_price - trade.trade_enter_price).abs()
+    } else {
+        0.0
+    };
+    let max_adverse_points = trade
+        .max_adverse_points
+        .unwrap_or(fallback_adverse_points)
+        .max(0.0);
+    let max_favorable_points = trade
+        .max_favorable_points
+        .unwrap_or(fallback_favorable_points)
+        .max(0.0);
+    let multiplier = contracts as f64 * point_value;
+
+    (
+        max_adverse_points,
+        max_favorable_points,
+        -max_adverse_points * multiplier,
+        max_favorable_points * multiplier,
+    )
 }
 
 #[route("/simulator/family-replay", method = "GET", method = "POST")]
@@ -1309,6 +1371,12 @@ async fn fetch_simulator_family_replay(
                 CAST(p.trade_enter_price AS DOUBLE) AS trade_enter_price,
                 CAST(p.trade_risk_exit_price AS DOUBLE) AS trade_risk_exit_price,
                 CAST(p.trade_reward_exit_price AS DOUBLE) AS trade_reward_exit_price,
+                CAST(p.trade_lowest_price AS DOUBLE) AS trade_lowest_price,
+                CAST(p.trade_highest_price AS DOUBLE) AS trade_highest_price,
+                CAST(p.trade_adverse_price AS DOUBLE) AS trade_adverse_price,
+                CAST(p.trade_favorable_price AS DOUBLE) AS trade_favorable_price,
+                CAST(p.max_adverse_points AS DOUBLE) AS max_adverse_points,
+                CAST(p.max_favorable_points AS DOUBLE) AS max_favorable_points,
                 CAST(p.prop_result AS SIGNED) AS trade_result
             FROM pattern_outcomes_prop p
             WHERE p.outcome_model = ?
@@ -1406,20 +1474,75 @@ async fn fetch_simulator_family_replay(
                     target_date: trade.target_date,
                     trade_result: trade.trade_result,
                     pnl: 0.0,
+                    closed_pnl: 0.0,
                     point_value: futures_point_value(&trade.symbol),
+                    balance_before: balance,
                     balance,
+                    closed_balance: balance,
+                    intratrade_low_balance: balance,
+                    intratrade_high_balance: balance,
+                    intratrade_adverse_pnl: 0.0,
+                    intratrade_favorable_pnl: 0.0,
                     drawdown: balance - peak_balance,
+                    trade_lowest_price: trade.trade_lowest_price,
+                    trade_highest_price: trade.trade_highest_price,
+                    trade_adverse_price: trade.trade_adverse_price,
+                    trade_favorable_price: trade.trade_favorable_price,
+                    max_adverse_points: trade.max_adverse_points.unwrap_or(0.0).max(0.0),
+                    max_favorable_points: trade.max_favorable_points.unwrap_or(0.0).max(0.0),
+                    failed_intratrade_drawdown: false,
+                    failure_reason: Some(String::from("Skipped while prior trade was open")),
                     skipped_for_overlap: true,
                 });
                 continue;
             }
 
             let point_value = futures_point_value(&trade.symbol);
-            let pnl = simulator_trade_pnl(trade, contracts);
-            balance += pnl;
-            peak_balance = peak_balance.max(balance);
+            let balance_before = balance;
+            let closed_pnl = simulator_trade_pnl(trade, contracts);
+            let closed_balance = balance_before + closed_pnl;
+            let (
+                max_adverse_points,
+                max_favorable_points,
+                intratrade_adverse_pnl,
+                intratrade_favorable_pnl,
+            ) = simulator_trade_excursion(trade, contracts, point_value);
+            let intratrade_low_balance = balance_before + intratrade_adverse_pnl;
+            let intratrade_high_balance = balance_before + intratrade_favorable_pnl;
+            let pre_close_peak_balance = peak_balance;
+            let pre_close_trailing_floor = pre_close_peak_balance - max_drawdown;
+            let daily_floor = daily_loss_limit.map(|limit| day_start_balance - limit);
+
+            let intratrade_failure_reason =
+                if max_drawdown > 0.0 && intratrade_low_balance <= pre_close_trailing_floor {
+                    Some(String::from("Intratrade trailing drawdown breached"))
+                } else if daily_floor
+                    .map(|floor| intratrade_low_balance <= floor)
+                    .unwrap_or(false)
+                {
+                    Some(String::from("Intratrade daily loss limit breached"))
+                } else {
+                    None
+                };
+
+            let failed_intratrade_drawdown = intratrade_failure_reason.is_some();
+            let pnl = if failed_intratrade_drawdown {
+                intratrade_adverse_pnl
+            } else {
+                closed_pnl
+            };
+            balance = if failed_intratrade_drawdown {
+                intratrade_low_balance
+            } else {
+                closed_balance
+            };
+            if !failed_intratrade_drawdown {
+                peak_balance = peak_balance.max(balance);
+            }
             let drawdown = balance - peak_balance;
-            max_drawdown_seen = max_drawdown_seen.min(drawdown);
+            max_drawdown_seen = max_drawdown_seen
+                .min(intratrade_low_balance - pre_close_peak_balance)
+                .min(drawdown);
             trade_count += 1;
             busy_until = trade.target_date;
             end_date = trade.target_date.or(Some(trade.entry_date));
@@ -1434,18 +1557,31 @@ async fn fetch_simulator_family_replay(
                 target_date: trade.target_date,
                 trade_result: trade.trade_result,
                 pnl,
+                closed_pnl,
                 point_value,
+                balance_before,
                 balance,
+                closed_balance,
+                intratrade_low_balance,
+                intratrade_high_balance,
+                intratrade_adverse_pnl,
+                intratrade_favorable_pnl,
                 drawdown,
+                trade_lowest_price: trade.trade_lowest_price,
+                trade_highest_price: trade.trade_highest_price,
+                trade_adverse_price: trade.trade_adverse_price,
+                trade_favorable_price: trade.trade_favorable_price,
+                max_adverse_points,
+                max_favorable_points,
+                failed_intratrade_drawdown,
+                failure_reason: intratrade_failure_reason.clone(),
                 skipped_for_overlap: false,
             });
 
             let trailing_floor = peak_balance - max_drawdown;
-            let daily_floor = daily_loss_limit.map(|limit| day_start_balance - limit);
-            if balance <= trailing_floor
-                || daily_floor
-                    .map(|floor| balance <= floor)
-                    .unwrap_or(false)
+            if failed_intratrade_drawdown
+                || balance <= trailing_floor
+                || daily_floor.map(|floor| balance <= floor).unwrap_or(false)
             {
                 status = String::from("failed");
                 break;
@@ -1557,9 +1693,12 @@ async fn fetch_current_open_setups(
             p.three_month_trend,
             p.six_month_trend,
             p.twelve_month_trend,
-            p.target_ready
+            p.target_ready,
+            p.prop_result
         FROM pattern_outcomes_prop p
         WHERE p.outcome_model = '{outcome_model}'
+            AND p.prop_result = 0
+            AND p.target_ready = FALSE
     "#,
         route_time_accuracy_expr = route_time_accuracy_expr,
         route_score_projection = route_score_projection,
@@ -1592,7 +1731,7 @@ async fn fetch_current_open_setups(
             trade_enter_price,
             trade_risk_exit_price,
             trade_reward_exit_price,
-            0 AS trade_result,
+            CAST(prop_result AS SIGNED) AS trade_result,
             market,
             pattern_id,
             pattern_group_id,
@@ -2101,7 +2240,7 @@ fn build_current_open_setups_where_clause(
 
     let mut where_clause = String::from(
         r#"
-        WHERE target_ready = TRUE
+        WHERE 1 = 1
         "#,
     );
 
@@ -2168,44 +2307,6 @@ fn build_current_open_setups_where_clause(
     ))
 }
 
-fn is_duplicate_or_missing_index_error(error: &sqlx::Error) -> bool {
-    match error {
-        sqlx::Error::Database(db_error) => {
-            let message = db_error.message();
-            message.contains("Duplicate key name")
-                || message.contains("already exists")
-                || message.contains("doesn't exist")
-                || message.contains("Unknown table")
-                || message.contains("Unknown column")
-        }
-        _ => false,
-    }
-}
-
-async fn create_index_if_missing(pool: &MySqlPool, sql: &str) -> Result<(), sqlx::Error> {
-    if let Err(error) = sqlx::query(sql).execute(pool).await {
-        if !is_duplicate_or_missing_index_error(&error) {
-            return Err(error);
-        }
-    }
-
-    Ok(())
-}
-
-async fn ensure_canvas_load_indexes(pool: &MySqlPool) -> Result<(), sqlx::Error> {
-    for sql in [
-        "CREATE INDEX idx_candles_symbol_date ON candles (symbol, date)",
-        "CREATE INDEX idx_futures_contract_1m_candles_symbol_ts_utc ON futures_contract_1m_candles (symbol, ts_utc)",
-        "CREATE INDEX idx_pattern_outcomes_prop_pattern_id ON pattern_outcomes_prop (pattern_id, d_date)",
-        "CREATE INDEX idx_pattern_outcomes_prop_group_detail ON pattern_outcomes_prop (pattern_group_id, d_date, market, harmonic_type, size_bucket)",
-        "CREATE INDEX idx_pattern_outcomes_prop_symbol_d_date ON pattern_outcomes_prop (symbol, d_date)",
-    ] {
-        create_index_if_missing(pool, sql).await?;
-    }
-
-    Ok(())
-}
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("🔹 Starting server...");
@@ -2223,9 +2324,6 @@ async fn main() -> std::io::Result<()> {
             panic!();
         }
     };
-    if let Err(error) = ensure_canvas_load_indexes(&pool).await {
-        eprintln!("Canvas load index check failed: {:?}", error);
-    }
     let pool = web::Data::new(pool);
 
     // --- Start server ---
@@ -2277,7 +2375,7 @@ async fn fetch_pattern_detail(
 }
 
 fn pattern_detail_candle_window_limit(params: &PatternDetailParams) -> i64 {
-    let fallback_limit = 20_000;
+    let fallback_limit = 120_000;
     let Some(total_setup_length) = [
         params.x_length,
         params.a_length,
@@ -2289,7 +2387,7 @@ fn pattern_detail_candle_window_limit(params: &PatternDetailParams) -> i64 {
         return fallback_limit;
     };
 
-    (total_setup_length + 8).clamp(16, fallback_limit)
+    (total_setup_length + 32).clamp(16, fallback_limit)
 }
 
 async fn fetch_pattern_detail_from_prop_outcomes(
@@ -2451,11 +2549,11 @@ async fn fetch_pattern_detail_from_prop_outcomes(
         indexed_outcome AS (
             SELECT
                 p.*,
-                d.rn AS d_rn,
-                d.rn - p.c_length AS c_rn,
-                d.rn - p.c_length - p.b_length AS b_rn,
-                d.rn - p.c_length - p.b_length - p.a_length AS a_rn,
-                d.rn - p.c_length - p.b_length - p.a_length - p.x_length AS x_rn
+                CAST(d.rn AS SIGNED) AS d_rn,
+                CAST(d.rn AS SIGNED) - CAST(p.c_length AS SIGNED) AS c_rn,
+                CAST(d.rn AS SIGNED) - CAST(p.c_length AS SIGNED) - CAST(p.b_length AS SIGNED) AS b_rn,
+                CAST(d.rn AS SIGNED) - CAST(p.c_length AS SIGNED) - CAST(p.b_length AS SIGNED) - CAST(p.a_length AS SIGNED) AS a_rn,
+                CAST(d.rn AS SIGNED) - CAST(p.c_length AS SIGNED) - CAST(p.b_length AS SIGNED) - CAST(p.a_length AS SIGNED) - CAST(p.x_length AS SIGNED) AS x_rn
             FROM selected_outcome p
             INNER JOIN ranked_candles d
                 ON d.symbol = p.symbol
@@ -2855,10 +2953,21 @@ async fn fetch_strategy_candidates(
     let prop_outcome_mode = normalize_prop_outcome_mode(params.prop_outcome_mode.as_deref());
     let min_closed_trades = params.min_closed_trades.unwrap_or(0).max(0);
     let limit = params.limit.unwrap_or(250).clamp(1, 1_000);
+    let include_count = params.include_count.unwrap_or(false);
 
     match is_rollup_cache_ready(pool.get_ref(), "prop_strategy_family_rollups").await {
         Ok(true) => {}
-        Ok(false) => return HttpResponse::Ok().json(Vec::<StrategyCandidateSummary>::new()),
+        Ok(false) => {
+            if include_count {
+                return HttpResponse::Ok().json(StrategyCandidatesResponse {
+                    strategies: Vec::new(),
+                    total_count: 0,
+                    has_more: false,
+                });
+            }
+
+            return HttpResponse::Ok().json(Vec::<StrategyCandidateSummary>::new());
+        }
         Err(error) => {
             eprintln!("Strategy candidates cache readiness error: {:?}", error);
             return HttpResponse::InternalServerError().finish();
@@ -2887,6 +2996,16 @@ async fn fetch_strategy_candidates(
     let sort_column =
         prop_family_sort_column(params.sort_by.as_deref(), "s", has_cadence.then_some("c"));
     let sort_direction = prop_family_sort_direction(params.sort_direction.as_deref());
+    let count_sql = format!(
+        r#"
+        SELECT COUNT(*)
+        FROM prop_strategy_family_summary s
+        WHERE s.closed_count >= ?
+          AND s.outcome_model = ?
+          {summary_filters}
+        "#,
+        summary_filters = summary_filters,
+    );
     let sql = format!(
         r#"
         SELECT
@@ -2937,6 +3056,55 @@ async fn fetch_strategy_candidates(
         sort_direction = sort_direction,
     );
 
+    let total_count = if include_count {
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql)
+            .bind(min_closed_trades)
+            .bind(prop_outcome_model_label(prop_outcome_mode));
+
+        if let Some(min_expectancy) = params.min_expectancy {
+            count_query = count_query.bind(min_expectancy);
+        }
+        if let Some(max_down_years) = params.max_down_years {
+            count_query = count_query.bind(max_down_years);
+        }
+        if let Some(min_worst_year_expectancy) = params.min_worst_year_expectancy {
+            count_query = count_query.bind(min_worst_year_expectancy);
+        }
+        if let Some(min_score) = params.min_score {
+            count_query = count_query.bind(min_score);
+        }
+        for values in [
+            params.strategy_markets.as_ref(),
+            params.strategy_harmonic_types.as_ref(),
+            params.strategy_bins.as_ref(),
+            params.strategy_reversal_types.as_ref(),
+            params.strategy_size_buckets.as_ref(),
+            params.strategy_time_bins.as_ref(),
+            params.strategy_x_strictness.as_ref(),
+            params.strategy_three_month_trends.as_ref(),
+            params.strategy_six_month_trends.as_ref(),
+            params.strategy_twelve_month_trends.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            for value in values {
+                count_query = count_query.bind(value);
+            }
+        }
+
+        match count_query.fetch_one(pool.get_ref()).await {
+            Ok(count) => count,
+            Err(error) if is_missing_table_error(&error) => 0,
+            Err(error) => {
+                eprintln!("Strategy candidate count DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        -1
+    };
+
     let mut query = sqlx::query_as::<_, StrategyCandidateSummary>(&sql)
         .bind(min_closed_trades)
         .bind(prop_outcome_model_label(prop_outcome_mode));
@@ -2974,9 +3142,28 @@ async fn fetch_strategy_candidates(
     }
 
     return match query.bind(limit).fetch_all(pool.get_ref()).await {
-        Ok(rows) => HttpResponse::Ok().json(rows),
+        Ok(rows) => {
+            if include_count {
+                let row_count = rows.len() as i64;
+                HttpResponse::Ok().json(StrategyCandidatesResponse {
+                    strategies: rows,
+                    total_count,
+                    has_more: row_count < total_count,
+                })
+            } else {
+                HttpResponse::Ok().json(rows)
+            }
+        }
         Err(error) if is_missing_table_error(&error) => {
-            HttpResponse::Ok().json(Vec::<StrategyCandidateSummary>::new())
+            if include_count {
+                HttpResponse::Ok().json(StrategyCandidatesResponse {
+                    strategies: Vec::new(),
+                    total_count: 0,
+                    has_more: false,
+                })
+            } else {
+                HttpResponse::Ok().json(Vec::<StrategyCandidateSummary>::new())
+            }
         }
         Err(error) => {
             eprintln!("Strategy candidate DB error: {:?}", error);

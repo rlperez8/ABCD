@@ -29,15 +29,19 @@ const formatDebugDate = (value) => {
 };
 
 const formatDebugPrice = (value) => {
-  if (!Number.isFinite(value)) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
     return '--';
   }
 
-  return value.toFixed(2);
+  return numericValue.toFixed(2);
 };
 
-const formatDebugInteger = (value) =>
-  Number.isFinite(value) ? `${value}` : '--';
+const formatDebugInteger = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? `${numericValue}` : '--';
+};
 
 const splitDebugDateTime = (value) => {
   if (!value || value === '--') {
@@ -109,6 +113,19 @@ const PatternDataStack = ({ rows, labelKey = 'key', ariaLabel }) => (
   </div>
 );
 
+const DetailMetricGrid = ({ items, className = '' }) => (
+  <div className={['pattern-identity-metric-grid', className].filter(Boolean).join(' ')}>
+    {items.map((item) => (
+      <div className="pattern-identity-metric" key={item.label}>
+        <span>{item.label}</span>
+        <strong className={item.valueClassName} style={item.valueStyle}>
+          {item.value}
+        </strong>
+      </div>
+    ))}
+  </div>
+);
+
 const CandleChartPanel = ({
   chartData,
   isSectionsExpanded,
@@ -132,6 +149,7 @@ const CandleChartPanel = ({
   const [isTrend6M, setTrend6M] = useState(false);
   const [isTrend12M, setTrend12M] = useState(false);
   const [isExpandedChart, setExpandedChart] = useState(false);
+  const [propFocusScope, setPropFocusScope] = useState('trade');
   const [hoveredCandle, setHoveredCandle] = useState({
     high: 0,
     close: 0,
@@ -285,52 +303,104 @@ const CandleChartPanel = ({
       : []),
   ];
   const tradeLevelFields = [
-    { label: 'Entry', value: formatDebugPrice(selectedPattern?.trade_enter_price) },
-    { label: 'Stop', value: formatDebugPrice(selectedPattern?.trade_risk_exit_price) },
-    { label: 'Target', value: formatDebugPrice(selectedPattern?.trade_reward_exit_price) },
+    { label: 'Entry', value: formatDebugPrice(selectedPattern?.trade_enter_price), tone: 'entry' },
+    { label: 'Stop', value: formatDebugPrice(selectedPattern?.trade_risk_exit_price), tone: 'stop' },
+    { label: 'Target', value: formatDebugPrice(selectedPattern?.trade_reward_exit_price), tone: 'target' },
   ];
+  const liveCandleMetrics = hoveredPriceStats.map((item) => ({
+    label: item.label,
+    value: item.value ?? '--',
+    valueStyle: { color: item.color },
+  }));
+  const barMetrics = legBarStats.map((item) => ({
+    label: item.label,
+    value: Number.isFinite(item.value) ? item.value : '--',
+  }));
+  const trendMetrics = hoveredTrendStats.map((item) => ({
+    label: item.label,
+    value: item.valueLabel,
+    valueClassName: item.className,
+  }));
   const patternIdentityPanel = selectedPattern ? (
     <div className="pattern-identity-card">
       <div className="pattern-identity-header">
-        <div className="pattern-identity-kicker">Pattern Inspector</div>
-        <div className="pattern-identity-title">Verify the active load</div>
-        <div className="pattern-identity-copy">
-          Compare the chart against the exact pivot dates and prices that were loaded.
+        <div>
+          <div className="pattern-identity-kicker">Trade Details</div>
+          <div className="pattern-identity-title">
+            {selectedPattern?.symbol ?? '--'} / {selectedPattern?.harmonic_type ?? 'Pattern'}
+          </div>
         </div>
+        <div className="pattern-identity-pill-row">
+          <span>{selectedPattern?.market ?? '--'}</span>
+          <span>{selectedPattern?.reversal_type ?? 'None'}</span>
+        </div>
+        {isPropFocus ? (
+          <div className="pattern-focus-toggle" aria-label="Canvas focus mode">
+            <button
+              type="button"
+              className={propFocusScope === 'trade' ? 'pattern-focus-toggle__button pattern-focus-toggle__button--active' : 'pattern-focus-toggle__button'}
+              onClick={() => setPropFocusScope('trade')}
+            >
+              Trade
+            </button>
+            <button
+              type="button"
+              className={propFocusScope === 'pattern' ? 'pattern-focus-toggle__button pattern-focus-toggle__button--active' : 'pattern-focus-toggle__button'}
+              onClick={() => setPropFocusScope('pattern')}
+            >
+              Pattern
+            </button>
+          </div>
+        ) : null}
       </div>
 
-      <div className="pattern-identity-grid">
-        {identityFields.map((field) => (
-          <div
-            key={field.label}
-            className={field.wide ? 'pattern-identity-field pattern-identity-field--wide' : 'pattern-identity-field'}
-          >
-            <div className="pattern-identity-label">{field.label}</div>
-            <div className="pattern-identity-value">{field.value}</div>
+      <div className="pattern-trade-levels" aria-label="Trade levels">
+        {tradeLevelFields.map((field) => (
+          <div className={`pattern-trade-level pattern-trade-level--${field.tone}`} key={field.label}>
+            <span>{field.label}</span>
+            <strong>{field.value}</strong>
           </div>
         ))}
       </div>
 
       <div className="pattern-identity-section">
-        <div className="pattern-identity-section-title">XABCD pivots</div>
-        <PatternDataStack rows={pivotRows} ariaLabel="Pattern pivot points" />
+        <div className="pattern-identity-section-title">Hovered candle</div>
+        <DetailMetricGrid items={liveCandleMetrics} />
       </div>
 
       <div className="pattern-identity-section">
-        <div className="pattern-identity-section-title">Confirm and target</div>
-        <PatternDataStack rows={eventRows} labelKey="label" ariaLabel="Pattern checkpoints" />
+        <div className="pattern-identity-section-title">Structure</div>
+        <DetailMetricGrid items={barMetrics} />
       </div>
 
       <div className="pattern-identity-section">
-        <div className="pattern-identity-section-title">Trade levels</div>
+        <div className="pattern-identity-section-title">Trend state</div>
+        <DetailMetricGrid items={trendMetrics} className="pattern-identity-metric-grid--trend" />
+      </div>
+
+      <div className="pattern-identity-section">
+        <div className="pattern-identity-section-title">Setup</div>
         <div className="pattern-identity-grid">
-          {tradeLevelFields.map((field) => (
-            <div className="pattern-identity-field" key={field.label}>
+          {identityFields.map((field) => (
+            <div
+              key={field.label}
+              className={field.wide ? 'pattern-identity-field pattern-identity-field--wide' : 'pattern-identity-field'}
+            >
               <div className="pattern-identity-label">{field.label}</div>
               <div className="pattern-identity-value">{field.value}</div>
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="pattern-identity-section">
+        <div className="pattern-identity-section-title">Timeline</div>
+        <PatternDataStack rows={eventRows} labelKey="label" ariaLabel="Pattern checkpoints" />
+      </div>
+
+      <div className="pattern-identity-section">
+        <div className="pattern-identity-section-title">XABCD pivots</div>
+        <PatternDataStack rows={pivotRows} ariaLabel="Pattern pivot points" />
       </div>
     </div>
   ) : null;
@@ -345,6 +415,7 @@ const CandleChartPanel = ({
     }
 
     if (focusMode === 'prop') {
+      setPropFocusScope('trade');
       setAbcdPattern(false);
       setPriceLevels(true);
       setRetracement(false);
@@ -358,7 +429,7 @@ const CandleChartPanel = ({
             active: isPriceLevels,
             onClick: () => setPriceLevels(!isPriceLevels),
             icon: '/images/prices.png',
-            label: 'Entry',
+            label: 'Rays',
           },
         ]
       : []),
@@ -417,7 +488,13 @@ const CandleChartPanel = ({
   ];
 
   const renderChartShell = (isOverlay = false) => (
-    <div className={`chart-panel-shell${isOverlay ? ' chart-panel-shell--overlay' : ''}`}>
+    <div
+      className={[
+        'chart-panel-shell',
+        isOverlay ? 'chart-panel-shell--overlay' : '',
+        patternIdentityPanel ? 'chart-panel-shell--with-detail' : '',
+      ].filter(Boolean).join(' ')}
+    >
       <div className="chart-header-wrapper">
         <div className="chart-panel-topline">
           <div className="chart-panel-copy">
@@ -468,16 +545,18 @@ const CandleChartPanel = ({
           </div>
         </div>
 
-        <div className="header-bar">
-          {headerStats.map((item) => (
-            <div className="header_slot" key={item.label}>
-              <div className="header_one">{item.label}</div>
-              <div className={item.valueClassName} style={item.valueStyle}>
-                {item.value}
+        {!patternIdentityPanel ? (
+          <div className="header-bar">
+            {headerStats.map((item) => (
+              <div className="header_slot" key={item.label}>
+                <div className="header_one">{item.label}</div>
+                <div className={item.valueClassName} style={item.valueStyle}>
+                  {item.value}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {chartData.candles.length > 0 && (
@@ -493,6 +572,7 @@ const CandleChartPanel = ({
               is_reversal_focus={isReversalFocus}
               trend_line_toggles={trendLineToggles}
               focusMode={focusMode}
+              propFocusScope={propFocusScope}
               market={market}
               activeReversalFilter={activeReversalFilter}
               set_hovered_candle={setHoveredCandle}
