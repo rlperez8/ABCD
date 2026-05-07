@@ -1,0 +1,27 @@
+===== ES ENGINE 1m START 2026-05-04T20:50:39.1926445-05:00 =====
+Connected to local DB
+Engine run id: engine-1777945842874-1748
+Selecting futures contract symbols
+Running xabcd scan on 21 futures contract symbols (root ES, timeframe 1m)
+Using candle source futures_contracts
+Using scan concurrency 2, write batch size 1000, symbol limit 21
+Using symbol offset 0
+Using max X bars left unlimited
+Using fast rebuild false, build tables false, pattern setups true, harmonic scores false, prop outcomes true, target-ready outcomes only false
+Symbol: ESH2, setup total: 473648, Bear: 330730, Bull: 142918 (1/21)
+Flushed 473648 pattern setups to DB
+Symbol: ESH3, setup total: 677056, Bear: 334324, Bull: 342732 (2/21)
+Flushed 677056 pattern setups to DB
+Symbol: ESH4, setup total: 478239, Bear: 99098, Bull: 379141 (3/21)
+Flushed 478239 pattern setups to DB
+Symbol: ESH5, setup total: 570893, Bear: 338265, Bull: 232628 (4/21)
+Flushed 570893 pattern setups to DB
+Symbol: ESH6, setup total: 438657, Bear: 270821, Bull: 167836 (5/21)
+Flushed 438657 pattern setups to DB
+Symbol: ESM1, setup total: 208204, Bear: 67495, Bull: 140709 (6/21)
+Flushed 208204 pattern setups to DB
+Symbol: ESM2, setup total: 1056298, Bear: 751131, Bull: 305167 (7/21)
+Flushed 1056298 pattern setups to DB
+Symbol: ESM3, setup total: 375855, Bear: 106908, Bull: 268947 (8/21)
+Flushed 375855 pattern setups to DB
+Symbol: ESM4, setup total: 637190, Bear: 296820, Bull: 340370 (9/21)

@@ -111,6 +111,134 @@ struct SimulatedTargetTrade {
     target_candle: Option<Candle>,
 }
 
+struct TargetSimulationLookup<'a> {
+    candles: &'a [Candle],
+    tree_size: usize,
+    max_high_tree: Vec<f64>,
+    min_low_tree: Vec<f64>,
+}
+
+impl<'a> TargetSimulationLookup<'a> {
+    fn new(candles: &'a [Candle]) -> Self {
+        let tree_size = candles.len().max(1).next_power_of_two();
+        let mut max_high_tree = vec![f64::NEG_INFINITY; tree_size * 2];
+        let mut min_low_tree = vec![f64::INFINITY; tree_size * 2];
+
+        for (index, candle) in candles.iter().enumerate() {
+            max_high_tree[tree_size + index] = candle.high;
+            min_low_tree[tree_size + index] = candle.low;
+        }
+
+        for index in (1..tree_size).rev() {
+            max_high_tree[index] = max_high_tree[index * 2].max(max_high_tree[index * 2 + 1]);
+            min_low_tree[index] = min_low_tree[index * 2].min(min_low_tree[index * 2 + 1]);
+        }
+
+        Self {
+            candles,
+            tree_size,
+            max_high_tree,
+            min_low_tree,
+        }
+    }
+
+    fn first_high_at_or_above(&self, start_index: usize, threshold: f64) -> Option<usize> {
+        self.first_high_at_or_above_from_node(1, 0, self.tree_size, start_index, threshold)
+            .filter(|index| *index < self.candles.len())
+    }
+
+    fn first_high_at_or_above_from_node(
+        &self,
+        node: usize,
+        left: usize,
+        right: usize,
+        start_index: usize,
+        threshold: f64,
+    ) -> Option<usize> {
+        if right <= start_index || self.max_high_tree[node] < threshold {
+            return None;
+        }
+
+        if right - left == 1 {
+            return Some(left);
+        }
+
+        let middle = (left + right) / 2;
+        self.first_high_at_or_above_from_node(node * 2, left, middle, start_index, threshold)
+            .or_else(|| {
+                self.first_high_at_or_above_from_node(
+                    node * 2 + 1,
+                    middle,
+                    right,
+                    start_index,
+                    threshold,
+                )
+            })
+    }
+
+    fn first_low_at_or_below(&self, start_index: usize, threshold: f64) -> Option<usize> {
+        self.first_low_at_or_below_from_node(1, 0, self.tree_size, start_index, threshold)
+            .filter(|index| *index < self.candles.len())
+    }
+
+    fn first_low_at_or_below_from_node(
+        &self,
+        node: usize,
+        left: usize,
+        right: usize,
+        start_index: usize,
+        threshold: f64,
+    ) -> Option<usize> {
+        if right <= start_index || self.min_low_tree[node] > threshold {
+            return None;
+        }
+
+        if right - left == 1 {
+            return Some(left);
+        }
+
+        let middle = (left + right) / 2;
+        self.first_low_at_or_below_from_node(node * 2, left, middle, start_index, threshold)
+            .or_else(|| {
+                self.first_low_at_or_below_from_node(
+                    node * 2 + 1,
+                    middle,
+                    right,
+                    start_index,
+                    threshold,
+                )
+            })
+    }
+
+    fn range_extrema(&self, start_index: usize, end_index: usize) -> (f64, f64) {
+        if self.candles.is_empty() || start_index > end_index {
+            return (0.0, 0.0);
+        }
+
+        let mut left = start_index + self.tree_size;
+        let mut right = end_index.min(self.candles.len() - 1) + self.tree_size + 1;
+        let mut lowest_price = f64::INFINITY;
+        let mut highest_price = f64::NEG_INFINITY;
+
+        while left < right {
+            if left % 2 == 1 {
+                lowest_price = lowest_price.min(self.min_low_tree[left]);
+                highest_price = highest_price.max(self.max_high_tree[left]);
+                left += 1;
+            }
+            if right % 2 == 1 {
+                right -= 1;
+                lowest_price = lowest_price.min(self.min_low_tree[right]);
+                highest_price = highest_price.max(self.max_high_tree[right]);
+            }
+            left /= 2;
+            right /= 2;
+        }
+
+        (lowest_price, highest_price)
+    }
+}
+
 fn trade_excursion(
     market: Market,
     enter_price: f64,
@@ -154,9 +282,10 @@ fn trade_pnl_points(market: Market, enter_price: f64, current_price: f64) -> f64
 
 fn simulate_c_target_trade(
     pattern: &PatternXABCD,
-    candles: &[Candle],
+    lookup: &TargetSimulationLookup,
     entry_index: usize,
 ) -> Option<SimulatedTargetTrade> {
+    let candles = lookup.candles;
     let entry_candle = candles.get(entry_index)?.clone();
     let (reward_exit_price, target_distance) = match pattern.market {
         Market::Bullish => (pattern.c.high, pattern.c.high - entry_candle.open),
@@ -171,143 +300,34 @@ fn simulate_c_target_trade(
         Market::Bullish => entry_candle.open - target_distance,
         Market::Bearish => entry_candle.open + target_distance,
     };
-    let mut d_length = entry_index.saturating_sub(pattern.reversal_context.d_index) as i64;
-    let mut lowest_price = entry_candle.low;
-    let mut highest_price = entry_candle.high;
-    let mut bars_held = 0_i64;
-    let mut minutes_held = 0_i64;
-    let mut current_price = entry_candle.close;
-    let mut pnl = trade_pnl_points(pattern.market, entry_candle.open, current_price);
 
-    for (index, candle) in candles.iter().enumerate().skip(entry_index) {
-        d_length = index.saturating_sub(pattern.reversal_context.d_index) as i64;
-        lowest_price = lowest_price.min(candle.low);
-        highest_price = highest_price.max(candle.high);
-        bars_held = index.saturating_sub(entry_index) as i64 + 1;
-        minutes_held = candle
-            .date
-            .signed_duration_since(entry_candle.date)
-            .num_minutes()
-            .max(0);
-        current_price = candle.close;
-        pnl = trade_pnl_points(pattern.market, entry_candle.open, current_price);
-        let (adverse_price, favorable_price, max_adverse_points, max_favorable_points) =
-            trade_excursion(
-                pattern.market,
-                entry_candle.open,
-                lowest_price,
-                highest_price,
-            );
+    let (reward_hit_index, risk_hit_index) = match pattern.market {
+        Market::Bullish => (
+            lookup.first_high_at_or_above(entry_index, reward_exit_price),
+            lookup.first_low_at_or_below(entry_index, risk_exit_price),
+        ),
+        Market::Bearish => (
+            lookup.first_low_at_or_below(entry_index, reward_exit_price),
+            lookup.first_high_at_or_above(entry_index, risk_exit_price),
+        ),
+    };
 
-        match pattern.market {
-            Market::Bullish => {
-                if candle.high >= reward_exit_price
-                    || candle.close >= reward_exit_price
-                    || candle.open >= reward_exit_price
-                    || candle.low >= reward_exit_price
-                {
-                    return Some(SimulatedTargetTrade {
-                        entry_date: entry_candle.date,
-                        enter_price: entry_candle.open,
-                        risk_exit_price,
-                        reward_exit_price,
-                        current_price: reward_exit_price,
-                        pnl: trade_pnl_points(pattern.market, entry_candle.open, reward_exit_price),
-                        lowest_price,
-                        highest_price,
-                        adverse_price,
-                        favorable_price,
-                        max_adverse_points,
-                        max_favorable_points,
-                        bars_held,
-                        minutes_held,
-                        result: 1,
-                        d_length,
-                        target_candle: Some(candle.clone()),
-                    });
-                }
-
-                if candle.low <= risk_exit_price
-                    || candle.close <= risk_exit_price
-                    || candle.open <= risk_exit_price
-                    || candle.high <= risk_exit_price
-                {
-                    return Some(SimulatedTargetTrade {
-                        entry_date: entry_candle.date,
-                        enter_price: entry_candle.open,
-                        risk_exit_price,
-                        reward_exit_price,
-                        current_price: risk_exit_price,
-                        pnl: trade_pnl_points(pattern.market, entry_candle.open, risk_exit_price),
-                        lowest_price,
-                        highest_price,
-                        adverse_price,
-                        favorable_price,
-                        max_adverse_points,
-                        max_favorable_points,
-                        bars_held,
-                        minutes_held,
-                        result: 2,
-                        d_length,
-                        target_candle: Some(candle.clone()),
-                    });
-                }
-            }
-            Market::Bearish => {
-                if candle.low <= reward_exit_price
-                    || candle.close <= reward_exit_price
-                    || candle.open <= reward_exit_price
-                    || candle.high <= reward_exit_price
-                {
-                    return Some(SimulatedTargetTrade {
-                        entry_date: entry_candle.date,
-                        enter_price: entry_candle.open,
-                        risk_exit_price,
-                        reward_exit_price,
-                        current_price: reward_exit_price,
-                        pnl: trade_pnl_points(pattern.market, entry_candle.open, reward_exit_price),
-                        lowest_price,
-                        highest_price,
-                        adverse_price,
-                        favorable_price,
-                        max_adverse_points,
-                        max_favorable_points,
-                        bars_held,
-                        minutes_held,
-                        result: 1,
-                        d_length,
-                        target_candle: Some(candle.clone()),
-                    });
-                }
-
-                if candle.high >= risk_exit_price
-                    || candle.close >= risk_exit_price
-                    || candle.open >= risk_exit_price
-                    || candle.low >= risk_exit_price
-                {
-                    return Some(SimulatedTargetTrade {
-                        entry_date: entry_candle.date,
-                        enter_price: entry_candle.open,
-                        risk_exit_price,
-                        reward_exit_price,
-                        current_price: risk_exit_price,
-                        pnl: trade_pnl_points(pattern.market, entry_candle.open, risk_exit_price),
-                        lowest_price,
-                        highest_price,
-                        adverse_price,
-                        favorable_price,
-                        max_adverse_points,
-                        max_favorable_points,
-                        bars_held,
-                        minutes_held,
-                        result: 2,
-                        d_length,
-                        target_candle: Some(candle.clone()),
-                    });
-                }
-            }
+    let (exit_index, result, current_price) = match (reward_hit_index, risk_hit_index) {
+        (Some(reward_index), Some(risk_index)) if reward_index <= risk_index => {
+            (reward_index, 1, reward_exit_price)
         }
-    }
+        (Some(_reward_index), Some(risk_index)) => (risk_index, 2, risk_exit_price),
+        (Some(reward_index), None) => (reward_index, 1, reward_exit_price),
+        (None, Some(risk_index)) => (risk_index, 2, risk_exit_price),
+        (None, None) => {
+            let final_index = candles.len().saturating_sub(1);
+            let final_candle = candles.get(final_index)?;
+            (final_index, 0, final_candle.close)
+        }
+    };
+
+    let exit_candle = candles.get(exit_index)?;
+    let (lowest_price, highest_price) = lookup.range_extrema(entry_index, exit_index);
 
     let (adverse_price, favorable_price, max_adverse_points, max_favorable_points) =
         trade_excursion(
@@ -316,6 +336,13 @@ fn simulate_c_target_trade(
             lowest_price,
             highest_price,
         );
+    let bars_held = exit_index.saturating_sub(entry_index) as i64 + 1;
+    let minutes_held = exit_candle
+        .date
+        .signed_duration_since(entry_candle.date)
+        .num_minutes()
+        .max(0);
+    let d_length = exit_index.saturating_sub(pattern.reversal_context.d_index) as i64;
 
     Some(SimulatedTargetTrade {
         entry_date: entry_candle.date,
@@ -323,7 +350,7 @@ fn simulate_c_target_trade(
         risk_exit_price,
         reward_exit_price,
         current_price,
-        pnl,
+        pnl: trade_pnl_points(pattern.market, entry_candle.open, current_price),
         lowest_price,
         highest_price,
         adverse_price,
@@ -332,9 +359,9 @@ fn simulate_c_target_trade(
         max_favorable_points,
         bars_held,
         minutes_held,
-        result: 0,
+        result,
         d_length,
-        target_candle: None,
+        target_candle: (result != 0).then(|| exit_candle.clone()),
     })
 }
 
@@ -472,6 +499,7 @@ pub fn build_prop_reversal_outcomes(
     candles: &[Candle],
 ) -> Vec<PropReversalOutcome> {
     let mut rows = Vec::new();
+    let target_lookup = TargetSimulationLookup::new(candles);
 
     for pattern in patterns {
         let setup_id = if pattern.pattern_id.is_empty() {
@@ -495,7 +523,8 @@ pub fn build_prop_reversal_outcomes(
             };
 
             let entry_index = std::cmp::max(d_index + 2, completion_index + 1);
-            let Some(simulated_trade) = simulate_c_target_trade(pattern, candles, entry_index)
+            let Some(simulated_trade) =
+                simulate_c_target_trade(pattern, &target_lookup, entry_index)
             else {
                 continue;
             };

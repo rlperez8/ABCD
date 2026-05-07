@@ -18,11 +18,14 @@ use serde::ser::Serializer;
 use serde::Serialize;
 use sqlx::{MySql, QueryBuilder};
 use std::collections::{HashMap, HashSet};
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 // use sqlx::{QueryBuilder};
 use rust_decimal::prelude::ToPrimitive;
 
-const PATTERN_INSERT_CHUNK_SIZE: usize = 1000;
+const PATTERN_INSERT_CHUNK_SIZE: usize = 500;
 const CANDLE_TREND_UPSERT_CHUNK_SIZE: usize = 500;
 const THREE_MONTH_SMA_PERIOD: usize = 63;
 const SIX_MONTH_SMA_PERIOD: usize = 126;
@@ -40,6 +43,143 @@ const HARMONIC_SCORE_COLUMNS: [(&str, &str, &str); 7] = [
     ("Crab", "crab_accuracy", "crab_time_accuracy"),
     ("DeepCrab", "deep_crab_accuracy", "deep_crab_time_accuracy"),
     ("Shark", "shark_accuracy", "shark_time_accuracy"),
+];
+
+const PATTERN_SETUP_CSV_HEADERS: &[&str] = &[
+    "setup_id",
+    "pattern_id",
+    "symbol",
+    "root_symbol",
+    "contract_symbol",
+    "source_table",
+    "source_timeframe",
+    "pattern_group_id",
+    "x_bars_left",
+    "market",
+    "harmonic_type",
+    "prop_strategy_id",
+    "x_date",
+    "x_open",
+    "x_high",
+    "x_low",
+    "x_close",
+    "x_length",
+    "x_min_max",
+    "a_date",
+    "a_open",
+    "a_high",
+    "a_low",
+    "a_close",
+    "a_length",
+    "a_min_max",
+    "xa_price_length",
+    "b_date",
+    "b_open",
+    "b_high",
+    "b_low",
+    "b_close",
+    "b_length",
+    "b_min_max",
+    "ab_price_length",
+    "c_date",
+    "c_open",
+    "c_high",
+    "c_low",
+    "c_close",
+    "c_length",
+    "c_min_max",
+    "bc_price_length",
+    "d_date",
+    "d_open",
+    "d_high",
+    "d_low",
+    "d_close",
+    "d_length",
+    "d_min_max",
+    "cd_price_length",
+    "full_pattern_length",
+    "bullish_key_reversal",
+    "bearish_key_reversal",
+    "bullish_engulfing",
+    "bearish_engulfing",
+    "bullish_outside_reversal",
+    "bearish_outside_reversal",
+    "hammer",
+    "shooting_star",
+    "morning_star",
+    "evening_star",
+    "three_white_soldiers",
+    "three_black_crows",
+    "three_month",
+    "six_month",
+    "twelve_month",
+];
+
+const PROP_OUTCOME_CSV_HEADERS: &[&str] = &[
+    "outcome_row_id",
+    "setup_id",
+    "prop_strategy_id",
+    "outcome_model",
+    "has_reversal",
+    "reversal_type",
+    "reversal_detect_date",
+    "reversal_bars_after_d",
+    "pattern_id",
+    "pattern_group_id",
+    "x_bars_left",
+    "symbol",
+    "root_symbol",
+    "contract_symbol",
+    "source_table",
+    "source_timeframe",
+    "d_date",
+    "contract_week_index",
+    "contract_days_from_start",
+    "entry_date",
+    "market",
+    "harmonic_type",
+    "bin",
+    "size_bucket",
+    "time_bin",
+    "three_month_trend",
+    "six_month_trend",
+    "twelve_month_trend",
+    "x_length",
+    "a_length",
+    "b_length",
+    "c_length",
+    "d_length",
+    "full_pattern_length",
+    "trade_enter_price",
+    "trade_risk_exit_price",
+    "trade_reward_exit_price",
+    "trade_open",
+    "trade_current_price",
+    "trade_pnl",
+    "trade_lowest_price",
+    "trade_highest_price",
+    "trade_adverse_price",
+    "trade_favorable_price",
+    "max_adverse_points",
+    "max_favorable_points",
+    "bars_held",
+    "minutes_held",
+    "d_confirm_date",
+    "prop_result",
+    "target_ready",
+    "target_date",
+    "target_open",
+    "target_high",
+    "target_low",
+    "target_close",
+    "target_volume",
+    "target_is_green",
+    "target_close_vs_open_pct",
+    "target_high_vs_open_pct",
+    "target_low_vs_open_pct",
+    "target_range_pct",
+    "target_breaks_entry_high",
+    "target_breaks_entry_low",
 ];
 
 const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 22] = [
@@ -1033,13 +1173,510 @@ pub struct XABCD_CSV {
     shark_time_accuracy: f64,
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct EngineCsvExportCounts {
+    pub setup_rows: usize,
+    pub prop_outcome_rows: usize,
+}
+
+pub struct EngineCsvOutputWriter {
+    output_dir: PathBuf,
+    pattern_setups_path: Option<PathBuf>,
+    prop_outcomes_path: PathBuf,
+    load_script_path: PathBuf,
+    pattern_setups_writer: Option<csv::Writer<BufWriter<File>>>,
+    prop_outcomes_writer: csv::Writer<BufWriter<File>>,
+    setup_rows: usize,
+    prop_outcome_rows: usize,
+}
+
+impl EngineCsvOutputWriter {
+    pub fn create<P: AsRef<Path>>(
+        output_dir: P,
+        write_pattern_setups: bool,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let output_dir = output_dir.as_ref().to_path_buf();
+        fs::create_dir_all(&output_dir)?;
+
+        let pattern_setups_path = if write_pattern_setups {
+            Some(output_dir.join("pattern_setups.csv"))
+        } else {
+            None
+        };
+        let prop_outcomes_path = output_dir.join("pattern_outcomes_prop.csv");
+        let load_script_path = output_dir.join("load_engine_csv_outputs.sql");
+
+        let pattern_setups_writer = if let Some(path) = pattern_setups_path.as_ref() {
+            let mut writer = csv_writer_for_path(path)?;
+            writer.write_record(PATTERN_SETUP_CSV_HEADERS)?;
+            Some(writer)
+        } else {
+            None
+        };
+
+        let mut prop_outcomes_writer = csv_writer_for_path(&prop_outcomes_path)?;
+        prop_outcomes_writer.write_record(PROP_OUTCOME_CSV_HEADERS)?;
+
+        write_csv_load_script(
+            &load_script_path,
+            pattern_setups_path.as_deref(),
+            &prop_outcomes_path,
+        )?;
+
+        Ok(Self {
+            output_dir,
+            pattern_setups_path,
+            prop_outcomes_path,
+            load_script_path,
+            pattern_setups_writer,
+            prop_outcomes_writer,
+            setup_rows: 0,
+            prop_outcome_rows: 0,
+        })
+    }
+
+    pub fn output_dir(&self) -> &Path {
+        &self.output_dir
+    }
+
+    pub fn pattern_setups_path(&self) -> Option<&Path> {
+        self.pattern_setups_path.as_deref()
+    }
+
+    pub fn prop_outcomes_path(&self) -> &Path {
+        &self.prop_outcomes_path
+    }
+
+    pub fn load_script_path(&self) -> &Path {
+        &self.load_script_path
+    }
+
+    pub fn setup_rows(&self) -> usize {
+        self.setup_rows
+    }
+
+    pub fn prop_outcome_rows(&self) -> usize {
+        self.prop_outcome_rows
+    }
+
+    pub fn write_symbol(
+        &mut self,
+        db: &Database,
+        patterns: &[PatternXABCD],
+        outcomes: &[PropReversalOutcome],
+        target_ready_only: bool,
+    ) -> Result<EngineCsvExportCounts, Box<dyn std::error::Error>> {
+        let mut counts = EngineCsvExportCounts::default();
+
+        if let Some(writer) = self.pattern_setups_writer.as_mut() {
+            let mut seen_setup_ids = HashSet::new();
+            for pattern in patterns {
+                let csv = db.from_pattern(pattern);
+                let setup_id = build_pattern_setup_id(&csv);
+                if !seen_setup_ids.insert(setup_id.clone()) {
+                    continue;
+                }
+
+                writer.write_record(pattern_setup_csv_record(&csv, &setup_id))?;
+                counts.setup_rows += 1;
+            }
+            writer.flush()?;
+        }
+
+        let mut seen_direct_row_ids = HashSet::new();
+        for pattern in patterns
+            .iter()
+            .filter(|pattern| !pattern.pattern_id.is_empty())
+            .filter(|pattern| !target_ready_only || pattern.target_candle.is_some())
+        {
+            let outcome_row_id = format!("{:x}", md5::compute(format!("{}|D", pattern.pattern_id)));
+            if !seen_direct_row_ids.insert(outcome_row_id.clone()) {
+                continue;
+            }
+
+            self.prop_outcomes_writer
+                .write_record(direct_prop_outcome_csv_record(pattern, &outcome_row_id))?;
+            counts.prop_outcome_rows += 1;
+        }
+
+        let mut seen_reversal_row_ids = HashSet::new();
+        for outcome in outcomes
+            .iter()
+            .filter(|item| !target_ready_only || item.target_ready)
+        {
+            if !seen_reversal_row_ids.insert(outcome.reversal_row_id.clone()) {
+                continue;
+            }
+
+            self.prop_outcomes_writer
+                .write_record(reversal_prop_outcome_csv_record(outcome))?;
+            counts.prop_outcome_rows += 1;
+        }
+        self.prop_outcomes_writer.flush()?;
+
+        self.setup_rows += counts.setup_rows;
+        self.prop_outcome_rows += counts.prop_outcome_rows;
+
+        Ok(counts)
+    }
+
+    pub fn finish(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(writer) = self.pattern_setups_writer.as_mut() {
+            writer.flush()?;
+        }
+        self.prop_outcomes_writer.flush()?;
+        Ok(())
+    }
+}
+
+fn csv_writer_for_path(
+    path: &Path,
+) -> Result<csv::Writer<BufWriter<File>>, Box<dyn std::error::Error>> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let file = File::create(path)?;
+    Ok(csv::WriterBuilder::new()
+        .has_headers(false)
+        .from_writer(BufWriter::new(file)))
+}
+
+fn write_csv_load_script(
+    path: &Path,
+    pattern_setups_path: Option<&Path>,
+    prop_outcomes_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut script = BufWriter::new(File::create(path)?);
+    writeln!(
+        script,
+        "-- Generated by ABCD CSV export. Run with mysql --local-infile=1 < this file."
+    )?;
+
+    if let Some(pattern_setups_path) = pattern_setups_path {
+        write_load_data_statement(
+            &mut script,
+            "pattern_setups",
+            pattern_setups_path,
+            PATTERN_SETUP_CSV_HEADERS,
+        )?;
+    }
+    write_load_data_statement(
+        &mut script,
+        "pattern_outcomes_prop",
+        prop_outcomes_path,
+        PROP_OUTCOME_CSV_HEADERS,
+    )?;
+
+    script.flush()?;
+    Ok(())
+}
+
+fn write_load_data_statement(
+    script: &mut BufWriter<File>,
+    table_name: &str,
+    file_path: &Path,
+    columns: &[&str],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let path = mysql_load_path(file_path);
+    writeln!(script)?;
+    writeln!(script, "LOAD DATA LOCAL INFILE '{}'", path)?;
+    writeln!(script, "REPLACE INTO TABLE {}", table_name)?;
+    writeln!(
+        script,
+        "FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' ESCAPED BY '\\\\'"
+    )?;
+    writeln!(script, "LINES TERMINATED BY '\\n'")?;
+    writeln!(script, "IGNORE 1 LINES")?;
+    writeln!(
+        script,
+        "({});",
+        columns
+            .iter()
+            .map(|column| format!("`{column}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )?;
+    Ok(())
+}
+
+fn mysql_load_path(path: &Path) -> String {
+    path.canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .replace('\\', "/")
+        .replace('\'', "\\'")
+}
+
+fn csv_null() -> String {
+    "\\N".to_string()
+}
+
+fn csv_value<T: ToString>(value: T) -> String {
+    value.to_string()
+}
+
+fn csv_opt<T: ToString>(value: Option<T>) -> String {
+    value.map(csv_value).unwrap_or_else(csv_null)
+}
+
+fn csv_opt_ref(value: Option<&str>) -> String {
+    value.map(str::to_string).unwrap_or_else(csv_null)
+}
+
+fn csv_bool(value: bool) -> String {
+    if value {
+        "1".to_string()
+    } else {
+        "0".to_string()
+    }
+}
+
+fn csv_opt_bool(value: Option<bool>) -> String {
+    value.map(csv_bool).unwrap_or_else(csv_null)
+}
+
+fn csv_date(value: &str) -> String {
+    value.split_whitespace().next().unwrap_or(value).to_string()
+}
+
+fn pattern_setup_csv_record(csv: &XABCD_CSV, setup_id: &str) -> Vec<String> {
+    vec![
+        setup_id.to_string(),
+        setup_id.to_string(),
+        csv.symbol.clone(),
+        csv_opt_ref(csv.root_symbol.as_deref()),
+        csv_opt_ref(csv.contract_symbol.as_deref()),
+        csv.source_table.clone(),
+        csv.source_timeframe.clone(),
+        csv.pattern_group_id.clone(),
+        csv_value(csv.x_bars_left),
+        format!("{:?}", csv.market),
+        csv.harmonic_type.clone(),
+        csv.prop_strategy_id.clone(),
+        csv_date(&csv.x_date),
+        csv_value(csv.x_open),
+        csv_value(csv.x_high),
+        csv_value(csv.x_low),
+        csv_value(csv.x_close),
+        csv_value(csv.x_length),
+        csv_value(csv.x_min_max),
+        csv_date(&csv.a_date),
+        csv_value(csv.a_open),
+        csv_value(csv.a_high),
+        csv_value(csv.a_low),
+        csv_value(csv.a_close),
+        csv_value(csv.a_length),
+        csv_value(csv.a_min_max),
+        csv_value(csv.xa_price_length),
+        csv_date(&csv.b_date),
+        csv_value(csv.b_open),
+        csv_value(csv.b_high),
+        csv_value(csv.b_low),
+        csv_value(csv.b_close),
+        csv_value(csv.b_length),
+        csv_value(csv.b_min_max),
+        csv_value(csv.ab_price_length),
+        csv_date(&csv.c_date),
+        csv_value(csv.c_open),
+        csv_value(csv.c_high),
+        csv_value(csv.c_low),
+        csv_value(csv.c_close),
+        csv_value(csv.c_length),
+        csv_value(csv.c_min_max),
+        csv_value(csv.bc_price_length),
+        csv_date(&csv.d_date),
+        csv_value(csv.d_open),
+        csv_value(csv.d_high),
+        csv_value(csv.d_low),
+        csv_value(csv.d_close),
+        csv_value(csv.d_length),
+        csv_value(csv.d_min_max),
+        csv_value(csv.cd_price_length),
+        csv_value(csv.full_pattern_length),
+        csv_bool(csv.bullish_key_reversal),
+        csv_bool(csv.bearish_key_reversal),
+        csv_bool(csv.bullish_engulfing),
+        csv_bool(csv.bearish_engulfing),
+        csv_bool(csv.bullish_outside_reversal),
+        csv_bool(csv.bearish_outside_reversal),
+        csv_bool(csv.hammer),
+        csv_bool(csv.shooting_star),
+        csv_bool(csv.morning_star),
+        csv_bool(csv.evening_star),
+        csv_bool(csv.three_white_soldiers),
+        csv_bool(csv.three_black_crows),
+        csv_opt_bool(csv.three_month),
+        csv_opt_bool(csv.six_month),
+        csv_opt_bool(csv.twelve_month),
+    ]
+}
+
+fn direct_prop_outcome_csv_record(pattern: &PatternXABCD, outcome_row_id: &str) -> Vec<String> {
+    let setup_id = pattern.pattern_id.clone();
+    let pattern_group_id = format!("{}{}", pattern.symbol, pattern.a.date);
+    let market = format!("{:?}", pattern.market);
+    let lens = pattern.dominant_harmonic_lens();
+    let size_bucket = route_size_bucket(
+        pattern.x.length,
+        pattern.a.length,
+        pattern.b.length,
+        pattern.c.length,
+    );
+    let target = pattern.target_candle;
+
+    vec![
+        outcome_row_id.to_string(),
+        setup_id.clone(),
+        pattern.prop_strategy_id.clone(),
+        "D".to_string(),
+        csv_bool(false),
+        "None".to_string(),
+        csv_null(),
+        csv_null(),
+        setup_id,
+        pattern_group_id,
+        csv_value(pattern.x_bars_left),
+        pattern.symbol.to_string(),
+        csv_opt_ref(pattern.root_symbol.as_deref()),
+        csv_opt_ref(pattern.contract_symbol.as_deref()),
+        pattern.source_table.to_string(),
+        pattern.source_timeframe.to_string(),
+        csv_value(pattern.d.date),
+        csv_opt(pattern.contract_week_index),
+        csv_opt(pattern.contract_days_from_start),
+        csv_value(pattern.trade.entry_date),
+        market,
+        lens.harmonic_type.to_string(),
+        lens.bin.to_string(),
+        size_bucket.to_string(),
+        lens.time_bin.to_string(),
+        trend_label(pattern.three_month).to_string(),
+        trend_label(pattern.six_month).to_string(),
+        trend_label(pattern.twelve_month).to_string(),
+        csv_value(pattern.x.length),
+        csv_value(pattern.a.length),
+        csv_value(pattern.b.length),
+        csv_value(pattern.c.length),
+        csv_value(pattern.d.length),
+        csv_value(
+            pattern.x.length
+                + pattern.a.length
+                + pattern.b.length
+                + pattern.c.length
+                + pattern.d.length,
+        ),
+        csv_value(pattern.trade.enter_price),
+        csv_value(pattern.trade.risk_exit_price),
+        csv_value(pattern.trade.reward_exit_price),
+        csv_bool(pattern.trade.open),
+        csv_value(pattern.trade.current_price),
+        csv_value(pattern.trade.pnl),
+        csv_value(pattern.trade.lowest_price),
+        csv_value(pattern.trade.highest_price),
+        csv_value(pattern.trade.adverse_price),
+        csv_value(pattern.trade.favorable_price),
+        csv_value(pattern.trade.max_adverse_points),
+        csv_value(pattern.trade.max_favorable_points),
+        csv_value(pattern.trade.bars_held),
+        csv_value(pattern.trade.minutes_held),
+        csv_value(pattern.d_confirm_date),
+        csv_value(pattern.trade.result),
+        csv_bool(target.is_some()),
+        csv_opt(target.map(|target| target.date)),
+        csv_opt(target.map(|target| target.open)),
+        csv_opt(target.map(|target| target.high)),
+        csv_opt(target.map(|target| target.low)),
+        csv_opt(target.map(|target| target.close)),
+        csv_opt(target.map(|target| target.volume)),
+        csv_opt_bool(target.map(|target| target.is_green)),
+        csv_opt(target.map(|target| target.close_vs_open_pct)),
+        csv_opt(target.map(|target| target.high_vs_open_pct)),
+        csv_opt(target.map(|target| target.low_vs_open_pct)),
+        csv_opt(target.map(|target| target.range_pct)),
+        csv_opt_bool(target.map(|target| target.breaks_d_high)),
+        csv_opt_bool(target.map(|target| target.breaks_d_low)),
+    ]
+}
+
+fn reversal_prop_outcome_csv_record(item: &PropReversalOutcome) -> Vec<String> {
+    vec![
+        item.reversal_row_id.clone(),
+        item.setup_id.clone(),
+        item.prop_strategy_id.clone(),
+        "DReversal".to_string(),
+        csv_bool(true),
+        item.reversal_type.clone(),
+        csv_value(item.reversal_detect_date),
+        csv_value(item.reversal_bars_after_d),
+        csv_opt_ref(item.pattern_id.as_deref()),
+        item.pattern_group_id.clone(),
+        csv_value(item.x_bars_left),
+        item.symbol.clone(),
+        csv_opt_ref(item.root_symbol.as_deref()),
+        csv_opt_ref(item.contract_symbol.as_deref()),
+        item.source_table.clone(),
+        item.source_timeframe.clone(),
+        csv_value(item.d_date),
+        csv_opt(item.contract_week_index),
+        csv_opt(item.contract_days_from_start),
+        csv_value(item.entry_date),
+        item.market.clone(),
+        item.harmonic_type.clone(),
+        item.bin.clone(),
+        item.size_bucket.clone(),
+        item.time_bin.clone(),
+        item.three_month_trend.clone(),
+        item.six_month_trend.clone(),
+        item.twelve_month_trend.clone(),
+        csv_value(item.x_length),
+        csv_value(item.a_length),
+        csv_value(item.b_length),
+        csv_value(item.c_length),
+        csv_value(item.d_length),
+        csv_value(item.full_pattern_length),
+        csv_value(item.trade_enter_price),
+        csv_value(item.trade_risk_exit_price),
+        csv_value(item.trade_reward_exit_price),
+        csv_bool(item.trade_open),
+        csv_value(item.trade_current_price),
+        csv_value(item.trade_pnl),
+        csv_value(item.trade_lowest_price),
+        csv_value(item.trade_highest_price),
+        csv_value(item.trade_adverse_price),
+        csv_value(item.trade_favorable_price),
+        csv_value(item.max_adverse_points),
+        csv_value(item.max_favorable_points),
+        csv_value(item.bars_held),
+        csv_value(item.minutes_held),
+        csv_value(item.d_confirm_date),
+        csv_value(item.trade_result),
+        csv_bool(item.target_ready),
+        csv_opt(item.target_date),
+        csv_opt(item.target_open),
+        csv_opt(item.target_high),
+        csv_opt(item.target_low),
+        csv_opt(item.target_close),
+        csv_opt(item.target_volume),
+        csv_opt_bool(item.target_is_green),
+        csv_opt(item.target_close_vs_open_pct),
+        csv_opt(item.target_high_vs_open_pct),
+        csv_opt(item.target_low_vs_open_pct),
+        csv_opt(item.target_range_pct),
+        csv_opt_bool(item.target_breaks_reversal_high),
+        csv_opt_bool(item.target_breaks_reversal_low),
+    ]
+}
+
 fn build_pattern_setup_id(csv: &XABCD_CSV) -> String {
     if !csv.pattern_id.is_empty() {
         return csv.pattern_id.clone();
     }
 
     let canonical_key = format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        csv.source_table,
+        csv.source_timeframe,
         format!("{:?}", csv.market).to_lowercase(),
         csv.symbol,
         csv.x_date,
@@ -4685,8 +5322,6 @@ impl Database {
     }
 
     pub async fn get_distinct_symbols(&self) -> Result<Vec<String>, sqlx::Error> {
-        println!("✅ get_distinct_symbols");
-
         let symbols: Vec<String> = sqlx::query_scalar(
             r#"
             SELECT DISTINCT symbol
@@ -4704,11 +5339,6 @@ impl Database {
         &self,
         minimum_average_volume: f64,
     ) -> Result<Vec<String>, sqlx::Error> {
-        println!(
-            "Filtering symbols by recent average volume >= {}",
-            minimum_average_volume
-        );
-
         let symbols: Vec<String> = sqlx::query_scalar(
             r#"
             SELECT ls.symbol
@@ -4731,32 +5361,105 @@ impl Database {
         Ok(symbols)
     }
 
+    fn futures_candle_table(source_table: &str) -> &'static str {
+        match source_table {
+            "futures_contract_1m_candles" => "futures_contract_1m_candles",
+            "futures_contract_3m_candles" => "futures_contract_3m_candles",
+            "futures_contract_5m_candles" => "futures_contract_5m_candles",
+            "futures_contract_15m_candles" => "futures_contract_15m_candles",
+            "futures_contract_30m_candles" => "futures_contract_30m_candles",
+            "futures_contract_1h_candles" => "futures_contract_1h_candles",
+            "futures_contract_4h_candles" => "futures_contract_4h_candles",
+            "futures_contract_12h_candles" => "futures_contract_12h_candles",
+            "futures_contract_1d_candles" => "futures_contract_1d_candles",
+            _ => "futures_contract_1m_candles",
+        }
+    }
+
     pub async fn get_futures_contract_symbols(
         &self,
         root_symbol: Option<&str>,
+        source_table: &str,
     ) -> Result<Vec<String>, sqlx::Error> {
-        println!("Selecting futures contract symbols");
+        let source_table = Self::futures_candle_table(source_table);
 
         let symbols: Vec<String> = if let Some(root_symbol) = root_symbol {
-            sqlx::query_scalar(
+            sqlx::query_scalar(&format!(
                 r#"
                 SELECT DISTINCT symbol
-                FROM abcd.futures_contract_1m_candles
+                FROM abcd.{source_table}
                 WHERE root_symbol = ?
                 ORDER BY symbol
-                "#,
-            )
+                "#
+            ))
             .bind(root_symbol)
             .fetch_all(&self.pool)
             .await?
         } else {
-            sqlx::query_scalar(
+            sqlx::query_scalar(&format!(
                 r#"
                 SELECT DISTINCT symbol
-                FROM abcd.futures_contract_1m_candles
+                FROM abcd.{source_table}
                 ORDER BY symbol
-                "#,
-            )
+                "#
+            ))
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        Ok(symbols)
+    }
+
+    pub async fn get_unprocessed_futures_contract_symbols(
+        &self,
+        root_symbol: Option<&str>,
+        source_table: &str,
+        source_timeframe: &str,
+    ) -> Result<Vec<String>, sqlx::Error> {
+        let source_table = Self::futures_candle_table(source_table);
+
+        let symbols: Vec<String> = if let Some(root_symbol) = root_symbol {
+            sqlx::query_scalar(&format!(
+                r#"
+                SELECT DISTINCT c.symbol
+                FROM abcd.{source_table} c
+                LEFT JOIN (
+                    SELECT DISTINCT contract_symbol
+                    FROM abcd.pattern_outcomes_prop
+                    WHERE source_table = ?
+                      AND source_timeframe = ?
+                      AND root_symbol = ?
+                      AND contract_symbol IS NOT NULL
+                ) done ON done.contract_symbol = c.symbol
+                WHERE c.root_symbol = ?
+                  AND done.contract_symbol IS NULL
+                ORDER BY c.symbol
+                "#
+            ))
+            .bind(source_table)
+            .bind(source_timeframe)
+            .bind(root_symbol)
+            .bind(root_symbol)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_scalar(&format!(
+                r#"
+                SELECT DISTINCT c.symbol
+                FROM abcd.{source_table} c
+                LEFT JOIN (
+                    SELECT DISTINCT contract_symbol
+                    FROM abcd.pattern_outcomes_prop
+                    WHERE source_table = ?
+                      AND source_timeframe = ?
+                      AND contract_symbol IS NOT NULL
+                ) done ON done.contract_symbol = c.symbol
+                WHERE done.contract_symbol IS NULL
+                ORDER BY c.symbol
+                "#
+            ))
+            .bind(source_table)
+            .bind(source_timeframe)
             .fetch_all(&self.pool)
             .await?
         };
@@ -4772,8 +5475,10 @@ impl Database {
     pub async fn get_stored_futures_contract_candles(
         &self,
         symbol: &str,
+        source_table: &str,
     ) -> Result<Vec<Candle>, sqlx::Error> {
-        let candles: Vec<Candle> = sqlx::query_as::<_, Candle>(
+        let source_table = Self::futures_candle_table(source_table);
+        let candles: Vec<Candle> = sqlx::query_as::<_, Candle>(&format!(
             r#"
             SELECT
                 symbol,
@@ -4786,11 +5491,11 @@ impl Database {
                 CAST(NULL AS SIGNED) AS three_month,
                 CAST(NULL AS SIGNED) AS six_month,
                 CAST(NULL AS SIGNED) AS twelve_month
-            FROM abcd.futures_contract_1m_candles
+            FROM abcd.{source_table}
             WHERE symbol = ?
             ORDER BY ts_utc
-            "#,
-        )
+            "#
+        ))
         .bind(symbol)
         .fetch_all(&self.pool)
         .await?;
@@ -4931,14 +5636,16 @@ impl Database {
         &self,
         patterns: &[PatternXABCD],
         outcomes: &[PropReversalOutcome],
+        fast_rebuild: bool,
         use_build_tables: bool,
         target_ready_only: bool,
+        replace_existing: bool,
     ) -> Result<i64, sqlx::Error> {
         if patterns.is_empty() {
             return Ok(0);
         }
 
-        if !use_build_tables {
+        if !fast_rebuild && !use_build_tables {
             self.ensure_pattern_mode_tables().await?;
         }
 
@@ -4948,7 +5655,7 @@ impl Database {
             PatternOutputTables::final_tables()
         };
 
-        if !use_build_tables {
+        if replace_existing && !use_build_tables {
             let mut setup_ids: Vec<String> = patterns
                 .iter()
                 .map(|pattern| pattern.pattern_id.clone())

@@ -1,18 +1,27 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const COLUMN_LABELS = {
+  simulator_result: 'Test Result',
   trade_result: 'Result',
   symbol: 'Symbol',
   market: 'Market',
   size_bucket: 'Size',
   closest_pattern: 'Closest Pattern',
   closest_accuracy: 'Accuracy',
-  d_date: 'Enter Date',
+  entry_date: 'Enter Date',
   trade_enter_price: 'Enter Price',
 };
 
 const getColumnClassName = (columnKey) =>
   `pattern-library-column--${columnKey.replace(/_/g, '-')}`;
+
+const RESULT_LABELS = {
+  won: 'Won',
+  lost: 'Lost',
+  skipped: 'Skipped',
+  open: 'Open',
+  pending: '',
+};
 
 const HARMONIC_ACCURACY_FIELDS = [
   { label: 'Bat', key: 'bat_accuracy' },
@@ -71,6 +80,10 @@ const getClosestPatternMatch = (pattern = {}) => {
 const getColumnValue = (row, columnKey) => {
   const closestPatternMatch = getClosestPatternMatch(row);
 
+  if (columnKey === 'simulator_result') {
+    return row.simulator_result_status;
+  }
+
   if (columnKey === 'closest_pattern') {
     return closestPatternMatch.label;
   }
@@ -79,7 +92,61 @@ const getColumnValue = (row, columnKey) => {
     return closestPatternMatch.accuracy;
   }
 
+  if (columnKey === 'entry_date') {
+    return row.entry_date ?? row.reversal_detect_date ?? row.d_confirm_date ?? row.d_date;
+  }
+
   return row[columnKey] ?? row[columnKey.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())];
+};
+
+const getNumericResultStatus = (value) => {
+  if (Number(value) === 1) {
+    return 'won';
+  }
+
+  if (Number(value) === 2) {
+    return 'lost';
+  }
+
+  return 'open';
+};
+
+const getSimulatorStatus = (row = {}) => row.simulator_result_status ?? 'pending';
+
+const getResultLabel = (status) => RESULT_LABELS[status] ?? '';
+
+const formatDateParts = (value) => {
+  if (!value) {
+    return { date: '', time: '' };
+  }
+
+  const text = String(value);
+  const [datePart, timePart = ''] = text.replace('T', ' ').split(' ');
+
+  return {
+    date: datePart,
+    time: timePart ? timePart.slice(0, 5) : '',
+  };
+};
+
+const formatPrice = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : value ?? '';
+};
+
+const formatAccuracy = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const getShortPatternId = (pattern = {}) => {
+  const value = pattern.pattern_id ?? pattern.pattern_group_id ?? '';
+  if (!value) {
+    return '';
+  }
+
+  const text = String(value);
+  return text.length > 10 ? text.slice(-10) : text;
 };
 
 const getPatternSelectionKey = (pattern = {}) => {
@@ -100,18 +167,109 @@ const getPatternSelectionKey = (pattern = {}) => {
   ].join('|');
 };
 
+const getPatternMatchKeys = (pattern = {}) => {
+  const keys = [];
+
+  if (pattern.pattern_id) {
+    keys.push(`id:${pattern.pattern_id}`);
+  }
+
+  if (pattern.pattern_group_id) {
+    keys.push(`group:${pattern.pattern_group_id}`);
+    [pattern.entry_date, pattern.reversal_detect_date, pattern.d_confirm_date, pattern.d_date]
+      .filter(Boolean)
+      .forEach((dateValue) => {
+        keys.push(`group-date:${pattern.pattern_group_id}|${String(dateValue).slice(0, 19)}`);
+        keys.push(`group-day:${pattern.pattern_group_id}|${String(dateValue).slice(0, 10)}`);
+      });
+  }
+
+  return keys;
+};
+
 const renderCellContent = (row, columnKey) => {
   const content = getColumnValue(row, columnKey);
+  const closestPatternMatch = getClosestPatternMatch(row);
 
-  if (columnKey === 'trade_result' && content === 1) return 'Won';
-  if (columnKey === 'trade_result' && content === 2) return 'Lost';
-  if (columnKey === 'trade_result') return 'Open';
-  if (columnKey === 'symbol') return content;
-  if (columnKey === 'market') return typeof content === 'string' ? content : 'Unknown';
-  if (columnKey === 'closest_pattern' || columnKey === 'size_bucket') return content ?? 'Unknown';
-  if (columnKey === 'closest_accuracy') return Number.isFinite(content) ? `${content.toFixed(1)}%` : 'N/A';
-  if (columnKey === 'd_date') return content ?? '';
-  if (columnKey === 'trade_enter_price') return typeof content === 'number' ? content.toFixed(2) : content;
+  if (columnKey === 'simulator_result') {
+    const status = getSimulatorStatus(row);
+    const label = getResultLabel(status);
+    return label ? (
+      <span className={`pattern-result-pill pattern-result-pill--${status}`}>{label}</span>
+    ) : (
+      <span className="pattern-result-placeholder" aria-label="Not tested" />
+    );
+  }
+
+  if (columnKey === 'trade_result') {
+    const status = getNumericResultStatus(content);
+    return (
+      <span className={`pattern-result-pill pattern-result-pill--trade pattern-result-pill--${status}`}>
+        {getResultLabel(status)}
+      </span>
+    );
+  }
+
+  if (columnKey === 'symbol') {
+    const shortId = getShortPatternId(row);
+    return (
+      <span className="pattern-trade-cell">
+        <strong>{content ?? 'N/A'}</strong>
+        {shortId ? <small>{shortId}</small> : null}
+      </span>
+    );
+  }
+
+  if (columnKey === 'market') {
+    const market = typeof content === 'string' ? content : 'Unknown';
+    return (
+      <span className={`pattern-chip pattern-chip--${market.toLowerCase()}`}>
+        {market}
+      </span>
+    );
+  }
+
+  if (columnKey === 'size_bucket') {
+    return <span className="pattern-chip pattern-chip--neutral">{content ?? 'Unknown'}</span>;
+  }
+
+  if (columnKey === 'closest_pattern') {
+    return (
+      <span className="pattern-match-cell">
+        <strong>{closestPatternMatch.label}</strong>
+        <small>{row.reversal_type ?? 'None'}</small>
+      </span>
+    );
+  }
+
+  if (columnKey === 'closest_accuracy') {
+    const accuracy = formatAccuracy(content);
+    return (
+      <span className="pattern-accuracy-cell">
+        <span>{accuracy === null ? 'N/A' : `${accuracy.toFixed(1)}%`}</span>
+        <span className="pattern-accuracy-track">
+          <span
+            className="pattern-accuracy-fill"
+            style={{ width: `${Math.max(0, Math.min(100, accuracy ?? 0))}%` }}
+          />
+        </span>
+      </span>
+    );
+  }
+
+  if (columnKey === 'entry_date') {
+    const { date, time } = formatDateParts(content);
+    return (
+      <span className="pattern-date-cell">
+        <strong>{date}</strong>
+        {time ? <small>{time}</small> : null}
+      </span>
+    );
+  }
+
+  if (columnKey === 'trade_enter_price') {
+    return <span className="pattern-price-cell">{formatPrice(content)}</span>;
+  }
 
   return typeof content === 'number' ? content.toFixed(2) : content;
 };
@@ -131,9 +289,11 @@ const PatternTable = ({
   density = 'default',
   variant = 'default',
   includeSizeColumn = false,
+  includeSimulatorResultColumn = false,
   statusLabel = 'Matched Patterns',
   emptyMessage = 'No patterns found.',
   onSelectPattern = null,
+  highlightedPatternKeys = [],
   fixedHeight = null,
 }) => {
   const tableBodyRef = useRef(null);
@@ -141,30 +301,52 @@ const PatternTable = ({
   const latestSelectionRequestRef = useRef(0);
   const lastLoadTriggerCountRef = useRef(0);
   const [hoveredRowIndex, setHoveredIndex] = useState(-1);
+  const highlightedPatternKeySet = useMemo(
+    () => new Set(highlightedPatternKeys),
+    [highlightedPatternKeys]
+  );
 
-  const columns = includeSizeColumn
-    ? [
-        'trade_result',
-        'symbol',
-        'market',
-        'size_bucket',
-        'closest_pattern',
-        'closest_accuracy',
-        'd_date',
-        'trade_enter_price',
-      ]
-    : [
-        'trade_result',
-        'symbol',
-        'market',
-        'closest_pattern',
-        'closest_accuracy',
-        'd_date',
-        'trade_enter_price',
-      ];
+  const columns = [
+    ...(includeSimulatorResultColumn ? ['simulator_result'] : []),
+    'trade_result',
+    'symbol',
+    'market',
+    ...(includeSizeColumn ? ['size_bucket'] : []),
+    'closest_pattern',
+    'closest_accuracy',
+    'entry_date',
+    'trade_enter_price',
+  ];
 
   const hasResolvedTotalCount =
     typeof totalPatternCount === 'number' && Number.isFinite(totalPatternCount) && totalPatternCount >= 0;
+  const tableStats = useMemo(() => {
+    const initial = {
+      loaded: patterns.length,
+      total: hasResolvedTotalCount ? totalPatternCount : patterns.length,
+      tested: 0,
+      won: 0,
+      lost: 0,
+      skipped: 0,
+      open: 0,
+    };
+
+    return patterns.reduce((stats, pattern) => {
+      const simulatorStatus = getSimulatorStatus(pattern);
+      const tradeStatus = getNumericResultStatus(pattern?.trade_result);
+
+      if (simulatorStatus !== 'pending') {
+        stats.tested += 1;
+        stats[simulatorStatus] += 1;
+      }
+
+      if (tradeStatus === 'open') {
+        stats.open += 1;
+      }
+
+      return stats;
+    }, initial);
+  }, [hasResolvedTotalCount, patterns, totalPatternCount]);
 
   useEffect(() => {
     if (!isLoadingMorePatterns) {
@@ -188,6 +370,23 @@ const PatternTable = ({
       inline: 'nearest',
     });
   }, [patterns, patterns.length, selectedPatternKey, selectedRowIndex]);
+
+  useEffect(() => {
+    if (!highlightedPatternKeySet.size || !patterns.length) {
+      return;
+    }
+
+    const activeIndex = patterns.findIndex((pattern) =>
+      getPatternMatchKeys(pattern).some((key) => highlightedPatternKeySet.has(key))
+    );
+
+    if (activeIndex >= 0) {
+      rowRefs.current.get(activeIndex)?.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest',
+      });
+    }
+  }, [highlightedPatternKeySet, patterns]);
 
   const handleSelectRow = async (rowIndex) => {
     const nextIndex = Math.max(0, Math.min(rowIndex, (patterns?.length ?? 1) - 1));
@@ -282,10 +481,19 @@ const PatternTable = ({
         <div className="pattern-library-status__primary">
           <span className="pattern-library-status__label">{statusLabel}</span>
           <span className="pattern-library-status__count">
-            {(hasResolvedTotalCount ? totalPatternCount : patterns.length).toLocaleString()}
+            {tableStats.loaded.toLocaleString()}
+            {hasResolvedTotalCount ? ` / ${tableStats.total.toLocaleString()}` : ''}
           </span>
         </div>
         <div className="pattern-library-status__secondary">
+          {includeSimulatorResultColumn ? (
+            <div className="pattern-library-status__metrics">
+              <span className="pattern-stat pattern-stat--tested">{tableStats.tested.toLocaleString()} tested</span>
+              <span className="pattern-stat pattern-stat--won">{tableStats.won.toLocaleString()} won</span>
+              <span className="pattern-stat pattern-stat--lost">{tableStats.lost.toLocaleString()} lost</span>
+              <span className="pattern-stat pattern-stat--skipped">{tableStats.skipped.toLocaleString()} skipped</span>
+            </div>
+          ) : null}
           <span
             className={[
               'pattern-library-status__hint',
@@ -341,6 +549,10 @@ const PatternTable = ({
                   : rowIndex === selectedRowIndex;
                 const isHovered = rowIndex === hoveredRowIndex;
                 const result = Number(pattern?.trade_result);
+                const simulatorResult = pattern?.simulator_result_status ?? null;
+                const isReplayActive = getPatternMatchKeys(pattern).some((key) =>
+                  highlightedPatternKeySet.has(key)
+                );
 
                 return (
                   <tr
@@ -355,9 +567,18 @@ const PatternTable = ({
                     className={[
                       'strategy-library-row',
                       'pattern-library-row',
-                      result === 1 ? 'pattern-library-row--won' : '',
-                      result === 2 ? 'pattern-library-row--lost' : '',
-                      result !== 1 && result !== 2 ? 'pattern-library-row--open' : '',
+                      simulatorResult === 'won' || (!includeSimulatorResultColumn && result === 1)
+                        ? 'pattern-library-row--won'
+                        : '',
+                      simulatorResult === 'lost' || (!includeSimulatorResultColumn && result === 2)
+                        ? 'pattern-library-row--lost'
+                        : '',
+                      simulatorResult === 'skipped' ? 'pattern-library-row--skipped' : '',
+                      !includeSimulatorResultColumn && result !== 1 && result !== 2
+                        ? 'pattern-library-row--open'
+                        : '',
+                      simulatorResult ? 'pattern-library-row--simulated' : '',
+                      isReplayActive ? 'pattern-library-row--replay-active' : '',
                       isHovered ? 'strategy-library-row--hovered' : '',
                       isSelected ? 'strategy-library-row--selected' : '',
                       isSelected ? 'pattern-library-row--selected' : '',

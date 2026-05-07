@@ -1,0 +1,2081 @@
+===== BUILD HG 3m START 2026-05-04T10:12:51.7319492-05:00 =====
+Building futures_contract_3m_candles from futures_contract_1m_candles: symbols=61 root=HG symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/61] HGF2 affected=198 deleted=0
+[2/61] HGF3 affected=177 deleted=0
+[3/61] HGF4 affected=182 deleted=0
+[4/61] HGF5 affected=166 deleted=0
+[5/61] HGF6 affected=199 deleted=0
+[6/61] HGG2 affected=182 deleted=0
+[7/61] HGG3 affected=126 deleted=0
+[8/61] HGG4 affected=123 deleted=0
+[9/61] HGG5 affected=97 deleted=0
+[10/61] HGG6 affected=241 deleted=0
+[11/61] HGH2 affected=1028 deleted=0
+[12/61] HGH3 affected=834 deleted=0
+[13/61] HGH4 affected=799 deleted=0
+[14/61] HGH5 affected=743 deleted=0
+[15/61] HGH6 affected=637 deleted=0
+[16/61] HGJ1 affected=11 deleted=0
+[17/61] HGJ2 affected=163 deleted=0
+[18/61] HGJ3 affected=165 deleted=0
+[19/61] HGJ4 affected=124 deleted=0
+[20/61] HGJ5 affected=224 deleted=0
+[21/61] HGJ6 affected=134 deleted=0
+[22/61] HGK1 affected=1078 deleted=0
+[23/61] HGK2 affected=758 deleted=0
+[24/61] HGK3 affected=794 deleted=0
+[25/61] HGK4 affected=898 deleted=0
+[26/61] HGK5 affected=735 deleted=0
+[27/61] HGM1 affected=196 deleted=0
+[28/61] HGM2 affected=174 deleted=0
+[29/61] HGM3 affected=151 deleted=0
+[30/61] HGM4 affected=192 deleted=0
+[31/61] HGM5 affected=265 deleted=0
+[32/61] HGN1 affected=1010 deleted=0
+[33/61] HGN2 affected=734 deleted=0
+[34/61] HGN3 affected=556 deleted=0
+[35/61] HGN4 affected=651 deleted=0
+[36/61] HGN5 affected=621 deleted=0
+[37/61] HGQ1 affected=152 deleted=0
+[38/61] HGQ2 affected=121 deleted=0
+[39/61] HGQ3 affected=214 deleted=0
+[40/61] HGQ4 affected=132 deleted=0
+[41/61] HGQ5 affected=244 deleted=0
+[42/61] HGU1 affected=1183 deleted=0
+[43/61] HGU2 affected=846 deleted=0
+[44/61] HGU3 affected=657 deleted=0
+[45/61] HGU4 affected=648 deleted=0
+[46/61] HGU5 affected=514 deleted=0
+[47/61] HGV1 affected=136 deleted=0
+[48/61] HGV2 affected=147 deleted=0
+[49/61] HGV3 affected=147 deleted=0
+[50/61] HGV4 affected=376 deleted=0
+[51/61] HGV5 affected=213 deleted=0
+[52/61] HGX1 affected=160 deleted=0
+[53/61] HGX2 affected=120 deleted=0
+[54/61] HGX3 affected=152 deleted=0
+[55/61] HGX4 affected=411 deleted=0
+[56/61] HGX5 affected=160 deleted=0
+[57/61] HGZ1 affected=943 deleted=0
+[58/61] HGZ2 affected=873 deleted=0
+[59/61] HGZ3 affected=735 deleted=0
+[60/61] HGZ4 affected=707 deleted=0
+[61/61] HGZ5 affected=708 deleted=0
+Done. table=futures_contract_3m_candles symbols=61 affected=26065 deleted=0
+===== BUILD HG 3m DONE 2026-05-04T10:12:53.4463178-05:00 =====
+===== BUILD HG TIMEFRAMES START 2026-05-04T10:12:53.4463178-05:00 =====
+Building futures_contract_5m_candles from futures_contract_1m_candles: timeframe=5m minutes=5 symbols=61 root=HG symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/61] 5m HGF2 affected=195 deleted=0
+[2/61] 5m HGF3 affected=165 deleted=0
+[3/61] 5m HGF4 affected=159 deleted=0
+[4/61] 5m HGF5 affected=158 deleted=0
+[5/61] 5m HGF6 affected=178 deleted=0
+[6/61] 5m HGG2 affected=164 deleted=0
+[7/61] 5m HGG3 affected=121 deleted=0
+[8/61] 5m HGG4 affected=112 deleted=0
+[9/61] 5m HGG5 affected=92 deleted=0
+[10/61] 5m HGG6 affected=209 deleted=0
+[11/61] 5m HGH2 affected=863 deleted=0
+[12/61] 5m HGH3 affected=718 deleted=0
+[13/61] 5m HGH4 affected=688 deleted=0
+[14/61] 5m HGH5 affected=675 deleted=0
+[15/61] 5m HGH6 affected=565 deleted=0
+[16/61] 5m HGJ1 affected=10 deleted=0
+[17/61] 5m HGJ2 affected=159 deleted=0
+[18/61] 5m HGJ3 affected=157 deleted=0
+[19/61] 5m HGJ4 affected=116 deleted=0
+[20/61] 5m HGJ5 affected=205 deleted=0
+[21/61] 5m HGJ6 affected=118 deleted=0
+[22/61] 5m HGK1 affected=881 deleted=0
+[23/61] 5m HGK2 affected=652 deleted=0
+[24/61] 5m HGK3 affected=679 deleted=0
+[25/61] 5m HGK4 affected=761 deleted=0
+[26/61] 5m HGK5 affected=654 deleted=0
+[27/61] 5m HGM1 affected=176 deleted=0
+[28/61] 5m HGM2 affected=165 deleted=0
+[29/61] 5m HGM3 affected=146 deleted=0
+[30/61] 5m HGM4 affected=172 deleted=0
+[31/61] 5m HGM5 affected=251 deleted=0
+[32/61] 5m HGN1 affected=833 deleted=0
+[33/61] 5m HGN2 affected=625 deleted=0
+[34/61] 5m HGN3 affected=488 deleted=0
+[35/61] 5m HGN4 affected=564 deleted=0
+[36/61] 5m HGN5 affected=544 deleted=0
+[37/61] 5m HGQ1 affected=145 deleted=0
+[38/61] 5m HGQ2 affected=117 deleted=0
+[39/61] 5m HGQ3 affected=192 deleted=0
+[40/61] 5m HGQ4 affected=124 deleted=0
+[41/61] 5m HGQ5 affected=215 deleted=0
+[42/61] 5m HGU1 affected=1016 deleted=0
+[43/61] 5m HGU2 affected=710 deleted=0
+[44/61] 5m HGU3 affected=558 deleted=0
+[45/61] 5m HGU4 affected=560 deleted=0
+[46/61] 5m HGU5 affected=461 deleted=0
+[47/61] 5m HGV1 affected=132 deleted=0
+[48/61] 5m HGV2 affected=140 deleted=0
+[49/61] 5m HGV3 affected=141 deleted=0
+[50/61] 5m HGV4 affected=323 deleted=0
+[51/61] 5m HGV5 affected=196 deleted=0
+[52/61] 5m HGX1 affected=148 deleted=0
+[53/61] 5m HGX2 affected=114 deleted=0
+[54/61] 5m HGX3 affected=145 deleted=0
+[55/61] 5m HGX4 affected=341 deleted=0
+[56/61] 5m HGX5 affected=138 deleted=0
+[57/61] 5m HGZ1 affected=796 deleted=0
+[58/61] 5m HGZ2 affected=752 deleted=0
+[59/61] 5m HGZ3 affected=612 deleted=0
+[60/61] 5m HGZ4 affected=587 deleted=0
+[61/61] 5m HGZ5 affected=599 deleted=0
+Done. table=futures_contract_5m_candles timeframe=5m symbols=61 affected=22680 deleted=0
+Building futures_contract_15m_candles from futures_contract_1m_candles: timeframe=15m minutes=15 symbols=61 root=HG symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/61] 15m HGF2 affected=167 deleted=0
+[2/61] 15m HGF3 affected=136 deleted=0
+[3/61] 15m HGF4 affected=132 deleted=0
+[4/61] 15m HGF5 affected=138 deleted=0
+[5/61] 15m HGF6 affected=148 deleted=0
+[6/61] 15m HGG2 affected=133 deleted=0
+[7/61] 15m HGG3 affected=100 deleted=0
+[8/61] 15m HGG4 affected=104 deleted=0
+[9/61] 15m HGG5 affected=82 deleted=0
+[10/61] 15m HGG6 affected=164 deleted=0
+[11/61] 15m HGH2 affected=566 deleted=0
+[12/61] 15m HGH3 affected=489 deleted=0
+[13/61] 15m HGH4 affected=468 deleted=0
+[14/61] 15m HGH5 affected=486 deleted=0
+[15/61] 15m HGH6 affected=422 deleted=0
+[16/61] 15m HGJ1 affected=9 deleted=0
+[17/61] 15m HGJ2 affected=133 deleted=0
+[18/61] 15m HGJ3 affected=129 deleted=0
+[19/61] 15m HGJ4 affected=101 deleted=0
+[20/61] 15m HGJ5 affected=169 deleted=0
+[21/61] 15m HGJ6 affected=91 deleted=0
+[22/61] 15m HGK1 affected=568 deleted=0
+[23/61] 15m HGK2 affected=460 deleted=0
+[24/61] 15m HGK3 affected=447 deleted=0
+[25/61] 15m HGK4 affected=508 deleted=0
+[26/61] 15m HGK5 affected=468 deleted=0
+[27/61] 15m HGM1 affected=149 deleted=0
+[28/61] 15m HGM2 affected=148 deleted=0
+[29/61] 15m HGM3 affected=135 deleted=0
+[30/61] 15m HGM4 affected=143 deleted=0
+[31/61] 15m HGM5 affected=193 deleted=0
+[32/61] 15m HGN1 affected=522 deleted=0
+[33/61] 15m HGN2 affected=429 deleted=0
+[34/61] 15m HGN3 affected=341 deleted=0
+[35/61] 15m HGN4 affected=396 deleted=0
+[36/61] 15m HGN5 affected=386 deleted=0
+[37/61] 15m HGQ1 affected=125 deleted=0
+[38/61] 15m HGQ2 affected=107 deleted=0
+[39/61] 15m HGQ3 affected=157 deleted=0
+[40/61] 15m HGQ4 affected=110 deleted=0
+[41/61] 15m HGQ5 affected=159 deleted=0
+[42/61] 15m HGU1 affected=671 deleted=0
+[43/61] 15m HGU2 affected=452 deleted=0
+[44/61] 15m HGU3 affected=376 deleted=0
+[45/61] 15m HGU4 affected=371 deleted=0
+[46/61] 15m HGU5 affected=324 deleted=0
+[47/61] 15m HGV1 affected=115 deleted=0
+[48/61] 15m HGV2 affected=123 deleted=0
+[49/61] 15m HGV3 affected=120 deleted=0
+[50/61] 15m HGV4 affected=227 deleted=0
+[51/61] 15m HGV5 affected=157 deleted=0
+[52/61] 15m HGX1 affected=127 deleted=0
+[53/61] 15m HGX2 affected=97 deleted=0
+[54/61] 15m HGX3 affected=121 deleted=0
+[55/61] 15m HGX4 affected=218 deleted=0
+[56/61] 15m HGX5 affected=104 deleted=0
+[57/61] 15m HGZ1 affected=523 deleted=0
+[58/61] 15m HGZ2 affected=497 deleted=0
+[59/61] 15m HGZ3 affected=392 deleted=0
+[60/61] 15m HGZ4 affected=405 deleted=0
+[61/61] 15m HGZ5 affected=418 deleted=0
+Done. table=futures_contract_15m_candles timeframe=15m symbols=61 affected=16156 deleted=0
+Building futures_contract_30m_candles from futures_contract_1m_candles: timeframe=30m minutes=30 symbols=61 root=HG symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/61] 30m HGF2 affected=150 deleted=0
+[2/61] 30m HGF3 affected=114 deleted=0
+[3/61] 30m HGF4 affected=117 deleted=0
+[4/61] 30m HGF5 affected=125 deleted=0
+[5/61] 30m HGF6 affected=128 deleted=0
+[6/61] 30m HGG2 affected=113 deleted=0
+[7/61] 30m HGG3 affected=89 deleted=0
+[8/61] 30m HGG4 affected=92 deleted=0
+[9/61] 30m HGG5 affected=76 deleted=0
+[10/61] 30m HGG6 affected=134 deleted=0
+[11/61] 30m HGH2 affected=411 deleted=0
+[12/61] 30m HGH3 affected=369 deleted=0
+[13/61] 30m HGH4 affected=359 deleted=0
+[14/61] 30m HGH5 affected=376 deleted=0
+[15/61] 30m HGH6 affected=323 deleted=0
+[16/61] 30m HGJ1 affected=8 deleted=0
+[17/61] 30m HGJ2 affected=114 deleted=0
+[18/61] 30m HGJ3 affected=108 deleted=0
+[19/61] 30m HGJ4 affected=91 deleted=0
+[20/61] 30m HGJ5 affected=146 deleted=0
+[21/61] 30m HGJ6 affected=78 deleted=0
+[22/61] 30m HGK1 affected=407 deleted=0
+[23/61] 30m HGK2 affected=343 deleted=0
+[24/61] 30m HGK3 affected=325 deleted=0
+[25/61] 30m HGK4 affected=380 deleted=0
+[26/61] 30m HGK5 affected=348 deleted=0
+[27/61] 30m HGM1 affected=129 deleted=0
+[28/61] 30m HGM2 affected=135 deleted=0
+[29/61] 30m HGM3 affected=121 deleted=0
+[30/61] 30m HGM4 affected=117 deleted=0
+[31/61] 30m HGM5 affected=162 deleted=0
+[32/61] 30m HGN1 affected=381 deleted=0
+[33/61] 30m HGN2 affected=321 deleted=0
+[34/61] 30m HGN3 affected=256 deleted=0
+[35/61] 30m HGN4 affected=305 deleted=0
+[36/61] 30m HGN5 affected=292 deleted=0
+[37/61] 30m HGQ1 affected=110 deleted=0
+[38/61] 30m HGQ2 affected=99 deleted=0
+[39/61] 30m HGQ3 affected=132 deleted=0
+[40/61] 30m HGQ4 affected=101 deleted=0
+[41/61] 30m HGQ5 affected=123 deleted=0
+[42/61] 30m HGU1 affected=480 deleted=0
+[43/61] 30m HGU2 affected=341 deleted=0
+[44/61] 30m HGU3 affected=279 deleted=0
+[45/61] 30m HGU4 affected=269 deleted=0
+[46/61] 30m HGU5 affected=249 deleted=0
+[47/61] 30m HGV1 affected=108 deleted=0
+[48/61] 30m HGV2 affected=114 deleted=0
+[49/61] 30m HGV3 affected=107 deleted=0
+[50/61] 30m HGV4 affected=177 deleted=0
+[51/61] 30m HGV5 affected=132 deleted=0
+[52/61] 30m HGX1 affected=120 deleted=0
+[53/61] 30m HGX2 affected=85 deleted=0
+[54/61] 30m HGX3 affected=109 deleted=0
+[55/61] 30m HGX4 affected=160 deleted=0
+[56/61] 30m HGX5 affected=87 deleted=0
+[57/61] 30m HGZ1 affected=379 deleted=0
+[58/61] 30m HGZ2 affected=362 deleted=0
+[59/61] 30m HGZ3 affected=284 deleted=0
+[60/61] 30m HGZ4 affected=310 deleted=0
+[61/61] 30m HGZ5 affected=318 deleted=0
+Done. table=futures_contract_30m_candles timeframe=30m symbols=61 affected=12578 deleted=0
+Building futures_contract_1h_candles from futures_contract_1m_candles: timeframe=1h minutes=60 symbols=61 root=HG symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/61] 1h HGF2 affected=120 deleted=0
+[2/61] 1h HGF3 affected=97 deleted=0
+[3/61] 1h HGF4 affected=102 deleted=0
+[4/61] 1h HGF5 affected=102 deleted=0
+[5/61] 1h HGF6 affected=108 deleted=0
+[6/61] 1h HGG2 affected=94 deleted=0
+[7/61] 1h HGG3 affected=75 deleted=0
+[8/61] 1h HGG4 affected=80 deleted=0
+[9/61] 1h HGG5 affected=69 deleted=0
+[10/61] 1h HGG6 affected=107 deleted=0
+[11/61] 1h HGH2 affected=276 deleted=0
+[12/61] 1h HGH3 affected=271 deleted=0
+[13/61] 1h HGH4 affected=247 deleted=0
+[14/61] 1h HGH5 affected=258 deleted=0
+[15/61] 1h HGH6 affected=231 deleted=0
+[16/61] 1h HGJ1 affected=8 deleted=0
+[17/61] 1h HGJ2 affected=100 deleted=0
+[18/61] 1h HGJ3 affected=93 deleted=0
+[19/61] 1h HGJ4 affected=76 deleted=0
+[20/61] 1h HGJ5 affected=120 deleted=0
+[21/61] 1h HGJ6 affected=63 deleted=0
+[22/61] 1h HGK1 affected=274 deleted=0
+[23/61] 1h HGK2 affected=244 deleted=0
+[24/61] 1h HGK3 affected=223 deleted=0
+[25/61] 1h HGK4 affected=262 deleted=0
+[26/61] 1h HGK5 affected=247 deleted=0
+[27/61] 1h HGM1 affected=109 deleted=0
+[28/61] 1h HGM2 affected=119 deleted=0
+[29/61] 1h HGM3 affected=102 deleted=0
+[30/61] 1h HGM4 affected=95 deleted=0
+[31/61] 1h HGM5 affected=131 deleted=0
+[32/61] 1h HGN1 affected=262 deleted=0
+[33/61] 1h HGN2 affected=226 deleted=0
+[34/61] 1h HGN3 affected=188 deleted=0
+[35/61] 1h HGN4 affected=219 deleted=0
+[36/61] 1h HGN5 affected=213 deleted=0
+[37/61] 1h HGQ1 affected=96 deleted=0
+[38/61] 1h HGQ2 affected=89 deleted=0
+[39/61] 1h HGQ3 affected=105 deleted=0
+[40/61] 1h HGQ4 affected=88 deleted=0
+[41/61] 1h HGQ5 affected=93 deleted=0
+[42/61] 1h HGU1 affected=317 deleted=0
+[43/61] 1h HGU2 affected=245 deleted=0
+[44/61] 1h HGU3 affected=195 deleted=0
+[45/61] 1h HGU4 affected=197 deleted=0
+[46/61] 1h HGU5 affected=179 deleted=0
+[47/61] 1h HGV1 affected=93 deleted=0
+[48/61] 1h HGV2 affected=102 deleted=0
+[49/61] 1h HGV3 affected=90 deleted=0
+[50/61] 1h HGV4 affected=137 deleted=0
+[51/61] 1h HGV5 affected=107 deleted=0
+[52/61] 1h HGX1 affected=105 deleted=0
+[53/61] 1h HGX2 affected=76 deleted=0
+[54/61] 1h HGX3 affected=98 deleted=0
+[55/61] 1h HGX4 affected=116 deleted=0
+[56/61] 1h HGX5 affected=74 deleted=0
+[57/61] 1h HGZ1 affected=258 deleted=0
+[58/61] 1h HGZ2 affected=256 deleted=0
+[59/61] 1h HGZ3 affected=194 deleted=0
+[60/61] 1h HGZ4 affected=232 deleted=0
+[61/61] 1h HGZ5 affected=228 deleted=0
+Done. table=futures_contract_1h_candles timeframe=1h symbols=61 affected=9381 deleted=0
+Building futures_contract_4h_candles from futures_contract_1m_candles: timeframe=4h minutes=240 symbols=61 root=HG symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/61] 4h HGF2 affected=74 deleted=0
+[2/61] 4h HGF3 affected=55 deleted=0
+[3/61] 4h HGF4 affected=64 deleted=0
+[4/61] 4h HGF5 affected=59 deleted=0
+[5/61] 4h HGF6 affected=58 deleted=0
+[6/61] 4h HGG2 affected=55 deleted=0
+[7/61] 4h HGG3 affected=46 deleted=0
+[8/61] 4h HGG4 affected=49 deleted=0
+[9/61] 4h HGG5 affected=40 deleted=0
+[10/61] 4h HGG6 affected=56 deleted=0
+[11/61] 4h HGH2 affected=110 deleted=0
+[12/61] 4h HGH3 affected=109 deleted=0
+[13/61] 4h HGH4 affected=96 deleted=0
+[14/61] 4h HGH5 affected=103 deleted=0
+[15/61] 4h HGH6 affected=98 deleted=0
+[16/61] 4h HGJ1 affected=6 deleted=0
+[17/61] 4h HGJ2 affected=53 deleted=0
+[18/61] 4h HGJ3 affected=60 deleted=0
+[19/61] 4h HGJ4 affected=52 deleted=0
+[20/61] 4h HGJ5 affected=70 deleted=0
+[21/61] 4h HGJ6 affected=39 deleted=0
+[22/61] 4h HGK1 affected=104 deleted=0
+[23/61] 4h HGK2 affected=101 deleted=0
+[24/61] 4h HGK3 affected=101 deleted=0
+[25/61] 4h HGK4 affected=109 deleted=0
+[26/61] 4h HGK5 affected=102 deleted=0
+[27/61] 4h HGM1 affected=60 deleted=0
+[28/61] 4h HGM2 affected=75 deleted=0
+[29/61] 4h HGM3 affected=64 deleted=0
+[30/61] 4h HGM4 affected=58 deleted=0
+[31/61] 4h HGM5 affected=61 deleted=0
+[32/61] 4h HGN1 affected=107 deleted=0
+[33/61] 4h HGN2 affected=93 deleted=0
+[34/61] 4h HGN3 affected=85 deleted=0
+[35/61] 4h HGN4 affected=95 deleted=0
+[36/61] 4h HGN5 affected=95 deleted=0
+[37/61] 4h HGQ1 affected=60 deleted=0
+[38/61] 4h HGQ2 affected=53 deleted=0
+[39/61] 4h HGQ3 affected=65 deleted=0
+[40/61] 4h HGQ4 affected=56 deleted=0
+[41/61] 4h HGQ5 affected=50 deleted=0
+[42/61] 4h HGU1 affected=116 deleted=0
+[43/61] 4h HGU2 affected=100 deleted=0
+[44/61] 4h HGU3 affected=88 deleted=0
+[45/61] 4h HGU4 affected=86 deleted=0
+[46/61] 4h HGU5 affected=79 deleted=0
+[47/61] 4h HGV1 affected=56 deleted=0
+[48/61] 4h HGV2 affected=60 deleted=0
+[49/61] 4h HGV3 affected=58 deleted=0
+[50/61] 4h HGV4 affected=75 deleted=0
+[51/61] 4h HGV5 affected=67 deleted=0
+[52/61] 4h HGX1 affected=64 deleted=0
+[53/61] 4h HGX2 affected=46 deleted=0
+[54/61] 4h HGX3 affected=68 deleted=0
+[55/61] 4h HGX4 affected=58 deleted=0
+[56/61] 4h HGX5 affected=45 deleted=0
+[57/61] 4h HGZ1 affected=108 deleted=0
+[58/61] 4h HGZ2 affected=106 deleted=0
+[59/61] 4h HGZ3 affected=84 deleted=0
+[60/61] 4h HGZ4 affected=99 deleted=0
+[61/61] 4h HGZ5 affected=100 deleted=0
+Done. table=futures_contract_4h_candles timeframe=4h symbols=61 affected=4509 deleted=0
+Building futures_contract_12h_candles from futures_contract_1m_candles: timeframe=12h minutes=720 symbols=61 root=HG symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/61] 12h HGF2 affected=36 deleted=0
+[2/61] 12h HGF3 affected=31 deleted=0
+[3/61] 12h HGF4 affected=36 deleted=0
+[4/61] 12h HGF5 affected=32 deleted=0
+[5/61] 12h HGF6 affected=31 deleted=0
+[6/61] 12h HGG2 affected=30 deleted=0
+[7/61] 12h HGG3 affected=27 deleted=0
+[8/61] 12h HGG4 affected=28 deleted=0
+[9/61] 12h HGG5 affected=23 deleted=0
+[10/61] 12h HGG6 affected=34 deleted=0
+[11/61] 12h HGH2 affected=47 deleted=0
+[12/61] 12h HGH3 affected=47 deleted=0
+[13/61] 12h HGH4 affected=41 deleted=0
+[14/61] 12h HGH5 affected=42 deleted=0
+[15/61] 12h HGH6 affected=42 deleted=0
+[16/61] 12h HGJ1 affected=4 deleted=0
+[17/61] 12h HGJ2 affected=29 deleted=0
+[18/61] 12h HGJ3 affected=32 deleted=0
+[19/61] 12h HGJ4 affected=32 deleted=0
+[20/61] 12h HGJ5 affected=35 deleted=0
+[21/61] 12h HGJ6 affected=27 deleted=0
+[22/61] 12h HGK1 affected=41 deleted=0
+[23/61] 12h HGK2 affected=43 deleted=0
+[24/61] 12h HGK3 affected=44 deleted=0
+[25/61] 12h HGK4 affected=45 deleted=0
+[26/61] 12h HGK5 affected=42 deleted=0
+[27/61] 12h HGM1 affected=35 deleted=0
+[28/61] 12h HGM2 affected=41 deleted=0
+[29/61] 12h HGM3 affected=40 deleted=0
+[30/61] 12h HGM4 affected=34 deleted=0
+[31/61] 12h HGM5 affected=35 deleted=0
+[32/61] 12h HGN1 affected=43 deleted=0
+[33/61] 12h HGN2 affected=40 deleted=0
+[34/61] 12h HGN3 affected=39 deleted=0
+[35/61] 12h HGN4 affected=44 deleted=0
+[36/61] 12h HGN5 affected=42 deleted=0
+[37/61] 12h HGQ1 affected=36 deleted=0
+[38/61] 12h HGQ2 affected=31 deleted=0
+[39/61] 12h HGQ3 affected=40 deleted=0
+[40/61] 12h HGQ4 affected=35 deleted=0
+[41/61] 12h HGQ5 affected=25 deleted=0
+[42/61] 12h HGU1 affected=46 deleted=0
+[43/61] 12h HGU2 affected=44 deleted=0
+[44/61] 12h HGU3 affected=38 deleted=0
+[45/61] 12h HGU4 affected=41 deleted=0
+[46/61] 12h HGU5 affected=38 deleted=0
+[47/61] 12h HGV1 affected=32 deleted=0
+[48/61] 12h HGV2 affected=35 deleted=0
+[49/61] 12h HGV3 affected=37 deleted=0
+[50/61] 12h HGV4 affected=39 deleted=0
+[51/61] 12h HGV5 affected=38 deleted=0
+[52/61] 12h HGX1 affected=37 deleted=0
+[53/61] 12h HGX2 affected=27 deleted=0
+[54/61] 12h HGX3 affected=38 deleted=0
+[55/61] 12h HGX4 affected=29 deleted=0
+[56/61] 12h HGX5 affected=27 deleted=0
+[57/61] 12h HGZ1 affected=45 deleted=0
+[58/61] 12h HGZ2 affected=42 deleted=0
+[59/61] 12h HGZ3 affected=34 deleted=0
+[60/61] 12h HGZ4 affected=41 deleted=0
+[61/61] 12h HGZ5 affected=45 deleted=0
+Done. table=futures_contract_12h_candles timeframe=12h symbols=61 affected=2214 deleted=0
+Building futures_contract_1d_candles from futures_contract_1m_candles: timeframe=1d minutes=1440 symbols=61 root=HG symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/61] 1d HGF2 affected=21 deleted=0
+[2/61] 1d HGF3 affected=20 deleted=0
+[3/61] 1d HGF4 affected=24 deleted=0
+[4/61] 1d HGF5 affected=22 deleted=0
+[5/61] 1d HGF6 affected=20 deleted=0
+[6/61] 1d HGG2 affected=18 deleted=0
+[7/61] 1d HGG3 affected=21 deleted=0
+[8/61] 1d HGG4 affected=20 deleted=0
+[9/61] 1d HGG5 affected=17 deleted=0
+[10/61] 1d HGG6 affected=20 deleted=0
+[11/61] 1d HGH2 affected=26 deleted=0
+[12/61] 1d HGH3 affected=26 deleted=0
+[13/61] 1d HGH4 affected=21 deleted=0
+[14/61] 1d HGH5 affected=23 deleted=0
+[15/61] 1d HGH6 affected=24 deleted=0
+[16/61] 1d HGJ1 affected=3 deleted=0
+[17/61] 1d HGJ2 affected=18 deleted=0
+[18/61] 1d HGJ3 affected=19 deleted=0
+[19/61] 1d HGJ4 affected=22 deleted=0
+[20/61] 1d HGJ5 affected=24 deleted=0
+[21/61] 1d HGJ6 affected=20 deleted=0
+[22/61] 1d HGK1 affected=21 deleted=0
+[23/61] 1d HGK2 affected=24 deleted=0
+[24/61] 1d HGK3 affected=23 deleted=0
+[25/61] 1d HGK4 affected=25 deleted=0
+[26/61] 1d HGK5 affected=23 deleted=0
+[27/61] 1d HGM1 affected=24 deleted=0
+[28/61] 1d HGM2 affected=24 deleted=0
+[29/61] 1d HGM3 affected=24 deleted=0
+[30/61] 1d HGM4 affected=20 deleted=0
+[31/61] 1d HGM5 affected=21 deleted=0
+[32/61] 1d HGN1 affected=23 deleted=0
+[33/61] 1d HGN2 affected=21 deleted=0
+[34/61] 1d HGN3 affected=22 deleted=0
+[35/61] 1d HGN4 affected=24 deleted=0
+[36/61] 1d HGN5 affected=24 deleted=0
+[37/61] 1d HGQ1 affected=22 deleted=0
+[38/61] 1d HGQ2 affected=20 deleted=0
+[39/61] 1d HGQ3 affected=23 deleted=0
+[40/61] 1d HGQ4 affected=24 deleted=0
+[41/61] 1d HGQ5 affected=20 deleted=0
+[42/61] 1d HGU1 affected=25 deleted=0
+[43/61] 1d HGU2 affected=23 deleted=0
+[44/61] 1d HGU3 affected=21 deleted=0
+[45/61] 1d HGU4 affected=22 deleted=0
+[46/61] 1d HGU5 affected=22 deleted=0
+[47/61] 1d HGV1 affected=21 deleted=0
+[48/61] 1d HGV2 affected=21 deleted=0
+[49/61] 1d HGV3 affected=21 deleted=0
+[50/61] 1d HGV4 affected=24 deleted=0
+[51/61] 1d HGV5 affected=25 deleted=0
+[52/61] 1d HGX1 affected=23 deleted=0
+[53/61] 1d HGX2 affected=20 deleted=0
+[54/61] 1d HGX3 affected=23 deleted=0
+[55/61] 1d HGX4 affected=20 deleted=0
+[56/61] 1d HGX5 affected=19 deleted=0
+[57/61] 1d HGZ1 affected=24 deleted=0
+[58/61] 1d HGZ2 affected=23 deleted=0
+[59/61] 1d HGZ3 affected=19 deleted=0
+[60/61] 1d HGZ4 affected=24 deleted=0
+[61/61] 1d HGZ5 affected=28 deleted=0
+Done. table=futures_contract_1d_candles timeframe=1d symbols=61 affected=1329 deleted=0
+===== BUILD HG TIMEFRAMES DONE 2026-05-04T10:12:58.1957900-05:00 =====
+===== BUILD PL 3m START 2026-05-04T10:12:58.1957900-05:00 =====
+Building futures_contract_3m_candles from futures_contract_1m_candles: symbols=55 root=PL symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/55] PLF2 affected=237 deleted=0
+[2/55] PLF3 affected=214 deleted=0
+[3/55] PLF4 affected=169 deleted=0
+[4/55] PLF5 affected=338 deleted=0
+[5/55] PLF6 affected=337 deleted=0
+[6/55] PLG2 affected=4 deleted=0
+[7/55] PLG3 affected=4 deleted=0
+[8/55] PLG4 affected=3 deleted=0
+[9/55] PLG5 affected=8 deleted=0
+[10/55] PLG6 affected=17 deleted=0
+[11/55] PLH2 affected=15 deleted=0
+[12/55] PLH3 affected=1 deleted=0
+[13/55] PLH4 affected=2 deleted=0
+[14/55] PLH5 affected=3 deleted=0
+[15/55] PLH6 affected=8 deleted=0
+[16/55] PLJ1 affected=2 deleted=0
+[17/55] PLJ2 affected=254 deleted=0
+[18/55] PLJ3 affected=146 deleted=0
+[19/55] PLJ4 affected=293 deleted=0
+[20/55] PLJ5 affected=226 deleted=0
+[21/55] PLJ6 affected=185 deleted=0
+[22/55] PLK1 affected=2 deleted=0
+[23/55] PLK2 affected=6 deleted=0
+[24/55] PLK4 affected=11 deleted=0
+[25/55] PLK5 affected=17 deleted=0
+[26/55] PLM1 affected=1 deleted=0
+[27/55] PLM2 affected=3 deleted=0
+[28/55] PLM4 affected=8 deleted=0
+[29/55] PLM5 affected=69 deleted=0
+[30/55] PLN1 affected=398 deleted=0
+[31/55] PLN2 affected=203 deleted=0
+[32/55] PLN3 affected=185 deleted=0
+[33/55] PLN4 affected=272 deleted=0
+[34/55] PLN5 affected=361 deleted=0
+[35/55] PLQ1 affected=7 deleted=0
+[36/55] PLQ2 affected=7 deleted=0
+[37/55] PLQ3 affected=6 deleted=0
+[38/55] PLQ4 affected=7 deleted=0
+[39/55] PLQ5 affected=42 deleted=0
+[40/55] PLU1 affected=49 deleted=0
+[41/55] PLU2 affected=4 deleted=0
+[42/55] PLU4 affected=5 deleted=0
+[43/55] PLU5 affected=2 deleted=0
+[44/55] PLV1 affected=271 deleted=0
+[45/55] PLV2 affected=295 deleted=0
+[46/55] PLV3 affected=233 deleted=0
+[47/55] PLV4 affected=206 deleted=0
+[48/55] PLV5 affected=403 deleted=0
+[49/55] PLX1 affected=11 deleted=0
+[50/55] PLX4 affected=5 deleted=0
+[51/55] PLX5 affected=6 deleted=0
+[52/55] PLZ1 affected=9 deleted=0
+[53/55] PLZ3 affected=3 deleted=0
+[54/55] PLZ4 affected=9 deleted=0
+[55/55] PLZ5 affected=11 deleted=0
+Done. table=futures_contract_3m_candles symbols=55 affected=5593 deleted=0
+===== BUILD PL 3m DONE 2026-05-04T10:12:59.0533506-05:00 =====
+===== BUILD PL TIMEFRAMES START 2026-05-04T10:12:59.0533506-05:00 =====
+Building futures_contract_5m_candles from futures_contract_1m_candles: timeframe=5m minutes=5 symbols=55 root=PL symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/55] 5m PLF2 affected=204 deleted=0
+[2/55] 5m PLF3 affected=185 deleted=0
+[3/55] 5m PLF4 affected=141 deleted=0
+[4/55] 5m PLF5 affected=258 deleted=0
+[5/55] 5m PLF6 affected=268 deleted=0
+[6/55] 5m PLG2 affected=4 deleted=0
+[7/55] 5m PLG3 affected=4 deleted=0
+[8/55] 5m PLG4 affected=3 deleted=0
+[9/55] 5m PLG5 affected=9 deleted=0
+[10/55] 5m PLG6 affected=16 deleted=0
+[11/55] 5m PLH2 affected=14 deleted=0
+[12/55] 5m PLH3 affected=1 deleted=0
+[13/55] 5m PLH4 affected=2 deleted=0
+[14/55] 5m PLH5 affected=3 deleted=0
+[15/55] 5m PLH6 affected=8 deleted=0
+[16/55] 5m PLJ1 affected=2 deleted=0
+[17/55] 5m PLJ2 affected=227 deleted=0
+[18/55] 5m PLJ3 affected=125 deleted=0
+[19/55] 5m PLJ4 affected=242 deleted=0
+[20/55] 5m PLJ5 affected=196 deleted=0
+[21/55] 5m PLJ6 affected=156 deleted=0
+[22/55] 5m PLK1 affected=2 deleted=0
+[23/55] 5m PLK2 affected=5 deleted=0
+[24/55] 5m PLK4 affected=10 deleted=0
+[25/55] 5m PLK5 affected=15 deleted=0
+[26/55] 5m PLM1 affected=1 deleted=0
+[27/55] 5m PLM2 affected=3 deleted=0
+[28/55] 5m PLM4 affected=8 deleted=0
+[29/55] 5m PLM5 affected=54 deleted=0
+[30/55] 5m PLN1 affected=338 deleted=0
+[31/55] 5m PLN2 affected=170 deleted=0
+[32/55] 5m PLN3 affected=156 deleted=0
+[33/55] 5m PLN4 affected=211 deleted=0
+[34/55] 5m PLN5 affected=300 deleted=0
+[35/55] 5m PLQ1 affected=8 deleted=0
+[36/55] 5m PLQ2 affected=7 deleted=0
+[37/55] 5m PLQ3 affected=6 deleted=0
+[38/55] 5m PLQ4 affected=7 deleted=0
+[39/55] 5m PLQ5 affected=33 deleted=0
+[40/55] 5m PLU1 affected=41 deleted=0
+[41/55] 5m PLU2 affected=3 deleted=0
+[42/55] 5m PLU4 affected=5 deleted=0
+[43/55] 5m PLU5 affected=2 deleted=0
+[44/55] 5m PLV1 affected=228 deleted=0
+[45/55] 5m PLV2 affected=230 deleted=0
+[46/55] 5m PLV3 affected=196 deleted=0
+[47/55] 5m PLV4 affected=172 deleted=0
+[48/55] 5m PLV5 affected=329 deleted=0
+[49/55] 5m PLX1 affected=11 deleted=0
+[50/55] 5m PLX4 affected=5 deleted=0
+[51/55] 5m PLX5 affected=6 deleted=0
+[52/55] 5m PLZ1 affected=9 deleted=0
+[53/55] 5m PLZ3 affected=3 deleted=0
+[54/55] 5m PLZ4 affected=9 deleted=0
+[55/55] 5m PLZ5 affected=10 deleted=0
+Done. table=futures_contract_5m_candles timeframe=5m symbols=55 affected=4661 deleted=0
+Building futures_contract_15m_candles from futures_contract_1m_candles: timeframe=15m minutes=15 symbols=55 root=PL symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/55] 15m PLF2 affected=156 deleted=0
+[2/55] 15m PLF3 affected=125 deleted=0
+[3/55] 15m PLF4 affected=103 deleted=0
+[4/55] 15m PLF5 affected=137 deleted=0
+[5/55] 15m PLF6 affected=159 deleted=0
+[6/55] 15m PLG2 affected=4 deleted=0
+[7/55] 15m PLG3 affected=4 deleted=0
+[8/55] 15m PLG4 affected=3 deleted=0
+[9/55] 15m PLG5 affected=8 deleted=0
+[10/55] 15m PLG6 affected=11 deleted=0
+[11/55] 15m PLH2 affected=13 deleted=0
+[12/55] 15m PLH3 affected=1 deleted=0
+[13/55] 15m PLH4 affected=2 deleted=0
+[14/55] 15m PLH5 affected=3 deleted=0
+[15/55] 15m PLH6 affected=7 deleted=0
+[16/55] 15m PLJ1 affected=2 deleted=0
+[17/55] 15m PLJ2 affected=151 deleted=0
+[18/55] 15m PLJ3 affected=83 deleted=0
+[19/55] 15m PLJ4 affected=145 deleted=0
+[20/55] 15m PLJ5 affected=126 deleted=0
+[21/55] 15m PLJ6 affected=105 deleted=0
+[22/55] 15m PLK1 affected=2 deleted=0
+[23/55] 15m PLK2 affected=5 deleted=0
+[24/55] 15m PLK4 affected=9 deleted=0
+[25/55] 15m PLK5 affected=12 deleted=0
+[26/55] 15m PLM1 affected=1 deleted=0
+[27/55] 15m PLM2 affected=3 deleted=0
+[28/55] 15m PLM4 affected=8 deleted=0
+[29/55] 15m PLM5 affected=32 deleted=0
+[30/55] 15m PLN1 affected=221 deleted=0
+[31/55] 15m PLN2 affected=108 deleted=0
+[32/55] 15m PLN3 affected=89 deleted=0
+[33/55] 15m PLN4 affected=114 deleted=0
+[34/55] 15m PLN5 affected=189 deleted=0
+[35/55] 15m PLQ1 affected=6 deleted=0
+[36/55] 15m PLQ2 affected=7 deleted=0
+[37/55] 15m PLQ3 affected=5 deleted=0
+[38/55] 15m PLQ4 affected=7 deleted=0
+[39/55] 15m PLQ5 affected=22 deleted=0
+[40/55] 15m PLU1 affected=27 deleted=0
+[41/55] 15m PLU2 affected=3 deleted=0
+[42/55] 15m PLU4 affected=5 deleted=0
+[43/55] 15m PLU5 affected=2 deleted=0
+[44/55] 15m PLV1 affected=154 deleted=0
+[45/55] 15m PLV2 affected=123 deleted=0
+[46/55] 15m PLV3 affected=118 deleted=0
+[47/55] 15m PLV4 affected=110 deleted=0
+[48/55] 15m PLV5 affected=203 deleted=0
+[49/55] 15m PLX1 affected=10 deleted=0
+[50/55] 15m PLX4 affected=5 deleted=0
+[51/55] 15m PLX5 affected=6 deleted=0
+[52/55] 15m PLZ1 affected=9 deleted=0
+[53/55] 15m PLZ3 affected=2 deleted=0
+[54/55] 15m PLZ4 affected=9 deleted=0
+[55/55] 15m PLZ5 affected=8 deleted=0
+Done. table=futures_contract_15m_candles timeframe=15m symbols=55 affected=2982 deleted=0
+Building futures_contract_30m_candles from futures_contract_1m_candles: timeframe=30m minutes=30 symbols=55 root=PL symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/55] 30m PLF2 affected=124 deleted=0
+[2/55] 30m PLF3 affected=98 deleted=0
+[3/55] 30m PLF4 affected=80 deleted=0
+[4/55] 30m PLF5 affected=93 deleted=0
+[5/55] 30m PLF6 affected=106 deleted=0
+[6/55] 30m PLG2 affected=4 deleted=0
+[7/55] 30m PLG3 affected=3 deleted=0
+[8/55] 30m PLG4 affected=2 deleted=0
+[9/55] 30m PLG5 affected=6 deleted=0
+[10/55] 30m PLG6 affected=8 deleted=0
+[11/55] 30m PLH2 affected=13 deleted=0
+[12/55] 30m PLH3 affected=1 deleted=0
+[13/55] 30m PLH4 affected=2 deleted=0
+[14/55] 30m PLH5 affected=3 deleted=0
+[15/55] 30m PLH6 affected=7 deleted=0
+[16/55] 30m PLJ1 affected=2 deleted=0
+[17/55] 30m PLJ2 affected=118 deleted=0
+[18/55] 30m PLJ3 affected=64 deleted=0
+[19/55] 30m PLJ4 affected=104 deleted=0
+[20/55] 30m PLJ5 affected=98 deleted=0
+[21/55] 30m PLJ6 affected=84 deleted=0
+[22/55] 30m PLK1 affected=2 deleted=0
+[23/55] 30m PLK2 affected=5 deleted=0
+[24/55] 30m PLK4 affected=9 deleted=0
+[25/55] 30m PLK5 affected=11 deleted=0
+[26/55] 30m PLM1 affected=1 deleted=0
+[27/55] 30m PLM2 affected=3 deleted=0
+[28/55] 30m PLM4 affected=7 deleted=0
+[29/55] 30m PLM5 affected=27 deleted=0
+[30/55] 30m PLN1 affected=161 deleted=0
+[31/55] 30m PLN2 affected=73 deleted=0
+[32/55] 30m PLN3 affected=61 deleted=0
+[33/55] 30m PLN4 affected=76 deleted=0
+[34/55] 30m PLN5 affected=135 deleted=0
+[35/55] 30m PLQ1 affected=6 deleted=0
+[36/55] 30m PLQ2 affected=6 deleted=0
+[37/55] 30m PLQ3 affected=4 deleted=0
+[38/55] 30m PLQ4 affected=6 deleted=0
+[39/55] 30m PLQ5 affected=18 deleted=0
+[40/55] 30m PLU1 affected=20 deleted=0
+[41/55] 30m PLU2 affected=2 deleted=0
+[42/55] 30m PLU4 affected=5 deleted=0
+[43/55] 30m PLU5 affected=2 deleted=0
+[44/55] 30m PLV1 affected=115 deleted=0
+[45/55] 30m PLV2 affected=84 deleted=0
+[46/55] 30m PLV3 affected=83 deleted=0
+[47/55] 30m PLV4 affected=75 deleted=0
+[48/55] 30m PLV5 affected=147 deleted=0
+[49/55] 30m PLX1 affected=10 deleted=0
+[50/55] 30m PLX4 affected=4 deleted=0
+[51/55] 30m PLX5 affected=5 deleted=0
+[52/55] 30m PLZ1 affected=8 deleted=0
+[53/55] 30m PLZ3 affected=2 deleted=0
+[54/55] 30m PLZ4 affected=9 deleted=0
+[55/55] 30m PLZ5 affected=8 deleted=0
+Done. table=futures_contract_30m_candles timeframe=30m symbols=55 affected=2210 deleted=0
+Building futures_contract_1h_candles from futures_contract_1m_candles: timeframe=1h minutes=60 symbols=55 root=PL symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/55] 1h PLF2 affected=92 deleted=0
+[2/55] 1h PLF3 affected=80 deleted=0
+[3/55] 1h PLF4 affected=60 deleted=0
+[4/55] 1h PLF5 affected=62 deleted=0
+[5/55] 1h PLF6 affected=73 deleted=0
+[6/55] 1h PLG2 affected=4 deleted=0
+[7/55] 1h PLG3 affected=3 deleted=0
+[8/55] 1h PLG4 affected=2 deleted=0
+[9/55] 1h PLG5 affected=6 deleted=0
+[10/55] 1h PLG6 affected=8 deleted=0
+[11/55] 1h PLH2 affected=11 deleted=0
+[12/55] 1h PLH3 affected=1 deleted=0
+[13/55] 1h PLH4 affected=2 deleted=0
+[14/55] 1h PLH5 affected=2 deleted=0
+[15/55] 1h PLH6 affected=7 deleted=0
+[16/55] 1h PLJ1 affected=2 deleted=0
+[17/55] 1h PLJ2 affected=91 deleted=0
+[18/55] 1h PLJ3 affected=47 deleted=0
+[19/55] 1h PLJ4 affected=75 deleted=0
+[20/55] 1h PLJ5 affected=73 deleted=0
+[21/55] 1h PLJ6 affected=62 deleted=0
+[22/55] 1h PLK1 affected=2 deleted=0
+[23/55] 1h PLK2 affected=5 deleted=0
+[24/55] 1h PLK4 affected=8 deleted=0
+[25/55] 1h PLK5 affected=8 deleted=0
+[26/55] 1h PLM1 affected=1 deleted=0
+[27/55] 1h PLM2 affected=3 deleted=0
+[28/55] 1h PLM4 affected=6 deleted=0
+[29/55] 1h PLM5 affected=23 deleted=0
+[30/55] 1h PLN1 affected=116 deleted=0
+[31/55] 1h PLN2 affected=50 deleted=0
+[32/55] 1h PLN3 affected=41 deleted=0
+[33/55] 1h PLN4 affected=52 deleted=0
+[34/55] 1h PLN5 affected=98 deleted=0
+[35/55] 1h PLQ1 affected=6 deleted=0
+[36/55] 1h PLQ2 affected=6 deleted=0
+[37/55] 1h PLQ3 affected=4 deleted=0
+[38/55] 1h PLQ4 affected=6 deleted=0
+[39/55] 1h PLQ5 affected=15 deleted=0
+[40/55] 1h PLU1 affected=17 deleted=0
+[41/55] 1h PLU2 affected=2 deleted=0
+[42/55] 1h PLU4 affected=5 deleted=0
+[43/55] 1h PLU5 affected=2 deleted=0
+[44/55] 1h PLV1 affected=86 deleted=0
+[45/55] 1h PLV2 affected=57 deleted=0
+[46/55] 1h PLV3 affected=54 deleted=0
+[47/55] 1h PLV4 affected=51 deleted=0
+[48/55] 1h PLV5 affected=107 deleted=0
+[49/55] 1h PLX1 affected=9 deleted=0
+[50/55] 1h PLX4 affected=4 deleted=0
+[51/55] 1h PLX5 affected=5 deleted=0
+[52/55] 1h PLZ1 affected=8 deleted=0
+[53/55] 1h PLZ3 affected=2 deleted=0
+[54/55] 1h PLZ4 affected=8 deleted=0
+[55/55] 1h PLZ5 affected=8 deleted=0
+Done. table=futures_contract_1h_candles timeframe=1h symbols=55 affected=1638 deleted=0
+Building futures_contract_4h_candles from futures_contract_1m_candles: timeframe=4h minutes=240 symbols=55 root=PL symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/55] 4h PLF2 affected=52 deleted=0
+[2/55] 4h PLF3 affected=47 deleted=0
+[3/55] 4h PLF4 affected=35 deleted=0
+[4/55] 4h PLF5 affected=36 deleted=0
+[5/55] 4h PLF6 affected=36 deleted=0
+[6/55] 4h PLG2 affected=3 deleted=0
+[7/55] 4h PLG3 affected=3 deleted=0
+[8/55] 4h PLG4 affected=2 deleted=0
+[9/55] 4h PLG5 affected=4 deleted=0
+[10/55] 4h PLG6 affected=6 deleted=0
+[11/55] 4h PLH2 affected=10 deleted=0
+[12/55] 4h PLH3 affected=1 deleted=0
+[13/55] 4h PLH4 affected=2 deleted=0
+[14/55] 4h PLH5 affected=2 deleted=0
+[15/55] 4h PLH6 affected=6 deleted=0
+[16/55] 4h PLJ1 affected=1 deleted=0
+[17/55] 4h PLJ2 affected=42 deleted=0
+[18/55] 4h PLJ3 affected=24 deleted=0
+[19/55] 4h PLJ4 affected=39 deleted=0
+[20/55] 4h PLJ5 affected=41 deleted=0
+[21/55] 4h PLJ6 affected=37 deleted=0
+[22/55] 4h PLK1 affected=2 deleted=0
+[23/55] 4h PLK2 affected=5 deleted=0
+[24/55] 4h PLK4 affected=7 deleted=0
+[25/55] 4h PLK5 affected=7 deleted=0
+[26/55] 4h PLM1 affected=1 deleted=0
+[27/55] 4h PLM2 affected=3 deleted=0
+[28/55] 4h PLM4 affected=4 deleted=0
+[29/55] 4h PLM5 affected=16 deleted=0
+[30/55] 4h PLN1 affected=53 deleted=0
+[31/55] 4h PLN2 affected=26 deleted=0
+[32/55] 4h PLN3 affected=23 deleted=0
+[33/55] 4h PLN4 affected=26 deleted=0
+[34/55] 4h PLN5 affected=51 deleted=0
+[35/55] 4h PLQ1 affected=6 deleted=0
+[36/55] 4h PLQ2 affected=5 deleted=0
+[37/55] 4h PLQ3 affected=3 deleted=0
+[38/55] 4h PLQ4 affected=5 deleted=0
+[39/55] 4h PLQ5 affected=10 deleted=0
+[40/55] 4h PLU1 affected=13 deleted=0
+[41/55] 4h PLU2 affected=2 deleted=0
+[42/55] 4h PLU4 affected=4 deleted=0
+[43/55] 4h PLU5 affected=2 deleted=0
+[44/55] 4h PLV1 affected=45 deleted=0
+[45/55] 4h PLV2 affected=32 deleted=0
+[46/55] 4h PLV3 affected=30 deleted=0
+[47/55] 4h PLV4 affected=30 deleted=0
+[48/55] 4h PLV5 affected=63 deleted=0
+[49/55] 4h PLX1 affected=7 deleted=0
+[50/55] 4h PLX4 affected=3 deleted=0
+[51/55] 4h PLX5 affected=5 deleted=0
+[52/55] 4h PLZ1 affected=4 deleted=0
+[53/55] 4h PLZ3 affected=2 deleted=0
+[54/55] 4h PLZ4 affected=7 deleted=0
+[55/55] 4h PLZ5 affected=8 deleted=0
+Done. table=futures_contract_4h_candles timeframe=4h symbols=55 affected=939 deleted=0
+Building futures_contract_12h_candles from futures_contract_1m_candles: timeframe=12h minutes=720 symbols=55 root=PL symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/55] 12h PLF2 affected=29 deleted=0
+[2/55] 12h PLF3 affected=30 deleted=0
+[3/55] 12h PLF4 affected=22 deleted=0
+[4/55] 12h PLF5 affected=26 deleted=0
+[5/55] 12h PLF6 affected=20 deleted=0
+[6/55] 12h PLG2 affected=3 deleted=0
+[7/55] 12h PLG3 affected=3 deleted=0
+[8/55] 12h PLG4 affected=1 deleted=0
+[9/55] 12h PLG5 affected=3 deleted=0
+[10/55] 12h PLG6 affected=5 deleted=0
+[11/55] 12h PLH2 affected=9 deleted=0
+[12/55] 12h PLH3 affected=1 deleted=0
+[13/55] 12h PLH4 affected=2 deleted=0
+[14/55] 12h PLH5 affected=2 deleted=0
+[15/55] 12h PLH6 affected=5 deleted=0
+[16/55] 12h PLJ1 affected=1 deleted=0
+[17/55] 12h PLJ2 affected=27 deleted=0
+[18/55] 12h PLJ3 affected=15 deleted=0
+[19/55] 12h PLJ4 affected=25 deleted=0
+[20/55] 12h PLJ5 affected=25 deleted=0
+[21/55] 12h PLJ6 affected=24 deleted=0
+[22/55] 12h PLK1 affected=2 deleted=0
+[23/55] 12h PLK2 affected=5 deleted=0
+[24/55] 12h PLK4 affected=5 deleted=0
+[25/55] 12h PLK5 affected=6 deleted=0
+[26/55] 12h PLM1 affected=1 deleted=0
+[27/55] 12h PLM2 affected=3 deleted=0
+[28/55] 12h PLM4 affected=4 deleted=0
+[29/55] 12h PLM5 affected=12 deleted=0
+[30/55] 12h PLN1 affected=29 deleted=0
+[31/55] 12h PLN2 affected=14 deleted=0
+[32/55] 12h PLN3 affected=17 deleted=0
+[33/55] 12h PLN4 affected=17 deleted=0
+[34/55] 12h PLN5 affected=31 deleted=0
+[35/55] 12h PLQ1 affected=4 deleted=0
+[36/55] 12h PLQ2 affected=5 deleted=0
+[37/55] 12h PLQ3 affected=3 deleted=0
+[38/55] 12h PLQ4 affected=5 deleted=0
+[39/55] 12h PLQ5 affected=8 deleted=0
+[40/55] 12h PLU1 affected=11 deleted=0
+[41/55] 12h PLU2 affected=2 deleted=0
+[42/55] 12h PLU4 affected=4 deleted=0
+[43/55] 12h PLU5 affected=2 deleted=0
+[44/55] 12h PLV1 affected=28 deleted=0
+[45/55] 12h PLV2 affected=19 deleted=0
+[46/55] 12h PLV3 affected=19 deleted=0
+[47/55] 12h PLV4 affected=21 deleted=0
+[48/55] 12h PLV5 affected=38 deleted=0
+[49/55] 12h PLX1 affected=7 deleted=0
+[50/55] 12h PLX4 affected=3 deleted=0
+[51/55] 12h PLX5 affected=5 deleted=0
+[52/55] 12h PLZ1 affected=2 deleted=0
+[53/55] 12h PLZ3 affected=2 deleted=0
+[54/55] 12h PLZ4 affected=4 deleted=0
+[55/55] 12h PLZ5 affected=5 deleted=0
+Done. table=futures_contract_12h_candles timeframe=12h symbols=55 affected=621 deleted=0
+Building futures_contract_1d_candles from futures_contract_1m_candles: timeframe=1d minutes=1440 symbols=55 root=PL symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/55] 1d PLF2 affected=18 deleted=0
+[2/55] 1d PLF3 affected=19 deleted=0
+[3/55] 1d PLF4 affected=14 deleted=0
+[4/55] 1d PLF5 affected=21 deleted=0
+[5/55] 1d PLF6 affected=13 deleted=0
+[6/55] 1d PLG2 affected=2 deleted=0
+[7/55] 1d PLG3 affected=3 deleted=0
+[8/55] 1d PLG4 affected=1 deleted=0
+[9/55] 1d PLG5 affected=2 deleted=0
+[10/55] 1d PLG6 affected=4 deleted=0
+[11/55] 1d PLH2 affected=6 deleted=0
+[12/55] 1d PLH3 affected=1 deleted=0
+[13/55] 1d PLH4 affected=1 deleted=0
+[14/55] 1d PLH5 affected=2 deleted=0
+[15/55] 1d PLH6 affected=4 deleted=0
+[16/55] 1d PLJ1 affected=1 deleted=0
+[17/55] 1d PLJ2 affected=17 deleted=0
+[18/55] 1d PLJ3 affected=10 deleted=0
+[19/55] 1d PLJ4 affected=17 deleted=0
+[20/55] 1d PLJ5 affected=17 deleted=0
+[21/55] 1d PLJ6 affected=15 deleted=0
+[22/55] 1d PLK1 affected=2 deleted=0
+[23/55] 1d PLK2 affected=4 deleted=0
+[24/55] 1d PLK4 affected=5 deleted=0
+[25/55] 1d PLK5 affected=5 deleted=0
+[26/55] 1d PLM1 affected=1 deleted=0
+[27/55] 1d PLM2 affected=3 deleted=0
+[28/55] 1d PLM4 affected=3 deleted=0
+[29/55] 1d PLM5 affected=11 deleted=0
+[30/55] 1d PLN1 affected=18 deleted=0
+[31/55] 1d PLN2 affected=10 deleted=0
+[32/55] 1d PLN3 affected=12 deleted=0
+[33/55] 1d PLN4 affected=13 deleted=0
+[34/55] 1d PLN5 affected=19 deleted=0
+[35/55] 1d PLQ1 affected=3 deleted=0
+[36/55] 1d PLQ2 affected=4 deleted=0
+[37/55] 1d PLQ3 affected=3 deleted=0
+[38/55] 1d PLQ4 affected=5 deleted=0
+[39/55] 1d PLQ5 affected=6 deleted=0
+[40/55] 1d PLU1 affected=9 deleted=0
+[41/55] 1d PLU2 affected=2 deleted=0
+[42/55] 1d PLU4 affected=3 deleted=0
+[43/55] 1d PLU5 affected=2 deleted=0
+[44/55] 1d PLV1 affected=17 deleted=0
+[45/55] 1d PLV2 affected=15 deleted=0
+[46/55] 1d PLV3 affected=12 deleted=0
+[47/55] 1d PLV4 affected=15 deleted=0
+[48/55] 1d PLV5 affected=22 deleted=0
+[49/55] 1d PLX1 affected=6 deleted=0
+[50/55] 1d PLX4 affected=3 deleted=0
+[51/55] 1d PLX5 affected=3 deleted=0
+[52/55] 1d PLZ1 affected=2 deleted=0
+[53/55] 1d PLZ3 affected=2 deleted=0
+[54/55] 1d PLZ4 affected=3 deleted=0
+[55/55] 1d PLZ5 affected=3 deleted=0
+Done. table=futures_contract_1d_candles timeframe=1d symbols=55 affected=434 deleted=0
+===== BUILD PL TIMEFRAMES DONE 2026-05-04T10:13:01.0969618-05:00 =====
+===== BUILD PA 3m START 2026-05-04T10:13:01.0969618-05:00 =====
+Building futures_contract_3m_candles from futures_contract_1m_candles: symbols=41 root=PA symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/41] PAF2 affected=1 deleted=0
+[2/41] PAF3 affected=2 deleted=0
+[3/41] PAF4 affected=4 deleted=0
+[4/41] PAF5 affected=1 deleted=0
+[5/41] PAF6 affected=29 deleted=0
+[6/41] PAG3 affected=3 deleted=0
+[7/41] PAG4 affected=10 deleted=0
+[8/41] PAG5 affected=4 deleted=0
+[9/41] PAG6 affected=14 deleted=0
+[10/41] PAH2 affected=204 deleted=0
+[11/41] PAH3 affected=115 deleted=0
+[12/41] PAH4 affected=71 deleted=0
+[13/41] PAH5 affected=82 deleted=0
+[14/41] PAH6 affected=109 deleted=0
+[15/41] PAJ2 affected=2 deleted=0
+[16/41] PAJ5 affected=6 deleted=0
+[17/41] PAJ6 affected=12 deleted=0
+[18/41] PAK3 affected=2 deleted=0
+[19/41] PAK4 affected=1 deleted=0
+[20/41] PAM1 affected=105 deleted=0
+[21/41] PAM2 affected=95 deleted=0
+[22/41] PAM3 affected=144 deleted=0
+[23/41] PAM4 affected=89 deleted=0
+[24/41] PAM5 affected=78 deleted=0
+[25/41] PAN4 affected=4 deleted=0
+[26/41] PAN5 affected=7 deleted=0
+[27/41] PAQ1 affected=1 deleted=0
+[28/41] PAQ4 affected=2 deleted=0
+[29/41] PAU1 affected=104 deleted=0
+[30/41] PAU2 affected=78 deleted=0
+[31/41] PAU3 affected=60 deleted=0
+[32/41] PAU4 affected=100 deleted=0
+[33/41] PAU5 affected=133 deleted=0
+[34/41] PAV5 affected=37 deleted=0
+[35/41] PAX4 affected=5 deleted=0
+[36/41] PAX5 affected=15 deleted=0
+[37/41] PAZ1 affected=69 deleted=0
+[38/41] PAZ2 affected=68 deleted=0
+[39/41] PAZ3 affected=74 deleted=0
+[40/41] PAZ4 affected=126 deleted=0
+[41/41] PAZ5 affected=170 deleted=0
+Done. table=futures_contract_3m_candles symbols=41 affected=2236 deleted=0
+===== BUILD PA 3m DONE 2026-05-04T10:13:01.7627087-05:00 =====
+===== BUILD PA TIMEFRAMES START 2026-05-04T10:13:01.7627087-05:00 =====
+Building futures_contract_5m_candles from futures_contract_1m_candles: timeframe=5m minutes=5 symbols=41 root=PA symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/41] 5m PAF2 affected=1 deleted=0
+[2/41] 5m PAF3 affected=2 deleted=0
+[3/41] 5m PAF4 affected=4 deleted=0
+[4/41] 5m PAF5 affected=1 deleted=0
+[5/41] 5m PAF6 affected=27 deleted=0
+[6/41] 5m PAG3 affected=3 deleted=0
+[7/41] 5m PAG4 affected=9 deleted=0
+[8/41] 5m PAG5 affected=4 deleted=0
+[9/41] 5m PAG6 affected=14 deleted=0
+[10/41] 5m PAH2 affected=186 deleted=0
+[11/41] 5m PAH3 affected=106 deleted=0
+[12/41] 5m PAH4 affected=66 deleted=0
+[13/41] 5m PAH5 affected=68 deleted=0
+[14/41] 5m PAH6 affected=97 deleted=0
+[15/41] 5m PAJ2 affected=2 deleted=0
+[16/41] 5m PAJ5 affected=5 deleted=0
+[17/41] 5m PAJ6 affected=11 deleted=0
+[18/41] 5m PAK3 affected=2 deleted=0
+[19/41] 5m PAK4 affected=1 deleted=0
+[20/41] 5m PAM1 affected=94 deleted=0
+[21/41] 5m PAM2 affected=85 deleted=0
+[22/41] 5m PAM3 affected=139 deleted=0
+[23/41] 5m PAM4 affected=79 deleted=0
+[24/41] 5m PAM5 affected=73 deleted=0
+[25/41] 5m PAN4 affected=4 deleted=0
+[26/41] 5m PAN5 affected=7 deleted=0
+[27/41] 5m PAQ1 affected=1 deleted=0
+[28/41] 5m PAQ4 affected=2 deleted=0
+[29/41] 5m PAU1 affected=97 deleted=0
+[30/41] 5m PAU2 affected=75 deleted=0
+[31/41] 5m PAU3 affected=56 deleted=0
+[32/41] 5m PAU4 affected=93 deleted=0
+[33/41] 5m PAU5 affected=124 deleted=0
+[34/41] 5m PAV5 affected=35 deleted=0
+[35/41] 5m PAX4 affected=4 deleted=0
+[36/41] 5m PAX5 affected=15 deleted=0
+[37/41] 5m PAZ1 affected=64 deleted=0
+[38/41] 5m PAZ2 affected=63 deleted=0
+[39/41] 5m PAZ3 affected=63 deleted=0
+[40/41] 5m PAZ4 affected=110 deleted=0
+[41/41] 5m PAZ5 affected=148 deleted=0
+Done. table=futures_contract_5m_candles timeframe=5m symbols=41 affected=2040 deleted=0
+Building futures_contract_15m_candles from futures_contract_1m_candles: timeframe=15m minutes=15 symbols=41 root=PA symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/41] 15m PAF2 affected=1 deleted=0
+[2/41] 15m PAF3 affected=2 deleted=0
+[3/41] 15m PAF4 affected=4 deleted=0
+[4/41] 15m PAF5 affected=1 deleted=0
+[5/41] 15m PAF6 affected=22 deleted=0
+[6/41] 15m PAG3 affected=3 deleted=0
+[7/41] 15m PAG4 affected=9 deleted=0
+[8/41] 15m PAG5 affected=4 deleted=0
+[9/41] 15m PAG6 affected=10 deleted=0
+[10/41] 15m PAH2 affected=134 deleted=0
+[11/41] 15m PAH3 affected=75 deleted=0
+[12/41] 15m PAH4 affected=51 deleted=0
+[13/41] 15m PAH5 affected=50 deleted=0
+[14/41] 15m PAH6 affected=67 deleted=0
+[15/41] 15m PAJ2 affected=2 deleted=0
+[16/41] 15m PAJ5 affected=3 deleted=0
+[17/41] 15m PAJ6 affected=9 deleted=0
+[18/41] 15m PAK3 affected=1 deleted=0
+[19/41] 15m PAK4 affected=1 deleted=0
+[20/41] 15m PAM1 affected=74 deleted=0
+[21/41] 15m PAM2 affected=67 deleted=0
+[22/41] 15m PAM3 affected=108 deleted=0
+[23/41] 15m PAM4 affected=62 deleted=0
+[24/41] 15m PAM5 affected=56 deleted=0
+[25/41] 15m PAN4 affected=4 deleted=0
+[26/41] 15m PAN5 affected=7 deleted=0
+[27/41] 15m PAQ1 affected=1 deleted=0
+[28/41] 15m PAQ4 affected=2 deleted=0
+[29/41] 15m PAU1 affected=79 deleted=0
+[30/41] 15m PAU2 affected=58 deleted=0
+[31/41] 15m PAU3 affected=48 deleted=0
+[32/41] 15m PAU4 affected=64 deleted=0
+[33/41] 15m PAU5 affected=91 deleted=0
+[34/41] 15m PAV5 affected=26 deleted=0
+[35/41] 15m PAX4 affected=3 deleted=0
+[36/41] 15m PAX5 affected=13 deleted=0
+[37/41] 15m PAZ1 affected=46 deleted=0
+[38/41] 15m PAZ2 affected=45 deleted=0
+[39/41] 15m PAZ3 affected=46 deleted=0
+[40/41] 15m PAZ4 affected=81 deleted=0
+[41/41] 15m PAZ5 affected=104 deleted=0
+Done. table=futures_contract_15m_candles timeframe=15m symbols=41 affected=1534 deleted=0
+Building futures_contract_30m_candles from futures_contract_1m_candles: timeframe=30m minutes=30 symbols=41 root=PA symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/41] 30m PAF2 affected=1 deleted=0
+[2/41] 30m PAF3 affected=2 deleted=0
+[3/41] 30m PAF4 affected=4 deleted=0
+[4/41] 30m PAF5 affected=1 deleted=0
+[5/41] 30m PAF6 affected=19 deleted=0
+[6/41] 30m PAG3 affected=3 deleted=0
+[7/41] 30m PAG4 affected=9 deleted=0
+[8/41] 30m PAG5 affected=4 deleted=0
+[9/41] 30m PAG6 affected=10 deleted=0
+[10/41] 30m PAH2 affected=102 deleted=0
+[11/41] 30m PAH3 affected=56 deleted=0
+[12/41] 30m PAH4 affected=40 deleted=0
+[13/41] 30m PAH5 affected=40 deleted=0
+[14/41] 30m PAH6 affected=54 deleted=0
+[15/41] 30m PAJ2 affected=2 deleted=0
+[16/41] 30m PAJ5 affected=2 deleted=0
+[17/41] 30m PAJ6 affected=9 deleted=0
+[18/41] 30m PAK3 affected=1 deleted=0
+[19/41] 30m PAK4 affected=1 deleted=0
+[20/41] 30m PAM1 affected=56 deleted=0
+[21/41] 30m PAM2 affected=55 deleted=0
+[22/41] 30m PAM3 affected=85 deleted=0
+[23/41] 30m PAM4 affected=48 deleted=0
+[24/41] 30m PAM5 affected=48 deleted=0
+[25/41] 30m PAN4 affected=3 deleted=0
+[26/41] 30m PAN5 affected=7 deleted=0
+[27/41] 30m PAQ1 affected=1 deleted=0
+[28/41] 30m PAQ4 affected=2 deleted=0
+[29/41] 30m PAU1 affected=65 deleted=0
+[30/41] 30m PAU2 affected=45 deleted=0
+[31/41] 30m PAU3 affected=36 deleted=0
+[32/41] 30m PAU4 affected=52 deleted=0
+[33/41] 30m PAU5 affected=67 deleted=0
+[34/41] 30m PAV5 affected=22 deleted=0
+[35/41] 30m PAX4 affected=3 deleted=0
+[36/41] 30m PAX5 affected=13 deleted=0
+[37/41] 30m PAZ1 affected=40 deleted=0
+[38/41] 30m PAZ2 affected=41 deleted=0
+[39/41] 30m PAZ3 affected=35 deleted=0
+[40/41] 30m PAZ4 affected=60 deleted=0
+[41/41] 30m PAZ5 affected=80 deleted=0
+Done. table=futures_contract_30m_candles timeframe=30m symbols=41 affected=1224 deleted=0
+Building futures_contract_1h_candles from futures_contract_1m_candles: timeframe=1h minutes=60 symbols=41 root=PA symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/41] 1h PAF2 affected=1 deleted=0
+[2/41] 1h PAF3 affected=1 deleted=0
+[3/41] 1h PAF4 affected=3 deleted=0
+[4/41] 1h PAF5 affected=1 deleted=0
+[5/41] 1h PAF6 affected=16 deleted=0
+[6/41] 1h PAG3 affected=2 deleted=0
+[7/41] 1h PAG4 affected=9 deleted=0
+[8/41] 1h PAG5 affected=4 deleted=0
+[9/41] 1h PAG6 affected=8 deleted=0
+[10/41] 1h PAH2 affected=70 deleted=0
+[11/41] 1h PAH3 affected=40 deleted=0
+[12/41] 1h PAH4 affected=32 deleted=0
+[13/41] 1h PAH5 affected=32 deleted=0
+[14/41] 1h PAH6 affected=40 deleted=0
+[15/41] 1h PAJ2 affected=2 deleted=0
+[16/41] 1h PAJ5 affected=2 deleted=0
+[17/41] 1h PAJ6 affected=8 deleted=0
+[18/41] 1h PAK3 affected=1 deleted=0
+[19/41] 1h PAK4 affected=1 deleted=0
+[20/41] 1h PAM1 affected=46 deleted=0
+[21/41] 1h PAM2 affected=43 deleted=0
+[22/41] 1h PAM3 affected=63 deleted=0
+[23/41] 1h PAM4 affected=37 deleted=0
+[24/41] 1h PAM5 affected=34 deleted=0
+[25/41] 1h PAN4 affected=3 deleted=0
+[26/41] 1h PAN5 affected=7 deleted=0
+[27/41] 1h PAQ1 affected=1 deleted=0
+[28/41] 1h PAQ4 affected=2 deleted=0
+[29/41] 1h PAU1 affected=50 deleted=0
+[30/41] 1h PAU2 affected=35 deleted=0
+[31/41] 1h PAU3 affected=26 deleted=0
+[32/41] 1h PAU4 affected=41 deleted=0
+[33/41] 1h PAU5 affected=48 deleted=0
+[34/41] 1h PAV5 affected=21 deleted=0
+[35/41] 1h PAX4 affected=3 deleted=0
+[36/41] 1h PAX5 affected=12 deleted=0
+[37/41] 1h PAZ1 affected=28 deleted=0
+[38/41] 1h PAZ2 affected=33 deleted=0
+[39/41] 1h PAZ3 affected=26 deleted=0
+[40/41] 1h PAZ4 affected=46 deleted=0
+[41/41] 1h PAZ5 affected=62 deleted=0
+Done. table=futures_contract_1h_candles timeframe=1h symbols=41 affected=940 deleted=0
+Building futures_contract_4h_candles from futures_contract_1m_candles: timeframe=4h minutes=240 symbols=41 root=PA symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/41] 4h PAF2 affected=1 deleted=0
+[2/41] 4h PAF3 affected=1 deleted=0
+[3/41] 4h PAF4 affected=3 deleted=0
+[4/41] 4h PAF5 affected=1 deleted=0
+[5/41] 4h PAF6 affected=11 deleted=0
+[6/41] 4h PAG3 affected=2 deleted=0
+[7/41] 4h PAG4 affected=8 deleted=0
+[8/41] 4h PAG5 affected=3 deleted=0
+[9/41] 4h PAG6 affected=7 deleted=0
+[10/41] 4h PAH2 affected=36 deleted=0
+[11/41] 4h PAH3 affected=23 deleted=0
+[12/41] 4h PAH4 affected=18 deleted=0
+[13/41] 4h PAH5 affected=18 deleted=0
+[14/41] 4h PAH6 affected=25 deleted=0
+[15/41] 4h PAJ2 affected=2 deleted=0
+[16/41] 4h PAJ5 affected=2 deleted=0
+[17/41] 4h PAJ6 affected=6 deleted=0
+[18/41] 4h PAK3 affected=1 deleted=0
+[19/41] 4h PAK4 affected=1 deleted=0
+[20/41] 4h PAM1 affected=25 deleted=0
+[21/41] 4h PAM2 affected=25 deleted=0
+[22/41] 4h PAM3 affected=35 deleted=0
+[23/41] 4h PAM4 affected=23 deleted=0
+[24/41] 4h PAM5 affected=20 deleted=0
+[25/41] 4h PAN4 affected=3 deleted=0
+[26/41] 4h PAN5 affected=4 deleted=0
+[27/41] 4h PAQ1 affected=1 deleted=0
+[28/41] 4h PAQ4 affected=2 deleted=0
+[29/41] 4h PAU1 affected=31 deleted=0
+[30/41] 4h PAU2 affected=20 deleted=0
+[31/41] 4h PAU3 affected=14 deleted=0
+[32/41] 4h PAU4 affected=22 deleted=0
+[33/41] 4h PAU5 affected=27 deleted=0
+[34/41] 4h PAV5 affected=13 deleted=0
+[35/41] 4h PAX4 affected=3 deleted=0
+[36/41] 4h PAX5 affected=8 deleted=0
+[37/41] 4h PAZ1 affected=14 deleted=0
+[38/41] 4h PAZ2 affected=17 deleted=0
+[39/41] 4h PAZ3 affected=13 deleted=0
+[40/41] 4h PAZ4 affected=26 deleted=0
+[41/41] 4h PAZ5 affected=33 deleted=0
+Done. table=futures_contract_4h_candles timeframe=4h symbols=41 affected=548 deleted=0
+Building futures_contract_12h_candles from futures_contract_1m_candles: timeframe=12h minutes=720 symbols=41 root=PA symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/41] 12h PAF2 affected=1 deleted=0
+[2/41] 12h PAF3 affected=1 deleted=0
+[3/41] 12h PAF4 affected=3 deleted=0
+[4/41] 12h PAF5 affected=1 deleted=0
+[5/41] 12h PAF6 affected=8 deleted=0
+[6/41] 12h PAG3 affected=2 deleted=0
+[7/41] 12h PAG4 affected=6 deleted=0
+[8/41] 12h PAG5 affected=3 deleted=0
+[9/41] 12h PAG6 affected=7 deleted=0
+[10/41] 12h PAH2 affected=19 deleted=0
+[11/41] 12h PAH3 affected=15 deleted=0
+[12/41] 12h PAH4 affected=12 deleted=0
+[13/41] 12h PAH5 affected=14 deleted=0
+[14/41] 12h PAH6 affected=17 deleted=0
+[15/41] 12h PAJ2 affected=2 deleted=0
+[16/41] 12h PAJ5 affected=2 deleted=0
+[17/41] 12h PAJ6 affected=4 deleted=0
+[18/41] 12h PAK3 affected=1 deleted=0
+[19/41] 12h PAK4 affected=1 deleted=0
+[20/41] 12h PAM1 affected=19 deleted=0
+[21/41] 12h PAM2 affected=15 deleted=0
+[22/41] 12h PAM3 affected=19 deleted=0
+[23/41] 12h PAM4 affected=16 deleted=0
+[24/41] 12h PAM5 affected=14 deleted=0
+[25/41] 12h PAN4 affected=3 deleted=0
+[26/41] 12h PAN5 affected=3 deleted=0
+[27/41] 12h PAQ1 affected=1 deleted=0
+[28/41] 12h PAQ4 affected=2 deleted=0
+[29/41] 12h PAU1 affected=20 deleted=0
+[30/41] 12h PAU2 affected=14 deleted=0
+[31/41] 12h PAU3 affected=9 deleted=0
+[32/41] 12h PAU4 affected=16 deleted=0
+[33/41] 12h PAU5 affected=17 deleted=0
+[34/41] 12h PAV5 affected=10 deleted=0
+[35/41] 12h PAX4 affected=2 deleted=0
+[36/41] 12h PAX5 affected=6 deleted=0
+[37/41] 12h PAZ1 affected=8 deleted=0
+[38/41] 12h PAZ2 affected=10 deleted=0
+[39/41] 12h PAZ3 affected=8 deleted=0
+[40/41] 12h PAZ4 affected=16 deleted=0
+[41/41] 12h PAZ5 affected=24 deleted=0
+Done. table=futures_contract_12h_candles timeframe=12h symbols=41 affected=371 deleted=0
+Building futures_contract_1d_candles from futures_contract_1m_candles: timeframe=1d minutes=1440 symbols=41 root=PA symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/41] 1d PAF2 affected=1 deleted=0
+[2/41] 1d PAF3 affected=1 deleted=0
+[3/41] 1d PAF4 affected=3 deleted=0
+[4/41] 1d PAF5 affected=1 deleted=0
+[5/41] 1d PAF6 affected=5 deleted=0
+[6/41] 1d PAG3 affected=1 deleted=0
+[7/41] 1d PAG4 affected=5 deleted=0
+[8/41] 1d PAG5 affected=3 deleted=0
+[9/41] 1d PAG6 affected=6 deleted=0
+[10/41] 1d PAH2 affected=14 deleted=0
+[11/41] 1d PAH3 affected=12 deleted=0
+[12/41] 1d PAH4 affected=7 deleted=0
+[13/41] 1d PAH5 affected=10 deleted=0
+[14/41] 1d PAH6 affected=12 deleted=0
+[15/41] 1d PAJ2 affected=2 deleted=0
+[16/41] 1d PAJ5 affected=2 deleted=0
+[17/41] 1d PAJ6 affected=3 deleted=0
+[18/41] 1d PAK3 affected=1 deleted=0
+[19/41] 1d PAK4 affected=1 deleted=0
+[20/41] 1d PAM1 affected=14 deleted=0
+[21/41] 1d PAM2 affected=12 deleted=0
+[22/41] 1d PAM3 affected=13 deleted=0
+[23/41] 1d PAM4 affected=11 deleted=0
+[24/41] 1d PAM5 affected=11 deleted=0
+[25/41] 1d PAN4 affected=3 deleted=0
+[26/41] 1d PAN5 affected=3 deleted=0
+[27/41] 1d PAQ1 affected=1 deleted=0
+[28/41] 1d PAQ4 affected=2 deleted=0
+[29/41] 1d PAU1 affected=16 deleted=0
+[30/41] 1d PAU2 affected=11 deleted=0
+[31/41] 1d PAU3 affected=8 deleted=0
+[32/41] 1d PAU4 affected=12 deleted=0
+[33/41] 1d PAU5 affected=11 deleted=0
+[34/41] 1d PAV5 affected=7 deleted=0
+[35/41] 1d PAX4 affected=2 deleted=0
+[36/41] 1d PAX5 affected=6 deleted=0
+[37/41] 1d PAZ1 affected=6 deleted=0
+[38/41] 1d PAZ2 affected=7 deleted=0
+[39/41] 1d PAZ3 affected=6 deleted=0
+[40/41] 1d PAZ4 affected=11 deleted=0
+[41/41] 1d PAZ5 affected=15 deleted=0
+Done. table=futures_contract_1d_candles timeframe=1d symbols=41 affected=278 deleted=0
+===== BUILD PA TIMEFRAMES DONE 2026-05-04T10:13:03.1163290-05:00 =====
+===== BUILD ZC 3m START 2026-05-04T10:13:03.1163290-05:00 =====
+Building futures_contract_3m_candles from futures_contract_1m_candles: symbols=26 root=ZC symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] ZCH2 affected=17992 deleted=0
+[2/26] ZCH3 affected=16486 deleted=0
+[3/26] ZCH4 affected=16093 deleted=0
+[4/26] ZCH5 affected=16094 deleted=0
+[5/26] ZCH6 affected=15555 deleted=0
+[6/26] ZCK1 affected=1937 deleted=0
+[7/26] ZCK2 affected=11429 deleted=0
+[8/26] ZCK3 affected=10905 deleted=0
+[9/26] ZCK4 affected=10408 deleted=0
+[10/26] ZCK5 affected=10035 deleted=0
+[11/26] ZCK6 affected=9266 deleted=0
+[12/26] ZCN1 affected=11506 deleted=0
+[13/26] ZCN2 affected=11311 deleted=0
+[14/26] ZCN3 affected=11223 deleted=0
+[15/26] ZCN4 affected=10300 deleted=0
+[16/26] ZCN5 affected=9948 deleted=0
+[17/26] ZCU1 affected=11222 deleted=0
+[18/26] ZCU2 affected=11149 deleted=0
+[19/26] ZCU3 affected=10738 deleted=0
+[20/26] ZCU4 affected=10421 deleted=0
+[21/26] ZCU5 affected=9727 deleted=0
+[22/26] ZCZ1 affected=18902 deleted=0
+[23/26] ZCZ2 affected=18566 deleted=0
+[24/26] ZCZ3 affected=17766 deleted=0
+[25/26] ZCZ4 affected=17773 deleted=0
+[26/26] ZCZ5 affected=17527 deleted=0
+Done. table=futures_contract_3m_candles symbols=26 affected=334279 deleted=0
+===== BUILD ZC 3m DONE 2026-05-04T10:13:24.6280138-05:00 =====
+===== BUILD ZC TIMEFRAMES START 2026-05-04T10:13:24.6290279-05:00 =====
+Building futures_contract_5m_candles from futures_contract_1m_candles: timeframe=5m minutes=5 symbols=26 root=ZC symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 5m ZCH2 affected=11027 deleted=0
+[2/26] 5m ZCH3 affected=10303 deleted=0
+[3/26] 5m ZCH4 affected=10249 deleted=0
+[4/26] 5m ZCH5 affected=10167 deleted=0
+[5/26] 5m ZCH6 affected=10072 deleted=0
+[6/26] 5m ZCK1 affected=1320 deleted=0
+[7/26] 5m ZCK2 affected=7107 deleted=0
+[8/26] 5m ZCK3 affected=6883 deleted=0
+[9/26] 5m ZCK4 affected=6698 deleted=0
+[10/26] 5m ZCK5 affected=6484 deleted=0
+[11/26] 5m ZCK6 affected=5775 deleted=0
+[12/26] 5m ZCN1 affected=7046 deleted=0
+[13/26] 5m ZCN2 affected=6999 deleted=0
+[14/26] 5m ZCN3 affected=6971 deleted=0
+[15/26] 5m ZCN4 affected=6446 deleted=0
+[16/26] 5m ZCN5 affected=6363 deleted=0
+[17/26] 5m ZCU1 affected=7076 deleted=0
+[18/26] 5m ZCU2 affected=7126 deleted=0
+[19/26] 5m ZCU3 affected=6858 deleted=0
+[20/26] 5m ZCU4 affected=6835 deleted=0
+[21/26] 5m ZCU5 affected=6481 deleted=0
+[22/26] 5m ZCZ1 affected=11649 deleted=0
+[23/26] 5m ZCZ2 affected=11453 deleted=0
+[24/26] 5m ZCZ3 affected=11116 deleted=0
+[25/26] 5m ZCZ4 affected=11266 deleted=0
+[26/26] 5m ZCZ5 affected=11131 deleted=0
+Done. table=futures_contract_5m_candles timeframe=5m symbols=26 affected=210901 deleted=0
+Building futures_contract_15m_candles from futures_contract_1m_candles: timeframe=15m minutes=15 symbols=26 root=ZC symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 15m ZCH2 affected=3855 deleted=0
+[2/26] 15m ZCH3 affected=3637 deleted=0
+[3/26] 15m ZCH4 affected=3648 deleted=0
+[4/26] 15m ZCH5 affected=3631 deleted=0
+[5/26] 15m ZCH6 affected=3669 deleted=0
+[6/26] 15m ZCK1 affected=563 deleted=0
+[7/26] 15m ZCK2 affected=2535 deleted=0
+[8/26] 15m ZCK3 affected=2485 deleted=0
+[9/26] 15m ZCK4 affected=2446 deleted=0
+[10/26] 15m ZCK5 affected=2360 deleted=0
+[11/26] 15m ZCK6 affected=1988 deleted=0
+[12/26] 15m ZCN1 affected=2470 deleted=0
+[13/26] 15m ZCN2 affected=2466 deleted=0
+[14/26] 15m ZCN3 affected=2466 deleted=0
+[15/26] 15m ZCN4 affected=2282 deleted=0
+[16/26] 15m ZCN5 affected=2336 deleted=0
+[17/26] 15m ZCU1 affected=2548 deleted=0
+[18/26] 15m ZCU2 affected=2593 deleted=0
+[19/26] 15m ZCU3 affected=2500 deleted=0
+[20/26] 15m ZCU4 affected=2541 deleted=0
+[21/26] 15m ZCU5 affected=2486 deleted=0
+[22/26] 15m ZCZ1 affected=4066 deleted=0
+[23/26] 15m ZCZ2 affected=4007 deleted=0
+[24/26] 15m ZCZ3 affected=3904 deleted=0
+[25/26] 15m ZCZ4 affected=3996 deleted=0
+[26/26] 15m ZCZ5 affected=3991 deleted=0
+Done. table=futures_contract_15m_candles timeframe=15m symbols=26 affected=75469 deleted=0
+Building futures_contract_30m_candles from futures_contract_1m_candles: timeframe=30m minutes=30 symbols=26 root=ZC symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 30m ZCH2 affected=2001 deleted=0
+[2/26] 30m ZCH3 affected=1886 deleted=0
+[3/26] 30m ZCH4 affected=1887 deleted=0
+[4/26] 30m ZCH5 affected=1890 deleted=0
+[5/26] 30m ZCH6 affected=1910 deleted=0
+[6/26] 30m ZCK1 affected=320 deleted=0
+[7/26] 30m ZCK2 affected=1336 deleted=0
+[8/26] 30m ZCK3 affected=1302 deleted=0
+[9/26] 30m ZCK4 affected=1288 deleted=0
+[10/26] 30m ZCK5 affected=1233 deleted=0
+[11/26] 30m ZCK6 affected=1008 deleted=0
+[12/26] 30m ZCN1 affected=1281 deleted=0
+[13/26] 30m ZCN2 affected=1278 deleted=0
+[14/26] 30m ZCN3 affected=1280 deleted=0
+[15/26] 30m ZCN4 affected=1190 deleted=0
+[16/26] 30m ZCN5 affected=1230 deleted=0
+[17/26] 30m ZCU1 affected=1329 deleted=0
+[18/26] 30m ZCU2 affected=1348 deleted=0
+[19/26] 30m ZCU3 affected=1307 deleted=0
+[20/26] 30m ZCU4 affected=1329 deleted=0
+[21/26] 30m ZCU5 affected=1315 deleted=0
+[22/26] 30m ZCZ1 affected=2095 deleted=0
+[23/26] 30m ZCZ2 affected=2073 deleted=0
+[24/26] 30m ZCZ3 affected=2026 deleted=0
+[25/26] 30m ZCZ4 affected=2059 deleted=0
+[26/26] 30m ZCZ5 affected=2065 deleted=0
+Done. table=futures_contract_30m_candles timeframe=30m symbols=26 affected=39266 deleted=0
+Building futures_contract_1h_candles from futures_contract_1m_candles: timeframe=1h minutes=60 symbols=26 root=ZC symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 1h ZCH2 affected=1084 deleted=0
+[2/26] 1h ZCH3 affected=1020 deleted=0
+[3/26] 1h ZCH4 affected=1025 deleted=0
+[4/26] 1h ZCH5 affected=1026 deleted=0
+[5/26] 1h ZCH6 affected=1035 deleted=0
+[6/26] 1h ZCK1 affected=194 deleted=0
+[7/26] 1h ZCK2 affected=734 deleted=0
+[8/26] 1h ZCK3 affected=718 deleted=0
+[9/26] 1h ZCK4 affected=712 deleted=0
+[10/26] 1h ZCK5 affected=675 deleted=0
+[11/26] 1h ZCK6 affected=532 deleted=0
+[12/26] 1h ZCN1 affected=695 deleted=0
+[13/26] 1h ZCN2 affected=694 deleted=0
+[14/26] 1h ZCN3 affected=697 deleted=0
+[15/26] 1h ZCN4 affected=650 deleted=0
+[16/26] 1h ZCN5 affected=674 deleted=0
+[17/26] 1h ZCU1 affected=724 deleted=0
+[18/26] 1h ZCU2 affected=736 deleted=0
+[19/26] 1h ZCU3 affected=711 deleted=0
+[20/26] 1h ZCU4 affected=723 deleted=0
+[21/26] 1h ZCU5 affected=720 deleted=0
+[22/26] 1h ZCZ1 affected=1130 deleted=0
+[23/26] 1h ZCZ2 affected=1116 deleted=0
+[24/26] 1h ZCZ3 affected=1093 deleted=0
+[25/26] 1h ZCZ4 affected=1115 deleted=0
+[26/26] 1h ZCZ5 affected=1111 deleted=0
+Done. table=futures_contract_1h_candles timeframe=1h symbols=26 affected=21344 deleted=0
+Building futures_contract_4h_candles from futures_contract_1m_candles: timeframe=4h minutes=240 symbols=26 root=ZC symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 4h ZCH2 affected=298 deleted=0
+[2/26] 4h ZCH3 affected=281 deleted=0
+[3/26] 4h ZCH4 affected=284 deleted=0
+[4/26] 4h ZCH5 affected=283 deleted=0
+[5/26] 4h ZCH6 affected=287 deleted=0
+[6/26] 4h ZCK1 affected=65 deleted=0
+[7/26] 4h ZCK2 affected=206 deleted=0
+[8/26] 4h ZCK3 affected=203 deleted=0
+[9/26] 4h ZCK4 affected=201 deleted=0
+[10/26] 4h ZCK5 affected=192 deleted=0
+[11/26] 4h ZCK6 affected=140 deleted=0
+[12/26] 4h ZCN1 affected=193 deleted=0
+[13/26] 4h ZCN2 affected=195 deleted=0
+[14/26] 4h ZCN3 affected=196 deleted=0
+[15/26] 4h ZCN4 affected=184 deleted=0
+[16/26] 4h ZCN5 affected=191 deleted=0
+[17/26] 4h ZCU1 affected=205 deleted=0
+[18/26] 4h ZCU2 affected=207 deleted=0
+[19/26] 4h ZCU3 affected=199 deleted=0
+[20/26] 4h ZCU4 affected=203 deleted=0
+[21/26] 4h ZCU5 affected=205 deleted=0
+[22/26] 4h ZCZ1 affected=310 deleted=0
+[23/26] 4h ZCZ2 affected=307 deleted=0
+[24/26] 4h ZCZ3 affected=301 deleted=0
+[25/26] 4h ZCZ4 affected=306 deleted=0
+[26/26] 4h ZCZ5 affected=305 deleted=0
+Done. table=futures_contract_4h_candles timeframe=4h symbols=26 affected=5947 deleted=0
+Building futures_contract_12h_candles from futures_contract_1m_candles: timeframe=12h minutes=720 symbols=26 root=ZC symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 12h ZCH2 affected=122 deleted=0
+[2/26] 12h ZCH3 affected=117 deleted=0
+[3/26] 12h ZCH4 affected=119 deleted=0
+[4/26] 12h ZCH5 affected=118 deleted=0
+[5/26] 12h ZCH6 affected=118 deleted=0
+[6/26] 12h ZCK1 affected=29 deleted=0
+[7/26] 12h ZCK2 affected=84 deleted=0
+[8/26] 12h ZCK3 affected=83 deleted=0
+[9/26] 12h ZCK4 affected=84 deleted=0
+[10/26] 12h ZCK5 affected=83 deleted=0
+[11/26] 12h ZCK6 affected=56 deleted=0
+[12/26] 12h ZCN1 affected=80 deleted=0
+[13/26] 12h ZCN2 affected=81 deleted=0
+[14/26] 12h ZCN3 affected=82 deleted=0
+[15/26] 12h ZCN4 affected=76 deleted=0
+[16/26] 12h ZCN5 affected=80 deleted=0
+[17/26] 12h ZCU1 affected=86 deleted=0
+[18/26] 12h ZCU2 affected=84 deleted=0
+[19/26] 12h ZCU3 affected=82 deleted=0
+[20/26] 12h ZCU4 affected=86 deleted=0
+[21/26] 12h ZCU5 affected=85 deleted=0
+[22/26] 12h ZCZ1 affected=127 deleted=0
+[23/26] 12h ZCZ2 affected=127 deleted=0
+[24/26] 12h ZCZ3 affected=126 deleted=0
+[25/26] 12h ZCZ4 affected=126 deleted=0
+[26/26] 12h ZCZ5 affected=126 deleted=0
+Done. table=futures_contract_12h_candles timeframe=12h symbols=26 affected=2467 deleted=0
+Building futures_contract_1d_candles from futures_contract_1m_candles: timeframe=1d minutes=1440 symbols=26 root=ZC symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 1d ZCH2 affected=61 deleted=0
+[2/26] 1d ZCH3 affected=60 deleted=0
+[3/26] 1d ZCH4 affected=61 deleted=0
+[4/26] 1d ZCH5 affected=61 deleted=0
+[5/26] 1d ZCH6 affected=61 deleted=0
+[6/26] 1d ZCK1 affected=15 deleted=0
+[7/26] 1d ZCK2 affected=43 deleted=0
+[8/26] 1d ZCK3 affected=42 deleted=0
+[9/26] 1d ZCK4 affected=42 deleted=0
+[10/26] 1d ZCK5 affected=42 deleted=0
+[11/26] 1d ZCK6 affected=28 deleted=0
+[12/26] 1d ZCN1 affected=41 deleted=0
+[13/26] 1d ZCN2 affected=41 deleted=0
+[14/26] 1d ZCN3 affected=42 deleted=0
+[15/26] 1d ZCN4 affected=40 deleted=0
+[16/26] 1d ZCN5 affected=40 deleted=0
+[17/26] 1d ZCU1 affected=43 deleted=0
+[18/26] 1d ZCU2 affected=42 deleted=0
+[19/26] 1d ZCU3 affected=43 deleted=0
+[20/26] 1d ZCU4 affected=44 deleted=0
+[21/26] 1d ZCU5 affected=43 deleted=0
+[22/26] 1d ZCZ1 affected=64 deleted=0
+[23/26] 1d ZCZ2 affected=64 deleted=0
+[24/26] 1d ZCZ3 affected=64 deleted=0
+[25/26] 1d ZCZ4 affected=64 deleted=0
+[26/26] 1d ZCZ5 affected=64 deleted=0
+Done. table=futures_contract_1d_candles timeframe=1d symbols=26 affected=1255 deleted=0
+===== BUILD ZC TIMEFRAMES DONE 2026-05-04T10:14:15.4801445-05:00 =====
+===== BUILD ZW 3m START 2026-05-04T10:14:15.4801445-05:00 =====
+Building futures_contract_3m_candles from futures_contract_1m_candles: symbols=26 root=ZW symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] ZWH2 affected=16862 deleted=0
+[2/26] ZWH3 affected=14970 deleted=0
+[3/26] ZWH4 affected=15350 deleted=0
+[4/26] ZWH5 affected=15733 deleted=0
+[5/26] ZWH6 affected=15223 deleted=0
+[6/26] ZWK1 affected=1195 deleted=0
+[7/26] ZWK2 affected=10115 deleted=0
+[8/26] ZWK3 affected=9839 deleted=0
+[9/26] ZWK4 affected=9757 deleted=0
+[10/26] ZWK5 affected=9622 deleted=0
+[11/26] ZWK6 affected=9417 deleted=0
+[12/26] ZWN1 affected=10336 deleted=0
+[13/26] ZWN2 affected=10400 deleted=0
+[14/26] ZWN3 affected=10688 deleted=0
+[15/26] ZWN4 affected=10077 deleted=0
+[16/26] ZWN5 affected=9322 deleted=0
+[17/26] ZWU1 affected=10974 deleted=0
+[18/26] ZWU2 affected=10812 deleted=0
+[19/26] ZWU3 affected=10855 deleted=0
+[20/26] ZWU4 affected=10706 deleted=0
+[21/26] ZWU5 affected=9947 deleted=0
+[22/26] ZWZ1 affected=17756 deleted=0
+[23/26] ZWZ2 affected=17388 deleted=0
+[24/26] ZWZ3 affected=16969 deleted=0
+[25/26] ZWZ4 affected=17456 deleted=0
+[26/26] ZWZ5 affected=16387 deleted=0
+Done. table=futures_contract_3m_candles symbols=26 affected=318156 deleted=0
+===== BUILD ZW 3m DONE 2026-05-04T10:14:40.4464730-05:00 =====
+===== BUILD ZW TIMEFRAMES START 2026-05-04T10:14:40.4464730-05:00 =====
+Building futures_contract_5m_candles from futures_contract_1m_candles: timeframe=5m minutes=5 symbols=26 root=ZW symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 5m ZWH2 affected=10382 deleted=0
+[2/26] 5m ZWH3 affected=9575 deleted=0
+[3/26] 5m ZWH4 affected=9783 deleted=0
+[4/26] 5m ZWH5 affected=9866 deleted=0
+[5/26] 5m ZWH6 affected=9729 deleted=0
+[6/26] 5m ZWK1 affected=845 deleted=0
+[7/26] 5m ZWK2 affected=6466 deleted=0
+[8/26] 5m ZWK3 affected=6269 deleted=0
+[9/26] 5m ZWK4 affected=6212 deleted=0
+[10/26] 5m ZWK5 affected=6171 deleted=0
+[11/26] 5m ZWK6 affected=5804 deleted=0
+[12/26] 5m ZWN1 affected=6462 deleted=0
+[13/26] 5m ZWN2 affected=6487 deleted=0
+[14/26] 5m ZWN3 affected=6646 deleted=0
+[15/26] 5m ZWN4 affected=6220 deleted=0
+[16/26] 5m ZWN5 affected=5924 deleted=0
+[17/26] 5m ZWU1 affected=6873 deleted=0
+[18/26] 5m ZWU2 affected=6773 deleted=0
+[19/26] 5m ZWU3 affected=6764 deleted=0
+[20/26] 5m ZWU4 affected=6800 deleted=0
+[21/26] 5m ZWU5 affected=6443 deleted=0
+[22/26] 5m ZWZ1 affected=11006 deleted=0
+[23/26] 5m ZWZ2 affected=10827 deleted=0
+[24/26] 5m ZWZ3 affected=10692 deleted=0
+[25/26] 5m ZWZ4 affected=10863 deleted=0
+[26/26] 5m ZWZ5 affected=10505 deleted=0
+Done. table=futures_contract_5m_candles timeframe=5m symbols=26 affected=200387 deleted=0
+Building futures_contract_15m_candles from futures_contract_1m_candles: timeframe=15m minutes=15 symbols=26 root=ZW symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 15m ZWH2 affected=3594 deleted=0
+[2/26] 15m ZWH3 affected=3406 deleted=0
+[3/26] 15m ZWH4 affected=3478 deleted=0
+[4/26] 15m ZWH5 affected=3449 deleted=0
+[5/26] 15m ZWH6 affected=3474 deleted=0
+[6/26] 15m ZWK1 affected=376 deleted=0
+[7/26] 15m ZWK2 affected=2332 deleted=0
+[8/26] 15m ZWK3 affected=2231 deleted=0
+[9/26] 15m ZWK4 affected=2208 deleted=0
+[10/26] 15m ZWK5 affected=2253 deleted=0
+[11/26] 15m ZWK6 affected=1988 deleted=0
+[12/26] 15m ZWN1 affected=2293 deleted=0
+[13/26] 15m ZWN2 affected=2277 deleted=0
+[14/26] 15m ZWN3 affected=2320 deleted=0
+[15/26] 15m ZWN4 affected=2172 deleted=0
+[16/26] 15m ZWN5 affected=2126 deleted=0
+[17/26] 15m ZWU1 affected=2425 deleted=0
+[18/26] 15m ZWU2 affected=2395 deleted=0
+[19/26] 15m ZWU3 affected=2384 deleted=0
+[20/26] 15m ZWU4 affected=2429 deleted=0
+[21/26] 15m ZWU5 affected=2352 deleted=0
+[22/26] 15m ZWZ1 affected=3815 deleted=0
+[23/26] 15m ZWZ2 affected=3759 deleted=0
+[24/26] 15m ZWZ3 affected=3731 deleted=0
+[25/26] 15m ZWZ4 affected=3774 deleted=0
+[26/26] 15m ZWZ5 affected=3773 deleted=0
+Done. table=futures_contract_15m_candles timeframe=15m symbols=26 affected=70814 deleted=0
+Building futures_contract_30m_candles from futures_contract_1m_candles: timeframe=30m minutes=30 symbols=26 root=ZW symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 30m ZWH2 affected=1848 deleted=0
+[2/26] 30m ZWH3 affected=1749 deleted=0
+[3/26] 30m ZWH4 affected=1782 deleted=0
+[4/26] 30m ZWH5 affected=1769 deleted=0
+[5/26] 30m ZWH6 affected=1789 deleted=0
+[6/26] 30m ZWK1 affected=231 deleted=0
+[7/26] 30m ZWK2 affected=1220 deleted=0
+[8/26] 30m ZWK3 affected=1154 deleted=0
+[9/26] 30m ZWK4 affected=1140 deleted=0
+[10/26] 30m ZWK5 affected=1169 deleted=0
+[11/26] 30m ZWK6 affected=1008 deleted=0
+[12/26] 30m ZWN1 affected=1193 deleted=0
+[13/26] 30m ZWN2 affected=1183 deleted=0
+[14/26] 30m ZWN3 affected=1196 deleted=0
+[15/26] 30m ZWN4 affected=1118 deleted=0
+[16/26] 30m ZWN5 affected=1108 deleted=0
+[17/26] 30m ZWU1 affected=1258 deleted=0
+[18/26] 30m ZWU2 affected=1238 deleted=0
+[19/26] 30m ZWU3 affected=1230 deleted=0
+[20/26] 30m ZWU4 affected=1259 deleted=0
+[21/26] 30m ZWU5 affected=1217 deleted=0
+[22/26] 30m ZWZ1 affected=1968 deleted=0
+[23/26] 30m ZWZ2 affected=1926 deleted=0
+[24/26] 30m ZWZ3 affected=1907 deleted=0
+[25/26] 30m ZWZ4 affected=1937 deleted=0
+[26/26] 30m ZWZ5 affected=1937 deleted=0
+Done. table=futures_contract_30m_candles timeframe=30m symbols=26 affected=36534 deleted=0
+Building futures_contract_1h_candles from futures_contract_1m_candles: timeframe=1h minutes=60 symbols=26 root=ZW symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 1h ZWH2 affected=996 deleted=0
+[2/26] 1h ZWH3 affected=938 deleted=0
+[3/26] 1h ZWH4 affected=951 deleted=0
+[4/26] 1h ZWH5 affected=946 deleted=0
+[5/26] 1h ZWH6 affected=959 deleted=0
+[6/26] 1h ZWK1 affected=149 deleted=0
+[7/26] 1h ZWK2 affected=664 deleted=0
+[8/26] 1h ZWK3 affected=618 deleted=0
+[9/26] 1h ZWK4 affected=613 deleted=0
+[10/26] 1h ZWK5 affected=625 deleted=0
+[11/26] 1h ZWK6 affected=532 deleted=0
+[12/26] 1h ZWN1 affected=653 deleted=0
+[13/26] 1h ZWN2 affected=641 deleted=0
+[14/26] 1h ZWN3 affected=646 deleted=0
+[15/26] 1h ZWN4 affected=602 deleted=0
+[16/26] 1h ZWN5 affected=602 deleted=0
+[17/26] 1h ZWU1 affected=685 deleted=0
+[18/26] 1h ZWU2 affected=665 deleted=0
+[19/26] 1h ZWU3 affected=662 deleted=0
+[20/26] 1h ZWU4 affected=680 deleted=0
+[21/26] 1h ZWU5 affected=655 deleted=0
+[22/26] 1h ZWZ1 affected=1059 deleted=0
+[23/26] 1h ZWZ2 affected=1032 deleted=0
+[24/26] 1h ZWZ3 affected=1016 deleted=0
+[25/26] 1h ZWZ4 affected=1032 deleted=0
+[26/26] 1h ZWZ5 affected=1039 deleted=0
+Done. table=futures_contract_1h_candles timeframe=1h symbols=26 affected=19660 deleted=0
+Building futures_contract_4h_candles from futures_contract_1m_candles: timeframe=4h minutes=240 symbols=26 root=ZW symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 4h ZWH2 affected=273 deleted=0
+[2/26] 4h ZWH3 affected=255 deleted=0
+[3/26] 4h ZWH4 affected=262 deleted=0
+[4/26] 4h ZWH5 affected=260 deleted=0
+[5/26] 4h ZWH6 affected=263 deleted=0
+[6/26] 4h ZWK1 affected=58 deleted=0
+[7/26] 4h ZWK2 affected=188 deleted=0
+[8/26] 4h ZWK3 affected=173 deleted=0
+[9/26] 4h ZWK4 affected=170 deleted=0
+[10/26] 4h ZWK5 affected=170 deleted=0
+[11/26] 4h ZWK6 affected=140 deleted=0
+[12/26] 4h ZWN1 affected=185 deleted=0
+[13/26] 4h ZWN2 affected=182 deleted=0
+[14/26] 4h ZWN3 affected=181 deleted=0
+[15/26] 4h ZWN4 affected=170 deleted=0
+[16/26] 4h ZWN5 affected=171 deleted=0
+[17/26] 4h ZWU1 affected=192 deleted=0
+[18/26] 4h ZWU2 affected=188 deleted=0
+[19/26] 4h ZWU3 affected=184 deleted=0
+[20/26] 4h ZWU4 affected=187 deleted=0
+[21/26] 4h ZWU5 affected=185 deleted=0
+[22/26] 4h ZWZ1 affected=297 deleted=0
+[23/26] 4h ZWZ2 affected=282 deleted=0
+[24/26] 4h ZWZ3 affected=276 deleted=0
+[25/26] 4h ZWZ4 affected=282 deleted=0
+[26/26] 4h ZWZ5 affected=284 deleted=0
+Done. table=futures_contract_4h_candles timeframe=4h symbols=26 affected=5458 deleted=0
+Building futures_contract_12h_candles from futures_contract_1m_candles: timeframe=12h minutes=720 symbols=26 root=ZW symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 12h ZWH2 affected=114 deleted=0
+[2/26] 12h ZWH3 affected=107 deleted=0
+[3/26] 12h ZWH4 affected=110 deleted=0
+[4/26] 12h ZWH5 affected=109 deleted=0
+[5/26] 12h ZWH6 affected=111 deleted=0
+[6/26] 12h ZWK1 affected=29 deleted=0
+[7/26] 12h ZWK2 affected=80 deleted=0
+[8/26] 12h ZWK3 affected=75 deleted=0
+[9/26] 12h ZWK4 affected=73 deleted=0
+[10/26] 12h ZWK5 affected=72 deleted=0
+[11/26] 12h ZWK6 affected=56 deleted=0
+[12/26] 12h ZWN1 affected=78 deleted=0
+[13/26] 12h ZWN2 affected=76 deleted=0
+[14/26] 12h ZWN3 affected=79 deleted=0
+[15/26] 12h ZWN4 affected=72 deleted=0
+[16/26] 12h ZWN5 affected=74 deleted=0
+[17/26] 12h ZWU1 affected=83 deleted=0
+[18/26] 12h ZWU2 affected=80 deleted=0
+[19/26] 12h ZWU3 affected=79 deleted=0
+[20/26] 12h ZWU4 affected=78 deleted=0
+[21/26] 12h ZWU5 affected=80 deleted=0
+[22/26] 12h ZWZ1 affected=124 deleted=0
+[23/26] 12h ZWZ2 affected=116 deleted=0
+[24/26] 12h ZWZ3 affected=115 deleted=0
+[25/26] 12h ZWZ4 affected=118 deleted=0
+[26/26] 12h ZWZ5 affected=119 deleted=0
+Done. table=futures_contract_12h_candles timeframe=12h symbols=26 affected=2307 deleted=0
+Building futures_contract_1d_candles from futures_contract_1m_candles: timeframe=1d minutes=1440 symbols=26 root=ZW symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/26] 1d ZWH2 affected=58 deleted=0
+[2/26] 1d ZWH3 affected=56 deleted=0
+[3/26] 1d ZWH4 affected=60 deleted=0
+[4/26] 1d ZWH5 affected=58 deleted=0
+[5/26] 1d ZWH6 affected=60 deleted=0
+[6/26] 1d ZWK1 affected=15 deleted=0
+[7/26] 1d ZWK2 affected=42 deleted=0
+[8/26] 1d ZWK3 affected=39 deleted=0
+[9/26] 1d ZWK4 affected=39 deleted=0
+[10/26] 1d ZWK5 affected=38 deleted=0
+[11/26] 1d ZWK6 affected=28 deleted=0
+[12/26] 1d ZWN1 affected=40 deleted=0
+[13/26] 1d ZWN2 affected=40 deleted=0
+[14/26] 1d ZWN3 affected=41 deleted=0
+[15/26] 1d ZWN4 affected=38 deleted=0
+[16/26] 1d ZWN5 affected=40 deleted=0
+[17/26] 1d ZWU1 affected=43 deleted=0
+[18/26] 1d ZWU2 affected=42 deleted=0
+[19/26] 1d ZWU3 affected=41 deleted=0
+[20/26] 1d ZWU4 affected=40 deleted=0
+[21/26] 1d ZWU5 affected=42 deleted=0
+[22/26] 1d ZWZ1 affected=63 deleted=0
+[23/26] 1d ZWZ2 affected=61 deleted=0
+[24/26] 1d ZWZ3 affected=60 deleted=0
+[25/26] 1d ZWZ4 affected=62 deleted=0
+[26/26] 1d ZWZ5 affected=62 deleted=0
+Done. table=futures_contract_1d_candles timeframe=1d symbols=26 affected=1208 deleted=0
+===== BUILD ZW TIMEFRAMES DONE 2026-05-04T10:15:30.9817505-05:00 =====
+===== BUILD ZS 3m START 2026-05-04T10:15:30.9817505-05:00 =====
+Building futures_contract_3m_candles from futures_contract_1m_candles: symbols=36 root=ZS symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/36] ZSF2 affected=10841 deleted=0
+[2/36] ZSF3 affected=10379 deleted=0
+[3/36] ZSF4 affected=9884 deleted=0
+[4/36] ZSF5 affected=9763 deleted=0
+[5/36] ZSF6 affected=9542 deleted=0
+[6/36] ZSH2 affected=10203 deleted=0
+[7/36] ZSH3 affected=10332 deleted=0
+[8/36] ZSH4 affected=10719 deleted=0
+[9/36] ZSH5 affected=10203 deleted=0
+[10/36] ZSH6 affected=9839 deleted=0
+[11/36] ZSK1 affected=1552 deleted=0
+[12/36] ZSK2 affected=11162 deleted=0
+[13/36] ZSK3 affected=10718 deleted=0
+[14/36] ZSK4 affected=10701 deleted=0
+[15/36] ZSK5 affected=10375 deleted=0
+[16/36] ZSK6 affected=9578 deleted=0
+[17/36] ZSN1 affected=10985 deleted=0
+[18/36] ZSN2 affected=11151 deleted=0
+[19/36] ZSN3 affected=11282 deleted=0
+[20/36] ZSN4 affected=10504 deleted=0
+[21/36] ZSN5 affected=10100 deleted=0
+[22/36] ZSQ1 affected=3496 deleted=0
+[23/36] ZSQ2 affected=3110 deleted=0
+[24/36] ZSQ3 affected=3120 deleted=0
+[25/36] ZSQ4 affected=3685 deleted=0
+[26/36] ZSQ5 affected=3363 deleted=0
+[27/36] ZSU1 affected=2985 deleted=0
+[28/36] ZSU2 affected=2803 deleted=0
+[29/36] ZSU3 affected=2847 deleted=0
+[30/36] ZSU4 affected=2618 deleted=0
+[31/36] ZSU5 affected=2266 deleted=0
+[32/36] ZSX1 affected=11632 deleted=0
+[33/36] ZSX2 affected=11580 deleted=0
+[34/36] ZSX3 affected=11639 deleted=0
+[35/36] ZSX4 affected=11647 deleted=0
+[36/36] ZSX5 affected=11726 deleted=0
+Done. table=futures_contract_3m_candles symbols=36 affected=298330 deleted=0
+===== BUILD ZS 3m DONE 2026-05-04T10:15:54.0074748-05:00 =====
+===== BUILD ZS TIMEFRAMES START 2026-05-04T10:15:54.0074748-05:00 =====
+Building futures_contract_5m_candles from futures_contract_1m_candles: timeframe=5m minutes=5 symbols=36 root=ZS symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/36] 5m ZSF2 affected=6727 deleted=0
+[2/36] 5m ZSF3 affected=6455 deleted=0
+[3/36] 5m ZSF4 affected=6112 deleted=0
+[4/36] 5m ZSF5 affected=6093 deleted=0
+[5/36] 5m ZSF6 affected=5977 deleted=0
+[6/36] 5m ZSH2 affected=6286 deleted=0
+[7/36] 5m ZSH3 affected=6422 deleted=0
+[8/36] 5m ZSH4 affected=6609 deleted=0
+[9/36] 5m ZSH5 affected=6323 deleted=0
+[10/36] 5m ZSH6 affected=6153 deleted=0
+[11/36] 5m ZSK1 affected=1073 deleted=0
+[12/36] 5m ZSK2 affected=6918 deleted=0
+[13/36] 5m ZSK3 affected=6650 deleted=0
+[14/36] 5m ZSK4 affected=6626 deleted=0
+[15/36] 5m ZSK5 affected=6490 deleted=0
+[16/36] 5m ZSK6 affected=5844 deleted=0
+[17/36] 5m ZSN1 affected=6720 deleted=0
+[18/36] 5m ZSN2 affected=6856 deleted=0
+[19/36] 5m ZSN3 affected=6941 deleted=0
+[20/36] 5m ZSN4 affected=6506 deleted=0
+[21/36] 5m ZSN5 affected=6320 deleted=0
+[22/36] 5m ZSQ1 affected=2404 deleted=0
+[23/36] 5m ZSQ2 affected=2110 deleted=0
+[24/36] 5m ZSQ3 affected=2099 deleted=0
+[25/36] 5m ZSQ4 affected=2439 deleted=0
+[26/36] 5m ZSQ5 affected=2263 deleted=0
+[27/36] 5m ZSU1 affected=2024 deleted=0
+[28/36] 5m ZSU2 affected=1949 deleted=0
+[29/36] 5m ZSU3 affected=1953 deleted=0
+[30/36] 5m ZSU4 affected=1833 deleted=0
+[31/36] 5m ZSU5 affected=1585 deleted=0
+[32/36] 5m ZSX1 affected=7221 deleted=0
+[33/36] 5m ZSX2 affected=7163 deleted=0
+[34/36] 5m ZSX3 affected=7167 deleted=0
+[35/36] 5m ZSX4 affected=7215 deleted=0
+[36/36] 5m ZSX5 affected=7341 deleted=0
+Done. table=futures_contract_5m_candles timeframe=5m symbols=36 affected=186867 deleted=0
+Building futures_contract_15m_candles from futures_contract_1m_candles: timeframe=15m minutes=15 symbols=36 root=ZS symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/36] 15m ZSF2 affected=2378 deleted=0
+[2/36] 15m ZSF3 affected=2301 deleted=0
+[3/36] 15m ZSF4 affected=2158 deleted=0
+[4/36] 15m ZSF5 affected=2177 deleted=0
+[5/36] 15m ZSF6 affected=2134 deleted=0
+[6/36] 15m ZSH2 affected=2252 deleted=0
+[7/36] 15m ZSH3 affected=2279 deleted=0
+[8/36] 15m ZSH4 affected=2335 deleted=0
+[9/36] 15m ZSH5 affected=2256 deleted=0
+[10/36] 15m ZSH6 affected=2223 deleted=0
+[11/36] 15m ZSK1 affected=483 deleted=0
+[12/36] 15m ZSK2 affected=2471 deleted=0
+[13/36] 15m ZSK3 affected=2364 deleted=0
+[14/36] 15m ZSK4 affected=2337 deleted=0
+[15/36] 15m ZSK5 affected=2324 deleted=0
+[16/36] 15m ZSK6 affected=1988 deleted=0
+[17/36] 15m ZSN1 affected=2353 deleted=0
+[18/36] 15m ZSN2 affected=2402 deleted=0
+[19/36] 15m ZSN3 affected=2447 deleted=0
+[20/36] 15m ZSN4 affected=2304 deleted=0
+[21/36] 15m ZSN5 affected=2242 deleted=0
+[22/36] 15m ZSQ1 affected=1012 deleted=0
+[23/36] 15m ZSQ2 affected=871 deleted=0
+[24/36] 15m ZSQ3 affected=842 deleted=0
+[25/36] 15m ZSQ4 affected=939 deleted=0
+[26/36] 15m ZSQ5 affected=893 deleted=0
+[27/36] 15m ZSU1 affected=820 deleted=0
+[28/36] 15m ZSU2 affected=851 deleted=0
+[29/36] 15m ZSU3 affected=824 deleted=0
+[30/36] 15m ZSU4 affected=774 deleted=0
+[31/36] 15m ZSU5 affected=683 deleted=0
+[32/36] 15m ZSX1 affected=2584 deleted=0
+[33/36] 15m ZSX2 affected=2544 deleted=0
+[34/36] 15m ZSX3 affected=2538 deleted=0
+[35/36] 15m ZSX4 affected=2559 deleted=0
+[36/36] 15m ZSX5 affected=2627 deleted=0
+Done. table=futures_contract_15m_candles timeframe=15m symbols=36 affected=67569 deleted=0
+Building futures_contract_30m_candles from futures_contract_1m_candles: timeframe=30m minutes=30 symbols=36 root=ZS symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/36] 30m ZSF2 affected=1245 deleted=0
+[2/36] 30m ZSF3 affected=1197 deleted=0
+[3/36] 30m ZSF4 affected=1130 deleted=0
+[4/36] 30m ZSF5 affected=1141 deleted=0
+[5/36] 30m ZSF6 affected=1115 deleted=0
+[6/36] 30m ZSH2 affected=1195 deleted=0
+[7/36] 30m ZSH3 affected=1193 deleted=0
+[8/36] 30m ZSH4 affected=1217 deleted=0
+[9/36] 30m ZSH5 affected=1187 deleted=0
+[10/36] 30m ZSH6 affected=1171 deleted=0
+[11/36] 30m ZSK1 affected=294 deleted=0
+[12/36] 30m ZSK2 affected=1297 deleted=0
+[13/36] 30m ZSK3 affected=1243 deleted=0
+[14/36] 30m ZSK4 affected=1213 deleted=0
+[15/36] 30m ZSK5 affected=1217 deleted=0
+[16/36] 30m ZSK6 affected=1008 deleted=0
+[17/36] 30m ZSN1 affected=1226 deleted=0
+[18/36] 30m ZSN2 affected=1255 deleted=0
+[19/36] 30m ZSN3 affected=1278 deleted=0
+[20/36] 30m ZSN4 affected=1198 deleted=0
+[21/36] 30m ZSN5 affected=1172 deleted=0
+[22/36] 30m ZSQ1 affected=572 deleted=0
+[23/36] 30m ZSQ2 affected=493 deleted=0
+[24/36] 30m ZSQ3 affected=463 deleted=0
+[25/36] 30m ZSQ4 affected=513 deleted=0
+[26/36] 30m ZSQ5 affected=487 deleted=0
+[27/36] 30m ZSU1 affected=454 deleted=0
+[28/36] 30m ZSU2 affected=480 deleted=0
+[29/36] 30m ZSU3 affected=458 deleted=0
+[30/36] 30m ZSU4 affected=429 deleted=0
+[31/36] 30m ZSU5 affected=385 deleted=0
+[32/36] 30m ZSX1 affected=1359 deleted=0
+[33/36] 30m ZSX2 affected=1330 deleted=0
+[34/36] 30m ZSX3 affected=1339 deleted=0
+[35/36] 30m ZSX4 affected=1343 deleted=0
+[36/36] 30m ZSX5 affected=1369 deleted=0
+Done. table=futures_contract_30m_candles timeframe=30m symbols=36 affected=35666 deleted=0
+Building futures_contract_1h_candles from futures_contract_1m_candles: timeframe=1h minutes=60 symbols=36 root=ZS symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/36] 1h ZSF2 affected=683 deleted=0
+[2/36] 1h ZSF3 affected=655 deleted=0
+[3/36] 1h ZSF4 affected=618 deleted=0
+[4/36] 1h ZSF5 affected=627 deleted=0
+[5/36] 1h ZSF6 affected=613 deleted=0
+[6/36] 1h ZSH2 affected=662 deleted=0
+[7/36] 1h ZSH3 affected=648 deleted=0
+[8/36] 1h ZSH4 affected=665 deleted=0
+[9/36] 1h ZSH5 affected=653 deleted=0
+[10/36] 1h ZSH6 affected=649 deleted=0
+[11/36] 1h ZSK1 affected=183 deleted=0
+[12/36] 1h ZSK2 affected=716 deleted=0
+[13/36] 1h ZSK3 affected=687 deleted=0
+[14/36] 1h ZSK4 affected=667 deleted=0
+[15/36] 1h ZSK5 affected=670 deleted=0
+[16/36] 1h ZSK6 affected=532 deleted=0
+[17/36] 1h ZSN1 affected=668 deleted=0
+[18/36] 1h ZSN2 affected=683 deleted=0
+[19/36] 1h ZSN3 affected=693 deleted=0
+[20/36] 1h ZSN4 affected=652 deleted=0
+[21/36] 1h ZSN5 affected=643 deleted=0
+[22/36] 1h ZSQ1 affected=336 deleted=0
+[23/36] 1h ZSQ2 affected=290 deleted=0
+[24/36] 1h ZSQ3 affected=268 deleted=0
+[25/36] 1h ZSQ4 affected=295 deleted=0
+[26/36] 1h ZSQ5 affected=278 deleted=0
+[27/36] 1h ZSU1 affected=258 deleted=0
+[28/36] 1h ZSU2 affected=275 deleted=0
+[29/36] 1h ZSU3 affected=259 deleted=0
+[30/36] 1h ZSU4 affected=242 deleted=0
+[31/36] 1h ZSU5 affected=220 deleted=0
+[32/36] 1h ZSX1 affected=747 deleted=0
+[33/36] 1h ZSX2 affected=727 deleted=0
+[34/36] 1h ZSX3 affected=741 deleted=0
+[35/36] 1h ZSX4 affected=728 deleted=0
+[36/36] 1h ZSX5 affected=749 deleted=0
+Done. table=futures_contract_1h_candles timeframe=1h symbols=36 affected=19680 deleted=0
+Building futures_contract_4h_candles from futures_contract_1m_candles: timeframe=4h minutes=240 symbols=36 root=ZS symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/36] 4h ZSF2 affected=193 deleted=0
+[2/36] 4h ZSF3 affected=183 deleted=0
+[3/36] 4h ZSF4 affected=172 deleted=0
+[4/36] 4h ZSF5 affected=179 deleted=0
+[5/36] 4h ZSF6 affected=175 deleted=0
+[6/36] 4h ZSH2 affected=186 deleted=0
+[7/36] 4h ZSH3 affected=179 deleted=0
+[8/36] 4h ZSH4 affected=187 deleted=0
+[9/36] 4h ZSH5 affected=184 deleted=0
+[10/36] 4h ZSH6 affected=186 deleted=0
+[11/36] 4h ZSK1 affected=62 deleted=0
+[12/36] 4h ZSK2 affected=203 deleted=0
+[13/36] 4h ZSK3 affected=195 deleted=0
+[14/36] 4h ZSK4 affected=188 deleted=0
+[15/36] 4h ZSK5 affected=191 deleted=0
+[16/36] 4h ZSK6 affected=140 deleted=0
+[17/36] 4h ZSN1 affected=187 deleted=0
+[18/36] 4h ZSN2 affected=191 deleted=0
+[19/36] 4h ZSN3 affected=191 deleted=0
+[20/36] 4h ZSN4 affected=182 deleted=0
+[21/36] 4h ZSN5 affected=183 deleted=0
+[22/36] 4h ZSQ1 affected=106 deleted=0
+[23/36] 4h ZSQ2 affected=90 deleted=0
+[24/36] 4h ZSQ3 affected=82 deleted=0
+[25/36] 4h ZSQ4 affected=95 deleted=0
+[26/36] 4h ZSQ5 affected=85 deleted=0
+[27/36] 4h ZSU1 affected=80 deleted=0
+[28/36] 4h ZSU2 affected=86 deleted=0
+[29/36] 4h ZSU3 affected=80 deleted=0
+[30/36] 4h ZSU4 affected=75 deleted=0
+[31/36] 4h ZSU5 affected=67 deleted=0
+[32/36] 4h ZSX1 affected=211 deleted=0
+[33/36] 4h ZSX2 affected=206 deleted=0
+[34/36] 4h ZSX3 affected=207 deleted=0
+[35/36] 4h ZSX4 affected=202 deleted=0
+[36/36] 4h ZSX5 affected=211 deleted=0
+Done. table=futures_contract_4h_candles timeframe=4h symbols=36 affected=5620 deleted=0
+Building futures_contract_12h_candles from futures_contract_1m_candles: timeframe=12h minutes=720 symbols=36 root=ZS symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/36] 12h ZSF2 affected=82 deleted=0
+[2/36] 12h ZSF3 affected=78 deleted=0
+[3/36] 12h ZSF4 affected=75 deleted=0
+[4/36] 12h ZSF5 affected=77 deleted=0
+[5/36] 12h ZSF6 affected=74 deleted=0
+[6/36] 12h ZSH2 affected=77 deleted=0
+[7/36] 12h ZSH3 affected=77 deleted=0
+[8/36] 12h ZSH4 affected=80 deleted=0
+[9/36] 12h ZSH5 affected=78 deleted=0
+[10/36] 12h ZSH6 affected=78 deleted=0
+[11/36] 12h ZSK1 affected=28 deleted=0
+[12/36] 12h ZSK2 affected=85 deleted=0
+[13/36] 12h ZSK3 affected=82 deleted=0
+[14/36] 12h ZSK4 affected=79 deleted=0
+[15/36] 12h ZSK5 affected=83 deleted=0
+[16/36] 12h ZSK6 affected=56 deleted=0
+[17/36] 12h ZSN1 affected=79 deleted=0
+[18/36] 12h ZSN2 affected=80 deleted=0
+[19/36] 12h ZSN3 affected=82 deleted=0
+[20/36] 12h ZSN4 affected=74 deleted=0
+[21/36] 12h ZSN5 affected=77 deleted=0
+[22/36] 12h ZSQ1 affected=44 deleted=0
+[23/36] 12h ZSQ2 affected=41 deleted=0
+[24/36] 12h ZSQ3 affected=39 deleted=0
+[25/36] 12h ZSQ4 affected=42 deleted=0
+[26/36] 12h ZSQ5 affected=38 deleted=0
+[27/36] 12h ZSU1 affected=36 deleted=0
+[28/36] 12h ZSU2 affected=40 deleted=0
+[29/36] 12h ZSU3 affected=36 deleted=0
+[30/36] 12h ZSU4 affected=34 deleted=0
+[31/36] 12h ZSU5 affected=31 deleted=0
+[32/36] 12h ZSX1 affected=85 deleted=0
+[33/36] 12h ZSX2 affected=86 deleted=0
+[34/36] 12h ZSX3 affected=86 deleted=0
+[35/36] 12h ZSX4 affected=85 deleted=0
+[36/36] 12h ZSX5 affected=89 deleted=0
+Done. table=futures_contract_12h_candles timeframe=12h symbols=36 affected=2393 deleted=0
+Building futures_contract_1d_candles from futures_contract_1m_candles: timeframe=1d minutes=1440 symbols=36 root=ZS symbol=ALL start=BEGINNING end=OPEN rebuild=false
+[1/36] 1d ZSF2 affected=42 deleted=0
+[2/36] 1d ZSF3 affected=41 deleted=0
+[3/36] 1d ZSF4 affected=40 deleted=0
+[4/36] 1d ZSF5 affected=40 deleted=0
+[5/36] 1d ZSF6 affected=40 deleted=0
+[6/36] 1d ZSH2 affected=39 deleted=0
+[7/36] 1d ZSH3 affected=40 deleted=0
+[8/36] 1d ZSH4 affected=42 deleted=0
+[9/36] 1d ZSH5 affected=40 deleted=0
+[10/36] 1d ZSH6 affected=40 deleted=0
+[11/36] 1d ZSK1 affected=15 deleted=0
+[12/36] 1d ZSK2 affected=43 deleted=0
+[13/36] 1d ZSK3 affected=42 deleted=0
+[14/36] 1d ZSK4 affected=40 deleted=0
+[15/36] 1d ZSK5 affected=42 deleted=0
+[16/36] 1d ZSK6 affected=28 deleted=0
+[17/36] 1d ZSN1 affected=41 deleted=0
+[18/36] 1d ZSN2 affected=41 deleted=0
+[19/36] 1d ZSN3 affected=42 deleted=0
+[20/36] 1d ZSN4 affected=39 deleted=0
+[21/36] 1d ZSN5 affected=40 deleted=0
+[22/36] 1d ZSQ1 affected=22 deleted=0
+[23/36] 1d ZSQ2 affected=21 deleted=0
+[24/36] 1d ZSQ3 affected=21 deleted=0
+[25/36] 1d ZSQ4 affected=23 deleted=0
+[26/36] 1d ZSQ5 affected=22 deleted=0
+[27/36] 1d ZSU1 affected=21 deleted=0
+[28/36] 1d ZSU2 affected=22 deleted=0
+[29/36] 1d ZSU3 affected=21 deleted=0
+[30/36] 1d ZSU4 affected=20 deleted=0
+[31/36] 1d ZSU5 affected=17 deleted=0
+[32/36] 1d ZSX1 affected=43 deleted=0
+[33/36] 1d ZSX2 affected=43 deleted=0
+[34/36] 1d ZSX3 affected=43 deleted=0
+[35/36] 1d ZSX4 affected=44 deleted=0
+[36/36] 1d ZSX5 affected=45 deleted=0
+Done. table=futures_contract_1d_candles timeframe=1d symbols=36 affected=1245 deleted=0
+===== BUILD ZS TIMEFRAMES DONE 2026-05-04T10:16:43.0226195-05:00 =====
+===== ALL TIMEFRAME BUILDS DONE 2026-05-04T10:16:43.0226195-05:00 =====

@@ -1,0 +1,9 @@
+cargo :     Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.66s
+At 
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\run_engine_1m_remaining_roots.ps1:75 
+char:3
++   cargo run --bin abcd *> $outLog
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Finished `d...et(s) in 12.66s:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

@@ -1,0 +1,132 @@
+Connected to local DB
+Engine run id: engine-1777998014834-14912
+Selecting futures contract symbols
+Running xabcd scan on 10 futures contract symbols (root ES, timeframe 1m)
+Using candle source futures_contracts
+Using scan concurrency 1, write batch size 1000, progress every 10000 candles, symbol limit 10
+Using symbol offset 11
+Using max X bars left unlimited
+Using fast rebuild false, build tables false, pattern setups true, harmonic scores false, prop outcomes true, target-ready outcomes only false
+[scan] ESU1 loaded 88506 candles from 2021-06-20 22:00:00 to 2021-09-17 13:29:00
+[scan] ESU1 candle 10000/88506 (11.3%) date 2021-06-30 04:54:00 tracked patterns 25523
+[scan] ESU1 candle 20000/88506 (22.6%) date 2021-07-09 14:39:00 tracked patterns 81544
+[scan] ESU1 candle 30000/88506 (33.9%) date 2021-07-20 20:21:00 tracked patterns 344132
+[scan] ESU1 candle 40000/88506 (45.2%) date 2021-07-30 03:04:00 tracked patterns 401630
+[scan] ESU1 candle 50000/88506 (56.5%) date 2021-08-10 08:46:00 tracked patterns 434209
+[scan] ESU1 candle 60000/88506 (67.8%) date 2021-08-19 14:31:00 tracked patterns 517975
+[scan] ESU1 candle 70000/88506 (79.1%) date 2021-08-30 20:16:00 tracked patterns 547044
+[scan] ESU1 candle 80000/88506 (90.4%) date 2021-09-09 06:59:00 tracked patterns 632173
+[scan] ESU1 candle 88506/88506 (100.0%) date 2021-09-17 13:29:00 tracked patterns 681824
+Symbol: ESU1, setup total: 681824, Bear: 109072, Bull: 572752 (1/10)
+[scan] ESU2 loaded 88457 candles from 2022-06-19 22:00:00 to 2022-09-16 13:29:00
+[scan] ESU2 candle 10000/88457 (11.3%) date 2022-06-29 07:39:00 tracked patterns 65618
+[scan] ESU2 candle 20000/88457 (22.6%) date 2022-07-08 17:19:00 tracked patterns 103671
+[scan] ESU2 candle 30000/88457 (33.9%) date 2022-07-19 23:59:00 tracked patterns 126570
+[scan] ESU2 candle 40000/88457 (45.2%) date 2022-07-29 05:39:00 tracked patterns 165200
+[scan] ESU2 candle 50000/88457 (56.5%) date 2022-08-09 11:22:00 tracked patterns 210692
+[scan] ESU2 candle 60000/88457 (67.8%) date 2022-08-18 17:04:00 tracked patterns 302728
+[scan] ESU2 candle 70000/88457 (79.1%) date 2022-08-29 23:44:00 tracked patterns 500568
+[scan] ESU2 candle 80000/88457 (90.4%) date 2022-09-08 09:24:00 tracked patterns 565563
+[scan] ESU2 candle 88457/88457 (100.0%) date 2022-09-16 13:29:00 tracked patterns 606367
+Flushed 681824 pattern setups to DB
+Symbol: ESU2, setup total: 606367, Bear: 96725, Bull: 509642 (2/10)
+[scan] ESU3 loaded 88006 candles from 2023-06-18 22:00:00 to 2023-09-15 13:29:00
+[scan] ESU3 candle 10000/88006 (11.4%) date 2023-06-28 07:49:00 tracked patterns 42739
+[scan] ESU3 candle 20000/88006 (22.7%) date 2023-07-09 22:43:00 tracked patterns 64720
+[scan] ESU3 candle 30000/88006 (34.1%) date 2023-07-19 04:33:00 tracked patterns 100141
+[scan] ESU3 candle 40000/88006 (45.5%) date 2023-07-28 10:20:00 tracked patterns 130730
+[scan] ESU3 candle 50000/88006 (56.8%) date 2023-08-08 16:03:00 tracked patterns 179875
+[scan] ESU3 candle 60000/88006 (68.2%) date 2023-08-17 22:51:00 tracked patterns 250757
+[scan] ESU3 candle 70000/88006 (79.5%) date 2023-08-29 04:38:00 tracked patterns 347361
+[scan] ESU3 candle 80000/88006 (90.9%) date 2023-09-07 14:38:00 tracked patterns 382823
+[scan] ESU3 candle 88006/88006 (100.0%) date 2023-09-15 13:29:00 tracked patterns 401060
+Flushed 606367 pattern setups to DB
+Symbol: ESU3, setup total: 401060, Bear: 255453, Bull: 145607 (3/10)
+[scan] ESU4 loaded 88366 candles from 2024-06-23 22:00:00 to 2024-09-20 13:29:00
+[scan] ESU4 candle 10000/88366 (11.3%) date 2024-07-03 03:39:00 tracked patterns 19917
+[scan] ESU4 candle 20000/88366 (22.6%) date 2024-07-12 17:31:00 tracked patterns 56920
+[scan] ESU4 candle 30000/88366 (33.9%) date 2024-07-24 00:13:00 tracked patterns 207421
+[scan] ESU4 candle 40000/88366 (45.3%) date 2024-08-02 05:55:00 tracked patterns 253691
+[scan] ESU4 candle 50000/88366 (56.6%) date 2024-08-13 11:35:00 tracked patterns 325212
+[scan] ESU4 candle 60000/88366 (67.9%) date 2024-08-22 17:18:00 tracked patterns 539399
+Flushed 401060 pattern setups to DB
+[scan] ESU4 candle 70000/88366 (79.2%) date 2024-09-03 04:04:00 tracked patterns 635831
+[scan] ESU4 candle 80000/88366 (90.5%) date 2024-09-12 09:44:00 tracked patterns 856458
+[scan] ESU4 candle 88366/88366 (100.0%) date 2024-09-20 13:29:00 tracked patterns 919318
+Symbol: ESU4, setup total: 919318, Bear: 383556, Bull: 535762 (4/10)
+[scan] ESU5 loaded 88309 candles from 2025-06-22 22:00:00 to 2025-09-19 13:29:00
+[scan] ESU5 candle 10000/88309 (11.3%) date 2025-07-02 03:41:00 tracked patterns 39965
+[scan] ESU5 candle 20000/88309 (22.6%) date 2025-07-11 17:07:00 tracked patterns 106092
+[scan] ESU5 candle 30000/88309 (34.0%) date 2025-07-22 23:48:00 tracked patterns 153717
+[scan] ESU5 candle 40000/88309 (45.3%) date 2025-08-01 05:30:00 tracked patterns 264917
+[scan] ESU5 candle 50000/88309 (56.6%) date 2025-08-12 11:11:00 tracked patterns 385527
+[scan] ESU5 candle 60000/88309 (67.9%) date 2025-08-21 16:52:00 tracked patterns 505540
+[scan] ESU5 candle 70000/88309 (79.3%) date 2025-09-02 03:35:00 tracked patterns 577094
+[scan] ESU5 candle 80000/88309 (90.6%) date 2025-09-11 09:19:00 tracked patterns 689065
+[scan] ESU5 candle 88309/88309 (100.0%) date 2025-09-19 13:29:00 tracked patterns 798640
+Flushed 919318 pattern setups to DB
+Symbol: ESU5, setup total: 798640, Bear: 115955, Bull: 682685 (5/10)
+[scan] ESZ1 loaded 88709 candles from 2021-09-19 22:00:00 to 2021-12-17 14:29:00
+[scan] ESZ1 candle 10000/88709 (11.3%) date 2021-09-29 03:41:00 tracked patterns 44314
+[scan] ESZ1 candle 20000/88709 (22.5%) date 2021-10-08 09:21:00 tracked patterns 73360
+[scan] ESZ1 candle 30000/88709 (33.8%) date 2021-10-19 15:02:00 tracked patterns 107382
+[scan] ESZ1 candle 40000/88709 (45.1%) date 2021-10-28 20:43:00 tracked patterns 131856
+[scan] ESZ1 candle 50000/88709 (56.4%) date 2021-11-09 04:27:00 tracked patterns 183614
+[scan] ESZ1 candle 60000/88709 (67.6%) date 2021-11-18 10:12:00 tracked patterns 196908
+[scan] ESZ1 candle 70000/88709 (78.9%) date 2021-11-30 00:39:00 tracked patterns 285894
+[scan] ESZ1 candle 80000/88709 (90.2%) date 2021-12-09 06:19:00 tracked patterns 387869
+[scan] ESZ1 candle 88709/88709 (100.0%) date 2021-12-17 14:29:00 tracked patterns 498641
+Flushed 798640 pattern setups to DB
+Symbol: ESZ1, setup total: 498641, Bear: 138432, Bull: 360209 (6/10)
+[scan] ESZ2 loaded 88676 candles from 2022-09-18 22:00:00 to 2022-12-16 14:29:00
+[scan] ESZ2 candle 10000/88676 (11.3%) date 2022-09-28 03:39:00 tracked patterns 18795
+[scan] ESZ2 candle 20000/88676 (22.6%) date 2022-10-07 09:19:00 tracked patterns 89677
+[scan] ESZ2 candle 30000/88676 (33.8%) date 2022-10-18 14:59:00 tracked patterns 131604
+[scan] ESZ2 candle 40000/88676 (45.1%) date 2022-10-27 20:39:00 tracked patterns 192472
+[scan] ESZ2 candle 50000/88676 (56.4%) date 2022-11-08 04:19:00 tracked patterns 261810
+[scan] ESZ2 candle 60000/88676 (67.7%) date 2022-11-17 09:59:00 tracked patterns 301739
+[scan] ESZ2 candle 70000/88676 (78.9%) date 2022-11-29 00:26:00 tracked patterns 343441
+[scan] ESZ2 candle 80000/88676 (90.2%) date 2022-12-08 06:06:00 tracked patterns 422117
+[scan] ESZ2 candle 88676/88676 (100.0%) date 2022-12-16 14:29:00 tracked patterns 478453
+Flushed 498641 pattern setups to DB
+Symbol: ESZ2, setup total: 478453, Bear: 201217, Bull: 277236 (7/10)
+[scan] ESZ3 loaded 88551 candles from 2023-09-17 22:00:00 to 2023-12-15 14:29:00
+[scan] ESZ3 candle 10000/88551 (11.3%) date 2023-09-27 03:52:00 tracked patterns 26536
+[scan] ESZ3 candle 20000/88551 (22.6%) date 2023-10-06 09:34:00 tracked patterns 72836
+[scan] ESZ3 candle 30000/88551 (33.9%) date 2023-10-17 15:17:00 tracked patterns 113376
+[scan] ESZ3 candle 40000/88551 (45.2%) date 2023-10-26 20:59:00 tracked patterns 146850
+[scan] ESZ3 candle 50000/88551 (56.5%) date 2023-11-07 04:41:00 tracked patterns 336936
+[scan] ESZ3 candle 60000/88551 (67.8%) date 2023-11-16 10:23:00 tracked patterns 406201
+[scan] ESZ3 candle 70000/88551 (79.1%) date 2023-11-28 01:07:00 tracked patterns 460751
+[scan] ESZ3 candle 80000/88551 (90.3%) date 2023-12-07 06:52:00 tracked patterns 517545
+[scan] ESZ3 candle 88551/88551 (100.0%) date 2023-12-15 14:29:00 tracked patterns 612044
+Flushed 478453 pattern setups to DB
+Symbol: ESZ3, setup total: 612062, Bear: 345057, Bull: 267005 (8/10)
+[scan] ESZ4 loaded 88642 candles from 2024-09-22 22:00:00 to 2024-12-20 14:29:00
+[scan] ESZ4 candle 10000/88642 (11.3%) date 2024-10-02 03:41:00 tracked patterns 12187
+[scan] ESZ4 candle 20000/88642 (22.6%) date 2024-10-11 09:23:00 tracked patterns 34507
+[scan] ESZ4 candle 30000/88642 (33.8%) date 2024-10-22 15:07:00 tracked patterns 75833
+[scan] ESZ4 candle 40000/88642 (45.1%) date 2024-10-31 20:50:00 tracked patterns 125064
+[scan] ESZ4 candle 50000/88642 (56.4%) date 2024-11-12 04:31:00 tracked patterns 161020
+[scan] ESZ4 candle 60000/88642 (67.7%) date 2024-11-21 10:12:00 tracked patterns 288119
+[scan] ESZ4 candle 70000/88642 (79.0%) date 2024-12-03 00:37:00 tracked patterns 338256
+[scan] ESZ4 candle 80000/88642 (90.3%) date 2024-12-12 06:27:00 tracked patterns 361070
+[scan] ESZ4 candle 88642/88642 (100.0%) date 2024-12-20 14:29:00 tracked patterns 379012
+Flushed 612062 pattern setups to DB
+Symbol: ESZ4, setup total: 379012, Bear: 128173, Bull: 250839 (9/10)
+[scan] ESZ5 loaded 87971 candles from 2025-09-21 22:00:00 to 2025-12-19 14:29:00
+[scan] ESZ5 candle 10000/87971 (11.4%) date 2025-10-01 03:43:00 tracked patterns 14529
+[scan] ESZ5 candle 20000/87971 (22.7%) date 2025-10-10 09:29:00 tracked patterns 54562
+[scan] ESZ5 candle 30000/87971 (34.1%) date 2025-10-21 15:09:00 tracked patterns 92588
+[scan] ESZ5 candle 40000/87971 (45.5%) date 2025-10-30 20:49:00 tracked patterns 133554
+[scan] ESZ5 candle 50000/87971 (56.8%) date 2025-11-11 04:29:00 tracked patterns 225612
+[scan] ESZ5 candle 60000/87971 (68.2%) date 2025-11-20 10:09:00 tracked patterns 326159
+[scan] ESZ5 candle 70000/87971 (79.6%) date 2025-12-02 11:20:00 tracked patterns 437718
+[scan] ESZ5 candle 80000/87971 (90.9%) date 2025-12-11 17:00:00 tracked patterns 500075
+[scan] ESZ5 candle 87971/87971 (100.0%) date 2025-12-19 14:29:00 tracked patterns 531618
+Flushed 379012 pattern setups to DB
+Symbol: ESZ5, setup total: 531618, Bear: 283607, Bull: 248011 (10/10)
+Flushed 531618 pattern setups to DB
+Skipped prop strategy family summaries refresh
+Pattern setups total: 5906995, Prop reversal rows: 1024229, Bear: 2057247, Bull: 3849748, Failed symbols: 0
+Execution time: 11339.311872s

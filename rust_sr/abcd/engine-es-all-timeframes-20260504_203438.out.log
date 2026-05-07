@@ -1,0 +1,11 @@
+===== ES ENGINE 1m START 2026-05-04T20:34:38.8793168-05:00 =====
+Connected to local DB
+Engine run id: engine-1777944884290-15912
+Selecting futures contract symbols
+Running xabcd scan on 21 futures contract symbols (root ES, timeframe 1m)
+Using candle source futures_contracts
+Using scan concurrency 4, write batch size 1000, symbol limit 21
+Using symbol offset 0
+Using max X bars left unlimited
+Using fast rebuild false, build tables false, pattern setups true, harmonic scores false, prop outcomes true, target-ready outcomes only false
+Symbol: ESH4, setup total: 478239, Bear: 99098, Bull: 379141 (1/21)

@@ -12,10 +12,23 @@ use actix_web::route;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use sqlx::{MySqlPool, Row};
-use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::time::Instant;
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+use tokio::process::Command;
 
-const CANDLE_STORAGE_TABLES: [&str; 2] =
-    ["futures_contract_1m_candles", "futures_contract_3m_candles"];
+const CANDLE_STORAGE_TABLES: [&str; 9] = [
+    "futures_contract_1m_candles",
+    "futures_contract_3m_candles",
+    "futures_contract_5m_candles",
+    "futures_contract_15m_candles",
+    "futures_contract_30m_candles",
+    "futures_contract_1h_candles",
+    "futures_contract_4h_candles",
+    "futures_contract_12h_candles",
+    "futures_contract_1d_candles",
+];
 const ENGINE_STORAGE_TABLES: [&str; 2] = ["pattern_setups", "pattern_outcomes_prop"];
 const ROLLUP_STORAGE_TABLES: [&str; 4] = [
     "prop_strategy_family_summary",
@@ -29,6 +42,9 @@ struct PatternSummariesResponse {
     patterns: Vec<PatternSummary>,
     total_count: i64,
     has_more: bool,
+    earliest_entry_date: Option<NaiveDateTime>,
+    latest_entry_date: Option<NaiveDateTime>,
+    entry_dates: Vec<NaiveDate>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -109,6 +125,7 @@ struct StrategyTradesParams {
     pub include_count: Option<bool>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    pub first_start_date: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -120,8 +137,98 @@ struct StrategyContractWeekParams {
 #[derive(Debug, serde::Deserialize)]
 struct CandleStorageParams {}
 
+#[derive(Debug, Deserialize)]
+struct AdminActionParams {
+    action: String,
+    root_symbol: Option<String>,
+    contract_symbol: Option<String>,
+    source_timeframe: Option<String>,
+    scan_concurrency: Option<i64>,
+    default_fit_only: Option<bool>,
+    skip_processed_symbols: Option<bool>,
+    defer_rebuild_indexes: Option<bool>,
+    skip_prop_family_summaries: Option<bool>,
+    confirm_text: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AdminActionStartResponse {
+    run_id: i64,
+    status: String,
+    action: String,
+    command_text: String,
+}
+
+#[derive(Serialize)]
+struct AdminStatusResponse {
+    abcd_dir: Option<String>,
+    operations: Vec<AdminOperationSnapshot>,
+    table_snapshots: Vec<AdminTableSnapshot>,
+    engine_phases: Vec<AdminEnginePhaseSnapshot>,
+    cache_states: Vec<AdminCacheStateSnapshot>,
+}
+
+#[derive(Serialize)]
+struct AdminOperationSnapshot {
+    id: i64,
+    action: String,
+    status: String,
+    root_symbol: Option<String>,
+    contract_symbol: Option<String>,
+    source_timeframe: Option<String>,
+    command_text: Option<String>,
+    started_at: Option<String>,
+    finished_at: Option<String>,
+    duration_ms: Option<i64>,
+    exit_code: Option<i64>,
+    output_tail: Option<String>,
+    error_message: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AdminTableSnapshot {
+    table_name: String,
+    exact_rows: i64,
+    total_bytes: u64,
+    refreshed_at: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AdminEnginePhaseSnapshot {
+    run_id: String,
+    symbol: Option<String>,
+    phase: String,
+    row_count: Option<i64>,
+    duration_ms: i64,
+    note: Option<String>,
+    created_at: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AdminCacheStateSnapshot {
+    cache_name: String,
+    is_ready: bool,
+    updated_at: Option<String>,
+    note: Option<String>,
+}
+
+#[derive(Clone)]
+struct AdminCommandSpec {
+    program: String,
+    args: Vec<String>,
+    envs: Vec<(String, String)>,
+    env_removes: Vec<String>,
+    cwd: PathBuf,
+    command_text: String,
+}
+
 #[derive(Serialize)]
 struct CandleStorageResponse {
+    disk_path: Option<String>,
+    disk_total_bytes: Option<u64>,
+    disk_free_bytes: Option<u64>,
+    disk_used_bytes: Option<u64>,
+    disk_free_percent: Option<f64>,
     tables: Vec<CandleTableStorage>,
     total_rows: i64,
     total_bytes: u64,
@@ -141,6 +248,8 @@ struct CandleStorageResponse {
     setup_bytes_per_row: f64,
     setup_roots: Vec<PatternSetupRootStorage>,
     setup_markets: Vec<PatternSetupMarketStorage>,
+    setup_contracts: Vec<PatternSetupContractStorage>,
+    setup_patterns: Vec<PatternSetupTimeframePatternStorage>,
 }
 
 #[derive(Clone, Serialize)]
@@ -184,11 +293,39 @@ struct PatternSetupMarketStorage {
     estimated_bytes: u64,
 }
 
-struct PatternSetupRootAggregate {
-    contract_count: i64,
+#[derive(Serialize)]
+struct PatternSetupContractStorage {
+    table_name: String,
+    root_symbol: String,
+    contract_symbol: String,
+    source_timeframe: String,
     setup_count: i64,
     first_d_date: Option<String>,
     last_d_date: Option<String>,
+    estimated_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct PatternSetupTimeframePatternStorage {
+    table_name: String,
+    root_symbol: String,
+    contract_symbol: String,
+    source_timeframe: String,
+    market: String,
+    harmonic_type: String,
+    setup_count: i64,
+    first_d_date: Option<String>,
+    last_d_date: Option<String>,
+    estimated_bytes: u64,
+}
+
+#[derive(Clone)]
+struct DiskStorageInfo {
+    path: String,
+    total_bytes: u64,
+    free_bytes: u64,
+    used_bytes: u64,
+    free_percent: f64,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -201,6 +338,7 @@ struct SimulatorReplayParams {
     pub profit_target: Option<f64>,
     pub max_drawdown: Option<f64>,
     pub daily_loss_limit: Option<f64>,
+    pub drawdown_model: Option<String>,
     pub one_trade_at_a_time: Option<bool>,
 }
 
@@ -305,6 +443,7 @@ struct PatternSummary {
     pub d_date: NaiveDateTime,
     pub d_confirm_date: Option<NaiveDateTime>,
     pub reversal_detect_date: Option<NaiveDateTime>,
+    pub entry_date: Option<NaiveDateTime>,
     pub target_date: Option<NaiveDateTime>,
     pub target_open: Option<Decimal>,
     pub target_high: Option<Decimal>,
@@ -709,296 +848,240 @@ fn read_i64_or_zero(row: &sqlx::mysql::MySqlRow, column: &str) -> i64 {
         .unwrap_or(0)
 }
 
-async fn count_storage_table_rows(pool: &MySqlPool, table_name: &str) -> Result<i64, sqlx::Error> {
-    let count_sql = format!("SELECT COUNT(*) AS count FROM {table_name}");
-    sqlx::query_scalar::<_, i64>(&count_sql)
-        .fetch_one(pool)
-        .await
-}
-
-async fn fetch_storage_table_bytes(
-    pool: &MySqlPool,
-    table_name: &str,
-) -> Result<(u64, u64), sqlx::Error> {
-    let stats = sqlx::query(
-        r#"
-        SELECT
-            CAST(COALESCE(data_length, 0) AS SIGNED) AS data_length,
-            CAST(COALESCE(index_length, 0) AS SIGNED) AS index_length
-        FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = ?
-        "#,
-    )
-    .bind(table_name)
-    .fetch_optional(pool)
-    .await?;
-
-    let data_bytes = stats
-        .as_ref()
-        .map(|row| read_i64_or_zero(row, "data_length").max(0) as u64)
-        .unwrap_or(0);
-    let index_bytes = stats
-        .as_ref()
-        .map(|row| read_i64_or_zero(row, "index_length").max(0) as u64)
-        .unwrap_or(0);
-
-    Ok((data_bytes, index_bytes))
-}
-
-async fn fetch_candle_table_storage(
-    pool: &MySqlPool,
-    table_name: &str,
-) -> Result<CandleTableStorage, sqlx::Error> {
-    let exact_rows = count_storage_table_rows(pool, table_name).await?;
-    let (data_bytes, index_bytes) = fetch_storage_table_bytes(pool, table_name).await?;
-    let total_bytes = data_bytes + index_bytes;
-    let bytes_per_row = if exact_rows > 0 {
-        total_bytes as f64 / exact_rows as f64
-    } else {
-        0.0
-    };
-
-    Ok(CandleTableStorage {
-        table_name: table_name.to_string(),
-        exact_rows,
-        data_bytes,
-        index_bytes,
-        total_bytes,
-        bytes_per_row,
-    })
-}
-
-async fn fetch_futures_root_candle_storage(
-    pool: &MySqlPool,
-    table: &CandleTableStorage,
-) -> Result<Vec<FuturesRootCandleStorage>, sqlx::Error> {
-    let sql = format!(
-        r#"
-        SELECT
-            root_symbol,
-            COUNT(DISTINCT symbol) AS contract_count,
-            COUNT(*) AS candle_count,
-            CAST(MIN(ts_utc) AS CHAR) AS first_ts,
-            CAST(MAX(ts_utc) AS CHAR) AS last_ts
-        FROM {}
-        GROUP BY root_symbol
-        ORDER BY candle_count DESC, root_symbol ASC
-        "#,
-        table.table_name
-    );
-
-    let rows = sqlx::query(&sql).fetch_all(pool).await?;
-    Ok(rows
-        .into_iter()
-        .map(|row| {
-            let candle_count = read_i64_or_zero(&row, "candle_count");
-            let estimated_bytes =
-                (candle_count as f64 * table.bytes_per_row).round().max(0.0) as u64;
-
-            FuturesRootCandleStorage {
-                table_name: table.table_name.clone(),
-                root_symbol: row.try_get("root_symbol").unwrap_or_default(),
-                contract_count: read_i64_or_zero(&row, "contract_count"),
-                candle_count,
-                first_ts: row.try_get("first_ts").ok(),
-                last_ts: row.try_get("last_ts").ok(),
-                estimated_bytes,
-            }
-        })
-        .collect())
-}
-
-fn futures_storage_root(symbol: &str) -> String {
-    let uppercase = symbol.trim().to_uppercase();
-    let chars = uppercase.chars().collect::<Vec<_>>();
-    let month_codes = ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z'];
-
-    if chars.len() >= 3
-        && chars[chars.len() - 2].is_ascii_digit()
-        && chars[chars.len() - 1].is_ascii_digit()
-        && month_codes.contains(&chars[chars.len() - 3])
-    {
-        return chars[..chars.len() - 3].iter().collect();
-    }
-
-    if chars.len() >= 2
-        && chars[chars.len() - 1].is_ascii_digit()
-        && month_codes.contains(&chars[chars.len() - 2])
-    {
-        return chars[..chars.len() - 2].iter().collect();
-    }
-
-    if uppercase.len() >= 2 && uppercase.starts_with('6') {
-        return uppercase.chars().take(2).collect();
-    }
-
-    let root = uppercase
-        .chars()
-        .take_while(|ch| ch.is_ascii_alphabetic())
-        .collect::<String>();
-
-    if root.is_empty() {
-        uppercase
-    } else {
-        root
-    }
-}
-
-async fn fetch_pattern_setup_root_storage(
-    pool: &MySqlPool,
-    table: &CandleTableStorage,
-) -> Result<Vec<PatternSetupRootStorage>, sqlx::Error> {
-    let has_root_symbol = table_column_exists(pool, &table.table_name, "root_symbol").await?;
-    let has_contract_symbol =
-        table_column_exists(pool, &table.table_name, "contract_symbol").await?;
-    let root_projection = if has_root_symbol {
-        "NULLIF(root_symbol, '')"
-    } else {
-        "NULL"
-    };
-    let contract_projection = if has_contract_symbol {
-        "COALESCE(NULLIF(contract_symbol, ''), symbol)"
-    } else {
-        "symbol"
-    };
-    let sql = format!(
-        r#"
-        SELECT
-            {root_projection} AS stored_root_symbol,
-            {contract_projection} AS contract_symbol,
-            COUNT(*) AS setup_count,
-            CAST(MIN(d_date) AS CHAR) AS first_d_date,
-            CAST(MAX(d_date) AS CHAR) AS last_d_date
-        FROM {}
-        GROUP BY stored_root_symbol, contract_symbol
-        ORDER BY setup_count DESC, contract_symbol ASC
-        "#,
-        table.table_name,
-        root_projection = root_projection,
-        contract_projection = contract_projection,
-    );
-
-    let rows = sqlx::query(&sql).fetch_all(pool).await?;
-    let mut by_root: BTreeMap<String, PatternSetupRootAggregate> = BTreeMap::new();
-
-    for row in rows {
-        let contract_symbol: String = row.try_get("contract_symbol").unwrap_or_default();
-        let stored_root_symbol: Option<String> = row.try_get("stored_root_symbol").ok().flatten();
-        let root_symbol = stored_root_symbol
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| futures_storage_root(&contract_symbol));
-        let setup_count = read_i64_or_zero(&row, "setup_count");
-        let first_d_date: Option<String> = row.try_get("first_d_date").ok();
-        let last_d_date: Option<String> = row.try_get("last_d_date").ok();
-        let aggregate = by_root
-            .entry(root_symbol)
-            .or_insert_with(|| PatternSetupRootAggregate {
-                contract_count: 0,
-                setup_count: 0,
-                first_d_date: None,
-                last_d_date: None,
-            });
-
-        aggregate.contract_count += 1;
-        aggregate.setup_count += setup_count;
-        if let Some(first_d_date) = first_d_date {
-            if aggregate
-                .first_d_date
-                .as_ref()
-                .map(|current| first_d_date < *current)
-                .unwrap_or(true)
-            {
-                aggregate.first_d_date = Some(first_d_date);
-            }
-        }
-        if let Some(last_d_date) = last_d_date {
-            if aggregate
-                .last_d_date
-                .as_ref()
-                .map(|current| last_d_date > *current)
-                .unwrap_or(true)
-            {
-                aggregate.last_d_date = Some(last_d_date);
-            }
-        }
-    }
-
-    let mut roots = by_root
-        .into_iter()
-        .map(|(root_symbol, aggregate)| {
-            let estimated_bytes = (aggregate.setup_count as f64 * table.bytes_per_row)
-                .round()
-                .max(0.0) as u64;
-
-            PatternSetupRootStorage {
-                table_name: table.table_name.clone(),
-                root_symbol,
-                contract_count: aggregate.contract_count,
-                setup_count: aggregate.setup_count,
-                first_d_date: aggregate.first_d_date,
-                last_d_date: aggregate.last_d_date,
-                estimated_bytes,
-            }
-        })
-        .collect::<Vec<_>>();
-
-    roots.sort_by(|left, right| {
-        right
-            .setup_count
-            .cmp(&left.setup_count)
-            .then_with(|| left.root_symbol.cmp(&right.root_symbol))
-    });
-
-    Ok(roots)
-}
-
-async fn fetch_pattern_setup_market_storage(
-    pool: &MySqlPool,
-    table: &CandleTableStorage,
-) -> Result<Vec<PatternSetupMarketStorage>, sqlx::Error> {
-    let sql = format!(
-        r#"
-        SELECT
-            market,
-            harmonic_type,
-            COUNT(*) AS setup_count
-        FROM {}
-        GROUP BY market, harmonic_type
-        ORDER BY setup_count DESC, market ASC, harmonic_type ASC
-        "#,
-        table.table_name
-    );
-
-    let rows = sqlx::query(&sql).fetch_all(pool).await?;
-    Ok(rows
-        .into_iter()
-        .map(|row| {
-            let setup_count = read_i64_or_zero(&row, "setup_count");
-            let estimated_bytes =
-                (setup_count as f64 * table.bytes_per_row).round().max(0.0) as u64;
-
-            PatternSetupMarketStorage {
-                table_name: table.table_name.clone(),
-                market: row.try_get("market").unwrap_or_default(),
-                harmonic_type: row.try_get("harmonic_type").unwrap_or_default(),
-                setup_count,
-                estimated_bytes,
-            }
-        })
-        .collect())
-}
-
-async fn fetch_storage_table_group(
+async fn fetch_cached_storage_table_group(
     pool: &MySqlPool,
     table_names: &[&str],
 ) -> Result<Vec<CandleTableStorage>, sqlx::Error> {
+    if !table_exists(pool, "storage_table_summary").await? {
+        return Ok(Vec::new());
+    }
+
     let mut tables = Vec::new();
     for table_name in table_names {
-        tables.push(fetch_candle_table_storage(pool, table_name).await?);
+        let row = sqlx::query(
+            r#"
+            SELECT
+                table_name,
+                exact_rows,
+                data_bytes,
+                index_bytes,
+                total_bytes,
+                bytes_per_row
+            FROM storage_table_summary
+            WHERE table_name = ?
+            "#,
+        )
+        .bind(table_name)
+        .fetch_optional(pool)
+        .await?;
+
+        if let Some(row) = row {
+            tables.push(CandleTableStorage {
+                table_name: row.try_get("table_name").unwrap_or_default(),
+                exact_rows: read_i64_or_zero(&row, "exact_rows"),
+                data_bytes: read_i64_or_zero(&row, "data_bytes").max(0) as u64,
+                index_bytes: read_i64_or_zero(&row, "index_bytes").max(0) as u64,
+                total_bytes: read_i64_or_zero(&row, "total_bytes").max(0) as u64,
+                bytes_per_row: row.try_get("bytes_per_row").unwrap_or(0.0),
+            });
+        }
     }
 
     Ok(tables)
+}
+
+async fn fetch_cached_futures_root_storage(
+    pool: &MySqlPool,
+) -> Result<Vec<FuturesRootCandleStorage>, sqlx::Error> {
+    if !table_exists(pool, "storage_futures_root_summary").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            table_name,
+            root_symbol,
+            contract_count,
+            candle_count,
+            first_ts,
+            last_ts,
+            estimated_bytes
+        FROM storage_futures_root_summary
+        ORDER BY candle_count DESC, root_symbol ASC, table_name ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| FuturesRootCandleStorage {
+            table_name: row.try_get("table_name").unwrap_or_default(),
+            root_symbol: row.try_get("root_symbol").unwrap_or_default(),
+            contract_count: read_i64_or_zero(&row, "contract_count"),
+            candle_count: read_i64_or_zero(&row, "candle_count"),
+            first_ts: row.try_get("first_ts").ok(),
+            last_ts: row.try_get("last_ts").ok(),
+            estimated_bytes: read_i64_or_zero(&row, "estimated_bytes").max(0) as u64,
+        })
+        .collect())
+}
+
+async fn fetch_cached_pattern_setup_root_storage(
+    pool: &MySqlPool,
+) -> Result<Vec<PatternSetupRootStorage>, sqlx::Error> {
+    if !table_exists(pool, "storage_pattern_setup_root_summary").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            table_name,
+            root_symbol,
+            contract_count,
+            setup_count,
+            first_d_date,
+            last_d_date,
+            estimated_bytes
+        FROM storage_pattern_setup_root_summary
+        ORDER BY setup_count DESC, root_symbol ASC, table_name ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| PatternSetupRootStorage {
+            table_name: row.try_get("table_name").unwrap_or_default(),
+            root_symbol: row.try_get("root_symbol").unwrap_or_default(),
+            contract_count: read_i64_or_zero(&row, "contract_count"),
+            setup_count: read_i64_or_zero(&row, "setup_count"),
+            first_d_date: row.try_get("first_d_date").ok(),
+            last_d_date: row.try_get("last_d_date").ok(),
+            estimated_bytes: read_i64_or_zero(&row, "estimated_bytes").max(0) as u64,
+        })
+        .collect())
+}
+
+async fn fetch_cached_pattern_setup_market_storage(
+    pool: &MySqlPool,
+) -> Result<Vec<PatternSetupMarketStorage>, sqlx::Error> {
+    if !table_exists(pool, "storage_pattern_setup_market_summary").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            table_name,
+            market,
+            harmonic_type,
+            setup_count,
+            estimated_bytes
+        FROM storage_pattern_setup_market_summary
+        ORDER BY setup_count DESC, market ASC, harmonic_type ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| PatternSetupMarketStorage {
+            table_name: row.try_get("table_name").unwrap_or_default(),
+            market: row.try_get("market").unwrap_or_default(),
+            harmonic_type: row.try_get("harmonic_type").unwrap_or_default(),
+            setup_count: read_i64_or_zero(&row, "setup_count"),
+            estimated_bytes: read_i64_or_zero(&row, "estimated_bytes").max(0) as u64,
+        })
+        .collect())
+}
+
+async fn fetch_cached_pattern_setup_contract_storage(
+    pool: &MySqlPool,
+) -> Result<Vec<PatternSetupContractStorage>, sqlx::Error> {
+    if !table_exists(pool, "storage_pattern_setup_contract_summary").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            table_name,
+            root_symbol,
+            contract_symbol,
+            source_timeframe,
+            setup_count,
+            first_d_date,
+            last_d_date,
+            estimated_bytes
+        FROM storage_pattern_setup_contract_summary
+        ORDER BY setup_count DESC, root_symbol ASC, contract_symbol ASC, source_timeframe ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| PatternSetupContractStorage {
+            table_name: row.try_get("table_name").unwrap_or_default(),
+            root_symbol: row.try_get("root_symbol").unwrap_or_default(),
+            contract_symbol: row.try_get("contract_symbol").unwrap_or_default(),
+            source_timeframe: row.try_get("source_timeframe").unwrap_or_default(),
+            setup_count: read_i64_or_zero(&row, "setup_count"),
+            first_d_date: row.try_get("first_d_date").ok(),
+            last_d_date: row.try_get("last_d_date").ok(),
+            estimated_bytes: read_i64_or_zero(&row, "estimated_bytes").max(0) as u64,
+        })
+        .collect())
+}
+
+async fn fetch_cached_pattern_setup_timeframe_pattern_storage(
+    pool: &MySqlPool,
+) -> Result<Vec<PatternSetupTimeframePatternStorage>, sqlx::Error> {
+    if !table_exists(pool, "storage_pattern_setup_timeframe_pattern_summary").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            table_name,
+            root_symbol,
+            contract_symbol,
+            source_timeframe,
+            market,
+            harmonic_type,
+            setup_count,
+            first_d_date,
+            last_d_date,
+            estimated_bytes
+        FROM storage_pattern_setup_timeframe_pattern_summary
+        ORDER BY setup_count DESC, root_symbol ASC, source_timeframe ASC, market ASC, harmonic_type ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| PatternSetupTimeframePatternStorage {
+            table_name: row.try_get("table_name").unwrap_or_default(),
+            root_symbol: row.try_get("root_symbol").unwrap_or_default(),
+            contract_symbol: row.try_get("contract_symbol").unwrap_or_default(),
+            source_timeframe: row.try_get("source_timeframe").unwrap_or_default(),
+            market: row.try_get("market").unwrap_or_default(),
+            harmonic_type: row.try_get("harmonic_type").unwrap_or_default(),
+            setup_count: read_i64_or_zero(&row, "setup_count"),
+            first_d_date: row.try_get("first_d_date").ok(),
+            last_d_date: row.try_get("last_d_date").ok(),
+            estimated_bytes: read_i64_or_zero(&row, "estimated_bytes").max(0) as u64,
+        })
+        .collect())
 }
 
 fn summarize_storage_tables(tables: &[CandleTableStorage]) -> (i64, u64, f64) {
@@ -1013,13 +1096,93 @@ fn summarize_storage_tables(tables: &[CandleTableStorage]) -> (i64, u64, f64) {
     (total_rows, total_bytes, bytes_per_row)
 }
 
+#[cfg(target_os = "windows")]
+fn disk_space_bytes(path: &Path) -> Option<(u64, u64)> {
+    use std::os::windows::ffi::OsStrExt;
+
+    extern "system" {
+        fn GetDiskFreeSpaceExW(
+            lpDirectoryName: *const u16,
+            lpFreeBytesAvailableToCaller: *mut u64,
+            lpTotalNumberOfBytes: *mut u64,
+            lpTotalNumberOfFreeBytes: *mut u64,
+        ) -> i32;
+    }
+
+    let wide_path = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let mut available_bytes = 0_u64;
+    let mut total_bytes = 0_u64;
+    let mut total_free_bytes = 0_u64;
+    let ok = unsafe {
+        GetDiskFreeSpaceExW(
+            wide_path.as_ptr(),
+            &mut available_bytes,
+            &mut total_bytes,
+            &mut total_free_bytes,
+        )
+    };
+
+    if ok == 0 {
+        None
+    } else {
+        Some((total_bytes, available_bytes))
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn disk_space_bytes(_path: &Path) -> Option<(u64, u64)> {
+    None
+}
+
+fn build_disk_storage_info(path: PathBuf) -> Option<DiskStorageInfo> {
+    let resolved_path = if path.exists() {
+        path
+    } else {
+        std::env::current_dir().ok()?
+    };
+    let (total_bytes, free_bytes) = disk_space_bytes(&resolved_path)?;
+    let used_bytes = total_bytes.saturating_sub(free_bytes);
+    let free_percent = if total_bytes > 0 {
+        (free_bytes as f64 / total_bytes as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    Some(DiskStorageInfo {
+        path: resolved_path.display().to_string(),
+        total_bytes,
+        free_bytes,
+        used_bytes,
+        free_percent,
+    })
+}
+
+async fn fetch_database_disk_storage(pool: &MySqlPool) -> Option<DiskStorageInfo> {
+    let datadir = sqlx::query("SELECT @@datadir AS datadir")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|row| row.try_get::<String, _>("datadir").ok())
+        .filter(|value| !value.trim().is_empty());
+
+    let path = datadir
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())?;
+    build_disk_storage_info(path)
+}
+
 async fn build_candle_storage_response(
     pool: &MySqlPool,
     _params: &CandleStorageParams,
 ) -> Result<CandleStorageResponse, sqlx::Error> {
-    let tables = fetch_storage_table_group(pool, &CANDLE_STORAGE_TABLES).await?;
-    let engine_tables = fetch_storage_table_group(pool, &ENGINE_STORAGE_TABLES).await?;
-    let rollup_tables = fetch_storage_table_group(pool, &ROLLUP_STORAGE_TABLES).await?;
+    let tables = fetch_cached_storage_table_group(pool, &CANDLE_STORAGE_TABLES).await?;
+    let engine_tables = fetch_cached_storage_table_group(pool, &ENGINE_STORAGE_TABLES).await?;
+    let rollup_tables = fetch_cached_storage_table_group(pool, &ROLLUP_STORAGE_TABLES).await?;
     let setup_tables = engine_tables
         .iter()
         .filter(|table| table.table_name == "pattern_setups")
@@ -1034,21 +1197,19 @@ async fn build_candle_storage_response(
     let (setup_total_rows, setup_total_bytes, setup_bytes_per_row) =
         summarize_storage_tables(&setup_tables);
 
-    let mut futures_roots = Vec::new();
-    for table in tables
-        .iter()
-        .filter(|table| table.table_name.starts_with("futures_contract_"))
-    {
-        futures_roots.extend(fetch_futures_root_candle_storage(pool, table).await?);
-    }
-    let mut setup_roots = Vec::new();
-    let mut setup_markets = Vec::new();
-    for table in &setup_tables {
-        setup_roots.extend(fetch_pattern_setup_root_storage(pool, table).await?);
-        setup_markets.extend(fetch_pattern_setup_market_storage(pool, table).await?);
-    }
+    let futures_roots = fetch_cached_futures_root_storage(pool).await?;
+    let setup_roots = fetch_cached_pattern_setup_root_storage(pool).await?;
+    let setup_markets = fetch_cached_pattern_setup_market_storage(pool).await?;
+    let setup_contracts = fetch_cached_pattern_setup_contract_storage(pool).await?;
+    let setup_patterns = fetch_cached_pattern_setup_timeframe_pattern_storage(pool).await?;
+    let disk_storage = fetch_database_disk_storage(pool).await;
 
     Ok(CandleStorageResponse {
+        disk_path: disk_storage.as_ref().map(|item| item.path.clone()),
+        disk_total_bytes: disk_storage.as_ref().map(|item| item.total_bytes),
+        disk_free_bytes: disk_storage.as_ref().map(|item| item.free_bytes),
+        disk_used_bytes: disk_storage.as_ref().map(|item| item.used_bytes),
+        disk_free_percent: disk_storage.as_ref().map(|item| item.free_percent),
         tables,
         total_rows,
         total_bytes,
@@ -1068,6 +1229,605 @@ async fn build_candle_storage_response(
         setup_bytes_per_row,
         setup_roots,
         setup_markets,
+        setup_contracts,
+        setup_patterns,
+    })
+}
+
+async fn ensure_admin_operation_table(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS admin_operation_runs (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            action VARCHAR(64) NOT NULL,
+            status VARCHAR(32) NOT NULL DEFAULT 'queued',
+            root_symbol VARCHAR(32) NULL,
+            contract_symbol VARCHAR(64) NULL,
+            source_timeframe VARCHAR(16) NULL,
+            command_text TEXT NULL,
+            started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            finished_at DATETIME NULL,
+            duration_ms BIGINT NULL,
+            exit_code INT NULL,
+            output_tail MEDIUMTEXT NULL,
+            error_message TEXT NULL,
+            INDEX idx_admin_operation_status (status, started_at),
+            INDEX idx_admin_operation_started (started_at)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+fn trim_admin_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+}
+
+fn normalize_admin_symbol(value: Option<&str>) -> Option<String> {
+    trim_admin_text(value).map(|item| item.to_ascii_uppercase())
+}
+
+fn normalize_admin_timeframe(value: Option<&str>) -> Result<String, String> {
+    let timeframe = trim_admin_text(value).unwrap_or_else(|| "1m".to_string());
+    let allowed = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "12h", "1d"];
+
+    if allowed.contains(&timeframe.as_str()) {
+        Ok(timeframe)
+    } else {
+        Err(format!("Unsupported timeframe: {timeframe}"))
+    }
+}
+
+fn bool_env(value: Option<bool>, default_value: bool) -> String {
+    if value.unwrap_or(default_value) {
+        "1".to_string()
+    } else {
+        "0".to_string()
+    }
+}
+
+fn resolve_abcd_dir() -> Result<PathBuf, String> {
+    if let Ok(value) = std::env::var("ABCD_ADMIN_ABCD_DIR") {
+        let path = PathBuf::from(value);
+        if path.join("Cargo.toml").exists() {
+            return Ok(path);
+        }
+    }
+
+    let current_dir = std::env::current_dir().map_err(|error| error.to_string())?;
+    let candidates = [
+        current_dir.join("rust_sr").join("abcd"),
+        current_dir.join("..").join("abcd"),
+        current_dir.join("..").join("..").join("rust_sr").join("abcd"),
+        current_dir.clone(),
+    ];
+
+    for candidate in candidates {
+        if candidate.join("Cargo.toml").exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err("Could not locate rust_sr/abcd. Set ABCD_ADMIN_ABCD_DIR.".to_string())
+}
+
+fn cargo_admin_command(
+    abcd_dir: PathBuf,
+    bin_name: &str,
+    action_label: &str,
+    envs: Vec<(String, String)>,
+    env_removes: Vec<String>,
+) -> AdminCommandSpec {
+    let args = vec![
+        "run".to_string(),
+        "--bin".to_string(),
+        bin_name.to_string(),
+    ];
+    let command_text = format!(
+        "{action_label}: cargo {}",
+        args.iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    AdminCommandSpec {
+        program: "cargo".to_string(),
+        args,
+        envs,
+        env_removes,
+        cwd: abcd_dir,
+        command_text,
+    }
+}
+
+fn build_admin_command(params: &AdminActionParams) -> Result<AdminCommandSpec, String> {
+    let action = params.action.trim();
+    let abcd_dir = resolve_abcd_dir()?;
+    let clean_env = vec![
+        "ABCD_ENGINE_WORKSTATION".to_string(),
+        "ABCD_BENCHMARK_ONLY".to_string(),
+        "ABCD_SCAN_ONLY".to_string(),
+        "ABCD_EXPORT_CSV".to_string(),
+        "ABCD_PHASE_TIMINGS".to_string(),
+        "ABCD_PRINT_PHASE_TIMINGS".to_string(),
+    ];
+
+    match action {
+        "rebuild_indexes" => Ok(cargo_admin_command(
+            abcd_dir,
+            "rebuild_engine_indexes",
+            "Rebuild indexes",
+            Vec::new(),
+            clean_env,
+        )),
+        "refresh_rollups" => Ok(cargo_admin_command(
+            abcd_dir,
+            "refresh_prop_strategy_family_summaries",
+            "Refresh rollups",
+            Vec::new(),
+            clean_env,
+        )),
+        "refresh_storage" => Ok(cargo_admin_command(
+            abcd_dir,
+            "refresh_storage_summary",
+            "Refresh storage",
+            Vec::new(),
+            clean_env,
+        )),
+        "clear_engine" => {
+            if params.confirm_text.as_deref() != Some("CLEAR ENGINE") {
+                return Err("Type CLEAR ENGINE before clearing generated engine tables.".to_string());
+            }
+
+            Ok(cargo_admin_command(
+                abcd_dir,
+                "clear_engine_tables",
+                "Clear engine",
+                Vec::new(),
+                clean_env,
+            ))
+        }
+        "run_engine_scan" => {
+            let timeframe = normalize_admin_timeframe(params.source_timeframe.as_deref())?;
+            let root_symbol = normalize_admin_symbol(params.root_symbol.as_deref());
+            let contract_symbol = normalize_admin_symbol(params.contract_symbol.as_deref());
+            let scan_concurrency = params.scan_concurrency.unwrap_or(1).clamp(1, 16);
+            let mut envs = vec![
+                ("ABCD_CANDLE_SOURCE".to_string(), "futures_contracts".to_string()),
+                ("ABCD_FUTURES_TIMEFRAME".to_string(), timeframe.clone()),
+                (
+                    "ABCD_SCAN_CONCURRENCY".to_string(),
+                    scan_concurrency.to_string(),
+                ),
+                ("ABCD_WRITE_BATCH_SIZE".to_string(), "1".to_string()),
+                (
+                    "ABCD_SKIP_PROCESSED_SYMBOLS".to_string(),
+                    bool_env(params.skip_processed_symbols, true),
+                ),
+                (
+                    "ABCD_SKIP_PROP_FAMILY_SUMMARIES".to_string(),
+                    bool_env(params.skip_prop_family_summaries, true),
+                ),
+                (
+                    "ABCD_DEFER_REBUILD_INDEXES".to_string(),
+                    bool_env(params.defer_rebuild_indexes, true),
+                ),
+                (
+                    "ABCD_DEFAULT_FIT_ONLY".to_string(),
+                    bool_env(params.default_fit_only, true),
+                ),
+                ("ABCD_PROGRESS_EVERY".to_string(), "10000".to_string()),
+            ];
+
+            let mut env_removes = clean_env;
+            env_removes.push("ABCD_FUTURES_ROOT".to_string());
+            env_removes.push("ABCD_FUTURES_CONTRACT_SYMBOL".to_string());
+
+            if let Some(root_symbol) = root_symbol.as_ref() {
+                envs.push(("ABCD_FUTURES_ROOT".to_string(), root_symbol.clone()));
+            }
+            if let Some(contract_symbol) = contract_symbol.as_ref() {
+                envs.push((
+                    "ABCD_FUTURES_CONTRACT_SYMBOL".to_string(),
+                    contract_symbol.clone(),
+                ));
+            }
+
+            let mut spec = cargo_admin_command(
+                abcd_dir,
+                "abcd",
+                "Run engine scan",
+                envs,
+                env_removes,
+            );
+            spec.command_text = format!(
+                "Run engine scan: {} {} {}",
+                root_symbol.unwrap_or_else(|| "ALL_ROOTS".to_string()),
+                contract_symbol.unwrap_or_else(|| "ALL_CONTRACTS".to_string()),
+                timeframe
+            );
+
+            Ok(spec)
+        }
+        _ => Err(format!("Unknown admin action: {action}")),
+    }
+}
+
+async fn insert_admin_operation(
+    pool: &MySqlPool,
+    params: &AdminActionParams,
+    command_text: &str,
+) -> Result<i64, sqlx::Error> {
+    let result = sqlx::query(
+        r#"
+        INSERT INTO admin_operation_runs (
+            action, status, root_symbol, contract_symbol, source_timeframe,
+            command_text, started_at
+        )
+        VALUES (?, 'running', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        "#,
+    )
+    .bind(params.action.trim())
+    .bind(normalize_admin_symbol(params.root_symbol.as_deref()))
+    .bind(normalize_admin_symbol(params.contract_symbol.as_deref()))
+    .bind(trim_admin_text(params.source_timeframe.as_deref()))
+    .bind(command_text)
+    .execute(pool)
+    .await?;
+
+    Ok(result.last_insert_id() as i64)
+}
+
+fn append_output_tail(tail: &mut String, text: &str) {
+    const MAX_OUTPUT_TAIL_BYTES: usize = 24_000;
+    tail.push_str(text);
+    while tail.len() > MAX_OUTPUT_TAIL_BYTES {
+        if let Some(index) = tail.find('\n') {
+            tail.drain(..=index);
+        } else {
+            tail.clear();
+            break;
+        }
+    }
+}
+
+async fn collect_stream_tail<R>(stream: R, label: &'static str) -> String
+where
+    R: AsyncRead + Unpin,
+{
+    let mut reader = BufReader::new(stream).lines();
+    let mut tail = String::new();
+
+    loop {
+        match reader.next_line().await {
+            Ok(Some(line)) => {
+                append_output_tail(&mut tail, &format!("[{label}] {line}\n"));
+            }
+            Ok(None) => break,
+            Err(error) => {
+                append_output_tail(&mut tail, &format!("[{label}] stream error: {error}\n"));
+                break;
+            }
+        }
+    }
+
+    tail
+}
+
+async fn finish_admin_operation(
+    pool: &MySqlPool,
+    run_id: i64,
+    status: &str,
+    duration_ms: i64,
+    exit_code: Option<i32>,
+    output_tail: String,
+    error_message: Option<String>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE admin_operation_runs
+        SET
+            status = ?,
+            finished_at = CURRENT_TIMESTAMP,
+            duration_ms = ?,
+            exit_code = ?,
+            output_tail = ?,
+            error_message = ?
+        WHERE id = ?
+        "#,
+    )
+    .bind(status)
+    .bind(duration_ms)
+    .bind(exit_code)
+    .bind(output_tail)
+    .bind(error_message)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn run_admin_command_background(pool: MySqlPool, run_id: i64, spec: AdminCommandSpec) {
+    let started_at = Instant::now();
+    let mut command = Command::new(&spec.program);
+    command
+        .args(&spec.args)
+        .current_dir(&spec.cwd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    for env_name in &spec.env_removes {
+        command.env_remove(env_name);
+    }
+    for (env_name, env_value) in &spec.envs {
+        command.env(env_name, env_value);
+    }
+
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            let _ = finish_admin_operation(
+                &pool,
+                run_id,
+                "failed",
+                started_at.elapsed().as_millis() as i64,
+                None,
+                String::new(),
+                Some(format!("Failed to start command: {error}")),
+            )
+            .await;
+            return;
+        }
+    };
+
+    let stdout_task = child
+        .stdout
+        .take()
+        .map(|stream| tokio::spawn(collect_stream_tail(stream, "out")));
+    let stderr_task = child
+        .stderr
+        .take()
+        .map(|stream| tokio::spawn(collect_stream_tail(stream, "err")));
+
+    let status_result = child.wait().await;
+    let mut output_tail = String::new();
+
+    if let Some(task) = stdout_task {
+        if let Ok(tail) = task.await {
+            append_output_tail(&mut output_tail, &tail);
+        }
+    }
+    if let Some(task) = stderr_task {
+        if let Ok(tail) = task.await {
+            append_output_tail(&mut output_tail, &tail);
+        }
+    }
+
+    let duration_ms = started_at.elapsed().as_millis() as i64;
+    let (status, exit_code, error_message) = match status_result {
+        Ok(exit_status) if exit_status.success() => ("completed", exit_status.code(), None),
+        Ok(exit_status) => (
+            "failed",
+            exit_status.code(),
+            Some(format!("Command exited with status {exit_status}")),
+        ),
+        Err(error) => ("failed", None, Some(format!("Command wait failed: {error}"))),
+    };
+
+    if let Err(error) = finish_admin_operation(
+        &pool,
+        run_id,
+        status,
+        duration_ms,
+        exit_code,
+        output_tail,
+        error_message,
+    )
+    .await
+    {
+        eprintln!("Admin operation update failed: {:?}", error);
+    }
+}
+
+async fn fetch_admin_operations(
+    pool: &MySqlPool,
+) -> Result<Vec<AdminOperationSnapshot>, sqlx::Error> {
+    if !table_exists(pool, "admin_operation_runs").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            id,
+            action,
+            status,
+            root_symbol,
+            contract_symbol,
+            source_timeframe,
+            command_text,
+            DATE_FORMAT(started_at, '%Y-%m-%d %H:%i:%s') AS started_at,
+            DATE_FORMAT(finished_at, '%Y-%m-%d %H:%i:%s') AS finished_at,
+            duration_ms,
+            exit_code,
+            output_tail,
+            error_message
+        FROM admin_operation_runs
+        ORDER BY id DESC
+        LIMIT 25
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| AdminOperationSnapshot {
+            id: read_i64_or_zero(&row, "id"),
+            action: row.try_get("action").unwrap_or_default(),
+            status: row.try_get("status").unwrap_or_default(),
+            root_symbol: row.try_get("root_symbol").ok(),
+            contract_symbol: row.try_get("contract_symbol").ok(),
+            source_timeframe: row.try_get("source_timeframe").ok(),
+            command_text: row.try_get("command_text").ok(),
+            started_at: row.try_get("started_at").ok(),
+            finished_at: row.try_get("finished_at").ok(),
+            duration_ms: row.try_get("duration_ms").ok(),
+            exit_code: row
+                .try_get::<Option<i32>, _>("exit_code")
+                .ok()
+                .flatten()
+                .map(|value| value as i64),
+            output_tail: row.try_get("output_tail").ok(),
+            error_message: row.try_get("error_message").ok(),
+        })
+        .collect())
+}
+
+async fn fetch_admin_table_snapshots(
+    pool: &MySqlPool,
+) -> Result<Vec<AdminTableSnapshot>, sqlx::Error> {
+    if !table_exists(pool, "storage_table_summary").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            table_name,
+            exact_rows,
+            total_bytes,
+            DATE_FORMAT(refreshed_at, '%Y-%m-%d %H:%i:%s') AS refreshed_at
+        FROM storage_table_summary
+        WHERE table_name IN (
+            'pattern_setups',
+            'pattern_outcomes_prop',
+            'prop_strategy_family_summary',
+            'prop_strategy_family_yearly',
+            'prop_strategy_contract_week_summary',
+            'prop_strategy_family_weekly_cadence',
+            'futures_contract_1m_candles'
+        )
+        ORDER BY FIELD(
+            table_name,
+            'pattern_setups',
+            'pattern_outcomes_prop',
+            'prop_strategy_family_summary',
+            'prop_strategy_family_yearly',
+            'prop_strategy_contract_week_summary',
+            'prop_strategy_family_weekly_cadence',
+            'futures_contract_1m_candles'
+        )
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| AdminTableSnapshot {
+            table_name: row.try_get("table_name").unwrap_or_default(),
+            exact_rows: read_i64_or_zero(&row, "exact_rows"),
+            total_bytes: read_i64_or_zero(&row, "total_bytes").max(0) as u64,
+            refreshed_at: row.try_get("refreshed_at").ok(),
+        })
+        .collect())
+}
+
+async fn fetch_admin_engine_phases(
+    pool: &MySqlPool,
+) -> Result<Vec<AdminEnginePhaseSnapshot>, sqlx::Error> {
+    if !table_exists(pool, "engine_phase_timings").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            run_id,
+            symbol,
+            phase,
+            row_count,
+            duration_ms,
+            note,
+            DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+        FROM engine_phase_timings
+        ORDER BY id DESC
+        LIMIT 30
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| AdminEnginePhaseSnapshot {
+            run_id: row.try_get("run_id").unwrap_or_default(),
+            symbol: row.try_get("symbol").ok(),
+            phase: row.try_get("phase").unwrap_or_default(),
+            row_count: row.try_get("row_count").ok(),
+            duration_ms: read_i64_or_zero(&row, "duration_ms"),
+            note: row.try_get("note").ok(),
+            created_at: row.try_get("created_at").ok(),
+        })
+        .collect())
+}
+
+async fn fetch_admin_cache_states(
+    pool: &MySqlPool,
+) -> Result<Vec<AdminCacheStateSnapshot>, sqlx::Error> {
+    if !table_exists(pool, "dashboard_cache_state").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            cache_name,
+            is_ready,
+            DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at,
+            note
+        FROM dashboard_cache_state
+        ORDER BY updated_at DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| AdminCacheStateSnapshot {
+            cache_name: row.try_get("cache_name").unwrap_or_default(),
+            is_ready: row
+                .try_get::<bool, _>("is_ready")
+                .unwrap_or_else(|_| read_i64_or_zero(&row, "is_ready") != 0),
+            updated_at: row.try_get("updated_at").ok(),
+            note: row.try_get("note").ok(),
+        })
+        .collect())
+}
+
+async fn build_admin_status_response(
+    pool: &MySqlPool,
+) -> Result<AdminStatusResponse, sqlx::Error> {
+    ensure_admin_operation_table(pool).await?;
+
+    Ok(AdminStatusResponse {
+        abcd_dir: resolve_abcd_dir()
+            .ok()
+            .map(|path| path.display().to_string()),
+        operations: fetch_admin_operations(pool).await?,
+        table_snapshots: fetch_admin_table_snapshots(pool).await?,
+        engine_phases: fetch_admin_engine_phases(pool).await?,
+        cache_states: fetch_admin_cache_states(pool).await?,
     })
 }
 
@@ -1187,28 +1947,6 @@ fn is_missing_table_error(error: &sqlx::Error) -> bool {
         error,
         sqlx::Error::Database(db_error) if db_error.code().as_deref() == Some("1146")
     )
-}
-
-async fn table_column_exists(
-    pool: &MySqlPool,
-    table: &str,
-    column: &str,
-) -> Result<bool, sqlx::Error> {
-    let exists: i64 = sqlx::query_scalar(
-        r#"
-        SELECT COUNT(*)
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = ?
-          AND COLUMN_NAME = ?
-        "#,
-    )
-    .bind(table)
-    .bind(column)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(exists > 0)
 }
 
 async fn is_rollup_cache_ready(pool: &MySqlPool, cache_name: &str) -> Result<bool, sqlx::Error> {
@@ -1546,6 +2284,7 @@ async fn fetch_strategy_trades(
     let limit = params.limit.unwrap_or(50).clamp(1, 500);
     let offset = params.offset.unwrap_or(0).max(0);
     let include_count = params.include_count.unwrap_or(false);
+    let first_start_date = parse_simulator_start_date(params.first_start_date.as_deref());
     let family = match fetch_prop_strategy_family_filter(pool.get_ref(), prop_strategy_id).await {
         Ok(Some(family)) => family,
         Ok(None) => return HttpResponse::NotFound().body("Prop strategy family not found"),
@@ -1556,7 +2295,7 @@ async fn fetch_strategy_trades(
     };
 
     let route_x_strictness_expr = x_strictness_expr("p.x_bars_left", "p.x_length");
-    let family_where_clause = format!(
+    let family_base_where_clause = format!(
         r#"
             WHERE p.outcome_model = ?
               AND p.market = ?
@@ -1571,6 +2310,33 @@ async fn fetch_strategy_trades(
               AND p.twelve_month_trend = ?
             "#,
         route_x_strictness_expr = route_x_strictness_expr,
+    );
+    let family_where_clause = format!(
+        r#"
+            {family_base_where_clause}
+              AND (? IS NULL OR COALESCE(p.entry_date, p.reversal_detect_date, p.d_confirm_date, p.d_date) >= ?)
+        "#,
+        family_base_where_clause = family_base_where_clause,
+    );
+    let range_sql = format!(
+        r#"
+            SELECT
+                MIN(COALESCE(p.entry_date, p.reversal_detect_date, p.d_confirm_date, p.d_date)) AS earliest_entry_date,
+                MAX(COALESCE(p.entry_date, p.reversal_detect_date, p.d_confirm_date, p.d_date)) AS latest_entry_date
+            FROM pattern_outcomes_prop p
+            {family_base_where_clause}
+        "#,
+        family_base_where_clause = family_base_where_clause,
+    );
+    let entry_dates_sql = format!(
+        r#"
+            SELECT DISTINCT DATE(COALESCE(p.entry_date, p.reversal_detect_date, p.d_confirm_date, p.d_date)) AS entry_date
+            FROM pattern_outcomes_prop p
+            {family_base_where_clause}
+              AND COALESCE(p.entry_date, p.reversal_detect_date, p.d_confirm_date, p.d_date) IS NOT NULL
+            ORDER BY entry_date ASC
+        "#,
+        family_base_where_clause = family_base_where_clause,
     );
     let count_sql = format!(
         r#"
@@ -1589,6 +2355,7 @@ async fn fetch_strategy_trades(
                 p.d_date,
                 p.d_confirm_date,
                 p.reversal_detect_date,
+                p.entry_date,
                 p.target_date,
                 CAST(p.target_open AS DECIMAL(12,2)) AS target_open,
                 CAST(p.target_high AS DECIMAL(12,2)) AS target_high,
@@ -1621,7 +2388,7 @@ async fn fetch_strategy_trades(
                 {route_score_projection}
             FROM pattern_outcomes_prop p
             {family_where_clause}
-            ORDER BY COALESCE(p.reversal_detect_date, p.d_confirm_date, p.d_date) DESC,
+            ORDER BY COALESCE(p.entry_date, p.reversal_detect_date, p.d_confirm_date, p.d_date) ASC,
                      p.trade_enter_price ASC
             LIMIT ? OFFSET ?
             "#,
@@ -1630,6 +2397,53 @@ async fn fetch_strategy_trades(
         route_x_strictness_expr_for_select = x_strictness_expr("p.x_bars_left", "p.x_length"),
         family_where_clause = family_where_clause,
     );
+
+    let (earliest_entry_date, latest_entry_date) = match sqlx::query_as::<
+        _,
+        (Option<NaiveDateTime>, Option<NaiveDateTime>),
+    >(&range_sql)
+    .bind(&family.outcome_model)
+    .bind(&family.market)
+    .bind(&family.harmonic_type)
+    .bind(&family.bin)
+    .bind(&family.reversal_type)
+    .bind(&family.size_bucket)
+    .bind(&family.time_bin)
+    .bind(family.x_strictness.as_deref().unwrap_or("Loose"))
+    .bind(&family.three_month_trend)
+    .bind(&family.six_month_trend)
+    .bind(&family.twelve_month_trend)
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(range) => range,
+        Err(error) => {
+            eprintln!("Prop strategy trades range DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let entry_dates = match sqlx::query_scalar::<_, NaiveDate>(&entry_dates_sql)
+        .bind(&family.outcome_model)
+        .bind(&family.market)
+        .bind(&family.harmonic_type)
+        .bind(&family.bin)
+        .bind(&family.reversal_type)
+        .bind(&family.size_bucket)
+        .bind(&family.time_bin)
+        .bind(family.x_strictness.as_deref().unwrap_or("Loose"))
+        .bind(&family.three_month_trend)
+        .bind(&family.six_month_trend)
+        .bind(&family.twelve_month_trend)
+        .fetch_all(pool.get_ref())
+        .await
+    {
+        Ok(dates) => dates,
+        Err(error) => {
+            eprintln!("Prop strategy trades date list DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
 
     let total_count = if include_count {
         match sqlx::query_scalar::<_, i64>(&count_sql)
@@ -1644,6 +2458,8 @@ async fn fetch_strategy_trades(
             .bind(&family.three_month_trend)
             .bind(&family.six_month_trend)
             .bind(&family.twelve_month_trend)
+            .bind(first_start_date)
+            .bind(first_start_date)
             .fetch_one(pool.get_ref())
             .await
         {
@@ -1672,6 +2488,8 @@ async fn fetch_strategy_trades(
         .bind(&family.three_month_trend)
         .bind(&family.six_month_trend)
         .bind(&family.twelve_month_trend)
+        .bind(first_start_date)
+        .bind(first_start_date)
         .bind(fetch_limit)
         .bind(offset)
         .fetch_all(pool.get_ref())
@@ -1697,6 +2515,9 @@ async fn fetch_strategy_trades(
         patterns,
         total_count,
         has_more,
+        earliest_entry_date,
+        latest_entry_date,
+        entry_dates,
     });
 }
 
@@ -1800,6 +2621,148 @@ fn simulator_trade_excursion(
     )
 }
 
+const SIMULATOR_DRAWDOWN_MODEL_INTRADAY: &str = "intraday";
+const SIMULATOR_DRAWDOWN_MODEL_EOD: &str = "eod";
+
+fn normalize_simulator_drawdown_model(value: Option<&str>) -> &'static str {
+    if value
+        .map(|item| item.trim().eq_ignore_ascii_case(SIMULATOR_DRAWDOWN_MODEL_EOD))
+        .unwrap_or(false)
+    {
+        SIMULATOR_DRAWDOWN_MODEL_EOD
+    } else {
+        SIMULATOR_DRAWDOWN_MODEL_INTRADAY
+    }
+}
+
+fn simulator_intratrade_peak_balance(
+    drawdown_model: &str,
+    pre_trade_peak_balance: f64,
+    intratrade_high_balance: f64,
+) -> f64 {
+    if drawdown_model == SIMULATOR_DRAWDOWN_MODEL_INTRADAY {
+        pre_trade_peak_balance.max(intratrade_high_balance)
+    } else {
+        pre_trade_peak_balance
+    }
+}
+
+fn simulator_intratrade_failure_reason(
+    drawdown_model: &str,
+    max_drawdown: f64,
+    intratrade_low_balance: f64,
+    trailing_floor: f64,
+    daily_floor: Option<f64>,
+) -> Option<String> {
+    if drawdown_model == SIMULATOR_DRAWDOWN_MODEL_INTRADAY
+        && max_drawdown > 0.0
+        && intratrade_low_balance <= trailing_floor
+    {
+        Some(String::from("Intratrade trailing drawdown breached"))
+    } else if daily_floor
+        .map(|floor| intratrade_low_balance <= floor)
+        .unwrap_or(false)
+    {
+        Some(String::from("Intratrade daily loss limit breached"))
+    } else {
+        None
+    }
+}
+
+fn simulator_next_peak_balance(
+    drawdown_model: &str,
+    failed_intratrade_drawdown: bool,
+    previous_peak_balance: f64,
+    intratrade_high_balance: f64,
+    balance: f64,
+) -> f64 {
+    if failed_intratrade_drawdown {
+        previous_peak_balance
+    } else if drawdown_model == SIMULATOR_DRAWDOWN_MODEL_INTRADAY {
+        previous_peak_balance
+            .max(intratrade_high_balance)
+            .max(balance)
+    } else {
+        previous_peak_balance.max(balance)
+    }
+}
+
+#[cfg(test)]
+mod simulator_tests {
+    use super::*;
+
+    #[test]
+    fn intraday_drawdown_trails_against_in_trade_high_water_mark() {
+        let pre_trade_peak = 50_000.0;
+        let intratrade_high = 52_500.0;
+        let intratrade_low = 50_300.0;
+        let max_drawdown = 2_000.0;
+        let intratrade_peak = simulator_intratrade_peak_balance(
+            SIMULATOR_DRAWDOWN_MODEL_INTRADAY,
+            pre_trade_peak,
+            intratrade_high,
+        );
+        let trailing_floor = intratrade_peak - max_drawdown;
+
+        assert_eq!(intratrade_peak, intratrade_high);
+        assert_eq!(trailing_floor, 50_500.0);
+        assert_eq!(
+            simulator_intratrade_failure_reason(
+                SIMULATOR_DRAWDOWN_MODEL_INTRADAY,
+                max_drawdown,
+                intratrade_low,
+                trailing_floor,
+                None,
+            ),
+            Some(String::from("Intratrade trailing drawdown breached"))
+        );
+    }
+
+    #[test]
+    fn eod_drawdown_does_not_fail_on_intratrade_high_water_mark() {
+        let pre_trade_peak = 50_000.0;
+        let intratrade_high = 52_500.0;
+        let intratrade_low = 50_300.0;
+        let max_drawdown = 2_000.0;
+        let intratrade_peak = simulator_intratrade_peak_balance(
+            SIMULATOR_DRAWDOWN_MODEL_EOD,
+            pre_trade_peak,
+            intratrade_high,
+        );
+        let trailing_floor = intratrade_peak - max_drawdown;
+
+        assert_eq!(intratrade_peak, pre_trade_peak);
+        assert_eq!(
+            simulator_intratrade_failure_reason(
+                SIMULATOR_DRAWDOWN_MODEL_EOD,
+                max_drawdown,
+                intratrade_low,
+                trailing_floor,
+                None,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn failed_intraday_trade_does_not_advance_peak_after_breach() {
+        let previous_peak = 50_000.0;
+        let intratrade_high = 52_500.0;
+        let stopped_balance = 49_900.0;
+
+        assert_eq!(
+            simulator_next_peak_balance(
+                SIMULATOR_DRAWDOWN_MODEL_INTRADAY,
+                true,
+                previous_peak,
+                intratrade_high,
+                stopped_balance,
+            ),
+            previous_peak
+        );
+    }
+}
+
 #[route("/simulator/family-replay", method = "GET", method = "POST")]
 async fn fetch_simulator_family_replay(
     pool: web::Data<MySqlPool>,
@@ -1825,6 +2788,7 @@ async fn fetch_simulator_family_replay(
     let profit_target = params.profit_target.unwrap_or(3_000.0).max(0.0);
     let max_drawdown = params.max_drawdown.unwrap_or(2_000.0).max(0.0);
     let daily_loss_limit = params.daily_loss_limit.filter(|value| *value > 0.0);
+    let drawdown_model = normalize_simulator_drawdown_model(params.drawdown_model.as_deref());
     let one_trade_at_a_time = params.one_trade_at_a_time.unwrap_or(true);
 
     let family = match fetch_prop_strategy_family_filter(pool.get_ref(), prop_strategy_id).await {
@@ -1990,20 +2954,21 @@ async fn fetch_simulator_family_replay(
             let intratrade_low_balance = balance_before + intratrade_adverse_pnl;
             let intratrade_high_balance = balance_before + intratrade_favorable_pnl;
             let pre_close_peak_balance = peak_balance;
-            let pre_close_trailing_floor = pre_close_peak_balance - max_drawdown;
+            let intratrade_peak_balance = simulator_intratrade_peak_balance(
+                drawdown_model,
+                pre_close_peak_balance,
+                intratrade_high_balance,
+            );
+            let intratrade_trailing_floor = intratrade_peak_balance - max_drawdown;
             let daily_floor = daily_loss_limit.map(|limit| day_start_balance - limit);
 
-            let intratrade_failure_reason =
-                if max_drawdown > 0.0 && intratrade_low_balance <= pre_close_trailing_floor {
-                    Some(String::from("Intratrade trailing drawdown breached"))
-                } else if daily_floor
-                    .map(|floor| intratrade_low_balance <= floor)
-                    .unwrap_or(false)
-                {
-                    Some(String::from("Intratrade daily loss limit breached"))
-                } else {
-                    None
-                };
+            let intratrade_failure_reason = simulator_intratrade_failure_reason(
+                drawdown_model,
+                max_drawdown,
+                intratrade_low_balance,
+                intratrade_trailing_floor,
+                daily_floor,
+            );
 
             let failed_intratrade_drawdown = intratrade_failure_reason.is_some();
             let pnl = if failed_intratrade_drawdown {
@@ -2016,13 +2981,21 @@ async fn fetch_simulator_family_replay(
             } else {
                 closed_balance
             };
-            if !failed_intratrade_drawdown {
-                peak_balance = peak_balance.max(balance);
-            }
+            peak_balance = simulator_next_peak_balance(
+                drawdown_model,
+                failed_intratrade_drawdown,
+                pre_close_peak_balance,
+                intratrade_high_balance,
+                balance,
+            );
             let drawdown = balance - peak_balance;
-            max_drawdown_seen = max_drawdown_seen
-                .min(intratrade_low_balance - pre_close_peak_balance)
-                .min(drawdown);
+            max_drawdown_seen = if drawdown_model == SIMULATOR_DRAWDOWN_MODEL_INTRADAY {
+                max_drawdown_seen
+                    .min(intratrade_low_balance - intratrade_peak_balance)
+                    .min(drawdown)
+            } else {
+                max_drawdown_seen.min(drawdown)
+            };
             trade_count += 1;
             busy_until = trade.target_date;
             end_date = trade.target_date.or(Some(trade.entry_date));
@@ -2344,6 +3317,9 @@ async fn fetch_current_open_setups(
         patterns,
         total_count,
         has_more,
+        earliest_entry_date: None,
+        latest_entry_date: None,
+        entry_dates: Vec::new(),
     })
 }
 
@@ -2801,6 +3777,55 @@ async fn fetch_candle_storage_summary(
     }
 }
 
+#[route("/admin/status", method = "GET", method = "POST")]
+async fn fetch_admin_status(pool: web::Data<MySqlPool>) -> impl Responder {
+    match build_admin_status_response(pool.get_ref()).await {
+        Ok(response) => HttpResponse::Ok().json(response),
+        Err(error) => {
+            eprintln!("Admin status DB error: {:?}", error);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+#[route("/admin/run-action", method = "POST")]
+async fn run_admin_action(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<AdminActionParams>,
+) -> impl Responder {
+    if let Err(error) = ensure_admin_operation_table(pool.get_ref()).await {
+        eprintln!("Admin operation table error: {:?}", error);
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    let spec = match build_admin_command(&params) {
+        Ok(spec) => spec,
+        Err(message) => return HttpResponse::BadRequest().body(message),
+    };
+
+    let run_id = match insert_admin_operation(pool.get_ref(), &params, &spec.command_text).await {
+        Ok(run_id) => run_id,
+        Err(error) => {
+            eprintln!("Admin operation insert error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let response = AdminActionStartResponse {
+        run_id,
+        status: "running".to_string(),
+        action: params.action.trim().to_string(),
+        command_text: spec.command_text.clone(),
+    };
+
+    let background_pool = pool.get_ref().clone();
+    tokio::spawn(async move {
+        run_admin_command_background(background_pool, run_id, spec).await;
+    });
+
+    HttpResponse::Ok().json(response)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("🔹 Starting server...");
@@ -2838,6 +3863,8 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_current_setup_strategies)
             .service(fetch_pattern_detail)
             .service(fetch_candle_storage_summary)
+            .service(fetch_admin_status)
+            .service(run_admin_action)
             .service(fetch_setup_comparison)
             .service(fetch_strategy_candidates)
             .service(fetch_strategy_contract_weeks)

@@ -1,0 +1,114 @@
+#< CLIXML
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2021-12-05 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2022-01-02 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-09-17 (degraded), 2025-09-24 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-11-28 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2026-03-15 (degraded), 2026-03-16 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2026-04-10 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2021-12-05 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2022-01-02 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-09-17 (degraded), 2025-09-24 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-11-28 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2026-03-15 (degraded), 2026-03-16 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2026-04-10 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2021-12-05 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2022-01-02 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: No data found for the request you submitted.
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-09-17 (degraded), 2025-09-24 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-11-28 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2026-03-15 (degraded), 2026-03-16 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2026-04-10 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2021-12-05 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2022-01-02 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-09-17 (degraded), 2025-09-24 (degraded), 2025-11-28 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2026-03-15 (degraded), 2026-03-16 (degraded), 2026-04-10 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2021-12-05 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2022-01-02 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-09-17 (degraded), 2025-09-24 (degraded), 2025-11-28 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2026-03-15 (degraded), 2026-03-16 (degraded), 2026-04-10 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2021-12-05 (degraded), 2022-01-02 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-09-17 (degraded), 2025-09-24 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2025-11-28 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd\scripts\load_futures_1m_candles.py:332: BentoWarning: The streaming request contained one or more days which have reduced quality: 2026-03-15 (degraded), 2026-03-16 (degraded), 2026-04-10 (degraded). See: https://databento.com/docs/api-reference-historical/metadata/metadata-get-dataset-condition
+  store = client.timeseries.get_range(
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><Obj S="progress" RefId="0"><TN RefId="0"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N="SourceId">1</I64><PR N="Record"><AV>Preparing modules for first use.</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj><Obj S="progress" RefId="1"><TNRef RefId="0" /><MS><I64 N="SourceId">1</I64><PR N="Record"><AV>Preparing modules for first use.</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>

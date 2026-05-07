@@ -5,7 +5,17 @@ use rust_decimal::Decimal;
 use sqlx::mysql::MySqlPool;
 use sqlx::Row;
 
-const CANDLE_TABLES: [&str; 2] = ["futures_contract_1m_candles", "futures_contract_3m_candles"];
+const CANDLE_TABLES: [&str; 9] = [
+    "futures_contract_1m_candles",
+    "futures_contract_3m_candles",
+    "futures_contract_5m_candles",
+    "futures_contract_15m_candles",
+    "futures_contract_30m_candles",
+    "futures_contract_1h_candles",
+    "futures_contract_4h_candles",
+    "futures_contract_12h_candles",
+    "futures_contract_1d_candles",
+];
 
 fn database_url_from_env() -> Result<String, Box<dyn std::error::Error>> {
     env::var("ABCD_DATABASE_URL")
@@ -68,6 +78,25 @@ async fn table_rows(pool: &MySqlPool, table_name: &str) -> i64 {
         .unwrap_or(0)
 }
 
+async fn table_exists(
+    pool: &MySqlPool,
+    table_name: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+        "#,
+    )
+    .bind(table_name)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(count > 0)
+}
+
 async fn table_storage_bytes(
     pool: &MySqlPool,
     table_name: &str,
@@ -109,7 +138,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut total_rows = 0_i64;
     let mut total_bytes = 0_u64;
+    let mut existing_tables = Vec::new();
     for table_name in CANDLE_TABLES {
+        if table_exists(&pool, table_name).await? {
+            existing_tables.push(table_name);
+        }
+    }
+
+    for table_name in &existing_tables {
         let exact_rows = table_rows(&pool, table_name).await;
         let (data_bytes, index_bytes) = table_storage_bytes(&pool, table_name).await?;
         let table_bytes = data_bytes + index_bytes;
@@ -146,7 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("FUTURES CANDLES BY ROOT SYMBOL");
     println!("table\troot_symbol\tcontracts\tcandles\tfirst_ts\tlast_ts\test_size");
 
-    for table_name in ["futures_contract_1m_candles", "futures_contract_3m_candles"] {
+    for table_name in existing_tables {
         let (data_bytes, index_bytes) = table_storage_bytes(&pool, table_name).await?;
         let table_bytes = data_bytes + index_bytes;
         let table_rows = table_rows(&pool, table_name).await;

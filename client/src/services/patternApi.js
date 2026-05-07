@@ -92,6 +92,7 @@ const parsePatternSummaryRecord = (pattern) => ({
   prop_strategy_id: pattern.prop_strategy_id ?? null,
   d_confirm_date: pattern.d_confirm_date ?? null,
   reversal_detect_date: pattern.reversal_detect_date ?? null,
+  entry_date: pattern.entry_date ?? null,
   target_date: pattern.target_date ?? null,
   trade_enter_price: parseFloat(pattern.trade_enter_price),
   trade_risk_exit_price: parseFloat(pattern.trade_risk_exit_price),
@@ -424,6 +425,11 @@ export const fetchCandleStorageSummary = async ({
 
     return {
       ...data,
+      disk_path: data?.disk_path ?? null,
+      disk_total_bytes: parseOptionalInt(data?.disk_total_bytes) ?? 0,
+      disk_free_bytes: parseOptionalInt(data?.disk_free_bytes) ?? 0,
+      disk_used_bytes: parseOptionalInt(data?.disk_used_bytes) ?? 0,
+      disk_free_percent: parseOptionalFloat(data?.disk_free_percent) ?? 0,
       total_rows: parseOptionalInt(data?.total_rows) ?? 0,
       total_bytes: parseOptionalInt(data?.total_bytes) ?? 0,
       bytes_per_row: parseOptionalFloat(data?.bytes_per_row) ?? 0,
@@ -487,7 +493,7 @@ export const fetchCandleStorageSummary = async ({
       setup_roots: Array.isArray(data?.setup_roots)
         ? data.setup_roots.map((root) => ({
             ...root,
-            symbol_count: parseOptionalInt(root?.symbol_count) ?? 0,
+            contract_count: parseOptionalInt(root?.contract_count) ?? 0,
             setup_count: parseOptionalInt(root?.setup_count) ?? 0,
             estimated_bytes: parseOptionalInt(root?.estimated_bytes) ?? 0,
           }))
@@ -499,7 +505,87 @@ export const fetchCandleStorageSummary = async ({
             estimated_bytes: parseOptionalInt(market?.estimated_bytes) ?? 0,
           }))
         : [],
+      setup_contracts: Array.isArray(data?.setup_contracts)
+        ? data.setup_contracts.map((contract) => ({
+            ...contract,
+            setup_count: parseOptionalInt(contract?.setup_count) ?? 0,
+            estimated_bytes: parseOptionalInt(contract?.estimated_bytes) ?? 0,
+          }))
+        : [],
+      setup_patterns: Array.isArray(data?.setup_patterns)
+        ? data.setup_patterns.map((pattern) => ({
+            ...pattern,
+            setup_count: parseOptionalInt(pattern?.setup_count) ?? 0,
+            estimated_bytes: parseOptionalInt(pattern?.estimated_bytes) ?? 0,
+          }))
+        : [],
     };
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
+export const fetchAdminStatus = async () => {
+  try {
+    const data = await postJson('/admin/status', {});
+    return {
+      ...data,
+      operations: Array.isArray(data?.operations)
+        ? data.operations.map((operation) => ({
+            ...operation,
+            id: parseOptionalInt(operation?.id) ?? 0,
+            duration_ms: parseOptionalInt(operation?.duration_ms),
+            exit_code: parseOptionalInt(operation?.exit_code),
+          }))
+        : [],
+      table_snapshots: Array.isArray(data?.table_snapshots)
+        ? data.table_snapshots.map((table) => ({
+            ...table,
+            exact_rows: parseOptionalInt(table?.exact_rows) ?? 0,
+            total_bytes: parseOptionalInt(table?.total_bytes) ?? 0,
+          }))
+        : [],
+      engine_phases: Array.isArray(data?.engine_phases)
+        ? data.engine_phases.map((phase) => ({
+            ...phase,
+            row_count: parseOptionalInt(phase?.row_count),
+            duration_ms: parseOptionalInt(phase?.duration_ms) ?? 0,
+          }))
+        : [],
+      cache_states: Array.isArray(data?.cache_states)
+        ? data.cache_states.map((cache) => ({
+            ...cache,
+            is_ready: Boolean(cache?.is_ready),
+          }))
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
+export const runAdminAction = async (action, options = {}) => {
+  try {
+    return await postJson('/admin/run-action', {
+      action,
+      root_symbol: options.rootSymbol ?? null,
+      contract_symbol: options.contractSymbol ?? null,
+      source_timeframe: options.sourceTimeframe ?? null,
+      scan_concurrency: parseOptionalInt(options.scanConcurrency),
+      default_fit_only:
+        typeof options.defaultFitOnly === 'boolean' ? options.defaultFitOnly : null,
+      skip_processed_symbols:
+        typeof options.skipProcessedSymbols === 'boolean' ? options.skipProcessedSymbols : null,
+      defer_rebuild_indexes:
+        typeof options.deferRebuildIndexes === 'boolean' ? options.deferRebuildIndexes : null,
+      skip_prop_family_summaries:
+        typeof options.skipPropFamilySummaries === 'boolean'
+          ? options.skipPropFamilySummaries
+          : null,
+      confirm_text: options.confirmText ?? null,
+    });
   } catch (error) {
     console.error(error);
     return null;
@@ -574,6 +660,7 @@ export const fetchSimulatorFamilyReplay = async ({
   testsToChain,
   contracts,
   accountRules,
+  drawdownModel,
   oneTradeAtATime,
 }) => {
   if (!familyId) {
@@ -590,6 +677,7 @@ export const fetchSimulatorFamilyReplay = async ({
       profit_target: accountRules?.profitTarget ?? null,
       max_drawdown: accountRules?.maxDrawdown ?? null,
       daily_loss_limit: accountRules?.dailyLossLimit ?? null,
+      drawdown_model: drawdownModel ?? null,
       one_trade_at_a_time: oneTradeAtATime,
     });
 
@@ -610,7 +698,7 @@ export const fetchStrategyTrades = async (
   }
 
   const filter = {
-    prop_strategy_id: strategy.propStrategyId ?? strategy.id ?? null,
+    prop_strategy_id: strategy.propStrategyId ?? strategy.familyKey ?? strategy.id ?? null,
     harmonic_type: strategy.harmonicType,
     market: strategy.market,
     bin: strategy.bin,
@@ -622,6 +710,7 @@ export const fetchStrategyTrades = async (
     offset: pagination.offset ?? 0,
     prop_mode: Boolean(options?.propMode),
     prop_outcome_mode: options?.propOutcomeMode ?? DEFAULT_PROP_OUTCOME_MODE,
+    first_start_date: options?.firstStartDate ?? null,
   };
 
   try {
@@ -639,10 +728,20 @@ export const fetchStrategyTrades = async (
       ...data,
       total_count: data?.total_count ?? data.patterns.length,
       has_more: Boolean(data?.has_more),
+      earliest_entry_date: data?.earliest_entry_date ?? null,
+      latest_entry_date: data?.latest_entry_date ?? null,
+      entry_dates: Array.isArray(data?.entry_dates) ? data.entry_dates : [],
     };
   } catch (error) {
     console.error(error);
-    return { patterns: [], total_count: 0, has_more: false };
+    return {
+      patterns: [],
+      total_count: 0,
+      has_more: false,
+      earliest_entry_date: null,
+      latest_entry_date: null,
+      entry_dates: [],
+    };
   }
 };
 

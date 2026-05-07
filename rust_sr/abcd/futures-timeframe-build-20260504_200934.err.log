@@ -1,0 +1,22 @@
+#< CLIXML
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.64s
+     Running `target\debug\build_futures_3m_candles.exe`
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.57s
+     Running `target\debug\build_futures_timeframe_candles.exe`
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running `target\debug\build_futures_3m_candles.exe`
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.39s
+     Running `target\debug\build_futures_timeframe_candles.exe`
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
+     Running `target\debug\build_futures_3m_candles.exe`
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running `target\debug\build_futures_timeframe_candles.exe`
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running `target\debug\build_futures_3m_candles.exe`
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
+     Running `target\debug\build_futures_timeframe_candles.exe`
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running `target\debug\build_futures_3m_candles.exe`
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running `target\debug\build_futures_timeframe_candles.exe`
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><Obj S="progress" RefId="0"><TN RefId="0"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N="SourceId">1</I64><PR N="Record"><AV>Preparing modules for first use.</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>

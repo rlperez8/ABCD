@@ -180,7 +180,9 @@ impl PatternXABCD {
 
     fn canonical_pattern_key(&self) -> String {
         format!(
-            "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+            "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+            self.source_table,
+            self.source_timeframe,
             format!("{:?}", self.market).to_lowercase(),
             self.symbol,
             self.x.date,

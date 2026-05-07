@@ -1,0 +1,38 @@
+saved table summary: futures_contract_1m_candles rows=29003425 size=5469356032 bytes (7.4s)
+saved table summary: futures_contract_3m_candles rows=11165270 size=1610579968 bytes (2.9s)
+saved table summary: futures_contract_5m_candles rows=7019156 size=864649216 bytes (1.8s)
+saved table summary: futures_contract_15m_candles rows=2546503 size=154959872 bytes (0.7s)
+saved table summary: futures_contract_30m_candles rows=1340422 size=154943488 bytes (0.4s)
+saved table summary: futures_contract_1h_candles rows=712456 size=90882048 bytes (0.2s)
+saved table summary: futures_contract_4h_candles rows=210178 size=26820608 bytes (0.1s)
+saved table summary: futures_contract_12h_candles rows=81864 size=11059200 bytes (0.1s)
+saved table summary: futures_contract_1d_candles rows=46673 size=6864896 bytes (0.0s)
+saved table summary: pattern_setups rows=4916040 size=364642304 bytes (6.1s)
+saved table summary: pattern_outcomes_prop rows=4986648 size=660537344 bytes (6.8s)
+saved table summary: prop_strategy_family_summary rows=0 size=12107776 bytes (0.0s)
+saved table summary: prop_strategy_family_yearly rows=0 size=11059200 bytes (0.0s)
+saved table summary: prop_strategy_contract_week_summary rows=0 size=49152 bytes (0.0s)
+saved table summary: prop_strategy_family_weekly_cadence rows=0 size=6864896 bytes (0.0s)
+saved futures root summary: futures_contract_1m_candles
+futures breakdown finished: futures_contract_1m_candles (15.9s)
+saved futures root summary: futures_contract_3m_candles
+futures breakdown finished: futures_contract_3m_candles (5.6s)
+saved futures root summary: futures_contract_5m_candles
+futures breakdown finished: futures_contract_5m_candles (3.5s)
+saved futures root summary: futures_contract_15m_candles
+futures breakdown finished: futures_contract_15m_candles (1.3s)
+saved futures root summary: futures_contract_30m_candles
+futures breakdown finished: futures_contract_30m_candles (0.7s)
+saved futures root summary: futures_contract_1h_candles
+futures breakdown finished: futures_contract_1h_candles (0.4s)
+saved futures root summary: futures_contract_4h_candles
+futures breakdown finished: futures_contract_4h_candles (0.1s)
+saved futures root summary: futures_contract_12h_candles
+futures breakdown finished: futures_contract_12h_candles (0.1s)
+saved futures root summary: futures_contract_1d_candles
+futures breakdown finished: futures_contract_1d_candles (0.1s)
+saved setup root summary: pattern_setups
+setup root breakdown finished (10.1s)
+saved setup market summary: pattern_setups
+setup market breakdown finished (7.3s)
+storage summary refresh complete (71.6s)

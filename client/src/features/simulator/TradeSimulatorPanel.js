@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import CandleChartPanel from '../candle-chart/CandleChartPanel';
 import { fetchSimulatorFamilyReplay } from '../../services/patternApi';
 
@@ -88,12 +88,15 @@ const APEX_RULE_SOURCES = [
 const SIMULATOR_TABS = [
   { id: 'overview', label: 'Simulator' },
   { id: 'details', label: 'Details' },
-  { id: 'events', label: 'Event Log' },
   { id: 'rules', label: 'Rules' },
 ];
 
-const SIMULATOR_PLAYBACK_INTERVAL_MS = 70;
-const SIMULATOR_PLAYBACK_EVENTS_PER_TICK = 3;
+const SIMULATOR_PLAYBACK_EVENTS_PER_TICK = 1;
+const SIMULATOR_PLAYBACK_SPEEDS = {
+  slow: { label: 'Slow', intervalMs: 180 },
+  medium: { label: 'Medium', intervalMs: 70 },
+  fast: { label: 'Fast', intervalMs: 24 },
+};
 const SIMULATOR_START_DATE = '2021-01-01';
 
 const formatMoney = (value) =>
@@ -102,9 +105,6 @@ const formatMoney = (value) =>
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(Number(value) || 0);
-
-const formatNumber = (value, digits = 0) =>
-  Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : 'N/A';
 
 const formatShortDate = (value) => {
   if (!value) {
@@ -164,77 +164,6 @@ const formatDateOption = (value) => {
   });
 };
 
-const getTradeDate = (trade = {}) =>
-  trade.entry_date ?? trade.reversal_detect_date ?? trade.d_confirm_date ?? trade.d_date ?? null;
-
-const getTradeEndDate = (trade = {}) => trade.target_date ?? getTradeDate(trade);
-
-const getCandleDate = (candle = {}) =>
-  candle.candle_date ?? candle.date ?? candle.ts_utc ?? null;
-
-const getDateTime = (value) => {
-  const normalizedDate = normalizeDateInput(value);
-  if (!normalizedDate) {
-    return null;
-  }
-
-  const [year, month, day] = normalizedDate.split('-').map((part) => Number.parseInt(part, 10));
-  const time = new Date(year, month - 1, day).getTime();
-  return Number.isFinite(time) ? time : null;
-};
-
-const getLatestDateValue = (values = []) => {
-  let latest = null;
-  let latestTime = null;
-
-  values.forEach((value) => {
-    const normalizedDate = normalizeDateInput(value);
-    const time = getDateTime(normalizedDate);
-    if (normalizedDate && time !== null && (latestTime === null || time > latestTime)) {
-      latest = normalizedDate;
-      latestTime = time;
-    }
-  });
-
-  return latest;
-};
-
-const getLatestLoadedDate = (candles = [], trades = []) => {
-  const latestCandleDate = getLatestDateValue(candles.map(getCandleDate));
-  if (latestCandleDate) {
-    return latestCandleDate;
-  }
-
-  return getLatestDateValue(
-    trades.flatMap((trade) => [
-      getTradeDate(trade),
-      getTradeEndDate(trade),
-      trade.entry_date,
-      trade.target_date,
-    ])
-  );
-};
-
-const buildDateRangeOptions = (startDate, endDate) => {
-  const dates = [];
-  const startTime = getDateTime(startDate);
-  const endTime = getDateTime(endDate);
-  const safeEndTime = Math.max(endTime ?? startTime ?? 0, startTime ?? 0);
-
-  if (startTime === null) {
-    return dates;
-  }
-
-  const cursor = new Date(startTime);
-
-  while (cursor.getTime() <= safeEndTime) {
-    dates.push(normalizeDateInput(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return dates;
-};
-
 const getTradeResultLabel = (trade = {}) => {
   const result = Number(trade.trade_result);
   if (result === 1) return 'Won';
@@ -251,43 +180,42 @@ const getSimulatorTradeKey = (trade = {}, fallback = '') =>
     trade.trade_index ?? fallback,
   ].join('|');
 
-const sameTradeDate = (left, right) =>
-  Boolean(left && right && normalizeDateInput(left) === normalizeDateInput(right));
+const getReplayPatternMatchKeys = (trade = {}) => {
+  const keys = [];
 
-const findLoadedPatternForTrade = (trade = {}, patterns = []) =>
-  patterns.find((pattern) => {
-    if (trade.pattern_id && pattern.pattern_id === trade.pattern_id) {
-      return true;
-    }
+  if (trade.pattern_id) {
+    keys.push(`id:${trade.pattern_id}`);
+  }
 
-    if (!trade.pattern_group_id || pattern.pattern_group_id !== trade.pattern_group_id) {
-      return false;
-    }
+  if (trade.pattern_group_id) {
+    keys.push(`group:${trade.pattern_group_id}`);
+    [trade.entry_date, trade.reversal_detect_date, trade.d_confirm_date, trade.d_date]
+      .filter(Boolean)
+      .forEach((dateValue) => {
+        keys.push(`group-date:${trade.pattern_group_id}|${String(dateValue).slice(0, 19)}`);
+        keys.push(`group-day:${trade.pattern_group_id}|${String(dateValue).slice(0, 10)}`);
+      });
+  }
 
-    return (
-      sameTradeDate(pattern.entry_date, trade.entry_date) ||
-      sameTradeDate(pattern.target_date, trade.target_date) ||
-      sameTradeDate(pattern.d_date, trade.entry_date)
-    );
-  }) ?? null;
+  return keys;
+};
 
-const buildTradeChartPayload = (trade = {}, selectedStrategy = null, loadedTrades = []) => {
-  const matchedPattern = findLoadedPatternForTrade(trade, loadedTrades);
+const getFamilyOptionId = (strategy = {}) =>
+  strategy.propStrategyId ?? strategy.familyKey ?? strategy.id ?? '';
 
-  return {
-    ...matchedPattern,
-    ...trade,
-    prop_outcome_mode: trade.prop_outcome_mode ?? matchedPattern?.prop_outcome_mode ?? 'reversal',
-    market: trade.market ?? matchedPattern?.market ?? selectedStrategy?.market ?? null,
-    harmonic_type:
-      trade.harmonic_type ?? matchedPattern?.harmonic_type ?? selectedStrategy?.harmonicType ?? null,
-    size_bucket:
-      trade.size_bucket ?? matchedPattern?.size_bucket ?? selectedStrategy?.sizeBucket ?? null,
-    bin: trade.bin ?? matchedPattern?.bin ?? selectedStrategy?.bin ?? null,
-    time_bin: trade.time_bin ?? matchedPattern?.time_bin ?? selectedStrategy?.timeBin ?? null,
-    reversal_type:
-      trade.reversal_type ?? matchedPattern?.reversal_type ?? selectedStrategy?.reversalType ?? 'None',
-  };
+const formatFamilyOptionLabel = (strategy = {}) => {
+  const familyId = getFamilyOptionId(strategy);
+  const details = [
+    strategy.market,
+    strategy.harmonicType,
+    strategy.bin,
+    strategy.sizeBucket,
+    strategy.timeBin,
+  ].filter(Boolean);
+  const score = Number(strategy.score);
+  const scoreLabel = Number.isFinite(score) ? `score ${score.toFixed(1)}` : null;
+
+  return [familyId, ...details, scoreLabel].filter(Boolean).join(' / ');
 };
 
 const getTestTone = (status = '') => {
@@ -313,15 +241,16 @@ const getScoreLabel = (score) => {
   return 'Weak run';
 };
 
-const toTime = (value) => {
-  const date = value ? new Date(value) : null;
-  return date && !Number.isNaN(date.getTime()) ? date.getTime() : null;
-};
-
-const buildServerReplay = (trades = [], startingBalance = 0, maxDrawdown = 0) => {
+const buildServerReplay = (
+  trades = [],
+  startingBalance = 0,
+  maxDrawdown = 0,
+  drawdownModel = 'intraday'
+) => {
   let previousTotal = 0;
   let peak = 0;
   const drawdownDistance = Math.abs(Number(maxDrawdown) || 0);
+  const usesIntradayDrawdown = drawdownModel !== 'eod';
 
   const points = [
     {
@@ -357,8 +286,14 @@ const buildServerReplay = (trades = [], startingBalance = 0, maxDrawdown = 0) =>
       const intratradeHighTotal = Number.isFinite(Number(trade.intratrade_high_balance))
         ? Number(trade.intratrade_high_balance) - startingBalance
         : Math.max(previousTotal, closedTotal, total);
-      peak = Math.max(peak, total);
+      const failedIntratradeDrawdown = Boolean(trade.failed_intratrade_drawdown);
+      peak = failedIntratradeDrawdown
+        ? peak
+        : usesIntradayDrawdown
+        ? Math.max(peak, intratradeHighTotal, total)
+        : Math.max(peak, total);
       const drawdownLevel = peak - drawdownDistance;
+      const lowWaterTotal = usesIntradayDrawdown ? Math.min(intratradeLowTotal, total) : total;
       points.push({
         index: index + 1,
         trade,
@@ -372,9 +307,9 @@ const buildServerReplay = (trades = [], startingBalance = 0, maxDrawdown = 0) =>
         intratradeHighTotal,
         intratradeLowPnl: Number(trade.intratrade_adverse_pnl) || 0,
         intratradeHighPnl: Number(trade.intratrade_favorable_pnl) || 0,
-        drawdown: total - peak,
+        drawdown: lowWaterTotal - peak,
         drawdownLevel,
-        failedIntratradeDrawdown: Boolean(trade.failed_intratrade_drawdown),
+        failedIntratradeDrawdown,
       });
       previousTotal = total;
     });
@@ -403,6 +338,7 @@ function SimulatorChart({
   totalPointCount = null,
   selectedTradeKey = '',
   onSelectTrade = null,
+  highlightedPatternKeys = [],
 }) {
   const width = 1000;
   const height = 330;
@@ -482,6 +418,10 @@ function SimulatorChart({
   const currentDrawdownY = currentDrawdown !== null ? yForValue(currentDrawdown) : null;
   const gridValues = Array.from({ length: 5 }, (_, index) =>
     maxValue - (valueSpan / 4) * index
+  );
+  const highlightedPatternKeySet = useMemo(
+    () => new Set(highlightedPatternKeys),
+    [highlightedPatternKeys]
   );
   const labelX = 8;
   const labelWidth = 88;
@@ -588,11 +528,14 @@ function SimulatorChart({
           const tradeTone = point.failedIntratradeDrawdown ? 'drawdown' : point.pnl >= 0 ? 'win' : 'loss';
           const tradeKey = getSimulatorTradeKey(point.trade, point.index);
           const isSelected = tradeKey === selectedTradeKey;
+          const isHighlighted =
+            point.trade &&
+            getReplayPatternMatchKeys(point.trade).some((key) => highlightedPatternKeySet.has(key));
           const resultLine = point.failedIntratradeDrawdown ? 'DD fail' : `Result ${result}`;
 
           return (
             <g
-              className={`simulator-live-chart__trade simulator-live-chart__trade--${tradeTone}${isSelected ? ' simulator-live-chart__trade--selected' : ''}`}
+              className={`simulator-live-chart__trade simulator-live-chart__trade--${tradeTone}${isSelected ? ' simulator-live-chart__trade--selected' : ''}${isHighlighted ? ' simulator-live-chart__trade--highlighted' : ''}`}
               key={`${point.index}-${point.total}-${point.pnl}`}
               onClick={() => onSelectTrade?.(point.trade, point.index)}
             >
@@ -964,13 +907,22 @@ const TradeCanvasDetails = ({
 
 const TradeSimulatorPanel = ({
   selectedStrategy = null,
+  familyOptions = [],
+  familyOptionsCount = null,
+  isLoadingFamilyOptions = false,
+  onSelectFamilyId = null,
+  onReplayChange = null,
+  onFirstStartDateChange = null,
+  highlightedPatternKeys = [],
   loadedTrades = [],
   loadedCandles = [],
+  earliestTradeDate = null,
+  latestTradeDate = null,
+  familyStartDateOptions = [],
   tradeChartData = { candles: [], rust_patterns: null },
   isTradeChartExpanded = false,
   setTradeChartExpanded = () => {},
   chartOverlayTop = 0,
-  onLoadTradeChart = null,
   totalTradeCount = 0,
 }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -983,11 +935,11 @@ const TradeSimulatorPanel = ({
   const [drawdownModel, setDrawdownModel] = useState('intraday');
   const [pnlMode, setPnlMode] = useState('total');
   const [chartPanelView, setChartPanelView] = useState('pnl');
-  const [overviewPanel, setOverviewPanel] = useState('trades');
   const [simulatorReplay, setSimulatorReplay] = useState(null);
   const [selectedReplayTestIndex, setSelectedReplayTestIndex] = useState(1);
   const [playbackEventCount, setPlaybackEventCount] = useState(0);
   const [isPlaybackRunning, setPlaybackRunning] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState('medium');
   const [isRunningReplay, setRunningReplay] = useState(false);
   const [replayError, setReplayError] = useState('');
   const [selectedCanvasTradeKey, setSelectedCanvasTradeKey] = useState('');
@@ -996,16 +948,96 @@ const TradeSimulatorPanel = ({
   const [tradeCanvasError, setTradeCanvasError] = useState('');
 
   const selectedFamilyId = selectedStrategy?.propStrategyId ?? selectedStrategy?.id ?? '';
+  const familyDropdownOptions = useMemo(() => {
+    const seen = new Set();
+    const options = [];
+
+    familyOptions.forEach((strategy) => {
+      const id = getFamilyOptionId(strategy);
+      if (!id || seen.has(id)) {
+        return;
+      }
+
+      seen.add(id);
+      options.push(strategy);
+    });
+
+    if (familyId && !seen.has(familyId)) {
+      options.unshift({
+        id: familyId,
+        propStrategyId: familyId,
+        familyKey: familyId,
+      });
+    }
+
+    return options;
+  }, [familyId, familyOptions]);
+  const familyDropdownIds = useMemo(
+    () => new Set(familyDropdownOptions.map(getFamilyOptionId)),
+    [familyDropdownOptions]
+  );
+  const hasFamilyDropdownOptions = familyDropdownOptions.length > 0;
+  const familyStartDateSelectOptions = useMemo(() => {
+    const seen = new Set();
+    const options = [];
+    const addDate = (value) => {
+      const normalizedDate = normalizeDateInput(value);
+      if (!normalizedDate || seen.has(normalizedDate)) {
+        return;
+      }
+
+      seen.add(normalizedDate);
+      options.push(normalizedDate);
+    };
+
+    familyStartDateOptions.forEach(addDate);
+
+    if (!options.length) {
+      loadedTrades.forEach((trade) => {
+        addDate(
+          trade.entry_date ??
+            trade.reversal_detect_date ??
+            trade.d_confirm_date ??
+            trade.d_date
+        );
+      });
+    }
+
+    if (!options.length) {
+      addDate(earliestTradeDate);
+      addDate(latestTradeDate);
+      addDate(firstStartDate);
+      addDate(SIMULATOR_START_DATE);
+    }
+
+    return options.sort();
+  }, [earliestTradeDate, familyStartDateOptions, firstStartDate, latestTradeDate, loadedTrades]);
+  const familyStartDateOptionSet = useMemo(
+    () => new Set(familyStartDateSelectOptions),
+    [familyStartDateSelectOptions]
+  );
 
   useEffect(() => {
     setFamilyId(selectedFamilyId);
-  }, [selectedFamilyId]);
+  }, [onReplayChange, selectedFamilyId]);
+
+  const handleFamilyIdChange = (nextFamilyId) => {
+    setFamilyId(nextFamilyId);
+    if (nextFamilyId && familyDropdownIds.has(nextFamilyId)) {
+      onSelectFamilyId?.(nextFamilyId);
+    }
+  };
+  const accountRules = APEX_ACCOUNT_RULES[accountSize] ?? APEX_ACCOUNT_RULES['50K'];
+  const contracts = Math.max(1, Number.parseInt(String(contractsPerTrade), 10) || 1);
+  const dailyLossLimit = drawdownModel === 'eod' ? accountRules.eodDailyLossLimit : null;
+  const playbackIntervalMs =
+    SIMULATOR_PLAYBACK_SPEEDS[playbackSpeed]?.intervalMs ??
+    SIMULATOR_PLAYBACK_SPEEDS.medium.intervalMs;
 
   useEffect(() => {
     setActiveTab('overview');
     setPnlMode('total');
     setChartPanelView('pnl');
-    setOverviewPanel('trades');
     setTestsToChain(1);
     setSimulatorReplay(null);
     setSelectedReplayTestIndex(1);
@@ -1015,7 +1047,8 @@ const TradeSimulatorPanel = ({
     setSelectedCanvasTrade(null);
     setLoadingTradeCanvas(false);
     setTradeCanvasError('');
-  }, [selectedFamilyId]);
+    onReplayChange?.(null);
+  }, [onReplayChange, selectedFamilyId]);
 
   useEffect(() => {
     if (!simulatorReplay?.trades?.length || !isPlaybackRunning) {
@@ -1033,38 +1066,99 @@ const TradeSimulatorPanel = ({
         }
         return next;
       });
-    }, SIMULATOR_PLAYBACK_INTERVAL_MS);
+    }, playbackIntervalMs);
 
     return () => window.clearInterval(timer);
-  }, [isPlaybackRunning, simulatorReplay]);
+  }, [isPlaybackRunning, playbackIntervalMs, simulatorReplay]);
 
-  const accountRules = APEX_ACCOUNT_RULES[accountSize] ?? APEX_ACCOUNT_RULES['50K'];
-  const contracts = Math.max(1, Number.parseInt(String(contractsPerTrade), 10) || 1);
-  const dailyLossLimit = drawdownModel === 'eod' ? accountRules.eodDailyLossLimit : null;
-  const latestLoadedDate = useMemo(
-    () => getLatestLoadedDate(loadedCandles, loadedTrades),
-    [loadedCandles, loadedTrades]
+  const familyLatestTradeDate = useMemo(
+    () =>
+      familyStartDateSelectOptions[familyStartDateSelectOptions.length - 1] ||
+      normalizeDateInput(latestTradeDate) ||
+      normalizeDateInput(firstStartDate) ||
+      SIMULATOR_START_DATE,
+    [familyStartDateSelectOptions, firstStartDate, latestTradeDate]
   );
-  const startDateOptions = useMemo(
-    () => buildDateRangeOptions(SIMULATOR_START_DATE, latestLoadedDate ?? SIMULATOR_START_DATE),
-    [latestLoadedDate]
+  const familyEarliestTradeDate = useMemo(
+    () =>
+      familyStartDateSelectOptions[0] ||
+      normalizeDateInput(earliestTradeDate) ||
+      SIMULATOR_START_DATE,
+    [earliestTradeDate, familyStartDateSelectOptions]
   );
   const normalizedFirstStartDate = normalizeDateInput(firstStartDate) || firstStartDate;
-  const isSelectedStartLoaded = startDateOptions.includes(normalizedFirstStartDate);
-  const startDateRangeEnd = startDateOptions[startDateOptions.length - 1] ?? SIMULATOR_START_DATE;
+  const familyDateRangeLabel = `${formatDateOption(familyEarliestTradeDate)} to ${formatDateOption(familyLatestTradeDate)}`;
+
+  useEffect(() => {
+    onFirstStartDateChange?.(normalizedFirstStartDate);
+  }, [normalizedFirstStartDate, onFirstStartDateChange]);
+
+  const resetSimulatorRunState = useCallback(() => {
+    setSimulatorReplay(null);
+    setSelectedReplayTestIndex(1);
+    setPlaybackEventCount(0);
+    setPlaybackRunning(false);
+    setSelectedCanvasTradeKey('');
+    setSelectedCanvasTrade(null);
+    setLoadingTradeCanvas(false);
+    setTradeCanvasError('');
+    onReplayChange?.(null);
+  }, [onReplayChange]);
+
+  const handleFirstStartDateChange = useCallback(
+    (nextDate) => {
+      setFirstStartDate(nextDate);
+      resetSimulatorRunState();
+    },
+    [resetSimulatorRunState]
+  );
+
+  useEffect(() => {
+    if (
+      !familyStartDateSelectOptions.length ||
+      familyStartDateOptionSet.has(normalizedFirstStartDate)
+    ) {
+      return;
+    }
+
+    handleFirstStartDateChange(familyStartDateSelectOptions[0]);
+  }, [
+    familyId,
+    familyStartDateOptionSet,
+    familyStartDateSelectOptions,
+    handleFirstStartDateChange,
+    normalizedFirstStartDate,
+  ]);
 
   const visibleReplayTrades = useMemo(
     () => (simulatorReplay?.trades ?? []).slice(0, playbackEventCount),
     [playbackEventCount, simulatorReplay]
   );
+  useEffect(() => {
+    if (!simulatorReplay) {
+      onReplayChange?.(null);
+      return;
+    }
+
+    onReplayChange?.({
+      ...simulatorReplay,
+      trades: visibleReplayTrades,
+    });
+  }, [onReplayChange, simulatorReplay, visibleReplayTrades]);
   const visibleSelectedReplayTrades = useMemo(
     () => visibleReplayTrades.filter((trade) => trade.test_index === selectedReplayTestIndex),
     [selectedReplayTestIndex, visibleReplayTrades]
   );
 
   const testReplayPoints = useMemo(
-    () => buildServerReplay(visibleSelectedReplayTrades, accountRules.startingBalance, accountRules.maxDrawdown),
-    [accountRules.maxDrawdown, accountRules.startingBalance, visibleSelectedReplayTrades]
+    () =>
+      buildServerReplay(
+        visibleSelectedReplayTrades,
+        accountRules.startingBalance,
+        accountRules.maxDrawdown,
+        drawdownModel
+      ),
+    [accountRules.maxDrawdown, accountRules.startingBalance, drawdownModel, visibleSelectedReplayTrades]
   );
 
   const hasSimulatorReplay = Boolean(simulatorReplay);
@@ -1171,9 +1265,15 @@ const TradeSimulatorPanel = ({
     };
   }, [accountRules.maxDrawdown, simulatorReplay, testsToChain]);
   const displayedFamilyRows =
-    Number.isFinite(totalTradeCount) && totalTradeCount >= 0
+    Number.isFinite(Number(familyOptionsCount)) && Number(familyOptionsCount) >= 0
+      ? Number(familyOptionsCount)
+      : Number.isFinite(totalTradeCount) && totalTradeCount >= 0
       ? totalTradeCount
       : loadedTrades.length;
+  const familyRowLabel =
+    Number.isFinite(Number(familyOptionsCount)) && Number(familyOptionsCount) >= 0
+      ? `${displayedFamilyRows.toLocaleString()} families`
+      : `${displayedFamilyRows.toLocaleString()} rows`;
   const visibleReplayTakenTrades = visibleReplayTrades.filter((trade) => !trade.skipped_for_overlap).length;
   const totalReplayTakenTrades = simulatorReplay?.trades?.filter((trade) => !trade.skipped_for_overlap).length ?? 0;
 
@@ -1196,13 +1296,6 @@ const TradeSimulatorPanel = ({
       null,
     [replayTestProgress, selectedReplayTestIndex]
   );
-  const selectedReplayTestTrades = useMemo(() => {
-    if (!selectedReplayTest || !visibleSelectedReplayTrades.length) {
-      return [];
-    }
-
-    return visibleSelectedReplayTrades.filter((trade) => !trade.skipped_for_overlap);
-  }, [selectedReplayTest, visibleSelectedReplayTrades]);
   const selectedReplayTestSkipped = useMemo(() => {
     if (!selectedReplayTest || !visibleSelectedReplayTrades.length) {
       return 0;
@@ -1219,34 +1312,6 @@ const TradeSimulatorPanel = ({
   const tradeChartMarket =
     tradeChartPattern?.market ?? selectedCanvasTrade?.market ?? selectedStrategy?.market ?? 'Bullish';
   const isUsingSelectedFamily = Boolean(familyId && selectedFamilyId && familyId === selectedFamilyId);
-  const handleSelectCanvasTrade = async (trade, fallbackIndex = '') => {
-    if (!trade || trade.skipped_for_overlap) {
-      return;
-    }
-
-    const tradeKey = getSimulatorTradeKey(trade, fallbackIndex);
-    const chartPayload = buildTradeChartPayload(trade, selectedStrategy, loadedTrades);
-    setSelectedCanvasTradeKey(tradeKey);
-    setSelectedCanvasTrade(trade);
-    setChartPanelView('canvas');
-    setOverviewPanel('trades');
-    setTradeCanvasError('');
-
-    if (!onLoadTradeChart) {
-      setTradeCanvasError('Canvas loader is not connected yet.');
-      return;
-    }
-
-    try {
-      setLoadingTradeCanvas(true);
-      await onLoadTradeChart(chartPayload);
-    } catch (error) {
-      console.error('Simulator trade canvas load failed:', error);
-      setTradeCanvasError('Could not load this trade on the canvas.');
-    } finally {
-      setLoadingTradeCanvas(false);
-    }
-  };
 
   const restartReplayPlayback = () => {
     if (!simulatorReplay?.trades?.length) {
@@ -1257,7 +1322,7 @@ const TradeSimulatorPanel = ({
     setPlaybackRunning(true);
   };
 
-  const toggleReplayPlayback = () => {
+  const playReplayPlayback = () => {
     if (!simulatorReplay?.trades?.length) {
       return;
     }
@@ -1267,43 +1332,12 @@ const TradeSimulatorPanel = ({
       return;
     }
 
-    setPlaybackRunning((current) => !current);
+    setPlaybackRunning(true);
   };
 
-  const timelineRows = useMemo(
-    () => {
-      if (!simulatorReplay?.trades?.length) {
-        return [];
-      }
-
-      const sourceRows = visibleReplayTrades;
-      return sourceRows.slice(0, 32).map((trade, index) => {
-        const start = getTradeDate(trade);
-        const end = getTradeEndDate(trade);
-        const startTime = toTime(start);
-        const endTime = toTime(end) ?? startTime;
-        const overlaps =
-          startTime === null || endTime === null
-            ? 0
-            : sourceRows.filter((candidate, candidateIndex) => {
-                if (candidateIndex === index) {
-                  return false;
-                }
-
-                const candidateTime = toTime(getTradeDate(candidate));
-                return candidateTime !== null && candidateTime > startTime && candidateTime < endTime;
-              }).length;
-
-        return {
-          trade,
-          start,
-          end,
-          overlaps,
-        };
-      });
-    },
-    [simulatorReplay, visibleReplayTrades]
-  );
+  const pauseReplayPlayback = () => {
+    setPlaybackRunning(false);
+  };
 
   const runReplay = async () => {
     if (!familyId || isRunningReplay) {
@@ -1326,6 +1360,7 @@ const TradeSimulatorPanel = ({
         ...accountRules,
         dailyLossLimit,
       },
+      drawdownModel,
       oneTradeAtATime,
     });
 
@@ -1337,11 +1372,10 @@ const TradeSimulatorPanel = ({
 
     setSimulatorReplay(result);
     setSelectedReplayTestIndex(1);
-    setPlaybackEventCount(result.trades?.length ?? 0);
-    setPlaybackRunning(false);
+    setPlaybackEventCount(0);
+    setPlaybackRunning(Boolean(result.trades?.length));
     setPnlMode('total');
     setChartPanelView('pnl');
-    setOverviewPanel('trades');
     setSelectedCanvasTradeKey('');
     setSelectedCanvasTrade(null);
     setLoadingTradeCanvas(false);
@@ -1395,15 +1429,39 @@ const TradeSimulatorPanel = ({
             </div>
             <label className="simulator-field simulator-field--wide">
               <span>Strategy Family</span>
-              <input
-                value={familyId}
-                onChange={(event) => setFamilyId(event.target.value)}
-                spellCheck="false"
-              />
+              {hasFamilyDropdownOptions ? (
+                <select
+                  value={familyDropdownIds.has(familyId) ? familyId : ''}
+                  onChange={(event) => handleFamilyIdChange(event.target.value)}
+                  disabled={isLoadingFamilyOptions}
+                >
+                  {familyDropdownOptions.map((strategy) => {
+                    const optionId = getFamilyOptionId(strategy);
+                    return (
+                      <option value={optionId} key={optionId}>
+                        {formatFamilyOptionLabel(strategy)}
+                      </option>
+                    );
+                  })}
+                </select>
+              ) : (
+                <input
+                  value={familyId}
+                  onChange={(event) => handleFamilyIdChange(event.target.value)}
+                  placeholder={isLoadingFamilyOptions ? 'Loading families...' : 'Family ID'}
+                  spellCheck="false"
+                />
+              )}
             </label>
-            <button type="button" className="simulator-secondary-button" onClick={() => setFamilyId(selectedFamilyId)}>
-              Use Selected
-            </button>
+            {!hasFamilyDropdownOptions && selectedFamilyId ? (
+              <button
+                type="button"
+                className="simulator-secondary-button"
+                onClick={() => handleFamilyIdChange(selectedFamilyId)}
+              >
+                Use Selected
+              </button>
+            ) : null}
             <div className="simulator-rail-mini-grid">
               <span>{selectedStrategy?.harmonicType ?? 'Pattern'}</span>
               <span>{selectedStrategy?.bin ?? 'Price Bin'}</span>
@@ -1418,33 +1476,23 @@ const TradeSimulatorPanel = ({
             </div>
             <label className="simulator-field simulator-date-select">
               <span>First Start</span>
-              {startDateOptions.length ? (
-                <select
-                  value={normalizedFirstStartDate}
-                  onChange={(event) => setFirstStartDate(event.target.value)}
-                >
-                  {!isSelectedStartLoaded ? (
-                    <option value={normalizedFirstStartDate}>
-                      {formatDateOption(normalizedFirstStartDate)} / current
-                    </option>
-                  ) : null}
-                  {startDateOptions.map((dateValue) => (
-                    <option value={dateValue} key={dateValue}>
-                      {formatDateOption(dateValue)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="date"
-                  value={normalizedFirstStartDate}
-                  onChange={(event) => setFirstStartDate(event.target.value)}
-                />
-              )}
+              <select
+                value={
+                  familyStartDateOptionSet.has(normalizedFirstStartDate)
+                    ? normalizedFirstStartDate
+                    : familyStartDateSelectOptions[0] ?? ''
+                }
+                onChange={(event) => handleFirstStartDateChange(event.target.value)}
+                disabled={!familyStartDateSelectOptions.length}
+              >
+                {familyStartDateSelectOptions.map((dateOption) => (
+                  <option value={dateOption} key={dateOption}>
+                    {formatDateOption(dateOption)}
+                  </option>
+                ))}
+              </select>
               <small>
-                {startDateOptions.length
-                  ? `${formatDateOption(SIMULATOR_START_DATE)} to ${formatDateOption(startDateRangeEnd)}`
-                  : 'No start dates available'}
+                {familyDateRangeLabel}
               </small>
             </label>
 
@@ -1547,8 +1595,53 @@ const TradeSimulatorPanel = ({
               : `Run ${Number(testsToChain) === 1 ? 'Test' : 'Tests'}`}
           </button>
 
+          <div className="simulator-playback-controls" aria-label="Replay controls">
+            <div className="simulator-playback-row">
+              <button
+                type="button"
+                className={!isPlaybackRunning && hasSimulatorReplay ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
+                onClick={playReplayPlayback}
+                disabled={!hasSimulatorReplay}
+              >
+                {isReplayComplete ? 'Replay' : isPlaybackRunning ? 'Playing' : 'Play'}
+              </button>
+              <button
+                type="button"
+                className={isPlaybackRunning ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
+                onClick={pauseReplayPlayback}
+                disabled={!isPlaybackRunning}
+              >
+                Pause
+              </button>
+              <button
+                type="button"
+                className="simulator-toggle"
+                onClick={restartReplayPlayback}
+                disabled={!hasSimulatorReplay}
+              >
+                Restart
+              </button>
+            </div>
+            <div className="simulator-playback-row simulator-playback-row--speed">
+              {Object.entries(SIMULATOR_PLAYBACK_SPEEDS).map(([speedKey, speed]) => (
+                <button
+                  type="button"
+                  className={
+                    playbackSpeed === speedKey
+                      ? 'simulator-toggle simulator-toggle--active'
+                      : 'simulator-toggle'
+                  }
+                  onClick={() => setPlaybackSpeed(speedKey)}
+                  key={speedKey}
+                >
+                  {speed.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="simulator-rail-summary simulator-rail-summary--compact">
-            <span>{displayedFamilyRows.toLocaleString()} rows</span>
+            <span>{familyRowLabel}</span>
             <span>{replayRunLabel}</span>
           </div>
           {replayError ? <div className="simulator-error-state">{replayError}</div> : null}
@@ -1718,24 +1811,6 @@ const TradeSimulatorPanel = ({
                         >
                           Total PnL
                         </button>
-                        {hasSimulatorReplay ? (
-                          <>
-                            <button
-                              type="button"
-                              className={isPlaybackRunning ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
-                              onClick={toggleReplayPlayback}
-                            >
-                              {isPlaybackRunning ? 'Pause Tests' : isReplayComplete ? 'Replay Tests' : 'Play Tests'}
-                            </button>
-                            <button
-                              type="button"
-                              className="simulator-toggle"
-                              onClick={restartReplayPlayback}
-                            >
-                              Restart Tests
-                            </button>
-                          </>
-                        ) : null}
                       </>
                     ) : null}
                   </div>
@@ -1778,7 +1853,7 @@ const TradeSimulatorPanel = ({
                           showThresholds={pnlMode === 'total'}
                           totalPointCount={Math.max(selectedReplayTest?.totalTrades ?? 0, 1)}
                           selectedTradeKey={selectedCanvasTradeKey}
-                          onSelectTrade={handleSelectCanvasTrade}
+                          highlightedPatternKeys={highlightedPatternKeys}
                         />
                       )}
                     </div>
@@ -1822,149 +1897,6 @@ const TradeSimulatorPanel = ({
                 )}
               </div>
 
-              <div className="simulator-overview-inspector">
-                <div className="simulator-inspector-head">
-                  <div className="simulator-section-title">Replay Inspector</div>
-                  <div className="simulator-toggle-group">
-                    <button
-                      type="button"
-                      className={overviewPanel === 'trades' ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
-                      onClick={() => setOverviewPanel('trades')}
-                    >
-                      Trades
-                    </button>
-                    <button
-                      type="button"
-                      className={overviewPanel === 'summary' ? 'simulator-toggle simulator-toggle--active' : 'simulator-toggle'}
-                      onClick={() => setOverviewPanel('summary')}
-                    >
-                      Summary
-                    </button>
-                  </div>
-                </div>
-
-                {overviewPanel === 'summary' ? (
-                  selectedReplayTest ? (
-                    <div className="simulator-selected-test-layout">
-                      <div className="simulator-selected-test-summary">
-                        <div className={selectedReplayTestNetPnl >= 0 ? 'simulator-selected-test-total simulator-selected-test-total--positive' : 'simulator-selected-test-total simulator-selected-test-total--negative'}>
-                          <span>Net P/L</span>
-                          <strong>{formatMoney(selectedReplayTestNetPnl)}</strong>
-                        </div>
-                        <div className="simulator-selected-test-facts">
-                          <div>
-                            <span>Progress</span>
-                            <strong>{selectedReplayTest.visibleTrades}/{selectedReplayTest.totalTrades || 0}</strong>
-                          </div>
-                          <div>
-                            <span>Trades</span>
-                            <strong>{selectedReplayTest.trade_count}</strong>
-                          </div>
-                          <div>
-                            <span>Skipped</span>
-                            <strong>{selectedReplayTestSkipped}</strong>
-                          </div>
-                          <div>
-                            <span>Max DD</span>
-                            <strong>{formatMoney(selectedReplayTest.max_drawdown)}</strong>
-                          </div>
-                          <div>
-                            <span>Start</span>
-                            <strong>{formatShortDate(selectedReplayTest.start_date)}</strong>
-                          </div>
-                          <div>
-                            <span>Finish</span>
-                            <strong>{formatShortDate(selectedReplayTest.end_date)}</strong>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="simulator-empty-state simulator-empty-state--compact">
-                      Run a test to see the result summary.
-                    </div>
-                  )
-                ) : null}
-
-                {overviewPanel === 'trades' ? (
-                  <div className="simulator-selected-trades simulator-selected-trades--inline">
-                    <div className="simulator-selected-trades-head">
-                      <span>Trades It Took</span>
-                      <strong>{selectedReplayTestTrades.length}</strong>
-                    </div>
-                    {selectedReplayTestTrades.length ? (
-                      <div className="simulator-selected-trade-list">
-                        {selectedReplayTestTrades.map((trade, index) => {
-                          const isDrawdownFail = Boolean(trade.failed_intratrade_drawdown);
-                          const isWin = !isDrawdownFail && Number(trade.pnl) >= 0;
-                          const tradeKey = getSimulatorTradeKey(trade, index + 1);
-                          const isSelected = tradeKey === selectedCanvasTradeKey;
-                          return (
-                            <button
-                              type="button"
-                              className={[
-                                'simulator-selected-trade',
-                                isWin ? 'simulator-selected-trade--win' : 'simulator-selected-trade--loss',
-                                isSelected ? 'simulator-selected-trade--selected' : '',
-                              ].filter(Boolean).join(' ')}
-                              key={`${trade.pattern_group_id}-${trade.entry_date}-${index}`}
-                              onClick={() => handleSelectCanvasTrade(trade, index + 1)}
-                            >
-                              <div className="simulator-selected-trade-index">
-                                <span>#{index + 1}</span>
-                                <strong>{isDrawdownFail ? 'DD Fail' : getTradeResultLabel(trade)}</strong>
-                              </div>
-                              <div className="simulator-selected-trade-main">
-                                <strong>{trade.symbol ?? 'N/A'}</strong>
-                                <span>{formatShortDate(trade.entry_date)} to {formatShortDate(trade.target_date)}</span>
-                              </div>
-                              <div className="simulator-selected-trade-values">
-                                <strong>{formatMoney(trade.pnl)}</strong>
-                                <span>
-                                  Low {formatMoney(trade.intratrade_low_balance ?? trade.balance)}
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="simulator-empty-state simulator-empty-state--compact">
-                        No taken trades have appeared yet.
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {activeTab === 'events' ? (
-            <div className="simulator-panel-block simulator-panel-block--wide simulator-replay-block">
-              <div className="simulator-section-title">Test Event Log</div>
-              <div className="simulator-timeline">
-                {timelineRows.length ? (
-                  timelineRows.map(({ trade, start, end, overlaps }, index) => {
-                    const result = getTradeResultLabel(trade);
-                    return (
-                      <div className="simulator-timeline-row" key={`${trade.pattern_id ?? trade.pattern_group_id ?? index}`}>
-                        <div className="simulator-timeline-dot" />
-                        <div className="simulator-timeline-main">
-                          <strong>{trade.symbol ?? 'N/A'}</strong>
-                          <span>{formatShortDate(start)} - {formatShortDate(end)}</span>
-                        </div>
-                        <span className={`simulator-result-pill simulator-result-pill--${result.toLowerCase()}`}>
-                          {trade.skipped_for_overlap ? 'Skipped' : result}
-                        </span>
-                        <span>{hasSimulatorReplay ? formatMoney(trade.pnl) : `${formatNumber(trade.trade_length, 0)} bars`}</span>
-                        <span>{overlaps} overlap</span>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="simulator-empty-state">Run a replay to load test events.</div>
-                )}
-              </div>
             </div>
           ) : null}
         </section>
