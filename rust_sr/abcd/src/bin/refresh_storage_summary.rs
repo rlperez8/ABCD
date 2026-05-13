@@ -19,7 +19,11 @@ const CANDLE_STORAGE_TABLES: [&str; 9] = [
     "futures_contract_1d_candles",
 ];
 
-const ENGINE_STORAGE_TABLES: [&str; 2] = ["pattern_setups", "pattern_outcomes_prop"];
+const ENGINE_STORAGE_TABLES: [&str; 3] = [
+    "pattern_setups",
+    "pattern_outcomes_prop",
+    "pattern_forward_observations",
+];
 const ROLLUP_STORAGE_TABLES: [&str; 4] = [
     "prop_strategy_family_summary",
     "prop_strategy_family_yearly",
@@ -742,12 +746,10 @@ async fn refresh_pattern_setup_timeframe_pattern_summary(
         return Ok(());
     }
 
-    sqlx::query(
-        "DELETE FROM storage_pattern_setup_timeframe_pattern_summary WHERE table_name = ?",
-    )
-    .bind(&summary.table_name)
-    .execute(pool)
-    .await?;
+    sqlx::query("DELETE FROM storage_pattern_setup_timeframe_pattern_summary WHERE table_name = ?")
+        .bind(&summary.table_name)
+        .execute(pool)
+        .await?;
 
     let has_root_symbol = table_column_exists(pool, &summary.table_name, "root_symbol").await?;
     let has_contract_symbol =
@@ -860,10 +862,8 @@ async fn refresh_pattern_setup_timeframe_pattern_summary(
         }
     }
 
-    for (
-        (root_symbol, contract_symbol, source_timeframe, market, harmonic_type),
-        aggregate,
-    ) in by_pattern
+    for ((root_symbol, contract_symbol, source_timeframe, market, harmonic_type), aggregate) in
+        by_pattern
     {
         let estimated_bytes = (aggregate.setup_count as f64 * summary.bytes_per_row)
             .round()

@@ -5,9 +5,10 @@ use sqlx::mysql::{MySqlPool, MySqlPoolOptions};
 use sqlx::MySqlConnection;
 use tokio::time::sleep;
 
-const ENGINE_TABLES: [&str; 6] = [
+const ENGINE_TABLES: [&str; 7] = [
     "pattern_setups",
     "pattern_outcomes_prop",
+    "pattern_forward_observations",
     "prop_strategy_family_yearly",
     "prop_strategy_family_summary",
     "prop_strategy_contract_week_summary",

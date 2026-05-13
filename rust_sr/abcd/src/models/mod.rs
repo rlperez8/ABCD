@@ -1,6 +1,7 @@
 pub mod accuracy;
 pub mod candle;
 pub mod database;
+pub mod forward_observation;
 pub mod harmonic_types;
 pub mod market;
 pub mod pattern_a;
@@ -21,6 +22,9 @@ pub mod xabcd_csv;
 // pub use xabcd_csv::XABCD_CSV;
 // pub use database::Database;
 pub use candle::Candle;
+pub use forward_observation::{
+    build_forward_observations, ForwardObservationConfig, PatternForwardObservation,
+};
 // pub use candle::CandleDecimal;
 pub use market::Market;
 pub use pivot::Pivot;

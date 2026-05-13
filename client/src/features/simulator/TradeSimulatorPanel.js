@@ -203,6 +203,9 @@ const getReplayPatternMatchKeys = (trade = {}) => {
 const getFamilyOptionId = (strategy = {}) =>
   strategy.propStrategyId ?? strategy.familyKey ?? strategy.id ?? '';
 
+const isPhase1FamilyId = (value = '') =>
+  /^[a-f0-9]{16}$/i.test(String(value ?? '').trim());
+
 const formatFamilyOptionLabel = (strategy = {}) => {
   const familyId = getFamilyOptionId(strategy);
   const details = [
@@ -768,6 +771,51 @@ const TradeCanvasDetails = ({
   const points =
     Number.isFinite(pointValue) && pointValue > 0 ? closedPnl / (pointValue * contractCount) : null;
   const resultTone = trade?.failed_intratrade_drawdown || pnl < 0 ? 'negative' : 'positive';
+  const patternId = tradePattern?.pattern_id ?? trade?.pattern_id ?? 'N/A';
+
+  if (!trade) {
+    return (
+      <div className="simulator-trade-detail-rail simulator-trade-detail-rail--empty">
+        <div className="simulator-trade-detail-head">
+          <span>{tradePattern ? 'Pattern Details' : 'Trade Details'}</span>
+          <strong>{tradePattern?.symbol ?? 'Waiting'}</strong>
+        </div>
+
+        <div className="simulator-trade-detail-empty-main">
+          <span>{tradePattern ? tradePattern.harmonic_type ?? 'XABCD' : selectedReplayTest ? `Test ${selectedReplayTest.test_index}` : 'No Test Loaded'}</span>
+          <strong>{tradePattern ? 'XABCD Pattern' : 'No Trade Selected'}</strong>
+          <small>
+            {tradePattern
+              ? `${formatShortDate(tradePattern.x_date)} to ${formatShortDate(tradePattern.d_date)}`
+              : 'Run a replay, then select a trade row or graph point.'}
+          </small>
+        </div>
+
+        <div className="simulator-trade-detail-empty-grid">
+          <div className="simulator-trade-detail-id-tile">
+            <span>Pattern ID</span>
+            <strong title={patternId}>{patternId}</strong>
+          </div>
+          <div>
+            <span>Market</span>
+            <strong>{tradePattern?.market ?? 'N/A'}</strong>
+          </div>
+          <div>
+            <span>Length</span>
+            <strong>{tradePattern?.full_pattern_length ?? 'N/A'}</strong>
+          </div>
+          <div>
+            <span>D Price</span>
+            <strong>{formatTradePrice(tradePattern?.d_close)}</strong>
+          </div>
+          <div>
+            <span>Contracts</span>
+            <strong>{Math.max(1, Number(contracts) || 1)}</strong>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const priceRows = [
     { label: 'Entry', value: formatTradePrice(tradePattern?.trade_enter_price) },
@@ -870,6 +918,10 @@ const TradeCanvasDetails = ({
           <span>Point Value</span>
           <strong>{Number.isFinite(pointValue) ? formatMoney(pointValue) : 'N/A'}</strong>
         </div>
+        <div className="simulator-trade-detail-id-tile">
+          <span>Pattern ID</span>
+          <strong title={patternId}>{patternId}</strong>
+        </div>
         <div>
           <span>Trade #</span>
           <strong>{trade?.trade_index ?? '-'}</strong>
@@ -931,6 +983,7 @@ const TradeSimulatorPanel = ({
   const [testsToChain, setTestsToChain] = useState(1);
   const [contractsPerTrade, setContractsPerTrade] = useState(1);
   const [oneTradeAtATime, setOneTradeAtATime] = useState(true);
+  const [useCandidateLogic, setUseCandidateLogic] = useState(false);
   const [accountSize, setAccountSize] = useState('50K');
   const [drawdownModel, setDrawdownModel] = useState('intraday');
   const [pnlMode, setPnlMode] = useState('total');
@@ -948,6 +1001,7 @@ const TradeSimulatorPanel = ({
   const [tradeCanvasError, setTradeCanvasError] = useState('');
 
   const selectedFamilyId = selectedStrategy?.propStrategyId ?? selectedStrategy?.id ?? '';
+  const isPhase1FamilyView = selectedStrategy?.outcomeModel === 'phase1-family';
   const familyDropdownOptions = useMemo(() => {
     const seen = new Set();
     const options = [];
@@ -1022,9 +1076,13 @@ const TradeSimulatorPanel = ({
   }, [onReplayChange, selectedFamilyId]);
 
   const handleFamilyIdChange = (nextFamilyId) => {
-    setFamilyId(nextFamilyId);
-    if (nextFamilyId && familyDropdownIds.has(nextFamilyId)) {
-      onSelectFamilyId?.(nextFamilyId);
+    const normalizedFamilyId = String(nextFamilyId ?? '').trim();
+    setFamilyId(normalizedFamilyId);
+    if (
+      normalizedFamilyId &&
+      (familyDropdownIds.has(normalizedFamilyId) || isPhase1FamilyId(normalizedFamilyId))
+    ) {
+      onSelectFamilyId?.(normalizedFamilyId);
     }
   };
   const accountRules = APEX_ACCOUNT_RULES[accountSize] ?? APEX_ACCOUNT_RULES['50K'];
@@ -1040,6 +1098,7 @@ const TradeSimulatorPanel = ({
     setChartPanelView('pnl');
     setTestsToChain(1);
     setSimulatorReplay(null);
+    setReplayError('');
     setSelectedReplayTestIndex(1);
     setPlaybackEventCount(0);
     setPlaybackRunning(false);
@@ -1340,7 +1399,10 @@ const TradeSimulatorPanel = ({
   };
 
   const runReplay = async () => {
-    if (!familyId || isRunningReplay) {
+    if (!familyId || isRunningReplay || isPhase1FamilyView) {
+      if (isPhase1FamilyView) {
+        setReplayError('Phase 1 family rows are loaded in the table. Route replay is not wired yet.');
+      }
       return;
     }
 
@@ -1362,6 +1424,7 @@ const TradeSimulatorPanel = ({
       },
       drawdownModel,
       oneTradeAtATime,
+      useCandidateLogic,
     });
 
     setRunningReplay(false);
@@ -1453,6 +1516,17 @@ const TradeSimulatorPanel = ({
                 />
               )}
             </label>
+            {hasFamilyDropdownOptions ? (
+              <label className="simulator-field simulator-field--wide">
+                <span>Family ID</span>
+                <input
+                  value={familyId}
+                  onChange={(event) => handleFamilyIdChange(event.target.value)}
+                  placeholder="Paste Phase 1 family ID"
+                  spellCheck="false"
+                />
+              </label>
+            ) : null}
             {!hasFamilyDropdownOptions && selectedFamilyId ? (
               <button
                 type="button"
@@ -1527,6 +1601,15 @@ const TradeSimulatorPanel = ({
               />
               <span>Skip Overlapping Setups</span>
             </label>
+
+            <label className="simulator-check simulator-check--switch">
+              <input
+                type="checkbox"
+                checked={useCandidateLogic}
+                onChange={(event) => setUseCandidateLogic(event.target.checked)}
+              />
+              <span>Use Candidate Logic</span>
+            </label>
           </div>
 
           <div className="simulator-rail-card simulator-rail-card--rules">
@@ -1588,10 +1671,12 @@ const TradeSimulatorPanel = ({
             type="button"
             className="simulator-primary-button"
             onClick={runReplay}
-            disabled={!familyId || isRunningReplay}
+            disabled={!familyId || isRunningReplay || isPhase1FamilyView}
           >
             {isRunningReplay
               ? `Running ${Number(testsToChain) === 1 ? 'Test' : 'Tests'}...`
+              : isPhase1FamilyView
+                ? 'Pattern Table Loaded'
               : `Run ${Number(testsToChain) === 1 ? 'Test' : 'Tests'}`}
           </button>
 
@@ -1726,6 +1811,13 @@ const TradeSimulatorPanel = ({
                       ? `${formatShortDate(selectedReplayTest.start_date)} to ${formatShortDate(selectedReplayTest.end_date)}`
                       : `${accountRules.label} account / ${Number(testsToChain) || 1} ${Number(testsToChain) === 1 ? 'test' : 'tests'}`}
                   </small>
+                  {hasSimulatorReplay && useCandidateLogic ? (
+                    <small>
+                      {simulatorReplay.candidate_logic_applied
+                        ? `Candidate logic: ${simulatorReplay.candidate_logic_filters.join(', ')}`
+                        : 'Candidate logic: no saved avoid rules applied'}
+                    </small>
+                  ) : null}
                 </div>
 
                 <div className="simulator-result-summary-grid">
@@ -1774,6 +1866,8 @@ const TradeSimulatorPanel = ({
                       {chartPanelView === 'canvas'
                         ? selectedCanvasTrade
                           ? `${selectedCanvasTrade.symbol ?? 'N/A'} / ${formatMoney(selectedCanvasTrade.pnl)}`
+                          : tradeChartPattern
+                          ? `${tradeChartPattern.symbol ?? 'N/A'} / XABCD pattern`
                           : 'Click a trade row or graph dot to load the candle chart'
                         : hasSimulatorReplay
                         ? `${replaySummary.trades}/${selectedReplayTest?.totalTrades ?? 0} trades shown`
@@ -1826,7 +1920,7 @@ const TradeSimulatorPanel = ({
                     />
                     <div className="simulator-trade-canvas-stage">
                       {chartPanelView === 'canvas' ? (
-                        tradeChartCandles.length && selectedCanvasTrade && !isLoadingTradeCanvas && !tradeCanvasError ? (
+                        tradeChartCandles.length && tradeChartPattern && !isLoadingTradeCanvas && !tradeCanvasError ? (
                           <div className="simulator-chart-canvas-shell">
                             <CandleChartPanel
                               chartData={tradeChartData}

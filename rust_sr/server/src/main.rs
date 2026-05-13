@@ -1,6 +1,6 @@
 use actix_cors::Cors;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 mod pattern;
 use crate::pattern::Pattern;
@@ -12,11 +12,14 @@ use actix_web::route;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use sqlx::{MySqlPool, Row};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::process::Command;
+use tokio::sync::Mutex;
 
 const CANDLE_STORAGE_TABLES: [&str; 9] = [
     "futures_contract_1m_candles",
@@ -29,7 +32,11 @@ const CANDLE_STORAGE_TABLES: [&str; 9] = [
     "futures_contract_12h_candles",
     "futures_contract_1d_candles",
 ];
-const ENGINE_STORAGE_TABLES: [&str; 2] = ["pattern_setups", "pattern_outcomes_prop"];
+const ENGINE_STORAGE_TABLES: [&str; 3] = [
+    "pattern_setups",
+    "pattern_outcomes_prop",
+    "pattern_forward_observations",
+];
 const ROLLUP_STORAGE_TABLES: [&str; 4] = [
     "prop_strategy_family_summary",
     "prop_strategy_family_yearly",
@@ -135,6 +142,20 @@ struct StrategyContractWeekParams {
 }
 
 #[derive(Debug, serde::Deserialize)]
+struct PatternDiscoveryParams {
+    pub prop_strategy_id: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PatternDiscoverySaveLogicParams {
+    pub prop_strategy_id: Option<String>,
+    pub title: Option<String>,
+    pub logic_text: Option<String>,
+    pub rule_json: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
 struct CandleStorageParams {}
 
 #[derive(Debug, Deserialize)]
@@ -148,6 +169,7 @@ struct AdminActionParams {
     skip_processed_symbols: Option<bool>,
     defer_rebuild_indexes: Option<bool>,
     skip_prop_family_summaries: Option<bool>,
+    #[serde(alias = "confirmText")]
     confirm_text: Option<String>,
 }
 
@@ -165,6 +187,7 @@ struct AdminStatusResponse {
     operations: Vec<AdminOperationSnapshot>,
     table_snapshots: Vec<AdminTableSnapshot>,
     engine_phases: Vec<AdminEnginePhaseSnapshot>,
+    engine_progress: Option<AdminEngineProgressSnapshot>,
     cache_states: Vec<AdminCacheStateSnapshot>,
 }
 
@@ -202,6 +225,21 @@ struct AdminEnginePhaseSnapshot {
     duration_ms: i64,
     note: Option<String>,
     created_at: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AdminEngineProgressSnapshot {
+    run_id: String,
+    total_symbols: i64,
+    queued_symbols: i64,
+    completed_symbols: i64,
+    percent_complete: f64,
+    elapsed_ms: i64,
+    estimated_total_ms: Option<i64>,
+    estimated_remaining_ms: Option<i64>,
+    latest_symbol: Option<String>,
+    latest_phase: String,
+    updated_at: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -340,6 +378,14 @@ struct SimulatorReplayParams {
     pub daily_loss_limit: Option<f64>,
     pub drawdown_model: Option<String>,
     pub one_trade_at_a_time: Option<bool>,
+    pub use_candidate_logic: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+struct CandidateLogicReplayFilter {
+    title: String,
+    value: String,
+    label: String,
 }
 
 #[derive(Clone, sqlx::FromRow, serde::Serialize)]
@@ -416,6 +462,8 @@ struct SimulatorReplayResponse {
     tests: Vec<SimulatorReplayTestResult>,
     trades: Vec<SimulatorReplayTradeEvent>,
     eligible_trade_count: i64,
+    candidate_logic_applied: bool,
+    candidate_logic_filters: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -631,6 +679,238 @@ struct StrategyCandidateSummary {
     max_setups_per_week: i64,
 }
 
+#[derive(Clone, sqlx::FromRow, serde::Serialize)]
+struct PatternFamilySummary {
+    family_key: String,
+    family_name: String,
+    family_level: i64,
+    included_dimensions: String,
+    outcome_model: String,
+    market: String,
+    harmonic_type: String,
+    bin: String,
+    reversal_type: String,
+    size_bucket: String,
+    time_bin: String,
+    x_strictness: String,
+    three_month_trend: String,
+    six_month_trend: String,
+    twelve_month_trend: String,
+    setup_count: i64,
+    symbol_count: i64,
+    first_d_date: Option<NaiveDate>,
+    last_d_date: Option<NaiveDate>,
+}
+
+#[derive(Deserialize, Debug)]
+struct PatternFamilyParams {
+    limit: Option<i64>,
+    min_setup_count: Option<i64>,
+    year: Option<i64>,
+    source_scope: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Phase1ResultsParams {
+    family_key: Option<String>,
+    source_scope: Option<String>,
+    year: Option<i64>,
+    limit: Option<i64>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Phase1FamilyPatternsParams {
+    family_key: Option<String>,
+    source_scope: Option<String>,
+    year: Option<i64>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+    include_count: Option<bool>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Phase1LeaderboardParams {
+    source_scope: Option<String>,
+    year: Option<i64>,
+    limit: Option<i64>,
+    min_trade_count: Option<i64>,
+    min_setup_count: Option<i64>,
+    best_per_family: Option<bool>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Phase1YearlyParams {
+    family_key: Option<String>,
+    run_id: Option<String>,
+    route_id: Option<String>,
+    cache_only: Option<bool>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct Phase1StrategyResult {
+    run_id: String,
+    family_key: String,
+    source_scope: String,
+    period_year: i64,
+    route_id: String,
+    route_label: String,
+    result_rank: i64,
+    entry_mode: String,
+    stop_mode: String,
+    target_r: f64,
+    max_hold_multiple: i64,
+    setup_count: i64,
+    trade_count: i64,
+    no_entry_count: i64,
+    win_count: i64,
+    loss_count: i64,
+    win_rate: f64,
+    avg_r: f64,
+    profit_factor: f64,
+    max_drawdown_r: f64,
+    worst_year_avg_r: f64,
+    score: f64,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct Phase1LeaderboardResult {
+    run_id: String,
+    family_key: String,
+    source_scope: String,
+    period_year: i64,
+    route_id: String,
+    route_label: String,
+    result_rank: i64,
+    entry_mode: String,
+    stop_mode: String,
+    target_r: f64,
+    max_hold_multiple: i64,
+    setup_count: i64,
+    trade_count: i64,
+    no_entry_count: i64,
+    win_count: i64,
+    loss_count: i64,
+    win_rate: f64,
+    avg_r: f64,
+    profit_factor: f64,
+    max_drawdown_r: f64,
+    worst_year_avg_r: f64,
+    score: f64,
+    created_at: Option<NaiveDateTime>,
+    harmonic_type: String,
+    bin: String,
+    size_bucket: String,
+    time_bin: String,
+    x_strictness: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct Phase1YearlyRouteContext {
+    run_id: String,
+    family_key: String,
+    source_scope: String,
+    period_year: i64,
+    route_id: String,
+    route_label: String,
+    result_rank: i64,
+    entry_mode: String,
+    stop_mode: String,
+    target_r: f64,
+    max_hold_multiple: i64,
+    setup_count: i64,
+    trade_count: i64,
+    no_entry_count: i64,
+    win_count: i64,
+    loss_count: i64,
+    win_rate: f64,
+    avg_r: f64,
+    profit_factor: f64,
+    max_drawdown_r: f64,
+    worst_year_avg_r: f64,
+    score: f64,
+    created_at: Option<NaiveDateTime>,
+    max_forward_bars: i64,
+    harmonic_type: String,
+    bin: String,
+    size_bucket: String,
+    time_bin: String,
+    x_strictness: String,
+}
+
+#[derive(Clone, sqlx::FromRow)]
+struct Phase1ReplaySetup {
+    setup_id: String,
+    symbol: String,
+    source_table: Option<String>,
+    source_timeframe: Option<String>,
+    market: String,
+    d_date: NaiveDateTime,
+    x_high: f64,
+    x_low: f64,
+    b_high: f64,
+    b_low: f64,
+    c_high: f64,
+    c_low: f64,
+    d_high: f64,
+    d_low: f64,
+    d_close: f64,
+    cd_price_length: f64,
+    full_pattern_length: i64,
+}
+
+#[derive(Clone, sqlx::FromRow)]
+struct Phase1ReplayCandle {
+    open: f64,
+    high: f64,
+    low: f64,
+    close: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct Phase1YearlyBreakdownRow {
+    year: i32,
+    setup_count: i64,
+    trade_count: i64,
+    no_entry_count: i64,
+    win_count: i64,
+    loss_count: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    profit_factor: f64,
+    max_drawdown_r: f64,
+}
+
+#[derive(Serialize)]
+struct Phase1YearlyBreakdownResponse {
+    route: Phase1LeaderboardResult,
+    years: Vec<Phase1YearlyBreakdownRow>,
+    cached: bool,
+}
+
+#[derive(Default)]
+struct Phase1YearlyAccumulator {
+    setup_count: i64,
+    trade_count: i64,
+    no_entry_count: i64,
+    win_count: i64,
+    loss_count: i64,
+    sum_r: f64,
+    positive_r: f64,
+    negative_r_abs: f64,
+    cumulative_r: f64,
+    peak_r: f64,
+    max_drawdown_r: f64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PatternFamilySourceScope {
+    All,
+    Futures,
+    Daily,
+}
+
 #[derive(Serialize)]
 struct StrategyCandidatesResponse {
     strategies: Vec<StrategyCandidateSummary>,
@@ -672,6 +952,151 @@ struct PropStrategyFamilyFilter {
     twelve_month_trend: String,
 }
 
+#[derive(Clone, serde::Serialize)]
+struct PatternDiscoveryFamily {
+    family_key: String,
+    family_name: String,
+    family_level: i64,
+    included_dimensions: String,
+    outcome_model: String,
+    market: String,
+    harmonic_type: String,
+    bin: String,
+    reversal_type: String,
+    size_bucket: String,
+    time_bin: String,
+    x_strictness: Option<String>,
+    three_month_trend: String,
+    six_month_trend: String,
+    twelve_month_trend: String,
+}
+
+impl From<&PropStrategyFamilyFilter> for PatternDiscoveryFamily {
+    fn from(family: &PropStrategyFamilyFilter) -> Self {
+        Self {
+            family_key: family.family_key.clone(),
+            family_name: family.family_name.clone(),
+            family_level: family.family_level,
+            included_dimensions: family.included_dimensions.clone(),
+            outcome_model: family.outcome_model.clone(),
+            market: family.market.clone(),
+            harmonic_type: family.harmonic_type.clone(),
+            bin: family.bin.clone(),
+            reversal_type: family.reversal_type.clone(),
+            size_bucket: family.size_bucket.clone(),
+            time_bin: family.time_bin.clone(),
+            x_strictness: family.x_strictness.clone(),
+            three_month_trend: family.three_month_trend.clone(),
+            six_month_trend: family.six_month_trend.clone(),
+            twelve_month_trend: family.twelve_month_trend.clone(),
+        }
+    }
+}
+
+#[derive(sqlx::FromRow, serde::Serialize)]
+struct PatternDiscoverySummary {
+    observations: i64,
+    complete_windows: i64,
+    avg_bars_observed: f64,
+    avg_mfe_r: f64,
+    avg_mae_r: f64,
+    avg_end_return_r: f64,
+    avg_return_1x_r: f64,
+    avg_return_2x_r: f64,
+    avg_return_3x_r: f64,
+    avg_return_5x_r: f64,
+    hit_pos_0_5r_rate: f64,
+    hit_pos_1_0r_rate: f64,
+    hit_pos_1_5r_rate: f64,
+    hit_pos_2_0r_rate: f64,
+    hit_neg_0_5r_rate: f64,
+    hit_neg_1_0r_rate: f64,
+    pos_1r_before_neg_1r_rate: f64,
+    avg_pos_1r_bar: f64,
+    avg_neg_1r_bar: f64,
+}
+
+fn empty_pattern_discovery_summary() -> PatternDiscoverySummary {
+    PatternDiscoverySummary {
+        observations: 0,
+        complete_windows: 0,
+        avg_bars_observed: 0.0,
+        avg_mfe_r: 0.0,
+        avg_mae_r: 0.0,
+        avg_end_return_r: 0.0,
+        avg_return_1x_r: 0.0,
+        avg_return_2x_r: 0.0,
+        avg_return_3x_r: 0.0,
+        avg_return_5x_r: 0.0,
+        hit_pos_0_5r_rate: 0.0,
+        hit_pos_1_0r_rate: 0.0,
+        hit_pos_1_5r_rate: 0.0,
+        hit_pos_2_0r_rate: 0.0,
+        hit_neg_0_5r_rate: 0.0,
+        hit_neg_1_0r_rate: 0.0,
+        pos_1r_before_neg_1r_rate: 0.0,
+        avg_pos_1r_bar: 0.0,
+        avg_neg_1r_bar: 0.0,
+    }
+}
+
+#[derive(sqlx::FromRow, serde::Serialize)]
+struct PatternDiscoveryBreakdownRow {
+    value: String,
+    observations: i64,
+    avg_mfe_r: f64,
+    avg_mae_r: f64,
+    avg_return_3x_r: f64,
+    avg_return_5x_r: f64,
+    hit_pos_1_0r_rate: f64,
+    hit_neg_1_0r_rate: f64,
+    pos_1r_before_neg_1r_rate: f64,
+}
+
+#[derive(serde::Serialize)]
+struct PatternDiscoveryBreakdown {
+    title: String,
+    rows: Vec<PatternDiscoveryBreakdownRow>,
+}
+
+#[derive(sqlx::FromRow, serde::Serialize)]
+struct PatternDiscoveryObservationExample {
+    observation_id: String,
+    symbol: String,
+    entry_date: NaiveDateTime,
+    observation_end_date: NaiveDateTime,
+    reference_price: f64,
+    mfe_r: Option<f64>,
+    mae_r: Option<f64>,
+    end_close_return_r: Option<f64>,
+    close_return_3x_r: Option<f64>,
+    close_return_5x_r: Option<f64>,
+    hit_pos_1_0r_bar: Option<i64>,
+    hit_neg_1_0r_bar: Option<i64>,
+    hit_pos_1r_before_neg_1r: Option<bool>,
+}
+
+#[derive(sqlx::FromRow, serde::Serialize)]
+struct PatternDiscoverySavedLogic {
+    id: i64,
+    family_key: String,
+    title: String,
+    logic_text: String,
+    rule_json: Option<String>,
+    status: String,
+    created_at: Option<NaiveDateTime>,
+    updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(serde::Serialize)]
+struct PatternDiscoveryResponse {
+    family: PatternDiscoveryFamily,
+    summary: PatternDiscoverySummary,
+    breakdowns: Vec<PatternDiscoveryBreakdown>,
+    examples: Vec<PatternDiscoveryObservationExample>,
+    saved_logic: Vec<PatternDiscoverySavedLogic>,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct CandleParams {
     symbol: String,
@@ -711,6 +1136,26 @@ fn normalize_trade_result_filter(trade_result: Option<i32>) -> Option<i32> {
     match trade_result {
         Some(0) | Some(1) | Some(2) => trade_result,
         _ => None,
+    }
+}
+
+fn normalize_pattern_family_source_scope(value: Option<&str>) -> PatternFamilySourceScope {
+    match value.map(|item| item.trim().to_ascii_lowercase()) {
+        Some(scope) if scope == "futures" || scope == "futures_1m" => {
+            PatternFamilySourceScope::Futures
+        }
+        Some(scope) if scope == "daily" || scope == "candles_daily" => {
+            PatternFamilySourceScope::Daily
+        }
+        _ => PatternFamilySourceScope::All,
+    }
+}
+
+fn pattern_family_source_scope_label(scope: PatternFamilySourceScope) -> &'static str {
+    match scope {
+        PatternFamilySourceScope::All => "all",
+        PatternFamilySourceScope::Futures => "futures",
+        PatternFamilySourceScope::Daily => "daily",
     }
 }
 
@@ -1301,12 +1746,32 @@ fn resolve_abcd_dir() -> Result<PathBuf, String> {
     }
 
     let current_dir = std::env::current_dir().map_err(|error| error.to_string())?;
-    let candidates = [
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(PathBuf::from));
+    let mut candidates = vec![
         current_dir.join("rust_sr").join("abcd"),
         current_dir.join("..").join("abcd"),
-        current_dir.join("..").join("..").join("rust_sr").join("abcd"),
+        current_dir
+            .join("..")
+            .join("..")
+            .join("rust_sr")
+            .join("abcd"),
         current_dir.clone(),
     ];
+
+    if let Some(exe_dir) = exe_dir {
+        candidates.extend([
+            exe_dir.join("..").join("..").join("..").join("abcd"),
+            exe_dir
+                .join("..")
+                .join("..")
+                .join("..")
+                .join("rust_sr")
+                .join("abcd"),
+            exe_dir.join("..").join(".."),
+        ]);
+    }
 
     for candidate in candidates {
         if candidate.join("Cargo.toml").exists() {
@@ -1324,11 +1789,7 @@ fn cargo_admin_command(
     envs: Vec<(String, String)>,
     env_removes: Vec<String>,
 ) -> AdminCommandSpec {
-    let args = vec![
-        "run".to_string(),
-        "--bin".to_string(),
-        bin_name.to_string(),
-    ];
+    let args = vec!["run".to_string(), "--bin".to_string(), bin_name.to_string()];
     let command_text = format!(
         "{action_label}: cargo {}",
         args.iter()
@@ -1383,7 +1844,9 @@ fn build_admin_command(params: &AdminActionParams) -> Result<AdminCommandSpec, S
         )),
         "clear_engine" => {
             if params.confirm_text.as_deref() != Some("CLEAR ENGINE") {
-                return Err("Type CLEAR ENGINE before clearing generated engine tables.".to_string());
+                return Err(
+                    "Type CLEAR ENGINE before clearing generated engine tables.".to_string()
+                );
             }
 
             Ok(cargo_admin_command(
@@ -1400,7 +1863,10 @@ fn build_admin_command(params: &AdminActionParams) -> Result<AdminCommandSpec, S
             let contract_symbol = normalize_admin_symbol(params.contract_symbol.as_deref());
             let scan_concurrency = params.scan_concurrency.unwrap_or(1).clamp(1, 16);
             let mut envs = vec![
-                ("ABCD_CANDLE_SOURCE".to_string(), "futures_contracts".to_string()),
+                (
+                    "ABCD_CANDLE_SOURCE".to_string(),
+                    "futures_contracts".to_string(),
+                ),
                 ("ABCD_FUTURES_TIMEFRAME".to_string(), timeframe.clone()),
                 (
                     "ABCD_SCAN_CONCURRENCY".to_string(),
@@ -1440,13 +1906,8 @@ fn build_admin_command(params: &AdminActionParams) -> Result<AdminCommandSpec, S
                 ));
             }
 
-            let mut spec = cargo_admin_command(
-                abcd_dir,
-                "abcd",
-                "Run engine scan",
-                envs,
-                env_removes,
-            );
+            let mut spec =
+                cargo_admin_command(abcd_dir, "abcd", "Run engine scan", envs, env_removes);
             spec.command_text = format!(
                 "Run engine scan: {} {} {}",
                 root_symbol.unwrap_or_else(|| "ALL_ROOTS".to_string()),
@@ -1498,27 +1959,65 @@ fn append_output_tail(tail: &mut String, text: &str) {
     }
 }
 
-async fn collect_stream_tail<R>(stream: R, label: &'static str) -> String
-where
+async fn update_admin_operation_output_tail(
+    pool: &MySqlPool,
+    run_id: i64,
+    output_tail: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE admin_operation_runs
+        SET output_tail = ?
+        WHERE id = ?
+        "#,
+    )
+    .bind(output_tail)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn collect_stream_tail<R>(
+    stream: R,
+    label: &'static str,
+    pool: MySqlPool,
+    run_id: i64,
+    shared_tail: Arc<Mutex<String>>,
+) where
     R: AsyncRead + Unpin,
 {
     let mut reader = BufReader::new(stream).lines();
-    let mut tail = String::new();
+    let mut last_flush = Instant::now();
 
     loop {
         match reader.next_line().await {
             Ok(Some(line)) => {
-                append_output_tail(&mut tail, &format!("[{label}] {line}\n"));
+                let mut flush_tail = None;
+                {
+                    let mut tail = shared_tail.lock().await;
+                    append_output_tail(&mut tail, &format!("[{label}] {line}\n"));
+                    if last_flush.elapsed().as_millis() >= 750 {
+                        flush_tail = Some(tail.clone());
+                        last_flush = Instant::now();
+                    }
+                }
+                if let Some(tail) = flush_tail {
+                    let _ = update_admin_operation_output_tail(&pool, run_id, &tail).await;
+                }
             }
             Ok(None) => break,
             Err(error) => {
+                let mut tail = shared_tail.lock().await;
                 append_output_tail(&mut tail, &format!("[{label}] stream error: {error}\n"));
                 break;
             }
         }
     }
 
-    tail
+    let tail = shared_tail.lock().await.clone();
+    let _ = update_admin_operation_output_tail(&pool, run_id, &tail).await;
 }
 
 async fn finish_admin_operation(
@@ -1588,28 +2087,35 @@ async fn run_admin_command_background(pool: MySqlPool, run_id: i64, spec: AdminC
         }
     };
 
-    let stdout_task = child
-        .stdout
-        .take()
-        .map(|stream| tokio::spawn(collect_stream_tail(stream, "out")));
-    let stderr_task = child
-        .stderr
-        .take()
-        .map(|stream| tokio::spawn(collect_stream_tail(stream, "err")));
+    let shared_tail = Arc::new(Mutex::new(String::new()));
+    let stdout_task = child.stdout.take().map(|stream| {
+        tokio::spawn(collect_stream_tail(
+            stream,
+            "out",
+            pool.clone(),
+            run_id,
+            shared_tail.clone(),
+        ))
+    });
+    let stderr_task = child.stderr.take().map(|stream| {
+        tokio::spawn(collect_stream_tail(
+            stream,
+            "err",
+            pool.clone(),
+            run_id,
+            shared_tail.clone(),
+        ))
+    });
 
     let status_result = child.wait().await;
-    let mut output_tail = String::new();
 
     if let Some(task) = stdout_task {
-        if let Ok(tail) = task.await {
-            append_output_tail(&mut output_tail, &tail);
-        }
+        let _ = task.await;
     }
     if let Some(task) = stderr_task {
-        if let Ok(tail) = task.await {
-            append_output_tail(&mut output_tail, &tail);
-        }
+        let _ = task.await;
     }
+    let output_tail = shared_tail.lock().await.clone();
 
     let duration_ms = started_at.elapsed().as_millis() as i64;
     let (status, exit_code, error_message) = match status_result {
@@ -1619,7 +2125,11 @@ async fn run_admin_command_background(pool: MySqlPool, run_id: i64, spec: AdminC
             exit_status.code(),
             Some(format!("Command exited with status {exit_status}")),
         ),
-        Err(error) => ("failed", None, Some(format!("Command wait failed: {error}"))),
+        Err(error) => (
+            "failed",
+            None,
+            Some(format!("Command wait failed: {error}")),
+        ),
     };
 
     if let Err(error) = finish_admin_operation(
@@ -1781,6 +2291,102 @@ async fn fetch_admin_engine_phases(
         .collect())
 }
 
+async fn fetch_admin_engine_progress(
+    pool: &MySqlPool,
+) -> Result<Option<AdminEngineProgressSnapshot>, sqlx::Error> {
+    if !table_exists(pool, "engine_phase_timings").await? {
+        return Ok(None);
+    }
+
+    let Some(run_id) = sqlx::query_scalar::<_, Option<String>>(
+        r#"
+        SELECT run_id
+        FROM engine_phase_timings
+        ORDER BY id DESC
+        LIMIT 1
+        "#,
+    )
+    .fetch_one(pool)
+    .await?
+    else {
+        return Ok(None);
+    };
+
+    let aggregate = sqlx::query(
+        r#"
+        SELECT
+            COALESCE(MAX(CASE WHEN phase = 'select_symbols' THEN row_count END), 0) AS total_symbols,
+            COALESCE(SUM(CASE
+                WHEN phase IN ('queue_initial_symbols', 'queue_next_symbol')
+                THEN COALESCE(row_count, 0)
+                ELSE 0
+            END), 0) AS queued_symbols,
+            COALESCE(SUM(CASE WHEN phase = 'await_symbol_result' THEN 1 ELSE 0 END), 0) AS completed_symbols,
+            CAST(COALESCE(AVG(CASE
+                WHEN phase = 'await_symbol_result' AND duration_ms > 0
+                THEN duration_ms
+                ELSE NULL
+            END), 0) AS DOUBLE) AS avg_symbol_duration_ms,
+            TIMESTAMPDIFF(MICROSECOND, MIN(created_at), NOW(6)) / 1000 AS elapsed_ms
+        FROM engine_phase_timings
+        WHERE run_id = ?
+        "#,
+    )
+    .bind(&run_id)
+    .fetch_one(pool)
+    .await?;
+
+    let latest = sqlx::query(
+        r#"
+        SELECT
+            symbol,
+            phase,
+            DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+        FROM engine_phase_timings
+        WHERE run_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&run_id)
+    .fetch_one(pool)
+    .await?;
+
+    let total_symbols = read_i64_or_zero(&aggregate, "total_symbols");
+    let queued_symbols = read_i64_or_zero(&aggregate, "queued_symbols");
+    let completed_symbols = read_i64_or_zero(&aggregate, "completed_symbols");
+    let avg_symbol_duration_ms = aggregate
+        .try_get::<f64, _>("avg_symbol_duration_ms")
+        .unwrap_or(0.0);
+    let elapsed_ms = read_i64_or_zero(&aggregate, "elapsed_ms").max(0);
+    let percent_complete = if total_symbols > 0 {
+        ((completed_symbols as f64 / total_symbols as f64) * 100.0).clamp(0.0, 100.0)
+    } else {
+        0.0
+    };
+    let remaining_symbols = total_symbols.saturating_sub(completed_symbols);
+    let estimated_remaining_ms = if avg_symbol_duration_ms > 0.0 && remaining_symbols > 0 {
+        Some((avg_symbol_duration_ms * remaining_symbols as f64).round() as i64)
+    } else {
+        None
+    };
+    let estimated_total_ms = estimated_remaining_ms.map(|remaining_ms| elapsed_ms + remaining_ms);
+
+    Ok(Some(AdminEngineProgressSnapshot {
+        run_id,
+        total_symbols,
+        queued_symbols,
+        completed_symbols,
+        percent_complete,
+        elapsed_ms,
+        estimated_total_ms,
+        estimated_remaining_ms,
+        latest_symbol: latest.try_get("symbol").ok(),
+        latest_phase: latest.try_get("phase").unwrap_or_default(),
+        updated_at: latest.try_get("updated_at").ok(),
+    }))
+}
+
 async fn fetch_admin_cache_states(
     pool: &MySqlPool,
 ) -> Result<Vec<AdminCacheStateSnapshot>, sqlx::Error> {
@@ -1815,9 +2421,7 @@ async fn fetch_admin_cache_states(
         .collect())
 }
 
-async fn build_admin_status_response(
-    pool: &MySqlPool,
-) -> Result<AdminStatusResponse, sqlx::Error> {
+async fn build_admin_status_response(pool: &MySqlPool) -> Result<AdminStatusResponse, sqlx::Error> {
     ensure_admin_operation_table(pool).await?;
 
     Ok(AdminStatusResponse {
@@ -1827,6 +2431,7 @@ async fn build_admin_status_response(
         operations: fetch_admin_operations(pool).await?,
         table_snapshots: fetch_admin_table_snapshots(pool).await?,
         engine_phases: fetch_admin_engine_phases(pool).await?,
+        engine_progress: fetch_admin_engine_progress(pool).await?,
         cache_states: fetch_admin_cache_states(pool).await?,
     })
 }
@@ -1943,10 +2548,15 @@ fn append_prop_family_candidate_option_filters(
 }
 
 fn is_missing_table_error(error: &sqlx::Error) -> bool {
-    matches!(
-        error,
-        sqlx::Error::Database(db_error) if db_error.code().as_deref() == Some("1146")
-    )
+    match error {
+        sqlx::Error::Database(db_error) => {
+            matches!(db_error.code().as_deref(), Some("1146") | Some("42S02"))
+                || db_error.message().contains("doesn't exist")
+                || db_error.message().contains("does not exist")
+                || db_error.message().contains("Unknown table")
+        }
+        _ => false,
+    }
 }
 
 async fn is_rollup_cache_ready(pool: &MySqlPool, cache_name: &str) -> Result<bool, sqlx::Error> {
@@ -2005,6 +2615,252 @@ async fn fetch_prop_strategy_family_filter(
         Err(error) if is_missing_table_error(&error) => Ok(None),
         Err(error) => Err(error),
     }
+}
+
+async fn ensure_pattern_discovery_logic_table(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS pattern_discovery_logic (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            family_key VARCHAR(64) NOT NULL,
+            title VARCHAR(128) NOT NULL,
+            logic_text TEXT NOT NULL,
+            rule_json LONGTEXT NULL,
+            status VARCHAR(32) NOT NULL DEFAULT 'candidate',
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_pattern_discovery_logic_family (family_key, created_at)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn fetch_pattern_discovery_saved_logic(
+    pool: &MySqlPool,
+    family_key: &str,
+) -> Result<Vec<PatternDiscoverySavedLogic>, sqlx::Error> {
+    ensure_pattern_discovery_logic_table(pool).await?;
+
+    sqlx::query_as::<_, PatternDiscoverySavedLogic>(
+        r#"
+        SELECT
+            CAST(id AS SIGNED) AS id,
+            family_key,
+            title,
+            logic_text,
+            rule_json,
+            status,
+            created_at,
+            updated_at
+        FROM pattern_discovery_logic
+        WHERE family_key = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 20
+        "#,
+    )
+    .bind(family_key)
+    .fetch_all(pool)
+    .await
+}
+
+fn parse_candidate_logic_replay_filters(logic_text: &str) -> Vec<CandidateLogicReplayFilter> {
+    logic_text
+        .lines()
+        .filter_map(|line| {
+            let rest = line.trim().strip_prefix("avoid_when ")?;
+            let (title, value_with_note) = rest.split_once(" = ")?;
+            let value = value_with_note
+                .split_once(" (")
+                .map(|(value, _)| value)
+                .unwrap_or(value_with_note)
+                .trim();
+            let title = title.trim();
+
+            if value.is_empty() || candidate_logic_filter_condition(title).is_none() {
+                return None;
+            }
+
+            Some(CandidateLogicReplayFilter {
+                title: title.to_string(),
+                value: value.to_string(),
+                label: format!("Avoid {} = {}", title, value),
+            })
+        })
+        .collect()
+}
+
+fn candidate_logic_filter_condition(title: &str) -> Option<&'static str> {
+    match title {
+        "Roots" => Some("COALESCE(NULLIF(p.root_symbol, ''), SUBSTRING(p.symbol, 1, 3)) <> ?"),
+        "Entry Hour" => Some("CAST(HOUR(p.entry_date) AS CHAR) <> ?"),
+        "Formation Length" => Some(
+            "CASE WHEN (p.x_length + p.a_length + p.b_length + p.c_length) <= 20 THEN '<=20' WHEN (p.x_length + p.a_length + p.b_length + p.c_length) <= 40 THEN '21-40' WHEN (p.x_length + p.a_length + p.b_length + p.c_length) <= 80 THEN '41-80' WHEN (p.x_length + p.a_length + p.b_length + p.c_length) <= 160 THEN '81-160' ELSE '161+' END <> ?",
+        ),
+        "Contract Week" => Some("COALESCE(CAST(p.contract_week_index AS CHAR), 'Unknown') <> ?"),
+        _ => None,
+    }
+}
+
+fn pattern_discovery_family_where_clause() -> String {
+    r#"
+        WHERE p.outcome_model = ?
+          AND p.market = ?
+          AND p.harmonic_type = ?
+          AND p.bin = ?
+          AND COALESCE(NULLIF(p.reversal_type, ''), 'None') = ?
+          AND p.size_bucket = ?
+          AND p.time_bin = ?
+          AND p.x_strictness = ?
+          AND p.three_month_trend = ?
+          AND p.six_month_trend = ?
+          AND p.twelve_month_trend = ?
+        "#
+    .to_string()
+}
+
+fn bind_pattern_discovery_family_as<'q, T>(
+    query: sqlx::query::QueryAs<'q, sqlx::MySql, T, sqlx::mysql::MySqlArguments>,
+    family: &'q PropStrategyFamilyFilter,
+) -> sqlx::query::QueryAs<'q, sqlx::MySql, T, sqlx::mysql::MySqlArguments>
+where
+    T: Send + Unpin + for<'r> sqlx::FromRow<'r, sqlx::mysql::MySqlRow>,
+{
+    query
+        .bind(&family.outcome_model)
+        .bind(&family.market)
+        .bind(&family.harmonic_type)
+        .bind(&family.bin)
+        .bind(&family.reversal_type)
+        .bind(&family.size_bucket)
+        .bind(&family.time_bin)
+        .bind(family.x_strictness.as_deref().unwrap_or("Loose"))
+        .bind(&family.three_month_trend)
+        .bind(&family.six_month_trend)
+        .bind(&family.twelve_month_trend)
+}
+
+async fn fetch_pattern_discovery_summary(
+    pool: &MySqlPool,
+    family: &PropStrategyFamilyFilter,
+) -> Result<PatternDiscoverySummary, sqlx::Error> {
+    let sql = format!(
+        r#"
+        SELECT
+            CAST(COUNT(*) AS SIGNED) AS observations,
+            CAST(SUM(CASE WHEN p.window_complete THEN 1 ELSE 0 END) AS SIGNED) AS complete_windows,
+            CAST(COALESCE(AVG(p.bars_observed), 0.0) AS DOUBLE) AS avg_bars_observed,
+            CAST(COALESCE(AVG(p.mfe_r), 0.0) AS DOUBLE) AS avg_mfe_r,
+            CAST(COALESCE(AVG(p.mae_r), 0.0) AS DOUBLE) AS avg_mae_r,
+            CAST(COALESCE(AVG(p.end_close_return_r), 0.0) AS DOUBLE) AS avg_end_return_r,
+            CAST(COALESCE(AVG(p.close_return_1x_r), 0.0) AS DOUBLE) AS avg_return_1x_r,
+            CAST(COALESCE(AVG(p.close_return_2x_r), 0.0) AS DOUBLE) AS avg_return_2x_r,
+            CAST(COALESCE(AVG(p.close_return_3x_r), 0.0) AS DOUBLE) AS avg_return_3x_r,
+            CAST(COALESCE(AVG(p.close_return_5x_r), 0.0) AS DOUBLE) AS avg_return_5x_r,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_pos_0_5r_bar IS NULL THEN 0 ELSE 1 END), 0.0) AS DOUBLE) AS hit_pos_0_5r_rate,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_pos_1_0r_bar IS NULL THEN 0 ELSE 1 END), 0.0) AS DOUBLE) AS hit_pos_1_0r_rate,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_pos_1_5r_bar IS NULL THEN 0 ELSE 1 END), 0.0) AS DOUBLE) AS hit_pos_1_5r_rate,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_pos_2_0r_bar IS NULL THEN 0 ELSE 1 END), 0.0) AS DOUBLE) AS hit_pos_2_0r_rate,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_neg_0_5r_bar IS NULL THEN 0 ELSE 1 END), 0.0) AS DOUBLE) AS hit_neg_0_5r_rate,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_neg_1_0r_bar IS NULL THEN 0 ELSE 1 END), 0.0) AS DOUBLE) AS hit_neg_1_0r_rate,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_pos_1r_before_neg_1r THEN 1 ELSE 0 END), 0.0) AS DOUBLE) AS pos_1r_before_neg_1r_rate,
+            CAST(COALESCE(AVG(p.hit_pos_1_0r_bar), 0.0) AS DOUBLE) AS avg_pos_1r_bar,
+            CAST(COALESCE(AVG(p.hit_neg_1_0r_bar), 0.0) AS DOUBLE) AS avg_neg_1r_bar
+        FROM pattern_forward_observations p
+        {where_clause}
+        "#,
+        where_clause = pattern_discovery_family_where_clause(),
+    );
+
+    bind_pattern_discovery_family_as(sqlx::query_as::<_, PatternDiscoverySummary>(&sql), family)
+        .fetch_one(pool)
+        .await
+}
+
+async fn fetch_pattern_discovery_breakdown(
+    pool: &MySqlPool,
+    family: &PropStrategyFamilyFilter,
+    title: &str,
+    value_expr: &str,
+    min_rows: i64,
+    limit: i64,
+) -> Result<PatternDiscoveryBreakdown, sqlx::Error> {
+    let sql = format!(
+        r#"
+        SELECT
+            {value_expr} AS value,
+            CAST(COUNT(*) AS SIGNED) AS observations,
+            CAST(COALESCE(AVG(p.mfe_r), 0.0) AS DOUBLE) AS avg_mfe_r,
+            CAST(COALESCE(AVG(p.mae_r), 0.0) AS DOUBLE) AS avg_mae_r,
+            CAST(COALESCE(AVG(p.close_return_3x_r), 0.0) AS DOUBLE) AS avg_return_3x_r,
+            CAST(COALESCE(AVG(p.close_return_5x_r), 0.0) AS DOUBLE) AS avg_return_5x_r,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_pos_1_0r_bar IS NULL THEN 0 ELSE 1 END), 0.0) AS DOUBLE) AS hit_pos_1_0r_rate,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_neg_1_0r_bar IS NULL THEN 0 ELSE 1 END), 0.0) AS DOUBLE) AS hit_neg_1_0r_rate,
+            CAST(COALESCE(AVG(CASE WHEN p.hit_pos_1r_before_neg_1r THEN 1 ELSE 0 END), 0.0) AS DOUBLE) AS pos_1r_before_neg_1r_rate
+        FROM pattern_forward_observations p
+        {where_clause}
+        GROUP BY value
+        HAVING observations >= ?
+        ORDER BY pos_1r_before_neg_1r_rate DESC, observations DESC
+        LIMIT ?
+        "#,
+        where_clause = pattern_discovery_family_where_clause(),
+    );
+
+    let rows = bind_pattern_discovery_family_as(
+        sqlx::query_as::<_, PatternDiscoveryBreakdownRow>(&sql),
+        family,
+    )
+    .bind(min_rows)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(PatternDiscoveryBreakdown {
+        title: title.to_string(),
+        rows,
+    })
+}
+
+async fn fetch_pattern_discovery_examples(
+    pool: &MySqlPool,
+    family: &PropStrategyFamilyFilter,
+    limit: i64,
+) -> Result<Vec<PatternDiscoveryObservationExample>, sqlx::Error> {
+    let sql = format!(
+        r#"
+        SELECT
+            p.observation_id,
+            p.symbol,
+            p.entry_date,
+            p.observation_end_date,
+            CAST(p.reference_price AS DOUBLE) AS reference_price,
+            CAST(p.mfe_r AS DOUBLE) AS mfe_r,
+            CAST(p.mae_r AS DOUBLE) AS mae_r,
+            CAST(p.end_close_return_r AS DOUBLE) AS end_close_return_r,
+            CAST(p.close_return_3x_r AS DOUBLE) AS close_return_3x_r,
+            CAST(p.close_return_5x_r AS DOUBLE) AS close_return_5x_r,
+            CAST(p.hit_pos_1_0r_bar AS SIGNED) AS hit_pos_1_0r_bar,
+            CAST(p.hit_neg_1_0r_bar AS SIGNED) AS hit_neg_1_0r_bar,
+            p.hit_pos_1r_before_neg_1r
+        FROM pattern_forward_observations p
+        {where_clause}
+        ORDER BY p.entry_date DESC, p.symbol ASC
+        LIMIT ?
+        "#,
+        where_clause = pattern_discovery_family_where_clause(),
+    );
+
+    bind_pattern_discovery_family_as(
+        sqlx::query_as::<_, PatternDiscoveryObservationExample>(&sql),
+        family,
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await
 }
 
 async fn try_fetch_setup_comparison_from_prop_strategy_rollup(
@@ -2398,30 +3254,28 @@ async fn fetch_strategy_trades(
         family_where_clause = family_where_clause,
     );
 
-    let (earliest_entry_date, latest_entry_date) = match sqlx::query_as::<
-        _,
-        (Option<NaiveDateTime>, Option<NaiveDateTime>),
-    >(&range_sql)
-    .bind(&family.outcome_model)
-    .bind(&family.market)
-    .bind(&family.harmonic_type)
-    .bind(&family.bin)
-    .bind(&family.reversal_type)
-    .bind(&family.size_bucket)
-    .bind(&family.time_bin)
-    .bind(family.x_strictness.as_deref().unwrap_or("Loose"))
-    .bind(&family.three_month_trend)
-    .bind(&family.six_month_trend)
-    .bind(&family.twelve_month_trend)
-    .fetch_one(pool.get_ref())
-    .await
-    {
-        Ok(range) => range,
-        Err(error) => {
-            eprintln!("Prop strategy trades range DB error: {:?}", error);
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
+    let (earliest_entry_date, latest_entry_date) =
+        match sqlx::query_as::<_, (Option<NaiveDateTime>, Option<NaiveDateTime>)>(&range_sql)
+            .bind(&family.outcome_model)
+            .bind(&family.market)
+            .bind(&family.harmonic_type)
+            .bind(&family.bin)
+            .bind(&family.reversal_type)
+            .bind(&family.size_bucket)
+            .bind(&family.time_bin)
+            .bind(family.x_strictness.as_deref().unwrap_or("Loose"))
+            .bind(&family.three_month_trend)
+            .bind(&family.six_month_trend)
+            .bind(&family.twelve_month_trend)
+            .fetch_one(pool.get_ref())
+            .await
+        {
+            Ok(range) => range,
+            Err(error) => {
+                eprintln!("Prop strategy trades range DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
 
     let entry_dates = match sqlx::query_scalar::<_, NaiveDate>(&entry_dates_sql)
         .bind(&family.outcome_model)
@@ -2519,6 +3373,211 @@ async fn fetch_strategy_trades(
         latest_entry_date,
         entry_dates,
     });
+}
+
+#[route("/pattern-discovery/family", method = "GET", method = "POST")]
+async fn fetch_pattern_discovery_family(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<PatternDiscoveryParams>,
+) -> impl Responder {
+    let Some(prop_strategy_id) = params
+        .prop_strategy_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Missing family key");
+    };
+
+    let family = match fetch_prop_strategy_family_filter(pool.get_ref(), prop_strategy_id).await {
+        Ok(Some(family)) => family,
+        Ok(None) => return HttpResponse::NotFound().body("Prop strategy family not found"),
+        Err(error) => {
+            eprintln!("Pattern discovery family lookup DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let mut has_forward_observations_table = true;
+    let summary = match fetch_pattern_discovery_summary(pool.get_ref(), &family).await {
+        Ok(summary) => summary,
+        Err(error) if is_missing_table_error(&error) => {
+            has_forward_observations_table = false;
+            empty_pattern_discovery_summary()
+        }
+        Err(error) => {
+            eprintln!("Pattern discovery summary DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let min_rows = (summary.observations / 20).clamp(5, 50);
+    let breakdown_specs = [
+        (
+            "Roots",
+            "COALESCE(NULLIF(p.root_symbol, ''), SUBSTRING(p.symbol, 1, 3))",
+        ),
+        (
+            "Entry Hour",
+            "CAST(HOUR(p.entry_date) AS CHAR)",
+        ),
+        (
+            "Formation Length",
+            "CASE WHEN p.formation_length <= 20 THEN '<=20' WHEN p.formation_length <= 40 THEN '21-40' WHEN p.formation_length <= 80 THEN '41-80' WHEN p.formation_length <= 160 THEN '81-160' ELSE '161+' END",
+        ),
+        (
+            "Contract Week",
+            "COALESCE(CAST(p.contract_week_index AS CHAR), 'Unknown')",
+        ),
+        (
+            "Window Complete",
+            "CASE WHEN p.window_complete THEN 'Complete' ELSE 'Partial' END",
+        ),
+    ];
+    let mut breakdowns = Vec::new();
+    if has_forward_observations_table && summary.observations > 0 {
+        for (title, value_expr) in breakdown_specs {
+            match fetch_pattern_discovery_breakdown(
+                pool.get_ref(),
+                &family,
+                title,
+                value_expr,
+                min_rows,
+                10,
+            )
+            .await
+            {
+                Ok(breakdown) => breakdowns.push(breakdown),
+                Err(error) if is_missing_table_error(&error) => {
+                    has_forward_observations_table = false;
+                    break;
+                }
+                Err(error) => {
+                    eprintln!("Pattern discovery breakdown DB error: {:?}", error);
+                    return HttpResponse::InternalServerError().finish();
+                }
+            }
+        }
+    }
+
+    let examples = if has_forward_observations_table && summary.observations > 0 {
+        match fetch_pattern_discovery_examples(
+            pool.get_ref(),
+            &family,
+            params.limit.unwrap_or(40).clamp(1, 200),
+        )
+        .await
+        {
+            Ok(examples) => examples,
+            Err(error) if is_missing_table_error(&error) => Vec::new(),
+            Err(error) => {
+                eprintln!("Pattern discovery examples DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    let saved_logic =
+        match fetch_pattern_discovery_saved_logic(pool.get_ref(), &family.family_key).await {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("Pattern discovery saved logic DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+
+    HttpResponse::Ok().json(PatternDiscoveryResponse {
+        family: PatternDiscoveryFamily::from(&family),
+        summary,
+        breakdowns,
+        examples,
+        saved_logic,
+    })
+}
+
+#[route("/pattern-discovery/save-logic", method = "POST")]
+async fn save_pattern_discovery_logic(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<PatternDiscoverySaveLogicParams>,
+) -> impl Responder {
+    let Some(prop_strategy_id) = params
+        .prop_strategy_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Missing family key");
+    };
+    let Some(logic_text) = params
+        .logic_text
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Missing logic text");
+    };
+
+    let family = match fetch_prop_strategy_family_filter(pool.get_ref(), prop_strategy_id).await {
+        Ok(Some(family)) => family,
+        Ok(None) => return HttpResponse::NotFound().body("Prop strategy family not found"),
+        Err(error) => {
+            eprintln!("Pattern discovery save family lookup DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    if let Err(error) = ensure_pattern_discovery_logic_table(pool.get_ref()).await {
+        eprintln!("Pattern discovery save table DB error: {:?}", error);
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    let title = params
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Candidate logic");
+    let rule_json = params
+        .rule_json
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    if let Err(error) = sqlx::query(
+        r#"
+        INSERT INTO pattern_discovery_logic (
+            family_key,
+            title,
+            logic_text,
+            rule_json,
+            status
+        )
+        VALUES (?, ?, ?, ?, 'candidate')
+        "#,
+    )
+    .bind(&family.family_key)
+    .bind(title)
+    .bind(logic_text)
+    .bind(rule_json)
+    .execute(pool.get_ref())
+    .await
+    {
+        eprintln!("Pattern discovery save logic DB error: {:?}", error);
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    match fetch_pattern_discovery_saved_logic(pool.get_ref(), &family.family_key).await {
+        Ok(rows) => HttpResponse::Ok().json(rows),
+        Err(error) => {
+            eprintln!(
+                "Pattern discovery saved logic refresh DB error: {:?}",
+                error
+            );
+            HttpResponse::InternalServerError().finish()
+        }
+    }
 }
 
 fn parse_simulator_start_date(value: Option<&str>) -> Option<NaiveDateTime> {
@@ -2626,7 +3685,10 @@ const SIMULATOR_DRAWDOWN_MODEL_EOD: &str = "eod";
 
 fn normalize_simulator_drawdown_model(value: Option<&str>) -> &'static str {
     if value
-        .map(|item| item.trim().eq_ignore_ascii_case(SIMULATOR_DRAWDOWN_MODEL_EOD))
+        .map(|item| {
+            item.trim()
+                .eq_ignore_ascii_case(SIMULATOR_DRAWDOWN_MODEL_EOD)
+        })
         .unwrap_or(false)
     {
         SIMULATOR_DRAWDOWN_MODEL_EOD
@@ -2790,6 +3852,7 @@ async fn fetch_simulator_family_replay(
     let daily_loss_limit = params.daily_loss_limit.filter(|value| *value > 0.0);
     let drawdown_model = normalize_simulator_drawdown_model(params.drawdown_model.as_deref());
     let one_trade_at_a_time = params.one_trade_at_a_time.unwrap_or(true);
+    let use_candidate_logic = params.use_candidate_logic.unwrap_or(false);
 
     let family = match fetch_prop_strategy_family_filter(pool.get_ref(), prop_strategy_id).await {
         Ok(Some(family)) => family,
@@ -2800,6 +3863,25 @@ async fn fetch_simulator_family_replay(
         }
     };
 
+    let candidate_logic_filters = if use_candidate_logic {
+        match fetch_pattern_discovery_saved_logic(pool.get_ref(), &family.family_key).await {
+            Ok(saved_logic) => saved_logic
+                .first()
+                .map(|logic| parse_candidate_logic_replay_filters(&logic.logic_text))
+                .unwrap_or_default(),
+            Err(error) => {
+                eprintln!("Simulator candidate logic DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        Vec::new()
+    };
+    let candidate_logic_filter_sql = candidate_logic_filters
+        .iter()
+        .filter_map(|filter| candidate_logic_filter_condition(&filter.title))
+        .map(|condition| format!("              AND ({condition})\n"))
+        .collect::<String>();
     let route_x_strictness_expr = x_strictness_expr("p.x_bars_left", "p.x_length");
     let sql = format!(
         r#"
@@ -2834,7 +3916,7 @@ async fn fetch_simulator_family_replay(
               AND p.three_month_trend = ?
               AND p.six_month_trend = ?
               AND p.twelve_month_trend = ?
-              AND p.target_date IS NOT NULL
+{candidate_logic_filter_sql}              AND p.target_date IS NOT NULL
               AND p.entry_date >= ?
             ORDER BY p.entry_date ASC,
                      p.target_date ASC,
@@ -2842,9 +3924,10 @@ async fn fetch_simulator_family_replay(
             LIMIT 50000
         "#,
         route_x_strictness_expr = route_x_strictness_expr,
+        candidate_logic_filter_sql = candidate_logic_filter_sql,
     );
 
-    let rows = match sqlx::query_as::<_, SimulatorReplaySourceTrade>(&sql)
+    let mut query = sqlx::query_as::<_, SimulatorReplaySourceTrade>(&sql)
         .bind(&family.outcome_model)
         .bind(&family.market)
         .bind(&family.harmonic_type)
@@ -2855,11 +3938,11 @@ async fn fetch_simulator_family_replay(
         .bind(family.x_strictness.as_deref().unwrap_or("Loose"))
         .bind(&family.three_month_trend)
         .bind(&family.six_month_trend)
-        .bind(&family.twelve_month_trend)
-        .bind(first_start_date)
-        .fetch_all(pool.get_ref())
-        .await
-    {
+        .bind(&family.twelve_month_trend);
+    for filter in &candidate_logic_filters {
+        query = query.bind(&filter.value);
+    }
+    let rows = match query.bind(first_start_date).fetch_all(pool.get_ref()).await {
         Ok(rows) => rows,
         Err(error) if is_missing_table_error(&error) => Vec::new(),
         Err(error) => {
@@ -3070,6 +4153,11 @@ async fn fetch_simulator_family_replay(
         tests,
         trades: events,
         eligible_trade_count: rows.len() as i64,
+        candidate_logic_applied: use_candidate_logic && !candidate_logic_filters.is_empty(),
+        candidate_logic_filters: candidate_logic_filters
+            .iter()
+            .map(|filter| filter.label.clone())
+            .collect(),
     })
 }
 
@@ -3858,6 +4946,8 @@ async fn main() -> std::io::Result<()> {
             )
             .service(fetch_candles)
             .service(fetch_strategy_trades)
+            .service(fetch_pattern_discovery_family)
+            .service(save_pattern_discovery_logic)
             .service(fetch_simulator_family_replay)
             .service(fetch_current_open_setups)
             .service(fetch_current_setup_strategies)
@@ -3867,6 +4957,11 @@ async fn main() -> std::io::Result<()> {
             .service(run_admin_action)
             .service(fetch_setup_comparison)
             .service(fetch_strategy_candidates)
+            .service(fetch_pattern_families)
+            .service(fetch_phase1_results)
+            .service(fetch_phase1_family_patterns)
+            .service(fetch_phase1_leaderboard)
+            .service(fetch_phase1_yearly_breakdown)
             .service(fetch_strategy_contract_weeks)
             .wrap(Logger::default()) // built-in Actix logs
             .wrap_fn(|req, srv| {
@@ -3886,6 +4981,22 @@ async fn fetch_pattern_detail(
     pool: web::Data<MySqlPool>,
     params: web::Json<PatternDetailParams>,
 ) -> impl Responder {
+    if params
+        .prop_outcome_mode
+        .as_deref()
+        .map(|mode| mode.trim().eq_ignore_ascii_case("phase1-family"))
+        .unwrap_or(false)
+    {
+        return match fetch_pattern_detail_from_pattern_setups(pool.get_ref(), &params).await {
+            Ok(Some(pattern)) => HttpResponse::Ok().json(pattern),
+            Ok(None) => HttpResponse::NotFound().body("Pattern not found in pattern_setups"),
+            Err(error) => {
+                eprintln!("Pattern setup detail lookup failed: {:?}", error);
+                HttpResponse::InternalServerError().finish()
+            }
+        };
+    }
+
     match fetch_pattern_detail_from_prop_outcomes(pool.get_ref(), &params).await {
         Ok(Some(pattern)) => HttpResponse::Ok().json(pattern),
         Ok(None) => HttpResponse::NotFound().body("Pattern not found in pattern_outcomes_prop"),
@@ -3910,6 +5021,209 @@ fn pattern_detail_candle_window_limit(params: &PatternDetailParams) -> i64 {
     };
 
     (total_setup_length + 32).clamp(16, fallback_limit)
+}
+
+async fn fetch_pattern_detail_from_pattern_setups(
+    pool: &MySqlPool,
+    params: &PatternDetailParams,
+) -> Result<Option<Pattern>, sqlx::Error> {
+    let has_pattern_id = params
+        .pattern_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some();
+    let setup_where = if has_pattern_id {
+        "WHERE ps.pattern_id = ?"
+    } else {
+        "WHERE ps.pattern_group_id = ?"
+    };
+    let sql = format!(
+        r#"
+        WITH selected_setup AS (
+            SELECT ps.*
+            FROM pattern_setups ps
+            {setup_where}
+            ORDER BY ps.d_date DESC, ps.setup_id ASC
+            LIMIT 1
+        ),
+        best_harmonic AS (
+            SELECT
+                hs.setup_id,
+                SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        hs.harmonic_type
+                        ORDER BY
+                            COALESCE(hs.price_accuracy, 0.0) DESC,
+                            COALESCE(hs.time_accuracy, 0.0) DESC,
+                            hs.harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS harmonic_type,
+                CAST(SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        COALESCE(CAST(hs.price_accuracy AS CHAR), '0')
+                        ORDER BY
+                            COALESCE(hs.price_accuracy, 0.0) DESC,
+                            COALESCE(hs.time_accuracy, 0.0) DESC,
+                            hs.harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS DOUBLE) AS price_accuracy,
+                CAST(SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        COALESCE(CAST(hs.time_accuracy AS CHAR), '0')
+                        ORDER BY
+                            COALESCE(hs.price_accuracy, 0.0) DESC,
+                            COALESCE(hs.time_accuracy, 0.0) DESC,
+                            hs.harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS DOUBLE) AS time_accuracy
+            FROM pattern_harmonic_scores hs
+            INNER JOIN selected_setup ps
+              ON ps.setup_id = hs.setup_id
+            GROUP BY hs.setup_id
+        )
+        SELECT
+            ps.symbol,
+            ps.pattern_id,
+            CAST(ps.x_date AS DATETIME) AS x_date,
+            CAST(ps.x_open AS DECIMAL(18,6)) AS x_open,
+            CAST(ps.x_high AS DECIMAL(18,6)) AS x_high,
+            CAST(ps.x_low AS DECIMAL(18,6)) AS x_low,
+            CAST(ps.x_close AS DECIMAL(18,6)) AS x_close,
+            CAST(ps.x_length AS DECIMAL(18,0)) AS x_length,
+            CAST(ps.x_min_max AS DECIMAL(18,6)) AS x_min_max,
+            CAST(ps.a_date AS DATETIME) AS a_date,
+            CAST(ps.a_open AS DECIMAL(18,6)) AS a_open,
+            CAST(ps.a_high AS DECIMAL(18,6)) AS a_high,
+            CAST(ps.a_low AS DECIMAL(18,6)) AS a_low,
+            CAST(ps.a_close AS DECIMAL(18,6)) AS a_close,
+            CAST(ps.a_length AS DECIMAL(18,0)) AS a_length,
+            CAST(ps.a_min_max AS DECIMAL(18,6)) AS a_min_max,
+            CAST(ps.b_date AS DATETIME) AS b_date,
+            CAST(ps.b_open AS DECIMAL(18,6)) AS b_open,
+            CAST(ps.b_high AS DECIMAL(18,6)) AS b_high,
+            CAST(ps.b_low AS DECIMAL(18,6)) AS b_low,
+            CAST(ps.b_close AS DECIMAL(18,6)) AS b_close,
+            CAST(ps.b_length AS DECIMAL(18,0)) AS b_length,
+            CAST(ps.b_min_max AS DECIMAL(18,6)) AS b_min_max,
+            CAST(ps.c_date AS DATETIME) AS c_date,
+            CAST(ps.c_open AS DECIMAL(18,6)) AS c_open,
+            CAST(ps.c_high AS DECIMAL(18,6)) AS c_high,
+            CAST(ps.c_low AS DECIMAL(18,6)) AS c_low,
+            CAST(ps.c_close AS DECIMAL(18,6)) AS c_close,
+            CAST(ps.c_length AS DECIMAL(18,0)) AS c_length,
+            CAST(ps.c_min_max AS DECIMAL(18,6)) AS c_min_max,
+            CAST(ps.d_date AS DATETIME) AS d_date,
+            CAST(ps.d_open AS DECIMAL(18,6)) AS d_open,
+            CAST(ps.d_high AS DECIMAL(18,6)) AS d_high,
+            CAST(ps.d_low AS DECIMAL(18,6)) AS d_low,
+            CAST(ps.d_close AS DECIMAL(18,6)) AS d_close,
+            CAST(ps.d_length AS DECIMAL(18,0)) AS d_length,
+            CAST(ps.full_pattern_length AS SIGNED) AS full_pattern_length,
+            CAST(ps.d_min_max AS DECIMAL(18,6)) AS d_min_max,
+            TRUE AS trade_open,
+            CAST(ps.d_date AS DATETIME) AS entry_date,
+            CAST(NULL AS DATETIME) AS d_confirm_date,
+            CAST(NULL AS DATETIME) AS reversal_detect_date,
+            CAST(NULL AS DATETIME) AS target_date,
+            CAST(NULL AS DECIMAL(18,6)) AS target_open,
+            CAST(NULL AS DECIMAL(18,6)) AS target_high,
+            CAST(NULL AS DECIMAL(18,6)) AS target_low,
+            CAST(NULL AS DECIMAL(18,6)) AS target_close,
+            CAST(NULL AS SIGNED) AS target_volume,
+            CAST(NULL AS SIGNED) AS target_is_green,
+            CAST(NULL AS DECIMAL(18,6)) AS target_close_vs_open_pct,
+            CAST(NULL AS DECIMAL(18,6)) AS target_high_vs_open_pct,
+            CAST(NULL AS DECIMAL(18,6)) AS target_low_vs_open_pct,
+            CAST(NULL AS DECIMAL(18,6)) AS target_range_pct,
+            CAST(NULL AS SIGNED) AS target_breaks_entry_high,
+            CAST(NULL AS SIGNED) AS target_breaks_entry_low,
+            CAST(CASE WHEN ps.market = 'Bullish' THEN ps.d_low ELSE ps.d_high END AS DECIMAL(18,6)) AS trade_risk_exit_price,
+            CAST(ps.d_close AS DECIMAL(18,6)) AS trade_reward_exit_price,
+            CAST(ps.d_close AS DECIMAL(18,6)) AS trade_enter_price,
+            CAST(ps.d_close AS DECIMAL(18,6)) AS trade_current_price,
+            CAST(0 AS DECIMAL(18,0)) AS trade_length,
+            CAST(0 AS DECIMAL(18,6)) AS trade_pnl,
+            CAST(0 AS SIGNED) AS trade_result,
+            CAST(ps.d_date AS DATETIME) AS trade_date,
+            CAST(COALESCE(ABS(ps.b_min_max - ps.a_min_max) / NULLIF(ABS(ps.a_min_max - ps.x_min_max), 0) * 100.0, 0.0) AS DECIMAL(12,4)) AS trade_ab_price_retracement,
+            CAST(COALESCE(ABS(ps.c_min_max - ps.b_min_max) / NULLIF(ABS(ps.b_min_max - ps.a_min_max), 0) * 100.0, 0.0) AS DECIMAL(12,4)) AS trade_bc_price_retracement,
+            CAST(COALESCE(ABS(ps.d_min_max - ps.c_min_max) / NULLIF(ABS(ps.c_min_max - ps.b_min_max), 0) * 100.0, 0.0) AS DECIMAL(12,4)) AS trade_cd_bc_price_retracement,
+            CAST((ps.d_min_max - ps.c_min_max) AS DECIMAL(18,6)) AS trade_cd_price_retracement,
+            CAST(COALESCE(ABS(ps.d_min_max - ps.c_min_max) / NULLIF(ABS(ps.a_min_max - ps.x_min_max), 0) * 100.0, 0.0) AS DECIMAL(12,4)) AS trade_cd_xa_price_retracement,
+            CAST(COALESCE(ps.b_length / NULLIF(ps.a_length, 0) * 100.0, 0.0) AS DOUBLE) AS trade_ab_bar_retracement,
+            CAST(COALESCE(ps.c_length / NULLIF(ps.b_length, 0) * 100.0, 0.0) AS DECIMAL(18,6)) AS trade_bc_bar_retracement,
+            CAST(COALESCE(ps.d_length / NULLIF(ps.c_length, 0) * 100.0, 0.0) AS DECIMAL(18,6)) AS trade_cd_bar_retracement,
+            CAST(COALESCE(ps.d_length / NULLIF(ps.c_length, 0) * 100.0, 0.0) AS DOUBLE) AS trade_cd_bc_bar_retracement,
+            CAST(COALESCE(ps.d_length / NULLIF(ps.x_length, 0) * 100.0, 0.0) AS DOUBLE) AS trade_cd_xa_bar_retracement,
+            CAST(0.0 AS DECIMAL(18,6)) AS trade_snr,
+            CAST(YEAR(ps.d_date) AS SIGNED) AS trade_year,
+            CAST(MONTH(ps.d_date) AS SIGNED) AS trade_month,
+            CAST(DAY(ps.d_date) AS SIGNED) AS trade_day,
+            'None' AS reversal_type,
+            ps.bullish_key_reversal,
+            ps.bearish_key_reversal,
+            ps.bullish_engulfing,
+            ps.bearish_engulfing,
+            ps.bullish_outside_reversal,
+            ps.bearish_outside_reversal,
+            ps.hammer,
+            ps.shooting_star,
+            ps.morning_star,
+            ps.evening_star,
+            ps.three_white_soldiers,
+            ps.three_black_crows,
+            ps.market,
+            ps.three_month,
+            ps.six_month,
+            ps.twelve_month,
+            ps.pattern_group_id,
+            COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) AS harmonic_type,
+            CAST(CASE WHEN COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) IN ('Bat', 'AlternateBat') THEN COALESCE(best_harmonic.price_accuracy, 0.0) ELSE NULL END AS DECIMAL(12,2)) AS bat_accuracy,
+            CAST(CASE WHEN COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) = 'Butterfly' THEN COALESCE(best_harmonic.price_accuracy, 0.0) ELSE NULL END AS DECIMAL(12,2)) AS butterfly_accuracy,
+            CAST(CASE WHEN COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) = 'Gartley' THEN COALESCE(best_harmonic.price_accuracy, 0.0) ELSE NULL END AS DECIMAL(12,2)) AS gartley_accuracy,
+            CAST(CASE WHEN COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) IN ('Crab', 'DeepCrab') THEN COALESCE(best_harmonic.price_accuracy, 0.0) ELSE NULL END AS DECIMAL(12,2)) AS crab_accuracy,
+            CAST(CASE WHEN COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) = 'Shark' THEN COALESCE(best_harmonic.price_accuracy, 0.0) ELSE NULL END AS DECIMAL(12,2)) AS shark_accuracy,
+            CAST(best_harmonic.time_accuracy AS DOUBLE) AS time_accuracy
+        FROM selected_setup ps
+        LEFT JOIN best_harmonic
+          ON best_harmonic.setup_id = ps.setup_id
+        "#,
+        setup_where = setup_where,
+    );
+
+    let query = if let Some(pattern_id) = params
+        .pattern_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        sqlx::query_as::<_, Pattern>(&sql).bind(pattern_id)
+    } else if let Some(pattern_group_id) = params
+        .pattern_group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        sqlx::query_as::<_, Pattern>(&sql).bind(pattern_group_id)
+    } else {
+        return Ok(None);
+    };
+
+    match query.fetch_optional(pool).await {
+        Ok(row) => Ok(row),
+        Err(error) if is_missing_table_error(&error) => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 async fn fetch_pattern_detail_from_prop_outcomes(
@@ -4692,6 +6006,1676 @@ async fn fetch_strategy_candidates(
             HttpResponse::InternalServerError().finish()
         }
     };
+}
+
+#[route("/pattern-families", method = "GET", method = "POST")]
+async fn fetch_pattern_families(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<PatternFamilyParams>,
+) -> impl Responder {
+    let limit = params.limit.unwrap_or(1_000).clamp(1, 10_000);
+    let min_setup_count = params.min_setup_count.unwrap_or(1).max(0);
+    let year = params.year.filter(|year| (1900..=2200).contains(year));
+    let source_scope = normalize_pattern_family_source_scope(params.source_scope.as_deref());
+
+    if year.is_some() || source_scope != PatternFamilySourceScope::All {
+        let rows = sqlx::query_as::<_, PatternFamilySummary>(
+            r#"
+            SELECT
+                family_key,
+                family_name,
+                CAST(family_level AS SIGNED) AS family_level,
+                included_dimensions,
+                outcome_model,
+                market,
+                harmonic_type,
+                bin,
+                reversal_type,
+                size_bucket,
+                time_bin,
+                x_strictness,
+                three_month_trend,
+                six_month_trend,
+                twelve_month_trend,
+                CAST(setup_count AS SIGNED) AS setup_count,
+                CAST(symbol_count AS SIGNED) AS symbol_count,
+                first_d_date,
+                last_d_date
+            FROM pattern_family_source_summary
+            WHERE source_scope = ?
+              AND period_year = ?
+              AND setup_count >= ?
+            ORDER BY setup_count DESC, symbol_count DESC, family_key ASC
+            LIMIT ?
+            "#,
+        )
+        .bind(pattern_family_source_scope_label(source_scope))
+        .bind(year.unwrap_or(0))
+        .bind(min_setup_count)
+        .bind(limit)
+        .fetch_all(pool.get_ref())
+        .await;
+
+        return match rows {
+            Ok(rows) => HttpResponse::Ok().json(rows),
+            Err(error) if is_missing_table_error(&error) => {
+                HttpResponse::Ok().json(Vec::<PatternFamilySummary>::new())
+            }
+            Err(error) => {
+                eprintln!("Pattern families yearly DB error: {:?}", error);
+                HttpResponse::InternalServerError().finish()
+            }
+        };
+    }
+
+    let rows = sqlx::query_as::<_, PatternFamilySummary>(
+        r#"
+        SELECT
+            family_key,
+            family_name,
+            CAST(family_level AS SIGNED) AS family_level,
+            included_dimensions,
+            outcome_model,
+            market,
+            harmonic_type,
+            bin,
+            reversal_type,
+            size_bucket,
+            time_bin,
+            x_strictness,
+            three_month_trend,
+            six_month_trend,
+            twelve_month_trend,
+            CAST(setup_count AS SIGNED) AS setup_count,
+            CAST(symbol_count AS SIGNED) AS symbol_count,
+            first_d_date,
+            last_d_date
+        FROM pattern_family_summary
+        WHERE setup_count >= ?
+        ORDER BY setup_count DESC, symbol_count DESC, family_key ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(min_setup_count)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match rows {
+        Ok(rows) => HttpResponse::Ok().json(rows),
+        Err(error) if is_missing_table_error(&error) => {
+            HttpResponse::Ok().json(Vec::<PatternFamilySummary>::new())
+        }
+        Err(error) => {
+            eprintln!("Pattern families DB error: {:?}", error);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+#[route("/phase1/results", method = "GET", method = "POST")]
+async fn fetch_phase1_results(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<Phase1ResultsParams>,
+) -> impl Responder {
+    let Some(family_key) = params
+        .family_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::Ok().json(Vec::<Phase1StrategyResult>::new());
+    };
+    let source_scope = pattern_family_source_scope_label(normalize_pattern_family_source_scope(
+        params.source_scope.as_deref(),
+    ));
+    let period_year = params
+        .year
+        .filter(|year| (1900..=2200).contains(year))
+        .unwrap_or(0);
+    let limit = params.limit.unwrap_or(250).clamp(1, 2_000);
+
+    let latest_run_id = match sqlx::query_scalar::<_, Option<String>>(
+        r#"
+        SELECT run_id
+        FROM phase1_strategy_runs
+        WHERE family_key = ?
+          AND source_scope = ?
+          AND period_year = ?
+        ORDER BY id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(family_key)
+    .bind(source_scope)
+    .bind(period_year)
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(run_id) => run_id,
+        Err(error) if is_missing_table_error(&error) => None,
+        Err(error) => {
+            eprintln!("Phase 1 latest run DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let Some(run_id) = latest_run_id else {
+        return HttpResponse::Ok().json(Vec::<Phase1StrategyResult>::new());
+    };
+
+    let rows = sqlx::query_as::<_, Phase1StrategyResult>(
+        r#"
+        SELECT
+            run_id,
+            family_key,
+            source_scope,
+            CAST(period_year AS SIGNED) AS period_year,
+            route_id,
+            route_label,
+            CAST(result_rank AS SIGNED) AS result_rank,
+            entry_mode,
+            stop_mode,
+            CAST(target_r AS DOUBLE) AS target_r,
+            CAST(max_hold_multiple AS SIGNED) AS max_hold_multiple,
+            CAST(setup_count AS SIGNED) AS setup_count,
+            CAST(trade_count AS SIGNED) AS trade_count,
+            CAST(no_entry_count AS SIGNED) AS no_entry_count,
+            CAST(win_count AS SIGNED) AS win_count,
+            CAST(loss_count AS SIGNED) AS loss_count,
+            CAST(win_rate AS DOUBLE) AS win_rate,
+            CAST(avg_r AS DOUBLE) AS avg_r,
+            CAST(profit_factor AS DOUBLE) AS profit_factor,
+            CAST(max_drawdown_r AS DOUBLE) AS max_drawdown_r,
+            CAST(worst_year_avg_r AS DOUBLE) AS worst_year_avg_r,
+            CAST(score AS DOUBLE) AS score,
+            created_at
+        FROM phase1_strategy_results
+        WHERE run_id = ?
+        ORDER BY result_rank ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(run_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    match rows {
+        Ok(rows) => HttpResponse::Ok().json(rows),
+        Err(error) if is_missing_table_error(&error) => {
+            HttpResponse::Ok().json(Vec::<Phase1StrategyResult>::new())
+        }
+        Err(error) => {
+            eprintln!("Phase 1 results DB error: {:?}", error);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+#[route("/phase1/family-patterns", method = "GET", method = "POST")]
+async fn fetch_phase1_family_patterns(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<Phase1FamilyPatternsParams>,
+) -> impl Responder {
+    let Some(family_key) = params
+        .family_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::Ok().json(PatternSummariesResponse {
+            patterns: Vec::new(),
+            total_count: 0,
+            has_more: false,
+            earliest_entry_date: None,
+            latest_entry_date: None,
+            entry_dates: Vec::new(),
+        });
+    };
+
+    let source_scope = normalize_pattern_family_source_scope(params.source_scope.as_deref());
+    let source_scope_label = pattern_family_source_scope_label(source_scope);
+    let period_year = params
+        .year
+        .filter(|year| (1900..=2200).contains(year))
+        .unwrap_or(0);
+    let limit = params.limit.unwrap_or(500).clamp(1, 5_000);
+    let offset = params.offset.unwrap_or(0).max(0);
+    let include_count = params.include_count.unwrap_or(true);
+
+    let family_from_source = if period_year > 0 || source_scope != PatternFamilySourceScope::All {
+        sqlx::query_as::<_, PatternFamilySummary>(
+            r#"
+            SELECT
+                family_key,
+                family_name,
+                CAST(family_level AS SIGNED) AS family_level,
+                included_dimensions,
+                outcome_model,
+                market,
+                harmonic_type,
+                bin,
+                reversal_type,
+                size_bucket,
+                time_bin,
+                x_strictness,
+                three_month_trend,
+                six_month_trend,
+                twelve_month_trend,
+                CAST(setup_count AS SIGNED) AS setup_count,
+                CAST(symbol_count AS SIGNED) AS symbol_count,
+                first_d_date,
+                last_d_date
+            FROM pattern_family_source_summary
+            WHERE family_key = ?
+              AND source_scope = ?
+              AND period_year = ?
+            LIMIT 1
+            "#,
+        )
+        .bind(family_key)
+        .bind(source_scope_label)
+        .bind(period_year)
+        .fetch_optional(pool.get_ref())
+        .await
+    } else {
+        Ok(None)
+    };
+
+    let family = match family_from_source {
+        Ok(Some(family)) => Some(family),
+        Ok(None) if period_year == 0 => match sqlx::query_as::<_, PatternFamilySummary>(
+            r#"
+            SELECT
+                family_key,
+                family_name,
+                CAST(family_level AS SIGNED) AS family_level,
+                included_dimensions,
+                outcome_model,
+                market,
+                harmonic_type,
+                bin,
+                reversal_type,
+                size_bucket,
+                time_bin,
+                x_strictness,
+                three_month_trend,
+                six_month_trend,
+                twelve_month_trend,
+                CAST(setup_count AS SIGNED) AS setup_count,
+                CAST(symbol_count AS SIGNED) AS symbol_count,
+                first_d_date,
+                last_d_date
+            FROM pattern_family_summary
+            WHERE family_key = ?
+            LIMIT 1
+            "#,
+        )
+        .bind(family_key)
+        .fetch_optional(pool.get_ref())
+        .await
+        {
+            Ok(family) => family,
+            Err(error) if is_missing_table_error(&error) => None,
+            Err(error) => {
+                eprintln!("Phase 1 family lookup DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        },
+        Ok(None) => None,
+        Err(error) if is_missing_table_error(&error) => None,
+        Err(error) => {
+            eprintln!("Phase 1 source family lookup DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let Some(family) = family else {
+        return HttpResponse::Ok().json(PatternSummariesResponse {
+            patterns: Vec::new(),
+            total_count: 0,
+            has_more: false,
+            earliest_entry_date: None,
+            latest_entry_date: None,
+            entry_dates: Vec::new(),
+        });
+    };
+
+    let source_filter = match source_scope {
+        PatternFamilySourceScope::Futures => {
+            "AND COALESCE(ps.source_table, '') LIKE 'futures_contract_%_candles'"
+        }
+        PatternFamilySourceScope::Daily => {
+            "AND COALESCE(ps.source_table, '') = 'candles' AND COALESCE(ps.source_timeframe, '') = 'daily'"
+        }
+        PatternFamilySourceScope::All => "",
+    };
+    let year_filter = if period_year > 0 {
+        "AND YEAR(ps.d_date) = ?"
+    } else {
+        ""
+    };
+    let bin_expr = phase1_accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
+    let time_bin_expr = phase1_accuracy_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
+    let size_bucket_expr = phase1_size_bucket_expr(
+        "CAST(COALESCE(fs.x_length, 0) + COALESCE(fs.a_length, 0) + COALESCE(fs.b_length, 0) + COALESCE(fs.c_length, 0) AS DOUBLE)",
+    );
+    let x_strictness = x_strictness_expr("fs.x_bars_left", "fs.x_length");
+    let sql = format!(
+        r#"
+        WITH eligible_setups AS (
+            SELECT
+                ps.setup_id,
+                ps.pattern_id,
+                ps.symbol,
+                ps.market,
+                ps.pattern_group_id,
+                ps.d_date,
+                ps.d_high,
+                ps.d_low,
+                ps.d_close,
+                ps.full_pattern_length,
+                ps.x_bars_left,
+                ps.x_length,
+                ps.a_length,
+                ps.b_length,
+                ps.c_length,
+                ps.d_length
+            FROM pattern_setups ps
+            WHERE ps.d_date IS NOT NULL
+              {source_filter}
+              {year_filter}
+        ),
+        best_harmonic AS (
+            SELECT
+                hs.setup_id,
+                SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        hs.harmonic_type
+                        ORDER BY
+                            COALESCE(hs.price_accuracy, 0.0) DESC,
+                            COALESCE(hs.time_accuracy, 0.0) DESC,
+                            hs.harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS harmonic_type,
+                CAST(SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        COALESCE(CAST(hs.price_accuracy AS CHAR), '0')
+                        ORDER BY
+                            COALESCE(hs.price_accuracy, 0.0) DESC,
+                            COALESCE(hs.time_accuracy, 0.0) DESC,
+                            hs.harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS DOUBLE) AS price_accuracy,
+                CAST(SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        COALESCE(CAST(hs.time_accuracy AS CHAR), '0')
+                        ORDER BY
+                            COALESCE(hs.price_accuracy, 0.0) DESC,
+                            COALESCE(hs.time_accuracy, 0.0) DESC,
+                            hs.harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS DOUBLE) AS time_accuracy
+            FROM pattern_harmonic_scores hs
+            INNER JOIN eligible_setups es
+              ON es.setup_id = hs.setup_id
+            GROUP BY hs.setup_id
+        ),
+        pattern_rows AS (
+            SELECT
+                fs.*,
+                COALESCE(best_harmonic.harmonic_type, 'Unknown') AS best_harmonic_type,
+                COALESCE(best_harmonic.price_accuracy, 0.0) AS best_price_accuracy,
+                COALESCE(best_harmonic.time_accuracy, 0.0) AS best_time_accuracy,
+                {bin_expr} AS best_bin,
+                {time_bin_expr} AS best_time_bin,
+                {size_bucket_expr} AS best_size_bucket,
+                {x_strictness} AS best_x_strictness
+            FROM eligible_setups fs
+            LEFT JOIN best_harmonic
+              ON best_harmonic.setup_id = fs.setup_id
+        )
+        SELECT
+            symbol,
+            CAST(CONCAT(d_date, ' 00:00:00') AS DATETIME) AS d_date,
+            CAST(NULL AS DATETIME) AS d_confirm_date,
+            CAST(NULL AS DATETIME) AS reversal_detect_date,
+            CAST(CONCAT(d_date, ' 00:00:00') AS DATETIME) AS entry_date,
+            CAST(NULL AS DATETIME) AS target_date,
+            CAST(NULL AS DECIMAL(18,6)) AS target_open,
+            CAST(NULL AS DECIMAL(18,6)) AS target_high,
+            CAST(NULL AS DECIMAL(18,6)) AS target_low,
+            CAST(NULL AS DECIMAL(18,6)) AS target_close,
+            CAST(COALESCE(d_close, 0) AS DECIMAL(18,6)) AS trade_enter_price,
+            CAST(CASE WHEN market = 'Bullish' THEN COALESCE(d_low, d_close, 0) ELSE COALESCE(d_high, d_close, 0) END AS DECIMAL(18,6)) AS trade_risk_exit_price,
+            CAST(COALESCE(d_close, 0) AS DECIMAL(18,6)) AS trade_reward_exit_price,
+            CAST(0 AS SIGNED) AS trade_result,
+            market,
+            pattern_id,
+            pattern_group_id,
+            CAST(? AS CHAR) AS prop_strategy_id,
+            best_harmonic_type AS harmonic_type,
+            'None' AS reversal_type,
+            best_size_bucket AS size_bucket,
+            CAST(NULL AS CHAR) AS balance_bucket,
+            best_time_bin AS time_bin,
+            best_x_strictness AS x_strictness,
+            CAST(NULL AS CHAR) AS three_month_trend,
+            CAST(NULL AS CHAR) AS six_month_trend,
+            CAST(NULL AS CHAR) AS twelve_month_trend,
+            CAST(best_time_accuracy AS DOUBLE) AS time_accuracy,
+            CAST(x_length AS SIGNED) AS x_length,
+            CAST(a_length AS SIGNED) AS a_length,
+            CAST(b_length AS SIGNED) AS b_length,
+            CAST(c_length AS SIGNED) AS c_length,
+            CAST(d_length AS SIGNED) AS d_length,
+            CAST(full_pattern_length AS SIGNED) AS full_pattern_length,
+            CAST(CASE WHEN best_harmonic_type IN ('Bat', 'AlternateBat') THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS bat_accuracy,
+            CAST(CASE WHEN best_harmonic_type = 'Butterfly' THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS butterfly_accuracy,
+            CAST(CASE WHEN best_harmonic_type = 'Gartley' THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS gartley_accuracy,
+            CAST(CASE WHEN best_harmonic_type IN ('Crab', 'DeepCrab') THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS crab_accuracy,
+            CAST(CASE WHEN best_harmonic_type = 'Shark' THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS shark_accuracy
+        FROM pattern_rows
+        WHERE best_harmonic_type = ?
+          AND best_bin = ?
+          AND best_size_bucket = ?
+          AND best_time_bin = ?
+          AND best_x_strictness = ?
+        ORDER BY d_date ASC, setup_id ASC
+        LIMIT ? OFFSET ?
+        "#,
+        source_filter = source_filter,
+        year_filter = year_filter,
+        bin_expr = bin_expr,
+        size_bucket_expr = size_bucket_expr,
+        time_bin_expr = time_bin_expr,
+        x_strictness = x_strictness,
+    );
+
+    let mut query = sqlx::query_as::<_, PatternSummary>(&sql);
+    if period_year > 0 {
+        query = query.bind(period_year);
+    }
+    query = query
+        .bind(family_key)
+        .bind(&family.harmonic_type)
+        .bind(&family.bin)
+        .bind(&family.size_bucket)
+        .bind(&family.time_bin)
+        .bind(&family.x_strictness)
+        .bind(limit)
+        .bind(offset);
+
+    let patterns = match query.fetch_all(pool.get_ref()).await {
+        Ok(patterns) => patterns,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Phase 1 family patterns DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let total_count = if include_count {
+        family.setup_count
+    } else {
+        -1
+    };
+    let has_more = if total_count >= 0 {
+        offset + (patterns.len() as i64) < total_count
+    } else {
+        patterns.len() as i64 >= limit
+    };
+    let earliest_entry_date = family
+        .first_d_date
+        .and_then(|date| date.and_hms_opt(0, 0, 0));
+    let latest_entry_date = family
+        .last_d_date
+        .and_then(|date| date.and_hms_opt(0, 0, 0));
+    let mut seen_dates = HashSet::new();
+    let entry_dates = patterns
+        .iter()
+        .filter_map(|pattern| pattern.entry_date.map(|date| date.date()))
+        .filter(|date| seen_dates.insert(*date))
+        .collect::<Vec<_>>();
+
+    HttpResponse::Ok().json(PatternSummariesResponse {
+        patterns,
+        total_count,
+        has_more,
+        earliest_entry_date,
+        latest_entry_date,
+        entry_dates,
+    })
+}
+
+#[route("/phase1/leaderboard", method = "GET", method = "POST")]
+async fn fetch_phase1_leaderboard(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<Phase1LeaderboardParams>,
+) -> impl Responder {
+    let source_scope = pattern_family_source_scope_label(normalize_pattern_family_source_scope(
+        params.source_scope.as_deref(),
+    ));
+    let period_year = params
+        .year
+        .filter(|year| (1900..=2200).contains(year))
+        .unwrap_or(0);
+    let limit = params.limit.unwrap_or(500).clamp(1, 2_000);
+    let min_trade_count = params.min_trade_count.unwrap_or(100).clamp(0, 1_000_000);
+    let min_setup_count = params.min_setup_count.unwrap_or(1).clamp(0, 1_000_000);
+    let best_per_family = params.best_per_family.unwrap_or(false);
+
+    let latest_runs = sqlx::query(
+        r#"
+        SELECT
+            r.family_key,
+            r.run_id
+        FROM phase1_strategy_runs r
+        INNER JOIN (
+            SELECT family_key, MAX(id) AS latest_id
+            FROM phase1_strategy_runs
+            WHERE source_scope = ?
+              AND period_year = ?
+            GROUP BY family_key
+        ) latest_runs
+          ON latest_runs.latest_id = r.id
+        "#,
+    )
+    .bind(source_scope)
+    .bind(period_year)
+    .fetch_all(pool.get_ref())
+    .await;
+
+    let latest_by_family = match latest_runs {
+        Ok(rows) => rows
+            .into_iter()
+            .filter_map(|row| {
+                let family_key = row.try_get::<String, _>("family_key").ok()?;
+                let run_id = row.try_get::<String, _>("run_id").ok()?;
+                Some((family_key, run_id))
+            })
+            .collect::<HashMap<_, _>>(),
+        Err(error) if is_missing_table_error(&error) => {
+            return HttpResponse::Ok().json(Vec::<Phase1LeaderboardResult>::new());
+        }
+        Err(error) => {
+            eprintln!("Phase 1 latest leaderboard runs DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    if latest_by_family.is_empty() {
+        return HttpResponse::Ok().json(Vec::<Phase1LeaderboardResult>::new());
+    }
+
+    let candidate_limit = if best_per_family {
+        limit.saturating_mul(3).clamp(limit, 5_000)
+    } else {
+        limit.saturating_mul(3).clamp(limit, 10_000)
+    };
+
+    let sql = if best_per_family {
+        r#"
+        SELECT
+            rr.run_id,
+            rr.family_key,
+            rr.source_scope,
+            CAST(rr.period_year AS SIGNED) AS period_year,
+            rr.route_id,
+            rr.route_label,
+            CAST(rr.result_rank AS SIGNED) AS result_rank,
+            rr.entry_mode,
+            rr.stop_mode,
+            CAST(rr.target_r AS DOUBLE) AS target_r,
+            CAST(rr.max_hold_multiple AS SIGNED) AS max_hold_multiple,
+            CAST(rr.setup_count AS SIGNED) AS setup_count,
+            CAST(rr.trade_count AS SIGNED) AS trade_count,
+            CAST(rr.no_entry_count AS SIGNED) AS no_entry_count,
+            CAST(rr.win_count AS SIGNED) AS win_count,
+            CAST(rr.loss_count AS SIGNED) AS loss_count,
+            CAST(rr.win_rate AS DOUBLE) AS win_rate,
+            CAST(rr.avg_r AS DOUBLE) AS avg_r,
+            CAST(rr.profit_factor AS DOUBLE) AS profit_factor,
+            CAST(rr.max_drawdown_r AS DOUBLE) AS max_drawdown_r,
+            CAST(rr.worst_year_avg_r AS DOUBLE) AS worst_year_avg_r,
+            CAST(rr.score AS DOUBLE) AS score,
+            rr.created_at,
+            r.harmonic_type,
+            r.bin,
+            r.size_bucket,
+            r.time_bin,
+            r.x_strictness
+        FROM phase1_strategy_results rr FORCE INDEX (idx_phase1_results_best_leaderboard)
+        INNER JOIN phase1_strategy_runs r
+          ON r.run_id = rr.run_id
+        WHERE rr.source_scope = ?
+          AND rr.period_year = ?
+          AND rr.result_rank = 1
+          AND rr.trade_count >= ?
+          AND rr.setup_count >= ?
+        ORDER BY rr.score DESC, rr.avg_r DESC, rr.trade_count DESC, rr.result_rank ASC
+        LIMIT ?
+        "#
+    } else {
+        r#"
+        SELECT
+            rr.run_id,
+            rr.family_key,
+            rr.source_scope,
+            CAST(rr.period_year AS SIGNED) AS period_year,
+            rr.route_id,
+            rr.route_label,
+            CAST(rr.result_rank AS SIGNED) AS result_rank,
+            rr.entry_mode,
+            rr.stop_mode,
+            CAST(rr.target_r AS DOUBLE) AS target_r,
+            CAST(rr.max_hold_multiple AS SIGNED) AS max_hold_multiple,
+            CAST(rr.setup_count AS SIGNED) AS setup_count,
+            CAST(rr.trade_count AS SIGNED) AS trade_count,
+            CAST(rr.no_entry_count AS SIGNED) AS no_entry_count,
+            CAST(rr.win_count AS SIGNED) AS win_count,
+            CAST(rr.loss_count AS SIGNED) AS loss_count,
+            CAST(rr.win_rate AS DOUBLE) AS win_rate,
+            CAST(rr.avg_r AS DOUBLE) AS avg_r,
+            CAST(rr.profit_factor AS DOUBLE) AS profit_factor,
+            CAST(rr.max_drawdown_r AS DOUBLE) AS max_drawdown_r,
+            CAST(rr.worst_year_avg_r AS DOUBLE) AS worst_year_avg_r,
+            CAST(rr.score AS DOUBLE) AS score,
+            rr.created_at,
+            r.harmonic_type,
+            r.bin,
+            r.size_bucket,
+            r.time_bin,
+            r.x_strictness
+        FROM phase1_strategy_results rr FORCE INDEX (idx_phase1_results_all_leaderboard)
+        INNER JOIN phase1_strategy_runs r
+          ON r.run_id = rr.run_id
+        WHERE rr.source_scope = ?
+          AND rr.period_year = ?
+          AND rr.trade_count >= ?
+          AND rr.setup_count >= ?
+        ORDER BY rr.score DESC, rr.avg_r DESC, rr.trade_count DESC, rr.result_rank ASC
+        LIMIT ?
+        "#
+    };
+
+    let rows = sqlx::query_as::<_, Phase1LeaderboardResult>(sql)
+        .bind(source_scope)
+        .bind(period_year)
+        .bind(min_trade_count)
+        .bind(min_setup_count)
+        .bind(candidate_limit)
+        .fetch_all(pool.get_ref())
+        .await;
+
+    match rows {
+        Ok(candidate_rows) => {
+            let rows = candidate_rows
+                .into_iter()
+                .filter(|row| latest_by_family.get(&row.family_key) == Some(&row.run_id))
+                .take(limit as usize)
+                .collect::<Vec<_>>();
+
+            HttpResponse::Ok().json(rows)
+        }
+        Err(error) if is_missing_table_error(&error) => {
+            HttpResponse::Ok().json(Vec::<Phase1LeaderboardResult>::new())
+        }
+        Err(error) => {
+            eprintln!("Phase 1 leaderboard DB error: {:?}", error);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+fn phase1_accuracy_bin_expr(accuracy_expr: &str) -> String {
+    format!(
+        "CASE
+            WHEN {accuracy_expr} <= 10 THEN '0-10'
+            WHEN {accuracy_expr} <= 20 THEN '10-20'
+            WHEN {accuracy_expr} <= 30 THEN '20-30'
+            WHEN {accuracy_expr} <= 40 THEN '30-40'
+            WHEN {accuracy_expr} <= 50 THEN '40-50'
+            WHEN {accuracy_expr} <= 60 THEN '50-60'
+            WHEN {accuracy_expr} <= 70 THEN '60-70'
+            WHEN {accuracy_expr} <= 80 THEN '70-80'
+            WHEN {accuracy_expr} <= 90 THEN '80-90'
+            ELSE '90-100'
+        END"
+    )
+}
+
+fn phase1_size_bucket_expr(total_bars_expr: &str) -> String {
+    format!(
+        "CASE
+            WHEN {total_bars_expr} <= 20 THEN 'Micro'
+            WHEN {total_bars_expr} <= 60 THEN 'Small'
+            WHEN {total_bars_expr} <= 180 THEN 'Normal'
+            WHEN {total_bars_expr} <= 365 THEN 'Large'
+            ELSE 'Massive'
+        END"
+    )
+}
+
+fn phase1_setup_ratio_expr(numerator_expr: &str, denominator_expr: &str) -> String {
+    format!(
+        "CASE
+            WHEN COALESCE({denominator_expr}, 0.0) > 0
+            THEN (CAST({numerator_expr} AS DOUBLE) / CAST({denominator_expr} AS DOUBLE)) * 100.0
+            ELSE 0.0
+        END"
+    )
+}
+
+fn phase1_leg_accuracy_expr(current_expr: &str, target: f64) -> String {
+    format!(
+        "CASE
+            WHEN COALESCE({current_expr}, 0.0) <= 0 THEN 0.0
+            ELSE LEAST(
+                GREATEST(
+                    100.0 * (1.0 - ABS((CAST({current_expr} AS DOUBLE) / 100.0) - {target}) / {target}),
+                    0.0
+                ),
+                100.0
+            )
+        END"
+    )
+}
+
+fn phase1_harmonic_score_select(
+    harmonic_type: &str,
+    ab_xa: f64,
+    bc_ab: f64,
+    cd_bc: f64,
+    d_completion: f64,
+) -> String {
+    let ab_xa_price = phase1_setup_ratio_expr("ab_price_length", "xa_price_length");
+    let bc_ab_price = phase1_setup_ratio_expr("bc_price_length", "ab_price_length");
+    let cd_bc_price = phase1_setup_ratio_expr("cd_price_length", "bc_price_length");
+    let d_completion_price =
+        phase1_setup_ratio_expr("ABS(a_min_max - d_min_max)", "xa_price_length");
+    let ab_xa_time = phase1_setup_ratio_expr("a_length", "x_length");
+    let bc_ab_time = phase1_setup_ratio_expr("b_length", "a_length");
+    let cd_bc_time = phase1_setup_ratio_expr("c_length", "b_length");
+    let cd_xa_time = phase1_setup_ratio_expr("c_length", "x_length");
+
+    format!(
+        r#"
+        SELECT
+            setup_id,
+            '{harmonic_type}' AS harmonic_type,
+            (
+                {price_ab_xa} + {price_bc_ab} + {price_cd_bc} + {price_d_completion}
+            ) / 4.0 AS price_accuracy,
+            (
+                {time_ab_xa} + {time_bc_ab} + {time_cd_bc} + {time_cd_xa}
+            ) / 4.0 AS time_accuracy
+        FROM filtered_setups
+        "#,
+        price_ab_xa = phase1_leg_accuracy_expr(&ab_xa_price, ab_xa),
+        price_bc_ab = phase1_leg_accuracy_expr(&bc_ab_price, bc_ab),
+        price_cd_bc = phase1_leg_accuracy_expr(&cd_bc_price, cd_bc),
+        price_d_completion = phase1_leg_accuracy_expr(&d_completion_price, d_completion),
+        time_ab_xa = phase1_leg_accuracy_expr(&ab_xa_time, ab_xa),
+        time_bc_ab = phase1_leg_accuracy_expr(&bc_ab_time, bc_ab),
+        time_cd_bc = phase1_leg_accuracy_expr(&cd_bc_time, cd_bc),
+        time_cd_xa = phase1_leg_accuracy_expr(&cd_xa_time, d_completion),
+    )
+}
+
+fn phase1_harmonic_score_selects() -> String {
+    [
+        phase1_harmonic_score_select("Bat", 0.500, 0.382, 1.618, 0.886),
+        phase1_harmonic_score_select("AlternateBat", 0.382, 0.382, 2.000, 1.130),
+        phase1_harmonic_score_select("Butterfly", 0.786, 0.382, 1.618, 1.272),
+        phase1_harmonic_score_select("Gartley", 0.618, 0.382, 1.272, 0.786),
+        phase1_harmonic_score_select("Crab", 0.382, 0.382, 2.618, 1.618),
+        phase1_harmonic_score_select("DeepCrab", 0.886, 0.382, 2.618, 1.618),
+        phase1_harmonic_score_select("Shark", 0.500, 1.130, 1.618, 0.886),
+    ]
+    .join("\nUNION ALL\n")
+}
+
+fn phase1_futures_candle_table(source_table: Option<&str>) -> &'static str {
+    match source_table {
+        Some("futures_contract_3m_candles") => "futures_contract_3m_candles",
+        Some("futures_contract_5m_candles") => "futures_contract_5m_candles",
+        Some("futures_contract_15m_candles") => "futures_contract_15m_candles",
+        Some("futures_contract_30m_candles") => "futures_contract_30m_candles",
+        Some("futures_contract_1h_candles") => "futures_contract_1h_candles",
+        Some("futures_contract_4h_candles") => "futures_contract_4h_candles",
+        Some("futures_contract_12h_candles") => "futures_contract_12h_candles",
+        Some("futures_contract_1d_candles") => "futures_contract_1d_candles",
+        _ => "futures_contract_1m_candles",
+    }
+}
+
+async fn fetch_phase1_replay_setups(
+    pool: &MySqlPool,
+    context: &Phase1YearlyRouteContext,
+) -> Result<Vec<Phase1ReplaySetup>, sqlx::Error> {
+    let source_filter = match context.source_scope.as_str() {
+        "futures" => "AND COALESCE(ps.source_table, '') LIKE 'futures_contract_%_candles'",
+        "daily" => {
+            "AND COALESCE(ps.source_table, '') = 'candles' AND COALESCE(ps.source_timeframe, '') = 'daily'"
+        }
+        _ => "",
+    };
+    let year_filter = if context.period_year > 0 {
+        "AND YEAR(ps.d_date) = ?"
+    } else {
+        ""
+    };
+    let bin_expr = phase1_accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
+    let time_bin_expr = phase1_accuracy_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
+    let size_bucket_expr = phase1_size_bucket_expr(
+        "CAST(COALESCE(fs.x_length, 0) + COALESCE(fs.a_length, 0) + COALESCE(fs.b_length, 0) + COALESCE(fs.c_length, 0) AS DOUBLE)",
+    );
+    let x_strictness = x_strictness_expr("fs.x_bars_left", "fs.x_length");
+    let score_selects = phase1_harmonic_score_selects();
+    let sql = format!(
+        r#"
+        WITH filtered_setups AS (
+            SELECT
+                ps.setup_id,
+                ps.symbol,
+                ps.source_table,
+                ps.source_timeframe,
+                ps.market,
+                ps.d_date,
+                ps.x_high,
+                ps.x_low,
+                ps.b_high,
+                ps.b_low,
+                ps.c_high,
+                ps.c_low,
+                ps.d_high,
+                ps.d_low,
+                ps.d_close,
+                ps.cd_price_length,
+                ps.full_pattern_length,
+                ps.xa_price_length,
+                ps.ab_price_length,
+                ps.bc_price_length,
+                ps.a_min_max,
+                ps.d_min_max,
+                ps.x_bars_left,
+                ps.x_length,
+                ps.a_length,
+                ps.b_length,
+                ps.c_length
+            FROM pattern_setups ps
+            WHERE ps.d_date IS NOT NULL
+              {source_filter}
+              {year_filter}
+        ),
+        setup_scores AS (
+            {score_selects}
+        ),
+        best_harmonic AS (
+            SELECT
+                setup_id,
+                SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        harmonic_type
+                        ORDER BY
+                            COALESCE(price_accuracy, 0.0) DESC,
+                            COALESCE(time_accuracy, 0.0) DESC,
+                            harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS harmonic_type,
+                CAST(SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        COALESCE(CAST(price_accuracy AS CHAR), '0')
+                        ORDER BY
+                            COALESCE(price_accuracy, 0.0) DESC,
+                            COALESCE(time_accuracy, 0.0) DESC,
+                            harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS DOUBLE) AS price_accuracy,
+                CAST(SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        COALESCE(CAST(time_accuracy AS CHAR), '0')
+                        ORDER BY
+                            COALESCE(price_accuracy, 0.0) DESC,
+                            COALESCE(time_accuracy, 0.0) DESC,
+                            harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS DOUBLE) AS time_accuracy
+            FROM setup_scores
+            GROUP BY setup_id
+        ),
+        pattern_rows AS (
+            SELECT
+                fs.*,
+                COALESCE(best_harmonic.harmonic_type, 'Unknown') AS best_harmonic_type,
+                {bin_expr} AS best_bin,
+                {time_bin_expr} AS best_time_bin,
+                {size_bucket_expr} AS best_size_bucket,
+                {x_strictness} AS best_x_strictness
+            FROM filtered_setups fs
+            LEFT JOIN best_harmonic
+              ON best_harmonic.setup_id = fs.setup_id
+        )
+        SELECT
+            setup_id,
+            symbol,
+            source_table,
+            source_timeframe,
+            market,
+            d_date,
+            x_high,
+            x_low,
+            b_high,
+            b_low,
+            c_high,
+            c_low,
+            d_high,
+            d_low,
+            d_close,
+            cd_price_length,
+            CAST(full_pattern_length AS SIGNED) AS full_pattern_length
+        FROM pattern_rows
+        WHERE best_harmonic_type = ?
+          AND best_bin = ?
+          AND best_size_bucket = ?
+          AND best_time_bin = ?
+          AND best_x_strictness = ?
+        ORDER BY d_date ASC, setup_id ASC
+        LIMIT ?
+        "#,
+        source_filter = source_filter,
+        year_filter = year_filter,
+        score_selects = score_selects,
+        bin_expr = bin_expr,
+        size_bucket_expr = size_bucket_expr,
+        time_bin_expr = time_bin_expr,
+        x_strictness = x_strictness,
+    );
+
+    let mut query = sqlx::query_as::<_, Phase1ReplaySetup>(&sql);
+    if context.period_year > 0 {
+        query = query.bind(context.period_year);
+    }
+
+    query
+        .bind(&context.harmonic_type)
+        .bind(&context.bin)
+        .bind(&context.size_bucket)
+        .bind(&context.time_bin)
+        .bind(&context.x_strictness)
+        .bind(context.setup_count.max(1))
+        .fetch_all(pool)
+        .await
+}
+
+async fn fetch_phase1_forward_candles(
+    pool: &MySqlPool,
+    setup: &Phase1ReplaySetup,
+    max_forward_bars: i64,
+) -> Result<Vec<Phase1ReplayCandle>, sqlx::Error> {
+    let use_daily = setup
+        .source_table
+        .as_deref()
+        .map(|table| table == "candles")
+        .unwrap_or(false)
+        || setup
+            .source_timeframe
+            .as_deref()
+            .map(|timeframe| timeframe == "daily")
+            .unwrap_or(false);
+
+    if use_daily {
+        return sqlx::query_as::<_, Phase1ReplayCandle>(
+            r#"
+            SELECT
+                CAST(open AS DOUBLE) AS open,
+                CAST(high AS DOUBLE) AS high,
+                CAST(low AS DOUBLE) AS low,
+                CAST(close AS DOUBLE) AS close
+            FROM candles
+            WHERE symbol = ?
+              AND date > ?
+            ORDER BY date ASC
+            LIMIT ?
+            "#,
+        )
+        .bind(&setup.symbol)
+        .bind(setup.d_date.date())
+        .bind(max_forward_bars)
+        .fetch_all(pool)
+        .await;
+    }
+
+    let candle_table = phase1_futures_candle_table(setup.source_table.as_deref());
+    let sql = format!(
+        r#"
+        SELECT
+            CAST(open AS DOUBLE) AS open,
+            CAST(high AS DOUBLE) AS high,
+            CAST(low AS DOUBLE) AS low,
+            CAST(close AS DOUBLE) AS close
+        FROM {candle_table}
+        WHERE symbol = ?
+          AND ts_utc > ?
+        ORDER BY ts_utc ASC
+        LIMIT ?
+        "#
+    );
+
+    sqlx::query_as::<_, Phase1ReplayCandle>(&sql)
+        .bind(&setup.symbol)
+        .bind(setup.d_date)
+        .bind(max_forward_bars)
+        .fetch_all(pool)
+        .await
+}
+
+fn phase1_direction(setup: &Phase1ReplaySetup) -> f64 {
+    if setup.market.eq_ignore_ascii_case("Bearish") {
+        -1.0
+    } else {
+        1.0
+    }
+}
+
+fn phase1_break_entry(direction: f64, level: f64, candle: &Phase1ReplayCandle) -> Option<f64> {
+    if direction > 0.0 && candle.high >= level {
+        Some(level)
+    } else if direction < 0.0 && candle.low <= level {
+        Some(level)
+    } else {
+        None
+    }
+}
+
+fn phase1_find_entry(
+    context: &Phase1YearlyRouteContext,
+    setup: &Phase1ReplaySetup,
+    candles: &[Phase1ReplayCandle],
+) -> Option<(usize, f64)> {
+    let direction = phase1_direction(setup);
+    let entry_scan_limit = candles.len().min(80);
+
+    match context.entry_mode.as_str() {
+        "next_open" => candles.first().map(|candle| (0, candle.open)),
+        "d_break" => {
+            let level = if direction > 0.0 {
+                setup.d_high
+            } else {
+                setup.d_low
+            };
+            candles
+                .iter()
+                .take(entry_scan_limit)
+                .enumerate()
+                .find_map(|(index, candle)| {
+                    phase1_break_entry(direction, level, candle).map(|entry| (index, entry))
+                })
+        }
+        "d_close_confirm" => {
+            candles
+                .iter()
+                .take(entry_scan_limit)
+                .enumerate()
+                .find_map(|(index, candle)| {
+                    let confirms = (direction > 0.0 && candle.close > setup.d_close)
+                        || (direction < 0.0 && candle.close < setup.d_close);
+                    confirms.then_some((index, candle.close))
+                })
+        }
+        "c_break" => {
+            let level = if direction > 0.0 {
+                setup.c_high
+            } else {
+                setup.c_low
+            };
+            candles
+                .iter()
+                .take(entry_scan_limit)
+                .enumerate()
+                .find_map(|(index, candle)| {
+                    phase1_break_entry(direction, level, candle).map(|entry| (index, entry))
+                })
+        }
+        "b_break" => {
+            let level = if direction > 0.0 {
+                setup.b_high
+            } else {
+                setup.b_low
+            };
+            candles
+                .iter()
+                .take(entry_scan_limit)
+                .enumerate()
+                .find_map(|(index, candle)| {
+                    phase1_break_entry(direction, level, candle).map(|entry| (index, entry))
+                })
+        }
+        _ => None,
+    }
+}
+
+fn phase1_stop_price(
+    context: &Phase1YearlyRouteContext,
+    setup: &Phase1ReplaySetup,
+    entry_price: f64,
+) -> f64 {
+    let direction = phase1_direction(setup);
+    match context.stop_mode.as_str() {
+        "d_extreme" => {
+            if direction > 0.0 {
+                setup.d_low
+            } else {
+                setup.d_high
+            }
+        }
+        "c_extreme" => {
+            if direction > 0.0 {
+                setup.c_low
+            } else {
+                setup.c_high
+            }
+        }
+        "x_extreme" => {
+            if direction > 0.0 {
+                setup.x_low
+            } else {
+                setup.x_high
+            }
+        }
+        "cd_025" => entry_price - direction * setup.cd_price_length.abs() * 0.25,
+        "cd_050" => entry_price - direction * setup.cd_price_length.abs() * 0.50,
+        "cd_075" => entry_price - direction * setup.cd_price_length.abs() * 0.75,
+        "cd_100" => entry_price - direction * setup.cd_price_length.abs() * 1.00,
+        "cd_150" => entry_price - direction * setup.cd_price_length.abs() * 1.50,
+        _ => entry_price - direction * setup.cd_price_length.abs(),
+    }
+}
+
+fn phase1_replay_route(
+    context: &Phase1YearlyRouteContext,
+    setup: &Phase1ReplaySetup,
+    candles: &[Phase1ReplayCandle],
+) -> Option<f64> {
+    let direction = phase1_direction(setup);
+    let (entry_index, entry_price) = phase1_find_entry(context, setup, candles)?;
+    let stop_price = phase1_stop_price(context, setup, entry_price);
+    let risk = (entry_price - stop_price) * direction;
+    if !risk.is_finite() || risk <= 0.0 {
+        return None;
+    }
+
+    let target_price = entry_price + direction * risk * context.target_r;
+    let max_hold_bars = setup
+        .full_pattern_length
+        .saturating_mul(context.max_hold_multiple.max(1))
+        .max(1) as usize;
+    let end_index = candles.len().min(entry_index.saturating_add(max_hold_bars));
+    if end_index <= entry_index {
+        return None;
+    }
+
+    for candle in &candles[entry_index..end_index] {
+        let stop_hit = (direction > 0.0 && candle.low <= stop_price)
+            || (direction < 0.0 && candle.high >= stop_price);
+        if stop_hit {
+            return Some(-1.0);
+        }
+
+        let target_hit = (direction > 0.0 && candle.high >= target_price)
+            || (direction < 0.0 && candle.low <= target_price);
+        if target_hit {
+            return Some(context.target_r);
+        }
+    }
+
+    let exit_close = candles[end_index - 1].close;
+    Some(((exit_close - entry_price) * direction) / risk)
+}
+
+impl Phase1YearlyAccumulator {
+    fn record_no_entry(&mut self) {
+        self.setup_count += 1;
+        self.no_entry_count += 1;
+    }
+
+    fn record_trade(&mut self, result_r: f64) {
+        self.setup_count += 1;
+        self.trade_count += 1;
+        self.sum_r += result_r;
+
+        if result_r > 0.0 {
+            self.win_count += 1;
+            self.positive_r += result_r;
+        } else {
+            self.loss_count += 1;
+            self.negative_r_abs += result_r.abs();
+        }
+
+        self.cumulative_r += result_r;
+        self.peak_r = self.peak_r.max(self.cumulative_r);
+        self.max_drawdown_r = self.max_drawdown_r.max(self.peak_r - self.cumulative_r);
+    }
+
+    fn into_row(self, year: i32) -> Phase1YearlyBreakdownRow {
+        let avg_r = if self.trade_count > 0 {
+            self.sum_r / self.trade_count as f64
+        } else {
+            0.0
+        };
+        let win_rate = if self.trade_count > 0 {
+            (self.win_count as f64 / self.trade_count as f64) * 100.0
+        } else {
+            0.0
+        };
+        let profit_factor = if self.negative_r_abs > 0.0 {
+            self.positive_r / self.negative_r_abs
+        } else if self.positive_r > 0.0 {
+            999.0
+        } else {
+            0.0
+        };
+
+        Phase1YearlyBreakdownRow {
+            year,
+            setup_count: self.setup_count,
+            trade_count: self.trade_count,
+            no_entry_count: self.no_entry_count,
+            win_count: self.win_count,
+            loss_count: self.loss_count,
+            win_rate,
+            avg_r,
+            sum_r: self.sum_r,
+            profit_factor,
+            max_drawdown_r: self.max_drawdown_r,
+        }
+    }
+}
+
+async fn ensure_phase1_yearly_cache_table(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS phase1_strategy_yearly_results (
+            run_id VARCHAR(64) NOT NULL,
+            family_key CHAR(16) NOT NULL,
+            source_scope VARCHAR(16) NOT NULL,
+            period_year INT NOT NULL,
+            route_id VARCHAR(128) NOT NULL,
+            trade_year INT NOT NULL,
+            setup_count BIGINT NOT NULL,
+            trade_count BIGINT NOT NULL,
+            no_entry_count BIGINT NOT NULL,
+            win_count BIGINT NOT NULL,
+            loss_count BIGINT NOT NULL,
+            win_rate DOUBLE NOT NULL,
+            avg_r DOUBLE NOT NULL,
+            sum_r DOUBLE NOT NULL,
+            profit_factor DOUBLE NOT NULL,
+            max_drawdown_r DOUBLE NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (run_id, route_id, trade_year),
+            INDEX idx_phase1_yearly_family (family_key, source_scope, period_year, trade_year)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn fetch_cached_phase1_yearly_rows(
+    pool: &MySqlPool,
+    run_id: &str,
+    route_id: &str,
+) -> Result<Vec<Phase1YearlyBreakdownRow>, sqlx::Error> {
+    sqlx::query_as::<_, Phase1YearlyBreakdownRow>(
+        r#"
+        SELECT
+            CAST(trade_year AS SIGNED) AS year,
+            CAST(setup_count AS SIGNED) AS setup_count,
+            CAST(trade_count AS SIGNED) AS trade_count,
+            CAST(no_entry_count AS SIGNED) AS no_entry_count,
+            CAST(win_count AS SIGNED) AS win_count,
+            CAST(loss_count AS SIGNED) AS loss_count,
+            CAST(win_rate AS DOUBLE) AS win_rate,
+            CAST(avg_r AS DOUBLE) AS avg_r,
+            CAST(sum_r AS DOUBLE) AS sum_r,
+            CAST(profit_factor AS DOUBLE) AS profit_factor,
+            CAST(max_drawdown_r AS DOUBLE) AS max_drawdown_r
+        FROM phase1_strategy_yearly_results
+        WHERE run_id = ?
+          AND route_id = ?
+        ORDER BY trade_year ASC
+        "#,
+    )
+    .bind(run_id)
+    .bind(route_id)
+    .fetch_all(pool)
+    .await
+}
+
+async fn save_phase1_yearly_rows(
+    pool: &MySqlPool,
+    context: &Phase1YearlyRouteContext,
+    years: &[Phase1YearlyBreakdownRow],
+) -> Result<(), sqlx::Error> {
+    for row in years {
+        sqlx::query(
+            r#"
+            INSERT INTO phase1_strategy_yearly_results (
+                run_id,
+                family_key,
+                source_scope,
+                period_year,
+                route_id,
+                trade_year,
+                setup_count,
+                trade_count,
+                no_entry_count,
+                win_count,
+                loss_count,
+                win_rate,
+                avg_r,
+                sum_r,
+                profit_factor,
+                max_drawdown_r
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                setup_count = VALUES(setup_count),
+                trade_count = VALUES(trade_count),
+                no_entry_count = VALUES(no_entry_count),
+                win_count = VALUES(win_count),
+                loss_count = VALUES(loss_count),
+                win_rate = VALUES(win_rate),
+                avg_r = VALUES(avg_r),
+                sum_r = VALUES(sum_r),
+                profit_factor = VALUES(profit_factor),
+                max_drawdown_r = VALUES(max_drawdown_r)
+            "#,
+        )
+        .bind(&context.run_id)
+        .bind(&context.family_key)
+        .bind(&context.source_scope)
+        .bind(context.period_year)
+        .bind(&context.route_id)
+        .bind(row.year)
+        .bind(row.setup_count)
+        .bind(row.trade_count)
+        .bind(row.no_entry_count)
+        .bind(row.win_count)
+        .bind(row.loss_count)
+        .bind(row.win_rate)
+        .bind(row.avg_r)
+        .bind(row.sum_r)
+        .bind(row.profit_factor)
+        .bind(row.max_drawdown_r)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+fn phase1_context_route(context: &Phase1YearlyRouteContext) -> Phase1LeaderboardResult {
+    Phase1LeaderboardResult {
+        run_id: context.run_id.clone(),
+        family_key: context.family_key.clone(),
+        source_scope: context.source_scope.clone(),
+        period_year: context.period_year,
+        route_id: context.route_id.clone(),
+        route_label: context.route_label.clone(),
+        result_rank: context.result_rank,
+        entry_mode: context.entry_mode.clone(),
+        stop_mode: context.stop_mode.clone(),
+        target_r: context.target_r,
+        max_hold_multiple: context.max_hold_multiple,
+        setup_count: context.setup_count,
+        trade_count: context.trade_count,
+        no_entry_count: context.no_entry_count,
+        win_count: context.win_count,
+        loss_count: context.loss_count,
+        win_rate: context.win_rate,
+        avg_r: context.avg_r,
+        profit_factor: context.profit_factor,
+        max_drawdown_r: context.max_drawdown_r,
+        worst_year_avg_r: context.worst_year_avg_r,
+        score: context.score,
+        created_at: context.created_at,
+        harmonic_type: context.harmonic_type.clone(),
+        bin: context.bin.clone(),
+        size_bucket: context.size_bucket.clone(),
+        time_bin: context.time_bin.clone(),
+        x_strictness: context.x_strictness.clone(),
+    }
+}
+
+#[route("/phase1/yearly-breakdown", method = "GET", method = "POST")]
+async fn fetch_phase1_yearly_breakdown(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<Phase1YearlyParams>,
+) -> impl Responder {
+    let Some(family_key) = params
+        .family_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Missing family_key");
+    };
+    let Some(run_id) = params
+        .run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Missing run_id");
+    };
+    let Some(route_id) = params
+        .route_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Missing route_id");
+    };
+
+    let context = match sqlx::query_as::<_, Phase1YearlyRouteContext>(
+        r#"
+        SELECT
+            rr.run_id,
+            rr.family_key,
+            rr.source_scope,
+            CAST(rr.period_year AS SIGNED) AS period_year,
+            rr.route_id,
+            rr.route_label,
+            CAST(rr.result_rank AS SIGNED) AS result_rank,
+            rr.entry_mode,
+            rr.stop_mode,
+            CAST(rr.target_r AS DOUBLE) AS target_r,
+            CAST(rr.max_hold_multiple AS SIGNED) AS max_hold_multiple,
+            CAST(rr.setup_count AS SIGNED) AS setup_count,
+            CAST(rr.trade_count AS SIGNED) AS trade_count,
+            CAST(rr.no_entry_count AS SIGNED) AS no_entry_count,
+            CAST(rr.win_count AS SIGNED) AS win_count,
+            CAST(rr.loss_count AS SIGNED) AS loss_count,
+            CAST(rr.win_rate AS DOUBLE) AS win_rate,
+            CAST(rr.avg_r AS DOUBLE) AS avg_r,
+            CAST(rr.profit_factor AS DOUBLE) AS profit_factor,
+            CAST(rr.max_drawdown_r AS DOUBLE) AS max_drawdown_r,
+            CAST(rr.worst_year_avg_r AS DOUBLE) AS worst_year_avg_r,
+            CAST(rr.score AS DOUBLE) AS score,
+            rr.created_at,
+            CAST(r.max_forward_bars AS SIGNED) AS max_forward_bars,
+            r.harmonic_type,
+            r.bin,
+            r.size_bucket,
+            r.time_bin,
+            r.x_strictness
+        FROM phase1_strategy_results rr
+        INNER JOIN phase1_strategy_runs r
+          ON r.run_id = rr.run_id
+        WHERE rr.family_key = ?
+          AND rr.run_id = ?
+          AND rr.route_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(family_key)
+    .bind(run_id)
+    .bind(route_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(Some(context)) => context,
+        Ok(None) => return HttpResponse::NotFound().body("Phase 1 route not found"),
+        Err(error) if is_missing_table_error(&error) => {
+            return HttpResponse::Ok().json(Phase1YearlyBreakdownResponse {
+                route: Phase1LeaderboardResult {
+                    run_id: run_id.to_string(),
+                    family_key: family_key.to_string(),
+                    source_scope: "futures".to_string(),
+                    period_year: 0,
+                    route_id: route_id.to_string(),
+                    route_label: String::new(),
+                    result_rank: 0,
+                    entry_mode: String::new(),
+                    stop_mode: String::new(),
+                    target_r: 0.0,
+                    max_hold_multiple: 0,
+                    setup_count: 0,
+                    trade_count: 0,
+                    no_entry_count: 0,
+                    win_count: 0,
+                    loss_count: 0,
+                    win_rate: 0.0,
+                    avg_r: 0.0,
+                    profit_factor: 0.0,
+                    max_drawdown_r: 0.0,
+                    worst_year_avg_r: 0.0,
+                    score: 0.0,
+                    created_at: None,
+                    harmonic_type: String::new(),
+                    bin: String::new(),
+                    size_bucket: String::new(),
+                    time_bin: String::new(),
+                    x_strictness: String::new(),
+                },
+                years: Vec::new(),
+                cached: false,
+            });
+        }
+        Err(error) => {
+            eprintln!("Phase 1 yearly route DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    if let Err(error) = ensure_phase1_yearly_cache_table(pool.get_ref()).await {
+        eprintln!("Phase 1 yearly cache table DB error: {:?}", error);
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    match fetch_cached_phase1_yearly_rows(pool.get_ref(), &context.run_id, &context.route_id).await
+    {
+        Ok(rows) if !rows.is_empty() => {
+            return HttpResponse::Ok().json(Phase1YearlyBreakdownResponse {
+                route: phase1_context_route(&context),
+                years: rows,
+                cached: true,
+            });
+        }
+        Ok(_) => {}
+        Err(error) if is_missing_table_error(&error) => {}
+        Err(error) => {
+            eprintln!("Phase 1 yearly cache read DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    if params.cache_only.unwrap_or(false) {
+        return HttpResponse::Ok().json(Phase1YearlyBreakdownResponse {
+            route: phase1_context_route(&context),
+            years: Vec::new(),
+            cached: false,
+        });
+    }
+
+    let setups = match fetch_phase1_replay_setups(pool.get_ref(), &context).await {
+        Ok(setups) => setups,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Phase 1 yearly setup DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let mut yearly: HashMap<i32, Phase1YearlyAccumulator> = HashMap::new();
+    for setup in &setups {
+        let year = setup.d_date.year();
+        let accumulator = yearly.entry(year).or_default();
+        let setup_forward_bars = setup
+            .full_pattern_length
+            .saturating_mul(5)
+            .clamp(40, context.max_forward_bars.max(40));
+        let candles = fetch_phase1_forward_candles(pool.get_ref(), setup, setup_forward_bars)
+            .await
+            .unwrap_or_else(|error| {
+                eprintln!(
+                    "Phase 1 yearly candle fetch failed for setup {} ({}): {:?}",
+                    setup.setup_id, setup.symbol, error
+                );
+                Vec::new()
+            });
+
+        if candles.is_empty() {
+            accumulator.record_no_entry();
+            continue;
+        }
+
+        match phase1_replay_route(&context, setup, &candles) {
+            Some(result_r) if result_r.is_finite() => accumulator.record_trade(result_r),
+            _ => accumulator.record_no_entry(),
+        }
+    }
+
+    let mut years = yearly
+        .into_iter()
+        .map(|(year, accumulator)| accumulator.into_row(year))
+        .collect::<Vec<_>>();
+    years.sort_by_key(|row| row.year);
+
+    if let Err(error) = save_phase1_yearly_rows(pool.get_ref(), &context, &years).await {
+        eprintln!("Phase 1 yearly cache write DB error: {:?}", error);
+    }
+
+    HttpResponse::Ok().json(Phase1YearlyBreakdownResponse {
+        route: phase1_context_route(&context),
+        years,
+        cached: false,
+    })
 }
 
 #[route("/strategy-contract-weeks", method = "GET", method = "POST")]

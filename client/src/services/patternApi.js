@@ -80,8 +80,10 @@ const postJson = async (path, body) => {
   });
 
   if (!response.ok) {
-    console.error(`Server Error: ${response.status} - ${response.statusText}`);
-    throw new Error('Request failed');
+    const errorText = await response.text();
+    const message = errorText || `${response.status} - ${response.statusText}`;
+    console.error(`Server Error: ${message}`);
+    throw new Error(message);
   }
 
   return response.json();
@@ -281,6 +283,65 @@ const parseStrategyCandidateRecord = (strategy) => ({
   },
 });
 
+const parsePatternFamilyRecord = (family = {}) => ({
+  ...family,
+  family_key: family?.family_key ?? null,
+  family_name: family?.family_name ?? null,
+  family_level: parseOptionalInt(family?.family_level) ?? 0,
+  included_dimensions: family?.included_dimensions ?? null,
+  outcome_model: family?.outcome_model ?? null,
+  setup_count: parseOptionalInt(family?.setup_count) ?? 0,
+  symbol_count: parseOptionalInt(family?.symbol_count) ?? 0,
+  first_d_date: family?.first_d_date ?? null,
+  last_d_date: family?.last_d_date ?? null,
+});
+
+const parsePhase1ResultRecord = (row = {}) => ({
+  ...row,
+  result_rank: parseOptionalInt(row?.result_rank) ?? 0,
+  period_year: parseOptionalInt(row?.period_year) ?? 0,
+  target_r: parseOptionalFloat(row?.target_r) ?? 0,
+  max_hold_multiple: parseOptionalInt(row?.max_hold_multiple) ?? 0,
+  setup_count: parseOptionalInt(row?.setup_count) ?? 0,
+  trade_count: parseOptionalInt(row?.trade_count) ?? 0,
+  no_entry_count: parseOptionalInt(row?.no_entry_count) ?? 0,
+  win_count: parseOptionalInt(row?.win_count) ?? 0,
+  loss_count: parseOptionalInt(row?.loss_count) ?? 0,
+  win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  profit_factor: parseOptionalFloat(row?.profit_factor) ?? 0,
+  max_drawdown_r: parseOptionalFloat(row?.max_drawdown_r) ?? 0,
+  worst_year_avg_r: parseOptionalFloat(row?.worst_year_avg_r) ?? 0,
+  score: parseOptionalFloat(row?.score) ?? 0,
+});
+
+const parsePhase1YearlyBreakdown = (data = null) => {
+  if (!data) {
+    return null;
+  }
+
+  return {
+    route: parsePhase1ResultRecord(data?.route ?? {}),
+    cached: Boolean(data?.cached),
+    years: Array.isArray(data?.years)
+      ? data.years.map((row) => ({
+          ...row,
+          year: parseOptionalInt(row?.year) ?? 0,
+          setup_count: parseOptionalInt(row?.setup_count) ?? 0,
+          trade_count: parseOptionalInt(row?.trade_count) ?? 0,
+          no_entry_count: parseOptionalInt(row?.no_entry_count) ?? 0,
+          win_count: parseOptionalInt(row?.win_count) ?? 0,
+          loss_count: parseOptionalInt(row?.loss_count) ?? 0,
+          win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+          avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+          sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+          profit_factor: parseOptionalFloat(row?.profit_factor) ?? 0,
+          max_drawdown_r: parseOptionalFloat(row?.max_drawdown_r) ?? 0,
+        }))
+      : [],
+  };
+};
+
 const parseSetupComparisonResponse = (comparison) => {
   if (!comparison) {
     return null;
@@ -353,6 +414,10 @@ const parseStrategyContractWeekRecord = (row) => ({
 const parseSimulatorReplayResponse = (data) => ({
   family_key: data?.family_key ?? null,
   eligible_trade_count: parseOptionalInt(data?.eligible_trade_count) ?? 0,
+  candidate_logic_applied: Boolean(data?.candidate_logic_applied),
+  candidate_logic_filters: Array.isArray(data?.candidate_logic_filters)
+    ? data.candidate_logic_filters
+    : [],
   tests: Array.isArray(data?.tests)
     ? data.tests.map((test) => ({
         ...test,
@@ -396,6 +461,88 @@ const parseSimulatorReplayResponse = (data) => ({
       }))
     : [],
 });
+
+const parsePatternDiscoverySummary = (summary = {}) => ({
+  observations: parseOptionalInt(summary?.observations) ?? 0,
+  complete_windows: parseOptionalInt(summary?.complete_windows) ?? 0,
+  avg_bars_observed: parseOptionalFloat(summary?.avg_bars_observed) ?? 0,
+  avg_mfe_r: parseOptionalFloat(summary?.avg_mfe_r) ?? 0,
+  avg_mae_r: parseOptionalFloat(summary?.avg_mae_r) ?? 0,
+  avg_end_return_r: parseOptionalFloat(summary?.avg_end_return_r) ?? 0,
+  avg_return_1x_r: parseOptionalFloat(summary?.avg_return_1x_r) ?? 0,
+  avg_return_2x_r: parseOptionalFloat(summary?.avg_return_2x_r) ?? 0,
+  avg_return_3x_r: parseOptionalFloat(summary?.avg_return_3x_r) ?? 0,
+  avg_return_5x_r: parseOptionalFloat(summary?.avg_return_5x_r) ?? 0,
+  hit_pos_0_5r_rate: parseOptionalFloat(summary?.hit_pos_0_5r_rate) ?? 0,
+  hit_pos_1_0r_rate: parseOptionalFloat(summary?.hit_pos_1_0r_rate) ?? 0,
+  hit_pos_1_5r_rate: parseOptionalFloat(summary?.hit_pos_1_5r_rate) ?? 0,
+  hit_pos_2_0r_rate: parseOptionalFloat(summary?.hit_pos_2_0r_rate) ?? 0,
+  hit_neg_0_5r_rate: parseOptionalFloat(summary?.hit_neg_0_5r_rate) ?? 0,
+  hit_neg_1_0r_rate: parseOptionalFloat(summary?.hit_neg_1_0r_rate) ?? 0,
+  pos_1r_before_neg_1r_rate: parseOptionalFloat(summary?.pos_1r_before_neg_1r_rate) ?? 0,
+  avg_pos_1r_bar: parseOptionalFloat(summary?.avg_pos_1r_bar) ?? 0,
+  avg_neg_1r_bar: parseOptionalFloat(summary?.avg_neg_1r_bar) ?? 0,
+});
+
+const parsePatternDiscoveryBreakdownRow = (row = {}) => ({
+  ...row,
+  observations: parseOptionalInt(row?.observations) ?? 0,
+  avg_mfe_r: parseOptionalFloat(row?.avg_mfe_r) ?? 0,
+  avg_mae_r: parseOptionalFloat(row?.avg_mae_r) ?? 0,
+  avg_return_3x_r: parseOptionalFloat(row?.avg_return_3x_r) ?? 0,
+  avg_return_5x_r: parseOptionalFloat(row?.avg_return_5x_r) ?? 0,
+  hit_pos_1_0r_rate: parseOptionalFloat(row?.hit_pos_1_0r_rate) ?? 0,
+  hit_neg_1_0r_rate: parseOptionalFloat(row?.hit_neg_1_0r_rate) ?? 0,
+  pos_1r_before_neg_1r_rate: parseOptionalFloat(row?.pos_1r_before_neg_1r_rate) ?? 0,
+});
+
+const parsePatternDiscoveryLogic = (logic = {}) => ({
+  ...logic,
+  id: parseOptionalInt(logic?.id) ?? 0,
+  rule_json: logic?.rule_json ?? null,
+  created_at: logic?.created_at ?? null,
+  updated_at: logic?.updated_at ?? null,
+});
+
+const parsePatternDiscoveryResponse = (data = null) => {
+  if (!data) {
+    return null;
+  }
+
+  return {
+    family: data?.family ?? null,
+    summary: parsePatternDiscoverySummary(data?.summary),
+    breakdowns: Array.isArray(data?.breakdowns)
+      ? data.breakdowns.map((breakdown) => ({
+          ...breakdown,
+          rows: Array.isArray(breakdown?.rows)
+            ? breakdown.rows.map(parsePatternDiscoveryBreakdownRow)
+            : [],
+        }))
+      : [],
+    examples: Array.isArray(data?.examples)
+      ? data.examples.map((example) => ({
+          ...example,
+          reference_price: parseOptionalFloat(example?.reference_price) ?? 0,
+          mfe_r: parseOptionalFloat(example?.mfe_r),
+          mae_r: parseOptionalFloat(example?.mae_r),
+          end_close_return_r: parseOptionalFloat(example?.end_close_return_r),
+          close_return_3x_r: parseOptionalFloat(example?.close_return_3x_r),
+          close_return_5x_r: parseOptionalFloat(example?.close_return_5x_r),
+          hit_pos_1_0r_bar: parseOptionalInt(example?.hit_pos_1_0r_bar),
+          hit_neg_1_0r_bar: parseOptionalInt(example?.hit_neg_1_0r_bar),
+          hit_pos_1r_before_neg_1r:
+            example?.hit_pos_1r_before_neg_1r === null ||
+            example?.hit_pos_1r_before_neg_1r === undefined
+              ? null
+              : Boolean(example.hit_pos_1r_before_neg_1r),
+        }))
+      : [],
+    saved_logic: Array.isArray(data?.saved_logic)
+      ? data.saved_logic.map(parsePatternDiscoveryLogic)
+      : [],
+  };
+};
 
 export const getCandles = async (symbol, { startDate = null, endDate = null } = {}) => {
   if (!symbol) {
@@ -553,6 +700,24 @@ export const fetchAdminStatus = async () => {
             duration_ms: parseOptionalInt(phase?.duration_ms) ?? 0,
           }))
         : [],
+      engine_progress: data?.engine_progress
+        ? {
+            ...data.engine_progress,
+            total_symbols: parseOptionalInt(data.engine_progress?.total_symbols) ?? 0,
+            queued_symbols: parseOptionalInt(data.engine_progress?.queued_symbols) ?? 0,
+            completed_symbols:
+              parseOptionalInt(data.engine_progress?.completed_symbols) ?? 0,
+            percent_complete:
+              parseOptionalFloat(data.engine_progress?.percent_complete) ?? 0,
+            elapsed_ms: parseOptionalInt(data.engine_progress?.elapsed_ms) ?? 0,
+            estimated_total_ms: parseOptionalInt(
+              data.engine_progress?.estimated_total_ms
+            ),
+            estimated_remaining_ms: parseOptionalInt(
+              data.engine_progress?.estimated_remaining_ms
+            ),
+          }
+        : null,
       cache_states: Array.isArray(data?.cache_states)
         ? data.cache_states.map((cache) => ({
             ...cache,
@@ -588,7 +753,7 @@ export const runAdminAction = async (action, options = {}) => {
     });
   } catch (error) {
     console.error(error);
-    return null;
+    return { error: error.message || 'Action failed to start.' };
   }
 };
 
@@ -662,6 +827,7 @@ export const fetchSimulatorFamilyReplay = async ({
   accountRules,
   drawdownModel,
   oneTradeAtATime,
+  useCandidateLogic = false,
 }) => {
   if (!familyId) {
     return null;
@@ -679,12 +845,54 @@ export const fetchSimulatorFamilyReplay = async ({
       daily_loss_limit: accountRules?.dailyLossLimit ?? null,
       drawdown_model: drawdownModel ?? null,
       one_trade_at_a_time: oneTradeAtATime,
+      use_candidate_logic: useCandidateLogic,
     });
 
     return parseSimulatorReplayResponse(data);
   } catch (error) {
     console.error(error);
     return null;
+  }
+};
+
+export const fetchPatternDiscoveryFamily = async ({ familyId, limit = 40 } = {}) => {
+  if (!familyId) {
+    return null;
+  }
+
+  try {
+    const data = await postJson('/pattern-discovery/family', {
+      prop_strategy_id: familyId,
+      limit,
+    });
+    return parsePatternDiscoveryResponse(data);
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
+export const savePatternDiscoveryLogic = async ({
+  familyId,
+  title,
+  logicText,
+  ruleJson = null,
+} = {}) => {
+  if (!familyId || !logicText) {
+    return [];
+  }
+
+  try {
+    const data = await postJson('/pattern-discovery/save-logic', {
+      prop_strategy_id: familyId,
+      title,
+      logic_text: logicText,
+      rule_json: ruleJson,
+    });
+    return Array.isArray(data) ? data.map(parsePatternDiscoveryLogic) : [];
+  } catch (error) {
+    console.error(error);
+    return [];
   }
 };
 
@@ -743,6 +951,115 @@ export const fetchStrategyTrades = async (
       entry_dates: [],
     };
   }
+};
+
+export const fetchPhase1FamilyPatterns = async (
+  {
+    familyKey = null,
+    sourceScope = 'futures',
+    year = null,
+  } = {},
+  pagination = { limit: 500, offset: 0, includeCount: true }
+) => {
+  if (!familyKey) {
+    return {
+      patterns: [],
+      total_count: 0,
+      has_more: false,
+      earliest_entry_date: null,
+      latest_entry_date: null,
+      entry_dates: [],
+    };
+  }
+
+  try {
+    const data = await postJson('/phase1/family-patterns', {
+      family_key: familyKey,
+      source_scope: sourceScope,
+      year: parseOptionalInt(year),
+      limit: pagination.limit ?? 500,
+      offset: pagination.offset ?? 0,
+      include_count: pagination.includeCount ?? true,
+    });
+
+    const patterns = Array.isArray(data?.patterns)
+      ? data.patterns.map((pattern) =>
+          parsePatternSummaryRecord({
+            ...pattern,
+            prop_outcome_mode: 'phase1-family',
+          })
+        )
+      : [];
+
+    return {
+      ...data,
+      patterns,
+      total_count: data?.total_count ?? patterns.length,
+      has_more: Boolean(data?.has_more),
+      earliest_entry_date: data?.earliest_entry_date ?? null,
+      latest_entry_date: data?.latest_entry_date ?? null,
+      entry_dates: Array.isArray(data?.entry_dates) ? data.entry_dates : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      patterns: [],
+      total_count: 0,
+      has_more: false,
+      earliest_entry_date: null,
+      latest_entry_date: null,
+      entry_dates: [],
+    };
+  }
+};
+
+export const fetchAllStrategyTrades = async (
+  strategy,
+  options = { propMode: false, propOutcomeMode: DEFAULT_PROP_OUTCOME_MODE },
+  pageSize = 500
+) => {
+  const patterns = [];
+  let offset = 0;
+  let totalCount = 0;
+  let earliestEntryDate = null;
+  let latestEntryDate = null;
+  let entryDates = [];
+
+  while (true) {
+    const data = await fetchStrategyTrades(
+      strategy,
+      {
+        limit: pageSize,
+        offset,
+        includeCount: offset === 0,
+      },
+      options
+    );
+    const nextPatterns = Array.isArray(data?.patterns) ? data.patterns : [];
+
+    patterns.push(...nextPatterns);
+    if (offset === 0) {
+      totalCount = data?.total_count ?? nextPatterns.length;
+      earliestEntryDate = data?.earliest_entry_date ?? null;
+      latestEntryDate = data?.latest_entry_date ?? null;
+      entryDates = Array.isArray(data?.entry_dates) ? data.entry_dates : [];
+    }
+
+    if (!data?.has_more || !nextPatterns.length) {
+      break;
+    }
+
+    offset += nextPatterns.length;
+  }
+
+  return {
+    patterns,
+    total_count: totalCount > 0 ? totalCount : patterns.length,
+    has_more: false,
+    earliest_entry_date: earliestEntryDate,
+    latest_entry_date: latestEntryDate,
+    entry_dates: entryDates,
+  };
 };
 
 export const fetchCurrentSetupStrategies = async (
@@ -895,6 +1212,102 @@ export const fetchStrategyCandidates = async ({
   } catch (error) {
     console.error(error);
     return { strategies: [], total_count: 0, has_more: false };
+  }
+};
+
+export const fetchPatternFamilies = async ({
+  limit = 1000,
+  minSetupCount = 1,
+  year = null,
+  sourceScope = 'all',
+} = {}) => {
+  try {
+    const data = await postJson('/pattern-families', {
+      limit,
+      min_setup_count: minSetupCount,
+      year: parseOptionalInt(year),
+      source_scope: sourceScope,
+    });
+
+    return Array.isArray(data) ? data.map(parsePatternFamilyRecord) : [];
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
+};
+
+export const fetchPhase1Results = async ({
+  familyKey = null,
+  sourceScope = 'futures',
+  year = null,
+  limit = 250,
+} = {}) => {
+  if (!familyKey) {
+    return [];
+  }
+
+  try {
+    const data = await postJson('/phase1/results', {
+      family_key: familyKey,
+      source_scope: sourceScope,
+      year: parseOptionalInt(year),
+      limit,
+    });
+
+    return Array.isArray(data) ? data.map(parsePhase1ResultRecord) : [];
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
+};
+
+export const fetchPhase1Leaderboard = async ({
+  sourceScope = 'futures',
+  year = null,
+  limit = 500,
+  minTradeCount = 100,
+  minSetupCount = 1,
+  bestPerFamily = false,
+} = {}) => {
+  try {
+    const data = await postJson('/phase1/leaderboard', {
+      source_scope: sourceScope,
+      year: parseOptionalInt(year),
+      limit: parseOptionalInt(limit),
+      min_trade_count: parseOptionalInt(minTradeCount),
+      min_setup_count: parseOptionalInt(minSetupCount),
+      best_per_family: Boolean(bestPerFamily),
+    });
+
+    return Array.isArray(data) ? data.map(parsePhase1ResultRecord) : [];
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
+};
+
+export const fetchPhase1YearlyBreakdown = async ({
+  familyKey = null,
+  runId = null,
+  routeId = null,
+  cacheOnly = false,
+} = {}) => {
+  if (!familyKey || !runId || !routeId) {
+    return null;
+  }
+
+  try {
+    const data = await postJson('/phase1/yearly-breakdown', {
+      family_key: familyKey,
+      run_id: runId,
+      route_id: routeId,
+      cache_only: Boolean(cacheOnly),
+    });
+
+    return parsePhase1YearlyBreakdown(data);
+  } catch (error) {
+    console.error(error);
+    return null;
   }
 };
 

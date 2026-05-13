@@ -10,6 +10,7 @@ use futures_util::TryStreamExt;
 use sqlx::mysql::MySqlPool;
 // use std::fs::File;
 // use csv::WriterBuilder;
+use crate::models::forward_observation::PatternForwardObservation;
 use crate::models::market::Market;
 use crate::models::pattern_abcd::PatternXABCD;
 use crate::models::prop_reversal_route::PropReversalOutcome;
@@ -182,7 +183,7 @@ const PROP_OUTCOME_CSV_HEADERS: &[&str] = &[
     "target_breaks_entry_low",
 ];
 
-const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 22] = [
+const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 28] = [
     (
         "pattern_harmonic_scores",
         "uniq_pattern_harmonic_score",
@@ -293,6 +294,36 @@ const REBUILD_SECONDARY_INDEXES: [(&str, &str, &str); 22] = [
         "idx_pattern_outcomes_prop_contract_week",
         "CREATE INDEX idx_pattern_outcomes_prop_contract_week ON pattern_outcomes_prop (symbol, contract_week_index)",
     ),
+    (
+        "pattern_forward_observations",
+        "uniq_pattern_forward_observations_observation_id",
+        "CREATE UNIQUE INDEX uniq_pattern_forward_observations_observation_id ON pattern_forward_observations (observation_id)",
+    ),
+    (
+        "pattern_forward_observations",
+        "idx_pattern_forward_observations_outcome_row_id",
+        "CREATE INDEX idx_pattern_forward_observations_outcome_row_id ON pattern_forward_observations (outcome_row_id)",
+    ),
+    (
+        "pattern_forward_observations",
+        "idx_pattern_forward_observations_strategy_id",
+        "CREATE INDEX idx_pattern_forward_observations_strategy_id ON pattern_forward_observations (prop_strategy_id, outcome_model, window_multiple)",
+    ),
+    (
+        "pattern_forward_observations",
+        "idx_pattern_forward_observations_pattern_id",
+        "CREATE INDEX idx_pattern_forward_observations_pattern_id ON pattern_forward_observations (pattern_id, d_date)",
+    ),
+    (
+        "pattern_forward_observations",
+        "idx_pattern_forward_observations_symbol_d_date",
+        "CREATE INDEX idx_pattern_forward_observations_symbol_d_date ON pattern_forward_observations (symbol, d_date)",
+    ),
+    (
+        "pattern_forward_observations",
+        "idx_pattern_forward_observations_lookup",
+        "CREATE INDEX idx_pattern_forward_observations_lookup ON pattern_forward_observations (outcome_model, market, harmonic_type, bin, reversal_type, size_bucket, time_bin)",
+    ),
 ];
 
 const DROP_ONLY_REBUILD_INDEXES: [(&str, &str); 1] = [(
@@ -306,6 +337,7 @@ struct PatternOutputTables {
     harmonic_scores: &'static str,
     swing_outcomes: &'static str,
     prop_outcomes: &'static str,
+    forward_observations: &'static str,
 }
 
 impl PatternOutputTables {
@@ -315,6 +347,7 @@ impl PatternOutputTables {
             harmonic_scores: "pattern_harmonic_scores",
             swing_outcomes: "pattern_outcomes_swing",
             prop_outcomes: "pattern_outcomes_prop",
+            forward_observations: "pattern_forward_observations",
         }
     }
 
@@ -324,6 +357,7 @@ impl PatternOutputTables {
             harmonic_scores: "pattern_harmonic_scores_build",
             swing_outcomes: "pattern_outcomes_swing_build",
             prop_outcomes: "pattern_outcomes_prop_build",
+            forward_observations: "pattern_forward_observations_build",
         }
     }
 }
@@ -334,6 +368,7 @@ pub struct OutputWriteOptions {
     pub write_harmonic_scores: bool,
     pub write_swing_outcomes: bool,
     pub write_prop_outcomes: bool,
+    pub write_forward_observations: bool,
 }
 
 impl OutputWriteOptions {
@@ -343,6 +378,7 @@ impl OutputWriteOptions {
             "pattern_harmonic_scores" => self.write_harmonic_scores,
             "pattern_outcomes_swing" => self.write_swing_outcomes,
             "pattern_outcomes_prop" => self.write_prop_outcomes,
+            "pattern_forward_observations" => self.write_forward_observations,
             _ => true,
         }
     }
@@ -669,6 +705,69 @@ fn leg_accuracy_sql_expr(current_expr: &str, target_leg: f64) -> String {
     )
 }
 
+fn setup_ratio_expr(numerator_expr: &str, denominator_expr: &str) -> String {
+    format!(
+        "CASE
+            WHEN COALESCE({denominator_expr}, 0.0) > 0
+            THEN (CAST({numerator_expr} AS DOUBLE) / CAST({denominator_expr} AS DOUBLE)) * 100.0
+            ELSE 0.0
+        END"
+    )
+}
+
+fn harmonic_setup_score_select(
+    harmonic_type: &str,
+    ab_xa: f64,
+    bc_ab: f64,
+    cd_bc: f64,
+    d_completion: f64,
+) -> String {
+    let ab_xa_price = setup_ratio_expr("ab_price_length", "xa_price_length");
+    let bc_ab_price = setup_ratio_expr("bc_price_length", "ab_price_length");
+    let cd_bc_price = setup_ratio_expr("cd_price_length", "bc_price_length");
+    let d_completion_price = setup_ratio_expr("ABS(a_min_max - d_min_max)", "xa_price_length");
+    let ab_xa_time = setup_ratio_expr("a_length", "x_length");
+    let bc_ab_time = setup_ratio_expr("b_length", "a_length");
+    let cd_bc_time = setup_ratio_expr("c_length", "b_length");
+    let cd_xa_time = setup_ratio_expr("c_length", "x_length");
+
+    format!(
+        r#"
+        SELECT
+            setup_id,
+            '{harmonic_type}' AS harmonic_type,
+            (
+                {price_ab_xa} + {price_bc_ab} + {price_cd_bc} + {price_d_completion}
+            ) / 4.0 AS price_accuracy,
+            (
+                {time_ab_xa} + {time_bc_ab} + {time_cd_bc} + {time_cd_xa}
+            ) / 4.0 AS time_accuracy
+        FROM pattern_setups
+        "#,
+        price_ab_xa = leg_accuracy_sql_expr(&ab_xa_price, ab_xa),
+        price_bc_ab = leg_accuracy_sql_expr(&bc_ab_price, bc_ab),
+        price_cd_bc = leg_accuracy_sql_expr(&cd_bc_price, cd_bc),
+        price_d_completion = leg_accuracy_sql_expr(&d_completion_price, d_completion),
+        time_ab_xa = leg_accuracy_sql_expr(&ab_xa_time, ab_xa),
+        time_bc_ab = leg_accuracy_sql_expr(&bc_ab_time, bc_ab),
+        time_cd_bc = leg_accuracy_sql_expr(&cd_bc_time, cd_bc),
+        time_cd_xa = leg_accuracy_sql_expr(&cd_xa_time, d_completion),
+    )
+}
+
+fn harmonic_setup_score_selects() -> String {
+    [
+        harmonic_setup_score_select("Bat", 0.500, 0.382, 1.618, 0.886),
+        harmonic_setup_score_select("AlternateBat", 0.382, 0.382, 2.000, 1.130),
+        harmonic_setup_score_select("Butterfly", 0.786, 0.382, 1.618, 1.272),
+        harmonic_setup_score_select("Gartley", 0.618, 0.382, 1.272, 0.786),
+        harmonic_setup_score_select("Crab", 0.382, 0.382, 2.618, 1.618),
+        harmonic_setup_score_select("DeepCrab", 0.886, 0.382, 2.618, 1.618),
+        harmonic_setup_score_select("Shark", 0.500, 1.130, 1.618, 0.886),
+    ]
+    .join("\nUNION ALL\n")
+}
+
 fn harmonic_time_accuracy_sql_expr(ab_xa: f64, bc_ab: f64, cd_bc: f64, cd_xa: f64) -> String {
     format!(
         "(
@@ -681,6 +780,23 @@ fn harmonic_time_accuracy_sql_expr(ab_xa: f64, bc_ab: f64, cd_bc: f64, cd_xa: f6
         bc_ab_expr = leg_accuracy_sql_expr("trade_bc_bar_retracement", bc_ab),
         cd_bc_expr = leg_accuracy_sql_expr("trade_cd_bc_bar_retracement", cd_bc),
         cd_xa_expr = leg_accuracy_sql_expr("trade_cd_xa_bar_retracement", cd_xa),
+    )
+}
+
+fn accuracy_bin_expr(accuracy_expr: &str) -> String {
+    format!(
+        "CASE
+            WHEN {accuracy_expr} <= 10 THEN '0-10'
+            WHEN {accuracy_expr} <= 20 THEN '10-20'
+            WHEN {accuracy_expr} <= 30 THEN '20-30'
+            WHEN {accuracy_expr} <= 40 THEN '30-40'
+            WHEN {accuracy_expr} <= 50 THEN '40-50'
+            WHEN {accuracy_expr} <= 60 THEN '50-60'
+            WHEN {accuracy_expr} <= 70 THEN '60-70'
+            WHEN {accuracy_expr} <= 80 THEN '70-80'
+            WHEN {accuracy_expr} <= 90 THEN '80-90'
+            ELSE '90-100'
+        END"
     )
 }
 
@@ -869,6 +985,42 @@ fn concrete_prop_family_key_expr(table_alias: &str) -> String {
         )), 16)",
         alias = table_alias,
         x_strictness = x_strictness,
+    )
+}
+
+fn concrete_pattern_family_key_expr(table_alias: &str) -> String {
+    format!(
+        "LEFT(MD5(CONCAT_WS('|',
+            'pattern-family-v1',
+            'concrete_pattern',
+            LOWER({alias}.harmonic_type),
+            LOWER({alias}.bin),
+            LOWER({alias}.size_bucket),
+            LOWER({alias}.time_bin),
+            LOWER({alias}.x_strictness)
+        )), 16)",
+        alias = table_alias,
+    )
+}
+
+fn pattern_setup_reversal_type_expr(table_alias: &str) -> String {
+    format!(
+        "CASE
+            WHEN {alias}.bullish_key_reversal THEN 'BullishKeyReversal'
+            WHEN {alias}.bearish_key_reversal THEN 'BearishKeyReversal'
+            WHEN {alias}.bullish_engulfing THEN 'BullishEngulfing'
+            WHEN {alias}.bearish_engulfing THEN 'BearishEngulfing'
+            WHEN {alias}.bullish_outside_reversal THEN 'BullishOutsideReversal'
+            WHEN {alias}.bearish_outside_reversal THEN 'BearishOutsideReversal'
+            WHEN {alias}.morning_star THEN 'MorningStar'
+            WHEN {alias}.evening_star THEN 'EveningStar'
+            WHEN {alias}.three_white_soldiers THEN 'ThreeWhiteSoldiers'
+            WHEN {alias}.three_black_crows THEN 'ThreeBlackCrows'
+            WHEN {alias}.hammer THEN 'Hammer'
+            WHEN {alias}.shooting_star THEN 'ShootingStar'
+            ELSE 'None'
+        END",
+        alias = table_alias,
     )
 }
 
@@ -2229,6 +2381,7 @@ impl Database {
                 write_pattern_setups: true,
                 write_swing_outcomes: true,
                 write_prop_outcomes: true,
+                write_forward_observations: true,
             },
         )
         .await
@@ -2276,6 +2429,7 @@ impl Database {
                 write_pattern_setups: true,
                 write_swing_outcomes: true,
                 write_prop_outcomes: true,
+                write_forward_observations: true,
             },
         )
         .await
@@ -2291,6 +2445,7 @@ impl Database {
 
     pub async fn recreate_fast_rebuild_output_tables(&self) -> Result<(), sqlx::Error> {
         for table in [
+            "pattern_forward_observations",
             "pattern_outcomes_prop",
             "pattern_setups",
             "pattern_harmonic_scores",
@@ -2321,6 +2476,9 @@ impl Database {
             tables.push("pattern_outcomes_swing");
         }
         tables.push("pattern_outcomes_prop");
+        if output_options.write_forward_observations {
+            tables.push("pattern_forward_observations");
+        }
         tables
     }
 
@@ -2359,11 +2517,15 @@ impl Database {
     pub async fn clear_generated_rollups_for_output_swap(&self) -> Result<(), sqlx::Error> {
         self.ensure_prop_strategy_family_yearly_table().await?;
         self.ensure_prop_strategy_family_summary_table().await?;
+        self.ensure_pattern_family_summary_table().await?;
+        self.ensure_pattern_family_source_summary_table().await?;
         self.ensure_dashboard_cache_state_table().await?;
 
         for table in [
             "prop_strategy_family_yearly",
             "prop_strategy_family_summary",
+            "pattern_family_summary",
+            "pattern_family_source_summary",
         ] {
             sqlx::query(&format!("TRUNCATE TABLE {table}"))
                 .execute(&self.pool)
@@ -2372,6 +2534,15 @@ impl Database {
 
         self.set_dashboard_cache_state(
             "prop_strategy_family_rollups",
+            false,
+            None,
+            Some("cleared"),
+        )
+        .await?;
+        self.set_dashboard_cache_state("pattern_family_universe", false, None, Some("cleared"))
+            .await?;
+        self.set_dashboard_cache_state(
+            "pattern_family_source_universe",
             false,
             None,
             Some("cleared"),
@@ -3802,6 +3973,110 @@ impl Database {
         self.drop_column_if_exists("pattern_outcomes_prop", "x_mode")
             .await?;
 
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS pattern_forward_observations (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                observation_id CHAR(32) NOT NULL,
+                outcome_row_id CHAR(32) NOT NULL,
+                setup_id CHAR(24) NOT NULL,
+                prop_strategy_id CHAR(16) NULL,
+                outcome_model VARCHAR(24) NOT NULL,
+                has_reversal BOOLEAN NOT NULL,
+                reversal_type VARCHAR(32) NOT NULL DEFAULT 'None',
+                reversal_detect_date DATETIME NULL,
+                reversal_bars_after_d BIGINT NULL,
+                pattern_id CHAR(24) NULL,
+                pattern_group_id VARCHAR(64) NOT NULL,
+                x_bars_left BIGINT NOT NULL DEFAULT 0,
+                x_strictness VARCHAR(16) NOT NULL,
+                symbol VARCHAR(32) NOT NULL,
+                root_symbol VARCHAR(16) NULL,
+                contract_symbol VARCHAR(32) NULL,
+                source_table VARCHAR(64) NULL,
+                source_timeframe VARCHAR(16) NULL,
+                d_date DATETIME NOT NULL,
+                d_confirm_date DATETIME NOT NULL,
+                entry_date DATETIME NOT NULL,
+                contract_week_index BIGINT NULL,
+                contract_days_from_start BIGINT NULL,
+                market VARCHAR(16) NOT NULL,
+                harmonic_type VARCHAR(24) NOT NULL DEFAULT 'Multi',
+                bin VARCHAR(16) NOT NULL DEFAULT 'Multi',
+                size_bucket VARCHAR(16) NOT NULL,
+                time_bin VARCHAR(16) NOT NULL DEFAULT 'Multi',
+                three_month_trend VARCHAR(16) NOT NULL,
+                six_month_trend VARCHAR(16) NOT NULL,
+                twelve_month_trend VARCHAR(16) NOT NULL,
+                x_length BIGINT NOT NULL,
+                a_length BIGINT NOT NULL,
+                b_length BIGINT NOT NULL,
+                c_length BIGINT NOT NULL,
+                formation_length BIGINT NOT NULL,
+                window_multiple BIGINT NOT NULL,
+                window_min_bars BIGINT NOT NULL,
+                window_max_bars BIGINT NULL,
+                bars_requested BIGINT NOT NULL,
+                bars_observed BIGINT NOT NULL,
+                window_complete BOOLEAN NOT NULL,
+                observation_start_date DATETIME NOT NULL,
+                observation_end_date DATETIME NOT NULL,
+                reference_price DOUBLE NOT NULL,
+                risk_points DOUBLE NOT NULL,
+                reward_points DOUBLE NOT NULL,
+                mfe_points DOUBLE NOT NULL,
+                mae_points DOUBLE NOT NULL,
+                mfe_r DOUBLE NULL,
+                mae_r DOUBLE NULL,
+                mfe_bar BIGINT NOT NULL,
+                mae_bar BIGINT NOT NULL,
+                mfe_price DOUBLE NOT NULL,
+                mae_price DOUBLE NOT NULL,
+                end_close_price DOUBLE NOT NULL,
+                end_close_return_points DOUBLE NOT NULL,
+                end_close_return_pct DOUBLE NULL,
+                end_close_return_r DOUBLE NULL,
+                close_return_1x_points DOUBLE NULL,
+                close_return_1x_r DOUBLE NULL,
+                close_return_2x_points DOUBLE NULL,
+                close_return_2x_r DOUBLE NULL,
+                close_return_3x_points DOUBLE NULL,
+                close_return_3x_r DOUBLE NULL,
+                close_return_5x_points DOUBLE NULL,
+                close_return_5x_r DOUBLE NULL,
+                hit_pos_0_5r_bar BIGINT NULL,
+                hit_pos_1_0r_bar BIGINT NULL,
+                hit_pos_1_5r_bar BIGINT NULL,
+                hit_pos_2_0r_bar BIGINT NULL,
+                hit_neg_0_5r_bar BIGINT NULL,
+                hit_neg_1_0r_bar BIGINT NULL,
+                hit_pos_1r_before_neg_1r BOOLEAN NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_pattern_forward_observations_observation_id (observation_id),
+                INDEX idx_pattern_forward_observations_outcome_row_id (outcome_row_id),
+                INDEX idx_pattern_forward_observations_strategy_id (
+                    prop_strategy_id,
+                    outcome_model,
+                    window_multiple
+                ),
+                INDEX idx_pattern_forward_observations_pattern_id (pattern_id, d_date),
+                INDEX idx_pattern_forward_observations_symbol_d_date (symbol, d_date),
+                INDEX idx_pattern_forward_observations_lookup (
+                    outcome_model,
+                    market,
+                    harmonic_type,
+                    bin,
+                    reversal_type,
+                    size_bucket,
+                    time_bin
+                )
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 
@@ -3814,6 +4089,7 @@ impl Database {
         self.ensure_pattern_mode_tables().await?;
 
         for sql in [
+            "TRUNCATE TABLE pattern_forward_observations",
             "TRUNCATE TABLE pattern_outcomes_prop",
             "TRUNCATE TABLE pattern_outcomes_swing",
             "TRUNCATE TABLE pattern_harmonic_scores",
@@ -4559,12 +4835,17 @@ impl Database {
         self.ensure_xabcd_patterns_table().await?;
         self.ensure_xabcd_time_columns().await?;
 
-        let bat_time_accuracy_expr = harmonic_time_accuracy_sql_expr(0.382, 0.382, 2.618, 1.618);
+        let bat_time_accuracy_expr = harmonic_time_accuracy_sql_expr(0.500, 0.382, 1.618, 0.886);
+        let alternate_bat_time_accuracy_expr =
+            harmonic_time_accuracy_sql_expr(0.382, 0.382, 2.000, 1.130);
         let butterfly_time_accuracy_expr =
-            harmonic_time_accuracy_sql_expr(0.786, 0.382, 1.27, 1.618);
-        let gartley_time_accuracy_expr = harmonic_time_accuracy_sql_expr(0.618, 0.382, 1.27, 0.786);
-        let crab_time_accuracy_expr = harmonic_time_accuracy_sql_expr(0.382, 0.382, 3.618, 2.618);
-        let shark_time_accuracy_expr = harmonic_time_accuracy_sql_expr(0.886, 0.382, 1.13, 1.618);
+            harmonic_time_accuracy_sql_expr(0.786, 0.382, 1.618, 1.272);
+        let gartley_time_accuracy_expr =
+            harmonic_time_accuracy_sql_expr(0.618, 0.382, 1.272, 0.786);
+        let crab_time_accuracy_expr = harmonic_time_accuracy_sql_expr(0.382, 0.382, 2.618, 1.618);
+        let deep_crab_time_accuracy_expr =
+            harmonic_time_accuracy_sql_expr(0.886, 0.382, 2.618, 1.618);
+        let shark_time_accuracy_expr = harmonic_time_accuracy_sql_expr(0.500, 1.130, 1.618, 0.886);
         let update_sql = format!(
             r#"
             UPDATE xabcd_patterns
@@ -4582,15 +4863,19 @@ impl Database {
                     ELSE (CAST(c_length AS DOUBLE) / CAST(x_length AS DOUBLE)) * 100.0
                 END,
                 bat_time_accuracy = {bat_time_accuracy_expr},
+                alternate_bat_time_accuracy = {alternate_bat_time_accuracy_expr},
                 butterfly_time_accuracy = {butterfly_time_accuracy_expr},
                 gartley_time_accuracy = {gartley_time_accuracy_expr},
                 crab_time_accuracy = {crab_time_accuracy_expr},
+                deep_crab_time_accuracy = {deep_crab_time_accuracy_expr},
                 shark_time_accuracy = {shark_time_accuracy_expr},
                 time_accuracy = GREATEST(
                     {bat_time_accuracy_expr},
+                    {alternate_bat_time_accuracy_expr},
                     {butterfly_time_accuracy_expr},
                     {gartley_time_accuracy_expr},
                     {crab_time_accuracy_expr},
+                    {deep_crab_time_accuracy_expr},
                     {shark_time_accuracy_expr}
                 )
             "#,
@@ -5092,6 +5377,106 @@ impl Database {
         Ok(())
     }
 
+    pub async fn ensure_pattern_family_summary_table(&self) -> Result<(), sqlx::Error> {
+        if self.table_exists("pattern_family_summary").await?
+            && !self
+                .table_column_exists("pattern_family_summary", "setup_count")
+                .await?
+        {
+            sqlx::query("DROP TABLE pattern_family_summary")
+                .execute(&self.pool)
+                .await?;
+        }
+
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS pattern_family_summary (
+                family_key CHAR(16) NOT NULL PRIMARY KEY,
+                family_name VARCHAR(64) NOT NULL,
+                family_level INT NOT NULL,
+                included_dimensions VARCHAR(255) NOT NULL,
+                outcome_model VARCHAR(24) NOT NULL,
+                market VARCHAR(16) NOT NULL,
+                harmonic_type VARCHAR(24) NOT NULL,
+                bin VARCHAR(16) NOT NULL,
+                reversal_type VARCHAR(32) NOT NULL,
+                size_bucket VARCHAR(16) NOT NULL,
+                time_bin VARCHAR(16) NOT NULL,
+                x_strictness VARCHAR(16) NOT NULL,
+                three_month_trend VARCHAR(16) NOT NULL,
+                six_month_trend VARCHAR(16) NOT NULL,
+                twelve_month_trend VARCHAR(16) NOT NULL,
+                setup_count BIGINT NOT NULL DEFAULT 0,
+                symbol_count BIGINT NOT NULL DEFAULT 0,
+                first_d_date DATE NULL,
+                last_d_date DATE NULL,
+                INDEX idx_pattern_family_summary_count (setup_count, symbol_count),
+                INDEX idx_pattern_family_summary_lookup (
+                    family_name,
+                    family_level,
+                    market,
+                    harmonic_type,
+                    bin,
+                    reversal_type
+                )
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn ensure_pattern_family_source_summary_table(&self) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS pattern_family_source_summary (
+                source_scope VARCHAR(16) NOT NULL,
+                period_year INT NOT NULL,
+                family_key CHAR(16) NOT NULL,
+                family_name VARCHAR(64) NOT NULL,
+                family_level INT NOT NULL,
+                included_dimensions VARCHAR(255) NOT NULL,
+                outcome_model VARCHAR(24) NOT NULL,
+                market VARCHAR(16) NOT NULL,
+                harmonic_type VARCHAR(24) NOT NULL,
+                bin VARCHAR(16) NOT NULL,
+                reversal_type VARCHAR(32) NOT NULL,
+                size_bucket VARCHAR(16) NOT NULL,
+                time_bin VARCHAR(16) NOT NULL,
+                x_strictness VARCHAR(16) NOT NULL,
+                three_month_trend VARCHAR(16) NOT NULL,
+                six_month_trend VARCHAR(16) NOT NULL,
+                twelve_month_trend VARCHAR(16) NOT NULL,
+                setup_count BIGINT NOT NULL DEFAULT 0,
+                symbol_count BIGINT NOT NULL DEFAULT 0,
+                first_d_date DATE NULL,
+                last_d_date DATE NULL,
+                PRIMARY KEY (source_scope, period_year, family_key),
+                INDEX idx_pattern_family_source_summary_count (
+                    source_scope,
+                    period_year,
+                    setup_count,
+                    symbol_count
+                ),
+                INDEX idx_pattern_family_source_summary_lookup (
+                    source_scope,
+                    period_year,
+                    family_name,
+                    family_level,
+                    harmonic_type,
+                    bin
+                )
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn ensure_prop_strategy_contract_week_summary_table(
         &self,
     ) -> Result<(), sqlx::Error> {
@@ -5250,6 +5635,8 @@ impl Database {
             .await?;
         self.ensure_dashboard_cache_state_table().await?;
         self.ensure_pattern_mode_tables().await?;
+        self.ensure_pattern_family_summary_table().await?;
+        self.ensure_pattern_family_source_summary_table().await?;
 
         for table in [
             "prop_strategy_family_members",
@@ -5281,6 +5668,10 @@ impl Database {
             .execute(&self.pool)
             .await?;
 
+        sqlx::query("TRUNCATE TABLE pattern_forward_observations")
+            .execute(&self.pool)
+            .await?;
+
         sqlx::query("TRUNCATE TABLE pattern_setups")
             .execute(&self.pool)
             .await?;
@@ -5290,6 +5681,14 @@ impl Database {
             .await?;
 
         sqlx::query("TRUNCATE TABLE prop_strategy_family_summary")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query("TRUNCATE TABLE pattern_family_summary")
+            .execute(&self.pool)
+            .await?;
+
+        sqlx::query("TRUNCATE TABLE pattern_family_source_summary")
             .execute(&self.pool)
             .await?;
 
@@ -5312,6 +5711,15 @@ impl Database {
 
         self.set_dashboard_cache_state(
             "prop_strategy_family_rollups",
+            false,
+            None,
+            Some("cleared"),
+        )
+        .await?;
+        self.set_dashboard_cache_state("pattern_family_universe", false, None, Some("cleared"))
+            .await?;
+        self.set_dashboard_cache_state(
+            "pattern_family_source_universe",
             false,
             None,
             Some("cleared"),
@@ -6016,6 +6424,241 @@ impl Database {
                     .push_bind(item.target_range_pct)
                     .push_bind(item.target_breaks_reversal_high)
                     .push_bind(item.target_breaks_reversal_low);
+            });
+
+            builder.build().execute(&mut *tx).await?;
+            rows_written += chunk_rows;
+        }
+
+        tx.commit().await?;
+
+        Ok(rows_written)
+    }
+
+    pub async fn sync_forward_observations(
+        &self,
+        patterns: &[PatternXABCD],
+        observations: &[PatternForwardObservation],
+        fast_rebuild: bool,
+        use_build_tables: bool,
+        replace_existing: bool,
+    ) -> Result<i64, sqlx::Error> {
+        if patterns.is_empty() && observations.is_empty() {
+            return Ok(0);
+        }
+
+        if !fast_rebuild && !use_build_tables {
+            self.ensure_pattern_mode_tables().await?;
+        }
+
+        let tables = if use_build_tables {
+            PatternOutputTables::build_tables()
+        } else {
+            PatternOutputTables::final_tables()
+        };
+
+        if replace_existing && !use_build_tables {
+            let mut setup_ids: Vec<String> = patterns
+                .iter()
+                .map(|pattern| pattern.pattern_id.clone())
+                .filter(|pattern_id| !pattern_id.is_empty())
+                .collect();
+            if setup_ids.is_empty() {
+                setup_ids.extend(observations.iter().map(|item| item.setup_id.clone()));
+            }
+            setup_ids.sort();
+            setup_ids.dedup();
+
+            for chunk in setup_ids.chunks(PATTERN_INSERT_CHUNK_SIZE) {
+                let mut builder = QueryBuilder::<MySql>::new(format!(
+                    "DELETE FROM {} WHERE setup_id IN (",
+                    tables.forward_observations
+                ));
+                let mut separated = builder.separated(", ");
+                for setup_id in chunk {
+                    separated.push_bind(setup_id);
+                }
+                separated.push_unseparated(")");
+                builder.build().execute(&self.pool).await?;
+            }
+        }
+
+        if observations.is_empty() {
+            return Ok(0);
+        }
+
+        let mut seen_observation_ids: HashSet<String> = HashSet::new();
+        let unique_observations: Vec<&PatternForwardObservation> = observations
+            .iter()
+            .filter(|item| seen_observation_ids.insert(item.observation_id.clone()))
+            .collect();
+
+        let mut rows_written = 0i64;
+        let mut tx = self.pool.begin().await?;
+
+        for chunk in unique_observations.chunks(PATTERN_INSERT_CHUNK_SIZE) {
+            let mut builder = QueryBuilder::<MySql>::new(format!(
+                r#"
+                INSERT INTO {} (
+                    observation_id,
+                    outcome_row_id,
+                    setup_id,
+                    prop_strategy_id,
+                    outcome_model,
+                    has_reversal,
+                    reversal_type,
+                    reversal_detect_date,
+                    reversal_bars_after_d,
+                    pattern_id,
+                    pattern_group_id,
+                    x_bars_left,
+                    x_strictness,
+                    symbol,
+                    root_symbol,
+                    contract_symbol,
+                    source_table,
+                    source_timeframe,
+                    d_date,
+                    d_confirm_date,
+                    entry_date,
+                    contract_week_index,
+                    contract_days_from_start,
+                    market,
+                    harmonic_type,
+                    bin,
+                    size_bucket,
+                    time_bin,
+                    three_month_trend,
+                    six_month_trend,
+                    twelve_month_trend,
+                    x_length,
+                    a_length,
+                    b_length,
+                    c_length,
+                    formation_length,
+                    window_multiple,
+                    window_min_bars,
+                    window_max_bars,
+                    bars_requested,
+                    bars_observed,
+                    window_complete,
+                    observation_start_date,
+                    observation_end_date,
+                    reference_price,
+                    risk_points,
+                    reward_points,
+                    mfe_points,
+                    mae_points,
+                    mfe_r,
+                    mae_r,
+                    mfe_bar,
+                    mae_bar,
+                    mfe_price,
+                    mae_price,
+                    end_close_price,
+                    end_close_return_points,
+                    end_close_return_pct,
+                    end_close_return_r,
+                    close_return_1x_points,
+                    close_return_1x_r,
+                    close_return_2x_points,
+                    close_return_2x_r,
+                    close_return_3x_points,
+                    close_return_3x_r,
+                    close_return_5x_points,
+                    close_return_5x_r,
+                    hit_pos_0_5r_bar,
+                    hit_pos_1_0r_bar,
+                    hit_pos_1_5r_bar,
+                    hit_pos_2_0r_bar,
+                    hit_neg_0_5r_bar,
+                    hit_neg_1_0r_bar,
+                    hit_pos_1r_before_neg_1r
+                )
+                "#,
+                tables.forward_observations
+            ));
+
+            let chunk_rows = chunk.len() as i64;
+            if chunk_rows == 0 {
+                continue;
+            }
+
+            builder.push_values(chunk.iter().copied(), |mut row, item| {
+                row.push_bind(&item.observation_id)
+                    .push_bind(&item.outcome_row_id)
+                    .push_bind(&item.setup_id)
+                    .push_bind(item.prop_strategy_id.as_deref())
+                    .push_bind(&item.outcome_model)
+                    .push_bind(item.has_reversal)
+                    .push_bind(&item.reversal_type)
+                    .push_bind(item.reversal_detect_date)
+                    .push_bind(item.reversal_bars_after_d)
+                    .push_bind(&item.pattern_id)
+                    .push_bind(&item.pattern_group_id)
+                    .push_bind(item.x_bars_left)
+                    .push_bind(&item.x_strictness)
+                    .push_bind(&item.symbol)
+                    .push_bind(item.root_symbol.as_deref())
+                    .push_bind(item.contract_symbol.as_deref())
+                    .push_bind(&item.source_table)
+                    .push_bind(&item.source_timeframe)
+                    .push_bind(item.d_date)
+                    .push_bind(item.d_confirm_date)
+                    .push_bind(item.entry_date)
+                    .push_bind(item.contract_week_index)
+                    .push_bind(item.contract_days_from_start)
+                    .push_bind(&item.market)
+                    .push_bind(&item.harmonic_type)
+                    .push_bind(&item.bin)
+                    .push_bind(&item.size_bucket)
+                    .push_bind(&item.time_bin)
+                    .push_bind(&item.three_month_trend)
+                    .push_bind(&item.six_month_trend)
+                    .push_bind(&item.twelve_month_trend)
+                    .push_bind(item.x_length)
+                    .push_bind(item.a_length)
+                    .push_bind(item.b_length)
+                    .push_bind(item.c_length)
+                    .push_bind(item.formation_length)
+                    .push_bind(item.window_multiple)
+                    .push_bind(item.window_min_bars)
+                    .push_bind(item.window_max_bars)
+                    .push_bind(item.bars_requested)
+                    .push_bind(item.bars_observed)
+                    .push_bind(item.window_complete)
+                    .push_bind(item.observation_start_date)
+                    .push_bind(item.observation_end_date)
+                    .push_bind(item.reference_price)
+                    .push_bind(item.risk_points)
+                    .push_bind(item.reward_points)
+                    .push_bind(item.mfe_points)
+                    .push_bind(item.mae_points)
+                    .push_bind(item.mfe_r)
+                    .push_bind(item.mae_r)
+                    .push_bind(item.mfe_bar)
+                    .push_bind(item.mae_bar)
+                    .push_bind(item.mfe_price)
+                    .push_bind(item.mae_price)
+                    .push_bind(item.end_close_price)
+                    .push_bind(item.end_close_return_points)
+                    .push_bind(item.end_close_return_pct)
+                    .push_bind(item.end_close_return_r)
+                    .push_bind(item.close_return_1x_points)
+                    .push_bind(item.close_return_1x_r)
+                    .push_bind(item.close_return_2x_points)
+                    .push_bind(item.close_return_2x_r)
+                    .push_bind(item.close_return_3x_points)
+                    .push_bind(item.close_return_3x_r)
+                    .push_bind(item.close_return_5x_points)
+                    .push_bind(item.close_return_5x_r)
+                    .push_bind(item.hit_pos_0_5r_bar)
+                    .push_bind(item.hit_pos_1_0r_bar)
+                    .push_bind(item.hit_pos_1_5r_bar)
+                    .push_bind(item.hit_pos_2_0r_bar)
+                    .push_bind(item.hit_neg_0_5r_bar)
+                    .push_bind(item.hit_neg_1_0r_bar)
+                    .push_bind(item.hit_pos_1r_before_neg_1r);
             });
 
             builder.build().execute(&mut *tx).await?;
@@ -7578,6 +8221,488 @@ impl Database {
             None,
             total_started.elapsed(),
             Some("total family rollup refresh"),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn refresh_pattern_family_summary(
+        &self,
+        run_id: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        let total_started = Instant::now();
+        self.ensure_pattern_family_summary_table().await?;
+        self.ensure_dashboard_cache_state_table().await?;
+
+        self.set_dashboard_cache_state("pattern_family_universe", false, None, Some("refreshing"))
+            .await?;
+
+        let phase_started = Instant::now();
+        sqlx::query("TRUNCATE TABLE pattern_family_summary")
+            .execute(&self.pool)
+            .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_pattern_family_truncate",
+            None,
+            phase_started.elapsed(),
+            Some("pattern family universe cleared"),
+        )
+        .await?;
+
+        let family_key_expr = concrete_pattern_family_key_expr("p");
+        let reversal_type_expr = pattern_setup_reversal_type_expr("ps");
+        let size_bucket_expr = structure_size_bucket_expr(
+            "CAST(COALESCE(ps.x_length, 0) + COALESCE(ps.a_length, 0) + COALESCE(ps.b_length, 0) + COALESCE(ps.c_length, 0) AS DOUBLE)",
+        );
+        let x_strictness_expr = x_strictness_expr("ps.x_bars_left", "ps.x_length");
+        let bin_expr = accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
+        let time_bin_expr = time_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
+        let three_month_trend_expr = trend_bucket_expr("ps.three_month");
+        let six_month_trend_expr = trend_bucket_expr("ps.six_month");
+        let twelve_month_trend_expr = trend_bucket_expr("ps.twelve_month");
+        let phase_started = Instant::now();
+        let sql = format!(
+            r#"
+            INSERT INTO pattern_family_summary (
+                family_key,
+                family_name,
+                family_level,
+                included_dimensions,
+                outcome_model,
+                market,
+                harmonic_type,
+                bin,
+                reversal_type,
+                size_bucket,
+                time_bin,
+                x_strictness,
+                three_month_trend,
+                six_month_trend,
+                twelve_month_trend,
+                setup_count,
+                symbol_count,
+                first_d_date,
+                last_d_date
+            )
+            SELECT
+                {family_key_expr} AS family_key,
+                'concrete_pattern' AS family_name,
+                5 AS family_level,
+                'harmonic_type,bin,size_bucket,time_bin,x_strictness' AS included_dimensions,
+                'D' AS outcome_model,
+                'All' AS market,
+                p.harmonic_type,
+                p.bin,
+                'All' AS reversal_type,
+                p.size_bucket,
+                p.time_bin,
+                p.x_strictness,
+                'All' AS three_month_trend,
+                'All' AS six_month_trend,
+                'All' AS twelve_month_trend,
+                CAST(COUNT(*) AS SIGNED) AS setup_count,
+                CAST(COUNT(DISTINCT p.symbol) AS SIGNED) AS symbol_count,
+                MIN(p.d_date) AS first_d_date,
+                MAX(p.d_date) AS last_d_date
+            FROM (
+                SELECT
+                    ps.setup_id,
+                    ps.symbol,
+                    ps.d_date,
+                    ps.market,
+                    COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) AS harmonic_type,
+                    {bin_expr} AS bin,
+                    {reversal_type_expr} AS reversal_type,
+                    {size_bucket_expr} AS size_bucket,
+                    {time_bin_expr} AS time_bin,
+                    {x_strictness_expr} AS x_strictness,
+                    {three_month_trend_expr} AS three_month_trend,
+                    {six_month_trend_expr} AS six_month_trend,
+                    {twelve_month_trend_expr} AS twelve_month_trend
+                FROM pattern_setups ps
+                LEFT JOIN (
+                    SELECT setup_id, harmonic_type, price_accuracy, time_accuracy
+                    FROM (
+                        SELECT
+                            setup_id,
+                            harmonic_type,
+                            price_accuracy,
+                            time_accuracy,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY setup_id
+                                ORDER BY price_accuracy DESC, time_accuracy DESC, harmonic_type ASC
+                            ) AS harmonic_rank
+                        FROM pattern_harmonic_scores
+                    ) ranked_harmonics
+                    WHERE harmonic_rank = 1
+                ) best_harmonic
+                  ON best_harmonic.setup_id = ps.setup_id
+            ) p
+            WHERE p.harmonic_type IS NOT NULL
+              AND p.bin IS NOT NULL
+              AND p.size_bucket IS NOT NULL
+              AND p.time_bin IS NOT NULL
+              AND p.d_date IS NOT NULL
+            GROUP BY
+                p.harmonic_type,
+                p.bin,
+                p.size_bucket,
+                p.time_bin,
+                p.x_strictness
+            "#,
+            family_key_expr = family_key_expr,
+            bin_expr = bin_expr,
+            reversal_type_expr = reversal_type_expr,
+            size_bucket_expr = size_bucket_expr,
+            time_bin_expr = time_bin_expr,
+            x_strictness_expr = x_strictness_expr,
+            three_month_trend_expr = three_month_trend_expr,
+            six_month_trend_expr = six_month_trend_expr,
+            twelve_month_trend_expr = twelve_month_trend_expr,
+        );
+        let rows_written = sqlx::query(&sql).execute(&self.pool).await?.rows_affected() as i64;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_pattern_family_summary",
+            Some(rows_written),
+            phase_started.elapsed(),
+            Some("pattern-only family universe built from pattern_setups"),
+        )
+        .await?;
+
+        self.set_dashboard_cache_state("pattern_family_universe", true, None, Some("ready"))
+            .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_pattern_family_universe",
+            Some(rows_written),
+            total_started.elapsed(),
+            Some("total pattern family universe refresh"),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn refresh_pattern_family_source_summary(
+        &self,
+        run_id: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        let total_started = Instant::now();
+        self.ensure_pattern_family_summary_table().await?;
+        self.ensure_pattern_family_source_summary_table().await?;
+        self.ensure_dashboard_cache_state_table().await?;
+
+        self.set_dashboard_cache_state("pattern_family_universe", false, None, Some("refreshing"))
+            .await?;
+        self.set_dashboard_cache_state(
+            "pattern_family_source_universe",
+            false,
+            None,
+            Some("refreshing"),
+        )
+        .await?;
+
+        let mut conn = self.pool.acquire().await?;
+
+        let phase_started = Instant::now();
+        sqlx::query("TRUNCATE TABLE pattern_family_summary")
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query("TRUNCATE TABLE pattern_family_source_summary")
+            .execute(&mut *conn)
+            .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_pattern_family_source_truncate",
+            None,
+            phase_started.elapsed(),
+            Some("pattern family universes cleared"),
+        )
+        .await?;
+
+        let phase_started = Instant::now();
+        sqlx::query("DROP TEMPORARY TABLE IF EXISTS tmp_pattern_family_best_harmonic")
+            .execute(&mut *conn)
+            .await?;
+        let setup_score_selects = harmonic_setup_score_selects();
+        let best_harmonic_sql = format!(
+            r#"
+            CREATE TEMPORARY TABLE tmp_pattern_family_best_harmonic AS
+            SELECT
+                setup_id,
+                SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        harmonic_type
+                        ORDER BY
+                            COALESCE(price_accuracy, 0.0) DESC,
+                            COALESCE(time_accuracy, 0.0) DESC,
+                            harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS harmonic_type,
+                CAST(SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        COALESCE(CAST(price_accuracy AS CHAR), '0')
+                        ORDER BY
+                            COALESCE(price_accuracy, 0.0) DESC,
+                            COALESCE(time_accuracy, 0.0) DESC,
+                            harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS DOUBLE) AS price_accuracy,
+                CAST(SUBSTRING_INDEX(
+                    GROUP_CONCAT(
+                        COALESCE(CAST(time_accuracy AS CHAR), '0')
+                        ORDER BY
+                            COALESCE(price_accuracy, 0.0) DESC,
+                            COALESCE(time_accuracy, 0.0) DESC,
+                            harmonic_type ASC
+                        SEPARATOR '|'
+                    ),
+                    '|',
+                    1
+                ) AS DOUBLE) AS time_accuracy
+            FROM (
+                {setup_score_selects}
+            ) setup_scores
+            GROUP BY setup_id
+            "#,
+            setup_score_selects = setup_score_selects,
+        );
+        sqlx::query(&best_harmonic_sql).execute(&mut *conn).await?;
+        sqlx::query(
+            "CREATE INDEX idx_tmp_pattern_family_best_setup ON tmp_pattern_family_best_harmonic (setup_id)",
+        )
+        .execute(&mut *conn)
+        .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_pattern_family_source_best_harmonic",
+            None,
+            phase_started.elapsed(),
+            Some("temporary best harmonic lookup built"),
+        )
+        .await?;
+
+        let family_key_expr = concrete_pattern_family_key_expr("g");
+        let size_bucket_expr = structure_size_bucket_expr(
+            "CAST(COALESCE(ps.x_length, 0) + COALESCE(ps.a_length, 0) + COALESCE(ps.b_length, 0) + COALESCE(ps.c_length, 0) AS DOUBLE)",
+        );
+        let x_strictness_expr = x_strictness_expr("ps.x_bars_left", "ps.x_length");
+        let bin_expr = accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
+        let time_bin_expr = time_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
+        let source_insert_started = Instant::now();
+        let sql = format!(
+            r#"
+            INSERT INTO pattern_family_source_summary (
+                source_scope,
+                period_year,
+                family_key,
+                family_name,
+                family_level,
+                included_dimensions,
+                outcome_model,
+                market,
+                harmonic_type,
+                bin,
+                reversal_type,
+                size_bucket,
+                time_bin,
+                x_strictness,
+                three_month_trend,
+                six_month_trend,
+                twelve_month_trend,
+                setup_count,
+                symbol_count,
+                first_d_date,
+                last_d_date
+            )
+            SELECT
+                g.source_scope,
+                g.period_year,
+                {family_key_expr} AS family_key,
+                'concrete_pattern' AS family_name,
+                5 AS family_level,
+                'harmonic_type,bin,size_bucket,time_bin,x_strictness' AS included_dimensions,
+                'D' AS outcome_model,
+                'All' AS market,
+                g.harmonic_type,
+                g.bin,
+                'All' AS reversal_type,
+                g.size_bucket,
+                g.time_bin,
+                g.x_strictness,
+                'All' AS three_month_trend,
+                'All' AS six_month_trend,
+                'All' AS twelve_month_trend,
+                g.setup_count,
+                g.symbol_count,
+                g.first_d_date,
+                g.last_d_date
+            FROM (
+                SELECT
+                    CASE
+                        WHEN expansion.scope_mode = 'all' THEN 'all'
+                        ELSE base.concrete_source_scope
+                    END AS source_scope,
+                    CASE
+                        WHEN expansion.period_mode = 'all' THEN 0
+                        ELSE YEAR(base.d_date)
+                    END AS period_year,
+                    base.harmonic_type,
+                    base.bin,
+                    base.size_bucket,
+                    base.time_bin,
+                    base.x_strictness,
+                    CAST(COUNT(*) AS SIGNED) AS setup_count,
+                    CAST(COUNT(DISTINCT base.symbol) AS SIGNED) AS symbol_count,
+                    DATE(MIN(base.d_date)) AS first_d_date,
+                    DATE(MAX(base.d_date)) AS last_d_date
+                FROM (
+                    SELECT
+                        CASE
+                            WHEN COALESCE(ps.source_table, '') LIKE 'futures_contract_%_candles'
+                                THEN 'futures'
+                            WHEN COALESCE(ps.source_table, '') = 'candles'
+                                AND COALESCE(ps.source_timeframe, '') = 'daily'
+                                THEN 'daily'
+                            ELSE 'other'
+                        END AS concrete_source_scope,
+                        ps.setup_id,
+                        ps.symbol,
+                        ps.d_date,
+                        COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) AS harmonic_type,
+                        {bin_expr} AS bin,
+                        {size_bucket_expr} AS size_bucket,
+                        {time_bin_expr} AS time_bin,
+                        {x_strictness_expr} AS x_strictness
+                    FROM pattern_setups ps
+                    LEFT JOIN tmp_pattern_family_best_harmonic best_harmonic
+                      ON best_harmonic.setup_id = ps.setup_id
+                    WHERE ps.d_date IS NOT NULL
+                ) base
+                JOIN (
+                    SELECT 'all' AS scope_mode, 'all' AS period_mode
+                    UNION ALL SELECT 'all', 'year'
+                    UNION ALL SELECT 'source', 'all'
+                    UNION ALL SELECT 'source', 'year'
+                ) expansion
+                WHERE (expansion.scope_mode = 'all'
+                   OR base.concrete_source_scope IN ('futures', 'daily'))
+                  AND base.harmonic_type IS NOT NULL
+                  AND base.bin IS NOT NULL
+                  AND base.size_bucket IS NOT NULL
+                  AND base.time_bin IS NOT NULL
+                GROUP BY
+                    source_scope,
+                    period_year,
+                    base.harmonic_type,
+                    base.bin,
+                    base.size_bucket,
+                    base.time_bin,
+                    base.x_strictness
+            ) g
+            WHERE g.source_scope IN ('all', 'futures', 'daily')
+            "#,
+            family_key_expr = family_key_expr,
+            bin_expr = bin_expr,
+            size_bucket_expr = size_bucket_expr,
+            time_bin_expr = time_bin_expr,
+            x_strictness_expr = x_strictness_expr,
+        );
+        let rows_written = sqlx::query(&sql).execute(&mut *conn).await?.rows_affected() as i64;
+        let phase_started = Instant::now();
+        let all_source_rows_written = sqlx::query(
+            r#"
+            INSERT INTO pattern_family_summary (
+                family_key,
+                family_name,
+                family_level,
+                included_dimensions,
+                outcome_model,
+                market,
+                harmonic_type,
+                bin,
+                reversal_type,
+                size_bucket,
+                time_bin,
+                x_strictness,
+                three_month_trend,
+                six_month_trend,
+                twelve_month_trend,
+                setup_count,
+                symbol_count,
+                first_d_date,
+                last_d_date
+            )
+            SELECT
+                family_key,
+                family_name,
+                family_level,
+                included_dimensions,
+                outcome_model,
+                market,
+                harmonic_type,
+                bin,
+                reversal_type,
+                size_bucket,
+                time_bin,
+                x_strictness,
+                three_month_trend,
+                six_month_trend,
+                twelve_month_trend,
+                setup_count,
+                symbol_count,
+                first_d_date,
+                last_d_date
+            FROM pattern_family_source_summary
+            WHERE source_scope = 'all'
+              AND period_year = 0
+            "#,
+        )
+        .execute(&mut *conn)
+        .await?
+        .rows_affected() as i64;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_pattern_family_summary_from_source",
+            Some(all_source_rows_written),
+            phase_started.elapsed(),
+            Some("all-source pattern family universe copied from source/year cache"),
+        )
+        .await?;
+
+        sqlx::query("DROP TEMPORARY TABLE IF EXISTS tmp_pattern_family_best_harmonic")
+            .execute(&mut *conn)
+            .await?;
+        drop(conn);
+
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_pattern_family_source_summary",
+            Some(rows_written),
+            source_insert_started.elapsed(),
+            Some("pattern-only family source/year universe built from pattern_setups"),
+        )
+        .await?;
+
+        self.set_dashboard_cache_state("pattern_family_universe", true, None, Some("ready"))
+            .await?;
+        self.set_dashboard_cache_state("pattern_family_source_universe", true, None, Some("ready"))
+            .await?;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_pattern_family_source_universe",
+            Some(rows_written),
+            total_started.elapsed(),
+            Some("total pattern family source/year universe refresh"),
         )
         .await?;
 

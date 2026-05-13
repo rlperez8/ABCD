@@ -11,9 +11,14 @@ import StrategyVariationPoolCard from '../features/strategies/StrategyVariationP
 import TradeSimulatorPanel from '../features/simulator/TradeSimulatorPanel';
 import StorageDashboardPage from '../features/storage/StorageDashboardPage';
 import AdminRunsPage from '../features/admin/AdminRunsPage';
+import FamilyRuleLabPage from '../features/diagnostics/FamilyRuleLabPage';
+import Phase1OutcomesPage from '../features/diagnostics/Phase1OutcomesPage';
+import PatternFamilyUniversePage from '../features/diagnostics/PatternFamilyUniversePage';
+import PatternDiscoveryPage from '../features/diagnostics/PatternDiscoveryPage';
 import {
   fetchCurrentSetupStrategies,
   fetchCurrentSetups,
+  fetchPhase1FamilyPatterns,
   fetchPatternDetail,
   fetchSetupComparison,
   fetchStrategyCandidates,
@@ -32,7 +37,10 @@ const STRATEGY_WORKSPACE_VIEW_CANVAS = 'canvas';
 const STRATEGY_WORKSPACE_VIEW_GRAPHS = 'graphs';
 const STRATEGY_WORKSPACE_VIEW_FREQUENCY = 'frequency';
 const APP_VIEW_SIMULATOR = 'simulator';
+const APP_VIEW_PATTERN_DISCOVERY = 'pattern-discovery';
+const APP_VIEW_RULE_LAB = 'rule-lab';
 const APP_VIEW_FAMILY_UNIVERSE = 'family-universe';
+const APP_VIEW_PHASE1_OUTCOMES = 'phase1-outcomes';
 const APP_VIEW_STORAGE = 'storage';
 const APP_VIEW_ADMIN = 'admin';
 const STRATEGY_LIBRARY_VIEW_MATCHED = 'matched-patterns';
@@ -293,6 +301,9 @@ const sortStrategyTrades = (patterns = []) =>
 
 const getStrategySelectionId = (strategy = {}) =>
   strategy?.propStrategyId ?? strategy?.familyKey ?? strategy?.id ?? '';
+
+const isPhase1FamilySelectionId = (selectedId = '') =>
+  /^[a-f0-9]{16}$/i.test(String(selectedId ?? '').trim());
 
 const isStrategySelectionMatch = (strategy = {}, selectedId = '') => {
   if (!strategy || !selectedId) {
@@ -562,6 +573,26 @@ const buildStrategySnapshot = ({
     rank,
   };
 };
+
+const buildPhase1FamilyStrategySnapshot = (familyKey) =>
+  buildStrategySnapshot({
+    propStrategyId: familyKey,
+    familyKey,
+    familyName: `Phase 1 family ${familyKey}`,
+    outcomeModel: 'phase1-family',
+    market: 'All',
+    harmonicType: 'Phase 1',
+    bin: 'Pattern',
+    reversalType: 'None',
+    sizeBucket: 'Family',
+    timeBin: 'All',
+    xStrictness: null,
+    comparison: buildEmptyStrategyComparison(),
+  });
+
+const isPhase1FamilyStrategy = (strategy = null) =>
+  strategy?.outcomeModel === 'phase1-family' ||
+  isPhase1FamilySelectionId(strategy?.familyKey ?? strategy?.propStrategyId ?? strategy?.id ?? '');
 
 const getPatternStrategyDefinition = (pattern = {}) => {
   const match = getClosestPatternMatch(pattern);
@@ -927,12 +958,21 @@ const App = () => {
         (strategyLibraryPatternView === STRATEGY_LIBRARY_VIEW_CURRENT && isLoadingCurrentSetups)
       : isLoadingCurrentSetupStrategies;
   const selectedStrategy = useMemo(
-    () =>
-      strategyTableSnapshots.find((strategy) =>
+    () => {
+      const matchedStrategy = strategyTableSnapshots.find((strategy) =>
         isStrategySelectionMatch(strategy, selectedStrategyId)
-      ) ??
-      strategyTableSnapshots[0] ??
-      null,
+      );
+
+      if (matchedStrategy) {
+        return matchedStrategy;
+      }
+
+      if (isPhase1FamilySelectionId(selectedStrategyId)) {
+        return buildPhase1FamilyStrategySnapshot(selectedStrategyId);
+      }
+
+      return strategyTableSnapshots[0] ?? null;
+    },
     [selectedStrategyId, strategyTableSnapshots]
   );
   const selectedStrategyForInsights = useMemo(() => {
@@ -953,8 +993,13 @@ const App = () => {
   useEffect(() => {
     if (
       activeStrategyWorkspaceView !== STRATEGY_WORKSPACE_VIEW_GRAPHS ||
-      !selectedStrategy
+      !selectedStrategy ||
+      isPhase1FamilyStrategy(selectedStrategy)
     ) {
+      if (isPhase1FamilyStrategy(selectedStrategy)) {
+        setStrategyContractWeeks([]);
+        setLoadingStrategyContractWeeks(false);
+      }
       return;
     }
 
@@ -989,7 +1034,7 @@ const App = () => {
   }, [activeStrategyWorkspaceView, selectedStrategy]);
   useEffect(() => {
     if (!strategyTableSnapshots.length) {
-      if (selectedStrategyId) {
+      if (selectedStrategyId && !isPhase1FamilySelectionId(selectedStrategyId)) {
         setSelectedStrategyId('');
       }
       return;
@@ -1000,7 +1045,10 @@ const App = () => {
       return;
     }
 
-    if (!strategyTableSnapshots.some((strategy) => isStrategySelectionMatch(strategy, selectedStrategyId))) {
+    if (
+      !isPhase1FamilySelectionId(selectedStrategyId) &&
+      !strategyTableSnapshots.some((strategy) => isStrategySelectionMatch(strategy, selectedStrategyId))
+    ) {
       setSelectedStrategyId(getStrategySelectionId(strategyTableSnapshots[0]));
     }
   }, [selectedStrategyId, strategyTableSnapshots]);
@@ -1012,7 +1060,9 @@ const App = () => {
         ? JSON.stringify({
             strategyMode,
             propOutcomeMode,
+            source: isPhase1FamilyStrategy(selectedStrategy) ? 'phase1-family' : 'strategy-trades',
             propStrategyId: selectedStrategy.propStrategyId ?? selectedStrategy.id,
+            familyKey: selectedStrategy.familyKey ?? null,
             strategyId: selectedStrategy.id,
             startDate: strategyTradeStartDate,
           })
@@ -1367,7 +1417,10 @@ const App = () => {
             );
           }
           setSelectedStrategyId((currentSelected) => {
-            if (nextSnapshots.some((strategy) => isStrategySelectionMatch(strategy, currentSelected))) {
+            if (
+              isPhase1FamilySelectionId(currentSelected) ||
+              nextSnapshots.some((strategy) => isStrategySelectionMatch(strategy, currentSelected))
+            ) {
               return currentSelected;
             }
 
@@ -1402,7 +1455,10 @@ const App = () => {
 
   useEffect(() => {
     setSelectedStrategyId((currentSelected) => {
-      if (strategyTableSnapshots.some((strategy) => isStrategySelectionMatch(strategy, currentSelected))) {
+      if (
+        isPhase1FamilySelectionId(currentSelected) ||
+        strategyTableSnapshots.some((strategy) => isStrategySelectionMatch(strategy, currentSelected))
+      ) {
         return currentSelected;
       }
 
@@ -1414,6 +1470,15 @@ const App = () => {
     if (!selectedStrategy) {
       setHydratingStrategy(false);
       setSelectedStrategyComparison(null);
+      return undefined;
+    }
+
+    if (isPhase1FamilyStrategy(selectedStrategy)) {
+      setHydratingStrategy(false);
+      setSelectedStrategyComparison({
+        strategyId: selectedStrategy.id,
+        comparison: selectedStrategy.comparison ?? buildEmptyStrategyComparison(),
+      });
       return undefined;
     }
 
@@ -1533,15 +1598,28 @@ const App = () => {
       try {
         setLoadingStrategyTrades(true);
         setFetchingMoreStrategyTrades(false);
-        const data = await fetchStrategyTrades(selectedStrategy, {
-          limit: strategyTradePageSize,
-          offset: 0,
-          includeCount: false,
-        }, {
-          propMode: strategyMode === STRATEGY_MODE_PROP,
-          propOutcomeMode,
-          firstStartDate: strategyTradeStartDate,
-        });
+        const data = isPhase1FamilyStrategy(selectedStrategy)
+          ? await fetchPhase1FamilyPatterns(
+              {
+                familyKey:
+                  selectedStrategy.familyKey ?? selectedStrategy.propStrategyId ?? selectedStrategy.id,
+                sourceScope: 'futures',
+              },
+              {
+                limit: strategyTradePageSize,
+                offset: 0,
+                includeCount: true,
+              }
+            )
+          : await fetchStrategyTrades(selectedStrategy, {
+              limit: strategyTradePageSize,
+              offset: 0,
+              includeCount: false,
+            }, {
+              propMode: strategyMode === STRATEGY_MODE_PROP,
+              propOutcomeMode,
+              firstStartDate: strategyTradeStartDate,
+            });
 
         if (isCancelled || latestStrategyTradesQueryKeyRef.current !== strategyTradesQueryKey) {
           return;
@@ -1817,15 +1895,28 @@ const App = () => {
     setFetchingMoreStrategyTrades(true);
 
     try {
-      const data = await fetchStrategyTrades(selectedStrategy, {
-        limit: strategyTradePageSize,
-        offset: nextOffset,
-        includeCount: false,
-      }, {
-        propMode: true,
-        propOutcomeMode,
-        firstStartDate: strategyTradeStartDate,
-      });
+      const data = isPhase1FamilyStrategy(selectedStrategy)
+        ? await fetchPhase1FamilyPatterns(
+            {
+              familyKey:
+                selectedStrategy.familyKey ?? selectedStrategy.propStrategyId ?? selectedStrategy.id,
+              sourceScope: 'futures',
+            },
+            {
+              limit: strategyTradePageSize,
+              offset: nextOffset,
+              includeCount: false,
+            }
+          )
+        : await fetchStrategyTrades(selectedStrategy, {
+            limit: strategyTradePageSize,
+            offset: nextOffset,
+            includeCount: false,
+          }, {
+            propMode: true,
+            propOutcomeMode,
+            firstStartDate: strategyTradeStartDate,
+          });
 
       if (latestStrategyTradesQueryKeyRef.current !== requestKey) {
         return;
@@ -1845,6 +1936,13 @@ const App = () => {
       }
     }
   };
+
+  const updateSimulatorPatternForChart = useCallback(
+    async (selectedPattern, setChartDataValue = setStrategyChartData) => {
+      return updateStrategyPatternForChart(selectedPattern, setChartDataValue);
+    },
+    [updateStrategyPatternForChart]
+  );
 
   const simulatorPatternRows = useMemo(() => {
     const filteredStrategyTrades = strategyTrades.filter((pattern) =>
@@ -2117,6 +2215,39 @@ const App = () => {
               <button
                 type="button"
                 className={
+                  activeAppView === APP_VIEW_PHASE1_OUTCOMES
+                    ? 'station-button station-button--active'
+                    : 'station-button'
+                }
+                onClick={() => setActiveAppView(APP_VIEW_PHASE1_OUTCOMES)}
+              >
+                Phase 1 Outcomes
+              </button>
+              <button
+                type="button"
+                className={
+                  activeAppView === APP_VIEW_PATTERN_DISCOVERY
+                    ? 'station-button station-button--active'
+                    : 'station-button'
+                }
+                onClick={() => setActiveAppView(APP_VIEW_PATTERN_DISCOVERY)}
+              >
+                Pattern Discovery
+              </button>
+              <button
+                type="button"
+                className={
+                  activeAppView === APP_VIEW_RULE_LAB
+                    ? 'station-button station-button--active'
+                    : 'station-button'
+                }
+                onClick={() => setActiveAppView(APP_VIEW_RULE_LAB)}
+              >
+                Rule Lab
+              </button>
+              <button
+                type="button"
+                className={
                   activeAppView === APP_VIEW_STORAGE
                     ? 'station-button station-button--active'
                     : 'station-button'
@@ -2143,6 +2274,31 @@ const App = () => {
             <StorageDashboardPage />
           ) : activeAppView === APP_VIEW_ADMIN ? (
             <AdminRunsPage />
+          ) : activeAppView === APP_VIEW_FAMILY_UNIVERSE ? (
+            <PatternFamilyUniversePage />
+          ) : activeAppView === APP_VIEW_PHASE1_OUTCOMES ? (
+            <Phase1OutcomesPage
+              onOpenSimulatorFamily={(familyId) => {
+                setSelectedStrategyId(familyId);
+                setActiveAppView(APP_VIEW_SIMULATOR);
+              }}
+            />
+          ) : activeAppView === APP_VIEW_PATTERN_DISCOVERY ? (
+            <PatternDiscoveryPage
+              initialFamily={selectedStrategy}
+              onOpenSimulatorFamily={(familyId) => {
+                setSelectedStrategyId(familyId);
+                setActiveAppView(APP_VIEW_SIMULATOR);
+              }}
+            />
+          ) : activeAppView === APP_VIEW_RULE_LAB ? (
+            <FamilyRuleLabPage
+              initialFamily={selectedStrategy}
+              onOpenSimulatorFamily={(familyId) => {
+                setSelectedStrategyId(familyId);
+                setActiveAppView(APP_VIEW_SIMULATOR);
+              }}
+            />
           ) : activeAppView === APP_VIEW_SIMULATOR ? (
             <div className="simulator-page-shell">
               <div className="simulator-page-stack">
@@ -2193,7 +2349,7 @@ const App = () => {
                     selectedRowIndex={selectedStrategyTradeIndex}
                     selectedPatternKey={selectedStrategyTradeKey}
                     setSelectedRowIndex={setSelectedStrategyTradeIndex}
-                    updateSelectedPattern={updateStrategyPatternForChart}
+                    updateSelectedPattern={updateSimulatorPatternForChart}
                   />
                 </div>
               </div>

@@ -58,6 +58,10 @@ impl Accuracies {
     }
 
     pub fn leg_accuracy(current_leg: f64, target_leg: f64) -> f64 {
+        if target_leg <= f64::EPSILON {
+            return 0.0;
+        }
+
         // Assume current_leg is in "percent" form (like 42 for 0.42)
         let current_leg_fraction = current_leg / 100.0;
         let accuracy = 100.0 * (1.0 - (current_leg_fraction - target_leg).abs() / target_leg);
@@ -66,14 +70,23 @@ impl Accuracies {
 
     fn harmonic_targets(harmonic_type: HarmonicType) -> Option<(f64, f64, f64, f64)> {
         match harmonic_type {
-            HarmonicType::Bat => Some((0.382, 0.382, 2.618, 1.618)),
+            HarmonicType::Bat => Some((0.500, 0.382, 1.618, 0.886)),
             HarmonicType::AlternateBat => Some((0.382, 0.382, 2.0, 1.13)),
-            HarmonicType::Butterfly => Some((0.786, 0.382, 1.27, 1.618)),
-            HarmonicType::Gartley => Some((0.618, 0.382, 1.27, 0.786)),
-            HarmonicType::Crab => Some((0.382, 0.382, 3.618, 2.618)),
+            HarmonicType::Butterfly => Some((0.786, 0.382, 1.618, 1.272)),
+            HarmonicType::Gartley => Some((0.618, 0.382, 1.272, 0.786)),
+            HarmonicType::Crab => Some((0.382, 0.382, 2.618, 1.618)),
             HarmonicType::DeepCrab => Some((0.886, 0.382, 2.618, 1.618)),
-            HarmonicType::Shark => Some((0.886, 0.382, 1.13, 1.618)),
+            HarmonicType::Shark => Some((0.500, 1.13, 1.618, 0.886)),
             _ => None,
+        }
+    }
+
+    fn d_completion_price_retracement(pattern: &PatternXABCD) -> f64 {
+        let xa_length = (pattern.a.min_max - pattern.x.min_max).abs();
+        if xa_length <= f64::EPSILON {
+            0.0
+        } else {
+            ((pattern.a.min_max - pattern.d.min_max).abs() / xa_length) * 100.0
         }
     }
 
@@ -95,7 +108,8 @@ impl Accuracies {
         harmonic_type: HarmonicType,
         targets: (f64, f64, f64, f64),
     ) -> (PatternAccuracy, TimeAccuracy) {
-        let (ab_xa_target, bc_ab_target, cd_bc_target, cd_xa_target) = targets;
+        let (ab_xa_target, bc_ab_target, cd_bc_target, d_completion_target) = targets;
+        let d_completion_price_retracement = Self::d_completion_price_retracement(pattern);
 
         let mut price_accuracy = PatternAccuracy::default();
         price_accuracy.ab_xa = Self::leg_accuracy(pattern.trade.ab_price_retracement, ab_xa_target);
@@ -103,7 +117,7 @@ impl Accuracies {
         price_accuracy.cd_bc =
             Self::leg_accuracy(pattern.trade.cd_bc_price_retracement, cd_bc_target);
         price_accuracy.cd_xa =
-            Self::leg_accuracy(pattern.trade.cd_xa_price_retracement, cd_xa_target);
+            Self::leg_accuracy(d_completion_price_retracement, d_completion_target);
         price_accuracy.pattern_accuracy = (price_accuracy.ab_xa
             + price_accuracy.bc_ab
             + price_accuracy.cd_bc
@@ -115,7 +129,8 @@ impl Accuracies {
         time_accuracy.ab_xa = Self::leg_accuracy(pattern.trade.ab_bar_retracement, ab_xa_target);
         time_accuracy.bc_ab = Self::leg_accuracy(pattern.trade.bc_bar_retracement, bc_ab_target);
         time_accuracy.cd_bc = Self::leg_accuracy(pattern.trade.cd_bc_bar_retracement, cd_bc_target);
-        time_accuracy.cd_xa = Self::leg_accuracy(pattern.trade.cd_xa_bar_retracement, cd_xa_target);
+        time_accuracy.cd_xa =
+            Self::leg_accuracy(pattern.trade.cd_xa_bar_retracement, d_completion_target);
         time_accuracy.time_accuracy =
             (time_accuracy.ab_xa + time_accuracy.bc_ab + time_accuracy.cd_bc + time_accuracy.cd_xa)
                 / 4.0;
@@ -145,6 +160,8 @@ impl Accuracies {
 
     pub fn get_accuracy(&self, mut xabcd_patterns: Vec<PatternXABCD>) -> Vec<PatternXABCD> {
         for pattern in xabcd_patterns.iter_mut() {
+            let mut accuracies = Accuracies::new();
+            let mut time_accuracies = TimeAccuracies::new();
             let mut dominant = None;
 
             for harmonic_type in [
@@ -162,16 +179,13 @@ impl Accuracies {
 
                 let (price_accuracy, time_accuracy) =
                     Self::harmonic_accuracy(pattern, harmonic_type, targets);
+                accuracies.set_harmonic_accuracy(harmonic_type, price_accuracy);
+                time_accuracies.set_harmonic_accuracy(harmonic_type, time_accuracy);
                 dominant =
                     Self::better_dominant(dominant, (harmonic_type, price_accuracy, time_accuracy));
             }
 
-            let mut accuracies = Accuracies::new();
-            let mut time_accuracies = TimeAccuracies::new();
-            if let Some((harmonic_type, price_accuracy, time_accuracy)) = dominant {
-                accuracies.set_harmonic_accuracy(harmonic_type, price_accuracy);
-                time_accuracies.set_harmonic_accuracy(harmonic_type, time_accuracy);
-            }
+            let _ = dominant;
             pattern.accuracies = accuracies;
             pattern.time_accuracies = time_accuracies;
             pattern.refresh_pattern_id();

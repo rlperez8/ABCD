@@ -6,18 +6,27 @@ const MAINTENANCE_ACTIONS = [
   {
     action: 'rebuild_indexes',
     title: 'Rebuild Indexes',
-    description: 'Restore generated engine lookup indexes after fast scans.',
+    description: 'Restore lookup speed after fast scans.',
+    tone: 'blue',
   },
   {
     action: 'refresh_rollups',
     title: 'Refresh Rollups',
     description: 'Rebuild family, yearly, contract-week, and cadence summaries.',
+    tone: 'green',
   },
   {
     action: 'refresh_storage',
     title: 'Refresh Storage',
-    description: 'Update cached row counts, table sizes, and storage tree breakdowns.',
+    description: 'Update row counts, table sizes, and storage breakdowns.',
+    tone: 'violet',
   },
+];
+const SCAN_TOGGLES = [
+  ['defaultFitOnly', 'Default Fit'],
+  ['skipProcessedSymbols', 'Skip Processed'],
+  ['deferRebuildIndexes', 'Defer Indexes'],
+  ['skipPropFamilySummaries', 'Skip Rollups'],
 ];
 
 const formatNumber = (value, maximumFractionDigits = 0) => {
@@ -29,6 +38,23 @@ const formatNumber = (value, maximumFractionDigits = 0) => {
   return new Intl.NumberFormat('en-US', {
     maximumFractionDigits,
   }).format(numericValue);
+};
+
+const formatBytes = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return '0 B';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = numericValue;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${formatNumber(size, size >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 };
 
 const formatDuration = (durationMs) => {
@@ -48,15 +74,71 @@ const formatDuration = (durationMs) => {
   if (seconds < 60) {
     return `${formatNumber(seconds, 1)}s`;
   }
+  if (seconds < 3600) {
+    return `${formatNumber(seconds / 60, 1)}m`;
+  }
 
-  return `${formatNumber(seconds / 60, 1)}m`;
+  return `${formatNumber(seconds / 3600, 1)}h`;
 };
+
+const formatDateTime = (value) => {
+  if (!value) {
+    return 'Unknown';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const formatActionTitle = (value = '') =>
+  String(value || 'Unknown')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+const operationScope = (operation = {}) =>
+  [operation.root_symbol, operation.contract_symbol, operation.source_timeframe]
+    .filter(Boolean)
+    .join(' / ') || 'System';
 
 const AdminMetricCard = ({ label, value, subvalue = null, tone = 'neutral' }) => (
   <div className={`admin-metric-card admin-metric-card--${tone}`}>
     <span>{label}</span>
     <strong>{value}</strong>
     {subvalue ? <small>{subvalue}</small> : null}
+  </div>
+);
+
+const AdminPanelHead = ({ eyebrow, title, detail = null }) => (
+  <div className="admin-panel-head">
+    <div>
+      <span>{eyebrow}</span>
+      <strong>{title}</strong>
+    </div>
+    {detail ? <small>{detail}</small> : null}
+  </div>
+);
+
+const AdminActionCard = ({ action, onRun, disabled }) => (
+  <div className={`admin-action-card admin-action-card--${action.tone}`}>
+    <div>
+      <span>{action.action}</span>
+      <strong>{action.title}</strong>
+      <small>{action.description}</small>
+    </div>
+    <button type="button" onClick={() => onRun(action.action)} disabled={disabled}>
+      Run
+    </button>
   </div>
 );
 
@@ -76,7 +158,6 @@ const AdminRunsPage = () => {
     deferRebuildIndexes: true,
     skipPropFamilySummaries: true,
   });
-  const [clearConfirmText, setClearConfirmText] = useState('');
 
   const loadStatus = useCallback(async ({ quiet = false } = {}) => {
     try {
@@ -113,8 +194,21 @@ const AdminRunsPage = () => {
     () => (status?.operations ?? []).filter((operation) => operation.status === 'running'),
     [status]
   );
+  const runningEngineScan = useMemo(
+    () => runningOperations.find((operation) => operation.action === 'run_engine_scan') ?? null,
+    [runningOperations]
+  );
   const latestOperation = status?.operations?.[0] ?? null;
   const latestPhase = status?.engine_phases?.[0] ?? null;
+  const engineProgress = status?.engine_progress ?? null;
+  const tableSnapshots = status?.table_snapshots ?? [];
+  const cacheStates = status?.cache_states ?? [];
+  const activeOperation = runningOperations[0] ?? latestOperation;
+  const latestLog =
+    latestOperation?.error_message ||
+    latestOperation?.output_tail ||
+    latestOperation?.command_text ||
+    'No output yet.';
 
   const updateScanConfig = (key, value) => {
     setScanConfig((current) => ({
@@ -132,6 +226,10 @@ const AdminRunsPage = () => {
         setErrorMessage('Action failed to start.');
         return;
       }
+      if (result.error) {
+        setErrorMessage(result.error);
+        return;
+      }
 
       await loadStatus({ quiet: true });
     } finally {
@@ -144,187 +242,235 @@ const AdminRunsPage = () => {
   };
 
   const clearEngine = () => {
-    startAction('clear_engine', { confirmText: clearConfirmText });
+    startAction('clear_engine', { confirmText: 'CLEAR ENGINE' });
   };
 
   return (
     <div className="admin-runs-page">
-      <div className="admin-runs-header">
-        <div>
-          <span>Local Operations</span>
-          <strong>Admin Runs</strong>
-          <small>
-            {lastLoadedAt ? `Last refresh ${lastLoadedAt.toLocaleTimeString()}` : 'Waiting for status'}
-          </small>
+      <header className="admin-command-hero">
+        <div className="admin-command-hero-main">
+          <span
+            className={`admin-live-pill ${
+              runningOperations.length ? 'admin-live-pill--running' : 'admin-live-pill--idle'
+            }`}
+          >
+            {runningOperations.length ? 'Running' : 'Idle'}
+          </span>
+          <h1>Admin Runs</h1>
+          <p>{status?.abcd_dir ?? 'Set ABCD_ADMIN_ABCD_DIR if needed'}</p>
         </div>
-        <button type="button" onClick={() => loadStatus()} disabled={isLoading}>
-          {isLoading ? 'Refreshing' : 'Refresh'}
-        </button>
-      </div>
+        <div className="admin-command-hero-side">
+          <div>
+            <span>Active Job</span>
+            <strong>{activeOperation ? formatActionTitle(activeOperation.action) : 'None'}</strong>
+            <small>
+              {activeOperation
+                ? `${activeOperation.status} / ${formatDuration(activeOperation.duration_ms)}`
+                : 'No operation history'}
+            </small>
+          </div>
+          <button type="button" onClick={() => loadStatus()} disabled={isLoading}>
+            {isLoading ? 'Refreshing' : 'Refresh'}
+          </button>
+        </div>
+      </header>
 
       {errorMessage ? <div className="admin-runs-error">{errorMessage}</div> : null}
 
-      <div className="admin-metric-grid">
+      <section className="admin-metric-grid">
         <AdminMetricCard
           label="Running"
           value={formatNumber(runningOperations.length)}
-          subvalue={runningOperations[0]?.action ?? 'No active admin job'}
+          subvalue={runningOperations[0] ? formatActionTitle(runningOperations[0].action) : 'No active job'}
           tone={runningOperations.length ? 'amber' : 'green'}
         />
         <AdminMetricCard
           label="Latest Operation"
           value={latestOperation?.status ?? 'None'}
-          subvalue={latestOperation?.action ?? 'No operation history'}
+          subvalue={latestOperation ? formatActionTitle(latestOperation.action) : 'No operation history'}
           tone={latestOperation?.status === 'failed' ? 'red' : 'blue'}
         />
         <AdminMetricCard
-          label="Latest Engine Phase"
+          label="Latest Phase"
           value={latestPhase?.symbol || latestPhase?.phase || 'None'}
           subvalue={latestPhase ? `${latestPhase.phase} / ${formatDuration(latestPhase.duration_ms)}` : null}
           tone="violet"
         />
         <AdminMetricCard
-          label="ABCD Path"
-          value={status?.abcd_dir ? 'Ready' : 'Missing'}
-          subvalue={status?.abcd_dir ?? 'Set ABCD_ADMIN_ABCD_DIR if needed'}
-          tone={status?.abcd_dir ? 'green' : 'red'}
+          label="Storage Tables"
+          value={formatNumber(tableSnapshots.length)}
+          subvalue={lastLoadedAt ? `Updated ${lastLoadedAt.toLocaleTimeString()}` : 'Waiting for status'}
+          tone="neutral"
         />
-      </div>
+      </section>
 
-      <div className="admin-operations-grid">
-        <section className="admin-panel admin-panel--maintenance">
-          <div className="admin-panel-head">
-            <span>Maintenance</span>
-            <strong>Safe Actions</strong>
+      {engineProgress && runningEngineScan ? (
+        <section className="admin-progress-panel">
+          <div className="admin-progress-copy">
+            <span>Engine Progress</span>
+            <strong>
+              {formatNumber(engineProgress.completed_symbols)} / {formatNumber(engineProgress.total_symbols)} done
+            </strong>
+            <small>
+              {engineProgress.latest_symbol || engineProgress.latest_phase || 'Waiting for phase data'}
+              {' / '}
+              elapsed {formatDuration(engineProgress.elapsed_ms)}
+              {' / '}
+              left{' '}
+              {engineProgress.estimated_remaining_ms === null ||
+              engineProgress.estimated_remaining_ms === undefined
+                ? 'estimating'
+                : formatDuration(engineProgress.estimated_remaining_ms)}
+            </small>
           </div>
-          <div className="admin-action-list">
-            {MAINTENANCE_ACTIONS.map((action) => (
-              <div key={action.action} className="admin-action-row">
-                <div>
-                  <strong>{action.title}</strong>
-                  <span>{action.description}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => startAction(action.action)}
-                  disabled={isSubmitting}
-                >
-                  Run
-                </button>
-              </div>
-            ))}
+          <div className="admin-progress-meter" aria-label="Engine scan progress">
+            <span style={{ width: `${Math.min(100, Math.max(0, engineProgress.percent_complete))}%` }} />
           </div>
+          <strong className="admin-progress-percent">
+            {formatNumber(engineProgress.percent_complete, 1)}%
+          </strong>
         </section>
+      ) : null}
 
+      <main className="admin-dashboard-grid">
         <section className="admin-panel admin-panel--scan">
-          <div className="admin-panel-head">
-            <span>Scan Runner</span>
-            <strong>Engine Scan</strong>
-          </div>
+          <AdminPanelHead eyebrow="Scan Runner" title="Engine Scan" detail={scanConfig.sourceTimeframe} />
 
-          <div className="admin-form-grid">
-            <label>
-              <span>Root</span>
-              <input
-                type="text"
-                placeholder="All roots"
-                value={scanConfig.rootSymbol}
-                onChange={(event) => updateScanConfig('rootSymbol', event.target.value)}
-              />
-            </label>
-            <label>
-              <span>Contract</span>
-              <input
-                type="text"
-                placeholder="Optional"
-                value={scanConfig.contractSymbol}
-                onChange={(event) => updateScanConfig('contractSymbol', event.target.value)}
-              />
-            </label>
-            <label>
-              <span>Timeframe</span>
-              <select
-                value={scanConfig.sourceTimeframe}
-                onChange={(event) => updateScanConfig('sourceTimeframe', event.target.value)}
-              >
-                {TIMEFRAME_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Concurrency</span>
-              <input
-                type="number"
-                min="1"
-                max="16"
-                step="1"
-                value={scanConfig.scanConcurrency}
-                onChange={(event) => updateScanConfig('scanConcurrency', event.target.value)}
-              />
-            </label>
-          </div>
-
-          <div className="admin-toggle-grid">
-            {[
-              ['defaultFitOnly', 'Default Fit'],
-              ['skipProcessedSymbols', 'Skip Processed'],
-              ['deferRebuildIndexes', 'Defer Indexes'],
-              ['skipPropFamilySummaries', 'Skip Rollups'],
-            ].map(([key, label]) => (
-              <label key={key} className="admin-checkbox">
+          <div className="admin-scan-layout">
+            <div className="admin-form-grid">
+              <label>
+                <span>Root</span>
                 <input
-                  type="checkbox"
-                  checked={Boolean(scanConfig[key])}
-                  onChange={(event) => updateScanConfig(key, event.target.checked)}
+                  type="text"
+                  placeholder="All roots"
+                  value={scanConfig.rootSymbol}
+                  onChange={(event) => updateScanConfig('rootSymbol', event.target.value)}
                 />
-                <span>{label}</span>
               </label>
-            ))}
-          </div>
+              <label>
+                <span>Contract</span>
+                <input
+                  type="text"
+                  placeholder="Optional"
+                  value={scanConfig.contractSymbol}
+                  onChange={(event) => updateScanConfig('contractSymbol', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Timeframe</span>
+                <select
+                  value={scanConfig.sourceTimeframe}
+                  onChange={(event) => updateScanConfig('sourceTimeframe', event.target.value)}
+                >
+                  {TIMEFRAME_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Concurrency</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="16"
+                  step="1"
+                  value={scanConfig.scanConcurrency}
+                  onChange={(event) => updateScanConfig('scanConcurrency', event.target.value)}
+                />
+              </label>
+            </div>
 
-          <button
-            type="button"
-            className="admin-primary-button"
-            onClick={startScan}
-            disabled={isSubmitting}
-          >
-            Run Scan
-          </button>
-        </section>
+            <div className="admin-toggle-grid">
+              {SCAN_TOGGLES.map(([key, label]) => (
+                <label key={key} className="admin-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(scanConfig[key])}
+                    onChange={(event) => updateScanConfig(key, event.target.checked)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
 
-        <section className="admin-panel admin-panel--danger">
-          <div className="admin-panel-head">
-            <span>Danger Zone</span>
-            <strong>Clear Engine</strong>
-          </div>
-          <div className="admin-danger-body">
-            <p>Clears generated engine tables and rollups. Type CLEAR ENGINE to enable.</p>
-            <input
-              type="text"
-              value={clearConfirmText}
-              onChange={(event) => setClearConfirmText(event.target.value)}
-              placeholder="CLEAR ENGINE"
-            />
             <button
               type="button"
-              onClick={clearEngine}
-              disabled={isSubmitting || clearConfirmText !== 'CLEAR ENGINE'}
+              className="admin-primary-button"
+              onClick={startScan}
+              disabled={isSubmitting}
             >
-              Clear Engine Tables
+              Run Engine Scan
             </button>
           </div>
         </section>
-      </div>
 
-      <div className="admin-runs-grid">
-        <section className="admin-panel admin-panel--history">
-          <div className="admin-panel-head">
-            <span>History</span>
-            <strong>Operation Runs</strong>
+        <aside className="admin-side-stack">
+          <section className="admin-panel admin-panel--maintenance">
+            <AdminPanelHead eyebrow="Maintenance" title="Actions" />
+            <div className="admin-action-list">
+              {MAINTENANCE_ACTIONS.map((action) => (
+                <AdminActionCard
+                  action={action}
+                  key={action.action}
+                  onRun={startAction}
+                  disabled={isSubmitting}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section className="admin-panel admin-panel--danger">
+            <AdminPanelHead eyebrow="Danger Zone" title="Clear Engine" />
+            <div className="admin-danger-body">
+              <p>Generated engine tables, forward observations, and rollups.</p>
+              <button type="button" onClick={clearEngine} disabled={isSubmitting}>
+                Clear Engine
+              </button>
+            </div>
+          </section>
+        </aside>
+
+        <section className="admin-panel admin-panel--tables">
+          <AdminPanelHead eyebrow="Storage" title="Table Health" detail={`${tableSnapshots.length} tracked`} />
+          <div className="admin-table-card-grid">
+            {tableSnapshots.length ? (
+              tableSnapshots.map((table) => (
+                <div className="admin-table-card" key={table.table_name}>
+                  <span>{table.table_name}</span>
+                  <strong>{formatNumber(table.exact_rows)}</strong>
+                  <small>{formatBytes(table.total_bytes)} / {formatDateTime(table.refreshed_at)}</small>
+                </div>
+              ))
+            ) : (
+              <div className="admin-empty-state">No storage snapshots yet.</div>
+            )}
           </div>
+        </section>
+
+        <section className="admin-panel admin-panel--cache">
+          <AdminPanelHead eyebrow="Caches" title="Readiness" detail={`${cacheStates.length} states`} />
+          <div className="admin-cache-list">
+            {cacheStates.length ? (
+              cacheStates.map((cache) => (
+                <div className="admin-cache-row" key={cache.cache_name}>
+                  <span className={cache.is_ready ? 'admin-cache-dot admin-cache-dot--ready' : 'admin-cache-dot'} />
+                  <div>
+                    <strong>{cache.cache_name}</strong>
+                    <small>{cache.note || (cache.is_ready ? 'ready' : 'not ready')}</small>
+                  </div>
+                  <time>{formatDateTime(cache.updated_at)}</time>
+                </div>
+              ))
+            ) : (
+              <div className="admin-empty-state">No cache state rows yet.</div>
+            )}
+          </div>
+        </section>
+
+        <section className="admin-panel admin-panel--history">
+          <AdminPanelHead eyebrow="History" title="Operation Runs" />
           <div className="admin-table-shell">
             <table className="admin-table">
               <thead>
@@ -342,19 +488,15 @@ const AdminRunsPage = () => {
                   status.operations.map((operation) => (
                     <tr key={operation.id}>
                       <td>{operation.id}</td>
-                      <td>{operation.action}</td>
+                      <td>{formatActionTitle(operation.action)}</td>
                       <td>
                         <span className={`admin-status-pill admin-status-pill--${operation.status}`}>
                           {operation.status}
                         </span>
                       </td>
-                      <td>
-                        {[operation.root_symbol, operation.contract_symbol, operation.source_timeframe]
-                          .filter(Boolean)
-                          .join(' / ') || 'System'}
-                      </td>
+                      <td>{operationScope(operation)}</td>
                       <td>{formatDuration(operation.duration_ms)}</td>
-                      <td>{operation.started_at ?? 'Unknown'}</td>
+                      <td>{formatDateTime(operation.started_at)}</td>
                     </tr>
                   ))
                 ) : (
@@ -368,13 +510,10 @@ const AdminRunsPage = () => {
         </section>
 
         <section className="admin-panel admin-panel--logs">
-          <div className="admin-panel-head">
-            <span>Output</span>
-            <strong>Latest Log Tail</strong>
-          </div>
-          <pre>{latestOperation?.output_tail || latestOperation?.command_text || 'No output yet.'}</pre>
+          <AdminPanelHead eyebrow="Output" title="Latest Log Tail" detail={latestOperation?.exit_code !== null && latestOperation?.exit_code !== undefined ? `exit ${latestOperation.exit_code}` : null} />
+          <pre>{latestLog}</pre>
         </section>
-      </div>
+      </main>
     </div>
   );
 };

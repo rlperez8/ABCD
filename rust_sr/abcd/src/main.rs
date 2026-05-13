@@ -88,6 +88,7 @@ struct SymbolScanResult {
     phase_timings: ScanPhaseTimings,
     patterns: Vec<PatternXABCD>,
     prop_reversal_outcomes: Vec<PropReversalOutcome>,
+    forward_observations: Vec<PatternForwardObservation>,
     bearish_count: usize,
     bullish_count: usize,
 }
@@ -243,6 +244,7 @@ struct ScanPhaseTimings {
     default_fit_filter: Duration,
     market_counts: Duration,
     prop_reversal_outcomes: Duration,
+    forward_observations: Duration,
     x_to_a_checks: u64,
     xa_to_b_checks: u64,
     xab_to_c_checks: u64,
@@ -266,6 +268,7 @@ impl ScanPhaseTimings {
         self.default_fit_filter += other.default_fit_filter;
         self.market_counts += other.market_counts;
         self.prop_reversal_outcomes += other.prop_reversal_outcomes;
+        self.forward_observations += other.forward_observations;
         self.x_to_a_checks += other.x_to_a_checks;
         self.xa_to_b_checks += other.xa_to_b_checks;
         self.xab_to_c_checks += other.xab_to_c_checks;
@@ -285,6 +288,7 @@ impl ScanPhaseTimings {
             + self.default_fit_filter
             + self.market_counts
             + self.prop_reversal_outcomes
+            + self.forward_observations
     }
 }
 
@@ -1057,6 +1061,8 @@ fn scan_symbol(
     source_context: PatternSourceContext,
     max_x_bars_left: Option<i64>,
     default_fit_only: bool,
+    build_prop_outcomes: bool,
+    forward_observation_config: Option<ForwardObservationConfig>,
     progress_every: usize,
     phase_timings_enabled: bool,
 ) -> SymbolScanResult {
@@ -1072,6 +1078,7 @@ fn scan_symbol(
             phase_timings: ScanPhaseTimings::default(),
             patterns: Vec::new(),
             prop_reversal_outcomes: Vec::new(),
+            forward_observations: Vec::new(),
             bearish_count: 0,
             bullish_count: 0,
         };
@@ -1526,9 +1533,21 @@ fn scan_symbol(
     }
 
     let phase_started = phase_timings_enabled.then(Instant::now);
-    let prop_reversal_outcomes = build_prop_reversal_outcomes(&patterns, &candles);
+    let prop_reversal_outcomes = if build_prop_outcomes {
+        build_prop_reversal_outcomes(&patterns, &candles)
+    } else {
+        Vec::new()
+    };
     if let Some(phase_started) = phase_started {
         phase_timings.prop_reversal_outcomes += phase_started.elapsed();
+    }
+
+    let phase_started = phase_timings_enabled.then(Instant::now);
+    let forward_observations = forward_observation_config
+        .map(|config| build_forward_observations(&patterns, &candles, config))
+        .unwrap_or_default();
+    if let Some(phase_started) = phase_started {
+        phase_timings.forward_observations += phase_started.elapsed();
     }
 
     SymbolScanResult {
@@ -1540,6 +1559,7 @@ fn scan_symbol(
         phase_timings,
         patterns,
         prop_reversal_outcomes,
+        forward_observations,
         bearish_count,
         bullish_count,
     }
@@ -1682,6 +1702,11 @@ fn print_phase_timing_lines(label: &str, timings: ScanPhaseTimings, scan_duratio
         label,
         format_phase_duration(timings.prop_reversal_outcomes, scan_duration)
     );
+    println!(
+        "[phase timing] {} forward observations {}",
+        label,
+        format_phase_duration(timings.forward_observations, scan_duration)
+    );
 }
 
 fn spawn_symbol_scan(
@@ -1691,6 +1716,8 @@ fn spawn_symbol_scan(
     candle_source: CandleSource,
     max_x_bars_left: Option<i64>,
     default_fit_only: bool,
+    build_prop_outcomes: bool,
+    forward_observation_config: Option<ForwardObservationConfig>,
     progress_every: usize,
     phase_timings_enabled: bool,
 ) {
@@ -1736,6 +1763,8 @@ fn spawn_symbol_scan(
                 source_context,
                 max_x_bars_left,
                 default_fit_only,
+                build_prop_outcomes,
+                forward_observation_config,
                 progress_every,
                 phase_timings_enabled,
             )
@@ -1755,10 +1784,13 @@ async fn flush_pending_patterns(
     run_id: &str,
     pending_patterns: &mut Vec<PatternXABCD>,
     pending_prop_reversal_outcomes: &mut Vec<PropReversalOutcome>,
+    pending_forward_observations: &mut Vec<PatternForwardObservation>,
     fast_rebuild: bool,
     use_build_tables: bool,
     write_pattern_setups: bool,
     write_harmonic_scores: bool,
+    write_prop_outcomes: bool,
+    write_forward_observations: bool,
     target_ready_outcomes_only: bool,
     replace_existing_prop_outcomes: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -1790,32 +1822,77 @@ async fn flush_pending_patterns(
         .await?;
     }
 
-    let phase_started = Instant::now();
-    let prop_outcome_rows_written = db
-        .sync_prop_outcomes(
-            pending_patterns,
-            pending_prop_reversal_outcomes,
-            fast_rebuild,
-            use_build_tables,
-            target_ready_outcomes_only,
-            replace_existing_prop_outcomes,
+    if write_prop_outcomes {
+        let phase_started = Instant::now();
+        let prop_outcome_rows_written = db
+            .sync_prop_outcomes(
+                pending_patterns,
+                pending_prop_reversal_outcomes,
+                fast_rebuild,
+                use_build_tables,
+                target_ready_outcomes_only,
+                replace_existing_prop_outcomes,
+            )
+            .await?;
+        db.record_engine_phase_timing(
+            run_id,
+            None,
+            "write_prop_outcomes",
+            Some(prop_outcome_rows_written),
+            phase_started.elapsed(),
+            Some(if target_ready_outcomes_only {
+                "closed/target-ready outcome rows only"
+            } else {
+                "all outcome rows, including open/not-target-ready rows"
+            }),
         )
         .await?;
-    db.record_engine_phase_timing(
-        run_id,
-        None,
-        "write_prop_outcomes",
-        Some(prop_outcome_rows_written),
-        phase_started.elapsed(),
-        Some(if target_ready_outcomes_only {
-            "closed/target-ready outcome rows only"
-        } else {
-            "all outcome rows, including open/not-target-ready rows"
-        }),
-    )
-    .await?;
+    } else {
+        db.record_engine_phase_timing(
+            run_id,
+            None,
+            "write_prop_outcomes",
+            Some(0),
+            std::time::Duration::ZERO,
+            Some("disabled by ABCD_WRITE_PROP_OUTCOMES"),
+        )
+        .await?;
+    }
+
+    if write_forward_observations {
+        let phase_started = Instant::now();
+        let forward_observation_rows_written = db
+            .sync_forward_observations(
+                pending_patterns,
+                pending_forward_observations,
+                fast_rebuild,
+                use_build_tables,
+                replace_existing_prop_outcomes,
+            )
+            .await?;
+        db.record_engine_phase_timing(
+            run_id,
+            None,
+            "write_forward_observations",
+            Some(forward_observation_rows_written),
+            phase_started.elapsed(),
+            Some("post-pattern forward-window observation rows"),
+        )
+        .await?;
+    } else {
+        db.record_engine_phase_timing(
+            run_id,
+            None,
+            "write_forward_observations",
+            Some(0),
+            std::time::Duration::ZERO,
+            Some("disabled by ABCD_WRITE_FORWARD_OBSERVATIONS"),
+        )
+        .await?;
+    }
     pending_patterns.clear();
     pending_prop_reversal_outcomes.clear();
+    pending_forward_observations.clear();
 
     Ok(())
 }
@@ -1852,7 +1929,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db_writes_enabled && !fast_rebuild && !skip_processed_symbols;
     let write_pattern_setups = !benchmark_only && env_flag_or("ABCD_WRITE_PATTERN_SETUPS", true);
     let write_harmonic_scores = !benchmark_only && env_flag("ABCD_WRITE_HARMONIC_SCORES");
-    let write_prop_outcomes = db_writes_enabled;
+    let write_prop_outcomes = db_writes_enabled && env_flag_or("ABCD_WRITE_PROP_OUTCOMES", true);
+    let write_forward_observations =
+        db_writes_enabled && env_flag_or("ABCD_WRITE_FORWARD_OBSERVATIONS", true);
+    let forward_observation_config = if write_forward_observations {
+        Some(
+            ForwardObservationConfig {
+                window_multiple: env_i64("ABCD_FORWARD_WINDOW_MULTIPLE", 5)?,
+                min_bars: env_i64("ABCD_FORWARD_MIN_BARS", 1)?,
+                max_bars: match env_i64("ABCD_FORWARD_MAX_BARS", 0)? {
+                    value if value > 0 => Some(value),
+                    _ => None,
+                },
+            }
+            .sanitized(),
+        )
+    } else {
+        None
+    };
     let default_fit_only = env_flag_or("ABCD_DEFAULT_FIT_ONLY", false);
     let target_ready_outcomes_only = env_flag_or("ABCD_TARGET_READY_OUTCOMES_ONLY", false)
         && !env_flag("ABCD_WRITE_OPEN_PROP_OUTCOMES");
@@ -1870,10 +1964,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         write_harmonic_scores: write_harmonic_scores && db_writes_enabled,
         write_swing_outcomes: false,
         write_prop_outcomes,
+        write_forward_observations,
     };
     let refresh_prop_family_summaries = db_writes_enabled
         && env_flag_or("ABCD_REFRESH_PROP_FAMILY_SUMMARIES", write_prop_outcomes)
         && !env_flag("ABCD_SKIP_PROP_FAMILY_SUMMARIES");
+    let refresh_pattern_family_summary = db_writes_enabled
+        && env_flag_or("ABCD_REFRESH_PATTERN_FAMILY_SUMMARY", write_pattern_setups);
     let csv_output_dir = env::var("ABCD_CSV_OUTPUT_DIR")
         .ok()
         .map(|value| value.trim().to_string())
@@ -2109,7 +2206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or_else(|| "unlimited".to_string())
         );
         println!(
-            "Using workstation {}, CSV export {}, phase timings {}, fast rebuild {}, defer rebuild indexes {}, build tables {}, pattern setups {}, harmonic scores {}, prop outcomes {}, default fit only {}, target-ready outcomes only {}, skip processed symbols {}, replace existing prop outcomes {}",
+            "Using workstation {}, CSV export {}, phase timings {}, fast rebuild {}, defer rebuild indexes {}, build tables {}, pattern setups {}, harmonic scores {}, prop outcomes {}, forward observations {}, default fit only {}, target-ready outcomes only {}, skip processed symbols {}, replace existing prop outcomes {}",
             benchmark_only,
             csv_export,
             phase_timings_enabled,
@@ -2119,11 +2216,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             write_pattern_setups,
             write_harmonic_scores,
             write_prop_outcomes,
+            write_forward_observations,
             default_fit_only,
             target_ready_outcomes_only,
             skip_processed_symbols,
             replace_existing_prop_outcomes
         );
+        if let Some(config) = forward_observation_config {
+            println!(
+                "Forward observations: {}x formation length, min {} bars, max {}",
+                config.window_multiple,
+                config.min_bars,
+                config
+                    .max_bars
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "unlimited".to_string())
+            );
+        }
         if benchmark_only {
             println!(
                 "Engine workstation mode: scanner runs normally, but pattern/output rows are not written."
@@ -2154,12 +2263,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut failed_symbols = 0usize;
     let mut total_setups_written = 0usize;
     let mut total_prop_reversal_rows = 0usize;
+    let mut total_forward_observation_rows = 0usize;
     let mut total_bearish_patterns = 0usize;
     let mut total_bullish_patterns = 0usize;
     let mut total_phase_timings = ScanPhaseTimings::default();
     let mut total_symbol_scan_duration = Duration::ZERO;
     let mut pending_patterns: Vec<PatternXABCD> = Vec::new();
     let mut pending_prop_reversal_outcomes: Vec<PropReversalOutcome> = Vec::new();
+    let mut pending_forward_observations: Vec<PatternForwardObservation> = Vec::new();
 
     let mut tasks: JoinSet<Result<SymbolScanResult, String>> = JoinSet::new();
     let mut symbol_iter = symbols.into_iter();
@@ -2175,6 +2286,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 candle_source,
                 max_x_bars_left,
                 default_fit_only,
+                write_prop_outcomes,
+                forward_observation_config,
                 progress_every,
                 phase_timings_enabled,
             );
@@ -2227,6 +2340,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         candle_source,
                         max_x_bars_left,
                         default_fit_only,
+                        write_prop_outcomes,
+                        forward_observation_config,
                         progress_every,
                         phase_timings_enabled,
                     );
@@ -2266,6 +2381,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         candle_source,
                         max_x_bars_left,
                         default_fit_only,
+                        write_prop_outcomes,
+                        forward_observation_config,
                         progress_every,
                         phase_timings_enabled,
                     );
@@ -2305,8 +2422,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut patterns = result.patterns;
         let symbol_pattern_count = patterns.len() as i64;
         let mut prop_reversal_outcomes = result.prop_reversal_outcomes;
+        let mut forward_observations = result.forward_observations;
         total_setups_written += patterns.len();
         total_prop_reversal_rows += prop_reversal_outcomes.len();
+        total_forward_observation_rows += forward_observations.len();
         total_bearish_patterns += result.bearish_count;
         total_bullish_patterns += result.bullish_count;
 
@@ -2339,10 +2458,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if benchmark_only {
             if verbose_engine_log {
                 println!(
-                    "[workstation] {} DB output skipped; generated {} setup rows and {} prop reversal rows in memory",
+                    "[workstation] {} DB output skipped; generated {} setup rows, {} prop reversal rows, and {} forward observations in memory",
                     symbol_name,
                     symbol_pattern_count,
-                    prop_reversal_outcomes.len()
+                    prop_reversal_outcomes.len(),
+                    forward_observations.len()
                 );
             }
         } else if let Some(writer) = csv_output_writer.as_mut() {
@@ -2361,6 +2481,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             pending_patterns.append(&mut patterns);
             pending_prop_reversal_outcomes.append(&mut prop_reversal_outcomes);
+            pending_forward_observations.append(&mut forward_observations);
         }
         db.record_engine_phase_timing(
             &run_id,
@@ -2381,6 +2502,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 candle_source,
                 max_x_bars_left,
                 default_fit_only,
+                write_prop_outcomes,
+                forward_observation_config,
                 progress_every,
                 phase_timings_enabled,
             );
@@ -2399,9 +2522,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let flush_size = pending_patterns.len();
             if compact_scan_log {
                 println!(
-                    "[db] writing {} setup rows and {} prop outcome rows",
+                    "[db] writing {} setup rows, {} prop outcome rows, and {} forward observation rows",
                     flush_size,
-                    pending_prop_reversal_outcomes.len()
+                    pending_prop_reversal_outcomes.len(),
+                    pending_forward_observations.len()
                 );
             }
             flush_pending_patterns(
@@ -2409,10 +2533,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &run_id,
                 &mut pending_patterns,
                 &mut pending_prop_reversal_outcomes,
+                &mut pending_forward_observations,
                 fast_rebuild,
                 use_build_tables,
                 write_pattern_setups,
                 write_harmonic_scores,
+                write_prop_outcomes,
+                write_forward_observations,
                 target_ready_outcomes_only,
                 replace_existing_prop_outcomes,
             )
@@ -2448,9 +2575,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let flush_size = pending_patterns.len();
         if compact_scan_log && flush_size > 0 {
             println!(
-                "[db] writing {} setup rows and {} prop outcome rows",
+                "[db] writing {} setup rows, {} prop outcome rows, and {} forward observation rows",
                 flush_size,
-                pending_prop_reversal_outcomes.len()
+                pending_prop_reversal_outcomes.len(),
+                pending_forward_observations.len()
             );
         }
         flush_pending_patterns(
@@ -2458,10 +2586,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &run_id,
             &mut pending_patterns,
             &mut pending_prop_reversal_outcomes,
+            &mut pending_forward_observations,
             fast_rebuild,
             use_build_tables,
             write_pattern_setups,
             write_harmonic_scores,
+            write_prop_outcomes,
+            write_forward_observations,
             target_ready_outcomes_only,
             replace_existing_prop_outcomes,
         )
@@ -2550,11 +2681,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    if refresh_pattern_family_summary {
+        if verbose_engine_log {
+            println!("Refreshing pattern family universe");
+        }
+        db.refresh_pattern_family_source_summary(Some(&run_id))
+            .await?;
+    }
+
     if verbose_engine_log {
         println!(
-            "Pattern setups total: {}, Prop reversal rows: {}, Bear: {}, Bull: {}, Failed symbols: {}",
+            "Pattern setups total: {}, Prop reversal rows: {}, Forward observation rows: {}, Bear: {}, Bull: {}, Failed symbols: {}",
             total_setups_written,
             total_prop_reversal_rows,
+            total_forward_observation_rows,
             total_bearish_patterns,
             total_bullish_patterns,
             failed_symbols
