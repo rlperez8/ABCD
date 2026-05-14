@@ -315,6 +315,21 @@ const parsePhase1ResultRecord = (row = {}) => ({
   score: parseOptionalFloat(row?.score) ?? 0,
 });
 
+const parsePhase1SupplySymbolRecord = (row = {}) => ({
+  ...row,
+  setup_count: parseOptionalInt(row?.setup_count) ?? 0,
+  pattern_count: parseOptionalInt(row?.pattern_count) ?? 0,
+  family_count: parseOptionalInt(row?.family_count) ?? 0,
+  contract_count: parseOptionalInt(row?.contract_count) ?? 0,
+});
+
+const parsePhase1SupplyFamilyRecord = (row = {}) => ({
+  ...row,
+  setup_count: parseOptionalInt(row?.setup_count) ?? 0,
+  pattern_count: parseOptionalInt(row?.pattern_count) ?? 0,
+  symbol_count: parseOptionalInt(row?.symbol_count) ?? 0,
+});
+
 const parsePhase1YearlyBreakdown = (data = null) => {
   if (!data) {
     return null;
@@ -1352,6 +1367,7 @@ export const fetchPhase1Leaderboard = async ({
   minTradeCount = 100,
   minSetupCount = 1,
   bestPerFamily = false,
+  routeId = null,
 } = {}) => {
   try {
     const data = await postJson('/phase1/leaderboard', {
@@ -1361,12 +1377,41 @@ export const fetchPhase1Leaderboard = async ({
       min_trade_count: parseOptionalInt(minTradeCount),
       min_setup_count: parseOptionalInt(minSetupCount),
       best_per_family: Boolean(bestPerFamily),
+      route_id: routeId,
     });
 
     return Array.isArray(data) ? data.map(parsePhase1ResultRecord) : [];
   } catch (error) {
     console.error(error);
     return [];
+  }
+};
+
+export const fetchPhase1Supply = async ({
+  sourceScope = 'futures',
+  year = null,
+  limit = 100,
+} = {}) => {
+  try {
+    const data = await postJson('/phase1/supply', {
+      source_scope: sourceScope,
+      year: parseOptionalInt(year),
+      limit: parseOptionalInt(limit),
+    });
+
+    return {
+      source_scope: data?.source_scope ?? sourceScope,
+      period_year: parseOptionalInt(data?.period_year) ?? 0,
+      symbols: Array.isArray(data?.symbols)
+        ? data.symbols.map(parsePhase1SupplySymbolRecord)
+        : [],
+      families: Array.isArray(data?.families)
+        ? data.families.map(parsePhase1SupplyFamilyRecord)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { source_scope: sourceScope, period_year: 0, symbols: [], families: [] };
   }
 };
 

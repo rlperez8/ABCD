@@ -794,6 +794,14 @@ struct Phase1LeaderboardParams {
     min_trade_count: Option<i64>,
     min_setup_count: Option<i64>,
     best_per_family: Option<bool>,
+    route_id: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Phase1SupplyParams {
+    source_scope: Option<String>,
+    year: Option<i64>,
+    limit: Option<i64>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -861,6 +869,40 @@ struct Phase1LeaderboardResult {
     size_bucket: String,
     time_bin: String,
     x_strictness: String,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct Phase1SymbolSupplyRow {
+    symbol: String,
+    setup_count: i64,
+    pattern_count: i64,
+    family_count: i64,
+    contract_count: i64,
+    first_d_date: Option<NaiveDate>,
+    last_d_date: Option<NaiveDate>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct Phase1FamilySupplyRow {
+    family_key: String,
+    harmonic_type: String,
+    bin: String,
+    size_bucket: String,
+    time_bin: String,
+    x_strictness: String,
+    setup_count: i64,
+    pattern_count: i64,
+    symbol_count: i64,
+    first_d_date: Option<NaiveDate>,
+    last_d_date: Option<NaiveDate>,
+}
+
+#[derive(Serialize)]
+struct Phase1SupplyResponse {
+    source_scope: String,
+    period_year: i64,
+    symbols: Vec<Phase1SymbolSupplyRow>,
+    families: Vec<Phase1FamilySupplyRow>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -5292,6 +5334,7 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_phase1_results)
             .service(fetch_phase1_family_patterns)
             .service(fetch_phase1_leaderboard)
+            .service(fetch_phase1_supply)
             .service(fetch_phase1_yearly_breakdown)
             .service(fetch_strategy_contract_weeks)
             .wrap(Logger::default()) // built-in Actix logs
@@ -6805,6 +6848,11 @@ async fn fetch_phase1_leaderboard(
     let min_trade_count = params.min_trade_count.unwrap_or(100).clamp(0, 1_000_000);
     let min_setup_count = params.min_setup_count.unwrap_or(1).clamp(0, 1_000_000);
     let best_per_family = params.best_per_family.unwrap_or(false);
+    let route_id = params
+        .route_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
 
     let latest_runs = sqlx::query(
         r#"
@@ -6935,6 +6983,7 @@ async fn fetch_phase1_leaderboard(
               AND rr.period_year = ?
               AND rr.trade_count >= ?
               AND rr.setup_count >= ?
+              AND (? IS NULL OR rr.route_id = ?)
         ) ranked
         WHERE ranked.family_route_rank = 1
         ORDER BY ranked.score DESC, ranked.avg_r DESC, ranked.trade_count DESC, ranked.result_rank ASC
@@ -6986,6 +7035,7 @@ async fn fetch_phase1_leaderboard(
           AND rr.period_year = ?
           AND rr.trade_count >= ?
           AND rr.setup_count >= ?
+          AND (? IS NULL OR rr.route_id = ?)
         ORDER BY rr.score DESC, rr.avg_r DESC, rr.trade_count DESC, rr.result_rank ASC
         LIMIT ?
         "#
@@ -6997,7 +7047,9 @@ async fn fetch_phase1_leaderboard(
         .bind(source_scope)
         .bind(period_year)
         .bind(min_trade_count)
-        .bind(min_setup_count);
+        .bind(min_setup_count)
+        .bind(route_id)
+        .bind(route_id);
 
     query = query.bind(candidate_limit);
 
@@ -7021,6 +7073,126 @@ async fn fetch_phase1_leaderboard(
             HttpResponse::InternalServerError().finish()
         }
     }
+}
+
+#[route("/phase1/supply", method = "GET", method = "POST")]
+async fn fetch_phase1_supply(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<Phase1SupplyParams>,
+) -> impl Responder {
+    let source_scope = normalize_pattern_family_source_scope(params.source_scope.as_deref());
+    let source_scope_label = pattern_family_source_scope_label(source_scope).to_string();
+    let period_year = params
+        .year
+        .filter(|year| (1900..=2200).contains(year))
+        .unwrap_or(0);
+    let limit = params.limit.unwrap_or(100).clamp(1, 1_000);
+    let source_filter = match source_scope {
+        PatternFamilySourceScope::Futures => {
+            "AND COALESCE(ps.source_table, '') LIKE 'futures_contract_%_candles'"
+        }
+        PatternFamilySourceScope::Daily => {
+            "AND COALESCE(ps.source_table, '') = 'candles' AND COALESCE(ps.source_timeframe, '') = 'daily'"
+        }
+        PatternFamilySourceScope::All => "",
+    };
+    let year_filter = if period_year > 0 {
+        "AND YEAR(ps.d_date) = ?"
+    } else {
+        ""
+    };
+
+    let symbol_sql = format!(
+        r#"
+        SELECT
+            COALESCE(NULLIF(ps.root_symbol, ''), ps.symbol, 'N/A') AS symbol,
+            CAST(COUNT(*) AS SIGNED) AS setup_count,
+            CAST(COUNT(DISTINCT COALESCE(NULLIF(ps.pattern_group_id, ''), ps.setup_id)) AS SIGNED) AS pattern_count,
+            CAST(COUNT(DISTINCT ps.pattern_family_key) AS SIGNED) AS family_count,
+            CAST(COUNT(DISTINCT COALESCE(NULLIF(ps.contract_symbol, ''), ps.symbol, 'N/A')) AS SIGNED) AS contract_count,
+            MIN(DATE(ps.d_date)) AS first_d_date,
+            MAX(DATE(ps.d_date)) AS last_d_date
+        FROM pattern_setups ps
+        WHERE ps.d_date IS NOT NULL
+          {source_filter}
+          {year_filter}
+        GROUP BY COALESCE(NULLIF(ps.root_symbol, ''), ps.symbol, 'N/A')
+        ORDER BY setup_count DESC, family_count DESC, pattern_count DESC, symbol ASC
+        LIMIT ?
+        "#,
+        source_filter = source_filter,
+        year_filter = year_filter,
+    );
+
+    let family_sql = format!(
+        r#"
+        SELECT
+            ps.pattern_family_key AS family_key,
+            COALESCE(ps.pattern_family_harmonic_type, 'N/A') AS harmonic_type,
+            COALESCE(ps.pattern_family_bin, 'N/A') AS bin,
+            COALESCE(ps.pattern_family_size_bucket, 'N/A') AS size_bucket,
+            COALESCE(ps.pattern_family_time_bin, 'N/A') AS time_bin,
+            COALESCE(ps.pattern_family_x_strictness, 'N/A') AS x_strictness,
+            CAST(COUNT(*) AS SIGNED) AS setup_count,
+            CAST(COUNT(DISTINCT COALESCE(NULLIF(ps.pattern_group_id, ''), ps.setup_id)) AS SIGNED) AS pattern_count,
+            CAST(COUNT(DISTINCT COALESCE(NULLIF(ps.root_symbol, ''), ps.symbol, 'N/A')) AS SIGNED) AS symbol_count,
+            MIN(DATE(ps.d_date)) AS first_d_date,
+            MAX(DATE(ps.d_date)) AS last_d_date
+        FROM pattern_setups ps
+        WHERE ps.d_date IS NOT NULL
+          AND ps.pattern_family_key IS NOT NULL
+          AND ps.pattern_family_key <> ''
+          {source_filter}
+          {year_filter}
+        GROUP BY
+            ps.pattern_family_key,
+            COALESCE(ps.pattern_family_harmonic_type, 'N/A'),
+            COALESCE(ps.pattern_family_bin, 'N/A'),
+            COALESCE(ps.pattern_family_size_bucket, 'N/A'),
+            COALESCE(ps.pattern_family_time_bin, 'N/A'),
+            COALESCE(ps.pattern_family_x_strictness, 'N/A')
+        ORDER BY setup_count DESC, symbol_count DESC, pattern_count DESC, family_key ASC
+        LIMIT ?
+        "#,
+        source_filter = source_filter,
+        year_filter = year_filter,
+    );
+
+    let mut symbol_query = sqlx::query_as::<_, Phase1SymbolSupplyRow>(&symbol_sql);
+    if period_year > 0 {
+        symbol_query = symbol_query.bind(period_year);
+    }
+    symbol_query = symbol_query.bind(limit);
+
+    let mut family_query = sqlx::query_as::<_, Phase1FamilySupplyRow>(&family_sql);
+    if period_year > 0 {
+        family_query = family_query.bind(period_year);
+    }
+    family_query = family_query.bind(limit);
+
+    let symbols = match symbol_query.fetch_all(pool.get_ref()).await {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Phase 1 supply symbol DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let families = match family_query.fetch_all(pool.get_ref()).await {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Phase 1 supply family DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(Phase1SupplyResponse {
+        source_scope: source_scope_label,
+        period_year,
+        symbols,
+        families,
+    })
 }
 
 fn phase1_futures_candle_table(source_table: Option<&str>) -> &'static str {

@@ -17348,6 +17348,188 @@ button:focus-visible {
   line-height: 1.35;
 }
 
+.pattern-family-test-overview {
+  display: grid;
+  grid-template-rows: 36px auto minmax(0, 1fr);
+  gap: 5px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pattern-family-test-overview-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pattern-family-test-overview-loading {
+  min-height: 28px;
+  padding: 6px 9px;
+  border: 1px solid #2b3437;
+  background: #101313;
+  color: #c7d1d3;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.pattern-family-test-overview-loading--error {
+  border-color: rgba(237, 55, 63, 0.38);
+  color: #ffb7bb;
+}
+
+.pattern-family-test-overview-loading--empty {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pattern-family-test-overview-tab {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #2b3437;
+  border-radius: 4px;
+  background: #111515;
+  color: #889498;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.pattern-family-test-overview-tab--active {
+  border-color: rgba(94, 214, 255, 0.42);
+  background:
+    linear-gradient(90deg, rgba(94, 214, 255, 0.13), transparent 70%),
+    #121819;
+  color: #effafa;
+}
+
+.pattern-family-test-overview-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+}
+
+.pattern-family-test-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.86fr) minmax(0, 1.1fr);
+  gap: 5px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pattern-family-test-overview-section {
+  display: grid;
+  grid-template-rows: 30px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #283033;
+  background: #0b0d0d;
+  overflow: hidden;
+}
+
+.pattern-family-test-overview-section header {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+  padding: 0 9px;
+  border-bottom: 1px solid #252c2e;
+  background:
+    linear-gradient(90deg, rgba(94, 214, 255, 0.1), transparent 68%),
+    linear-gradient(180deg, #171c1c, #101313);
+}
+
+.pattern-family-test-overview-section header span {
+  color: #eaf3f3;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.pattern-family-test-overview-cells {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(48px, auto);
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+  padding: 5px;
+  overflow: auto;
+}
+
+.pattern-family-test-overview-cell {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 7px 9px;
+  border: 1px solid #252d30;
+  background: linear-gradient(180deg, #121616, #0d1010);
+}
+
+.pattern-family-test-overview-empty {
+  display: grid;
+  place-items: center;
+  grid-column: 1 / -1;
+  min-height: 118px;
+  padding: 14px;
+  border: 1px dashed #30383b;
+  background: #0d1010;
+  color: #9da7aa;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pattern-family-test-overview-cell--wide {
+  grid-column: 1 / -1;
+}
+
+.pattern-family-test-overview-cell span {
+  color: #8e9a9d;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.pattern-family-test-overview-cell strong {
+  color: #edf4f4;
+  font-family: var(--mono-font);
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.18;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pattern-family-test-overview-cell--win {
+  border-color: rgba(16, 200, 101, 0.35);
+  background: linear-gradient(180deg, rgba(16, 200, 101, 0.12), #0d1010);
+}
+
+.pattern-family-test-overview-cell--win strong {
+  color: var(--success);
+}
+
+.pattern-family-test-overview-cell--loss {
+  border-color: rgba(237, 55, 63, 0.38);
+  background: linear-gradient(180deg, rgba(237, 55, 63, 0.12), #0d1010);
+}
+
+.pattern-family-test-overview-cell--loss strong {
+  color: var(--danger);
+}
+
+.pattern-family-test-overview-cell--skipped {
+  border-color: rgba(217, 179, 108, 0.34);
+  background: linear-gradient(180deg, rgba(217, 179, 108, 0.11), #0d1010);
+}
+
+.pattern-family-test-overview-cell--skipped strong {
+  color: #d9b36c;
+}
+
 .pattern-family-sim-controls {
   display: grid;
   grid-column: 1 / -1;

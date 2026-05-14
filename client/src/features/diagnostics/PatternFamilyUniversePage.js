@@ -4,9 +4,11 @@ import {
   fetchPatternDetail,
   fetchPatternFamilies,
   fetchPhase1FamilyPatterns,
+  fetchPhase1Leaderboard,
   fetchPhase1PatternRouteReplay,
   fetchPhase1RouteReplay,
   fetchPhase1Results,
+  fetchPhase1Supply,
   getCandles,
   getSupportResistanceLines,
 } from '../../services/patternApi';
@@ -543,6 +545,12 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const [routeTrades, setRouteTrades] = useState([]);
   const [isRouteTradesLoading, setRouteTradesLoading] = useState(false);
   const [routeTradesError, setRouteTradesError] = useState('');
+  const [routeFamilyRows, setRouteFamilyRows] = useState([]);
+  const [isRouteFamiliesLoading, setRouteFamiliesLoading] = useState(false);
+  const [routeFamiliesError, setRouteFamiliesError] = useState('');
+  const [supplyData, setSupplyData] = useState({ symbols: [], families: [] });
+  const [isSupplyLoading, setSupplyLoading] = useState(false);
+  const [supplyError, setSupplyError] = useState('');
   const [selectedRouteTradeKey, setSelectedRouteTradeKey] = useState(null);
   const [selectedPatternRouteTrade, setSelectedPatternRouteTrade] = useState(null);
   const [isPatternRouteTradeLoading, setPatternRouteTradeLoading] = useState(false);
@@ -561,6 +569,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const simDrawdownModel = 'intraday';
   const simOneTradeAtATime = false;
   const [browsePanel, setBrowsePanel] = useState(null);
+  const [testOverviewTab, setTestOverviewTab] = useState('overview');
 
   useEffect(() => {
     let isCancelled = false;
@@ -977,6 +986,584 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     },
     { label: 'Pattern', value: selectedRouteTrade?.pattern_id ?? selectedRouteTrade?.pattern_group_id ?? 'N/A', wide: true },
   ];
+  const selectedTestOverviewSections = selectedRoute
+    ? [
+        {
+          title: 'Performance',
+          items: [
+            { label: 'Score', value: formatDecimal(selectedRoute.score, 1), tone: 'win' },
+            { label: 'Rank', value: `#${selectedRoute.result_rank}` },
+            {
+              label: 'Avg R',
+              value: formatDecimal(selectedRoute.avg_r, 3),
+              tone: Number(selectedRoute.avg_r) < 0 ? 'loss' : 'win',
+            },
+            {
+              label: 'Win Rate',
+              value: `${formatDecimal(selectedRoute.win_rate, 1)}%`,
+              tone: Number(selectedRoute.win_rate) >= 50 ? 'win' : 'loss',
+            },
+            {
+              label: 'Profit Factor',
+              value: formatDecimal(selectedRoute.profit_factor, 2),
+              tone: Number(selectedRoute.profit_factor) >= 1 ? 'win' : 'loss',
+            },
+            { label: 'Max DD', value: `${formatDecimal(selectedRoute.max_drawdown_r, 2)}R`, tone: 'loss' },
+            {
+              label: 'Worst Year',
+              value: `${formatDecimal(selectedRoute.worst_year_avg_r, 3)}R`,
+              tone: Number(selectedRoute.worst_year_avg_r) < 0 ? 'loss' : 'win',
+            },
+            { label: 'Trades', value: formatNumber(selectedRoute.trade_count) },
+          ],
+        },
+        {
+          title: 'Coverage',
+          items: [
+            { label: 'Setups', value: formatNumber(selectedRoute.setup_count) },
+            { label: 'No Entry', value: formatNumber(selectedRoute.no_entry_count), tone: 'skipped' },
+            { label: 'Wins', value: formatNumber(selectedRoute.win_count), tone: 'win' },
+            { label: 'Losses', value: formatNumber(selectedRoute.loss_count), tone: 'loss' },
+            { label: 'Source', value: selectedSourceLabel },
+            { label: 'Year', value: yearFilter === 'All' ? 'All Years' : yearFilter },
+          ],
+        },
+        {
+          title: 'Route Logic',
+          items: [
+            { label: 'Direction', value: selectedRouteDisplayedSide, tone: selectedRouteDisplayedSide === 'SHORT' ? 'loss' : 'win' },
+            { label: 'Entry', value: selectedRouteEntryAction, wide: true },
+            { label: 'Stop', value: getDirectionalStopAction(selectedRoute.stop_mode, selectedRouteMarket), tone: 'loss' },
+            { label: 'Target', value: `${formatDecimal(selectedRoute.target_r, 2)}R`, tone: 'win' },
+            { label: 'Hold', value: `${selectedRoute.max_hold_multiple || '-'}x pattern` },
+            { label: 'Test ID', value: selectedRoute.route_id, wide: true },
+          ],
+        },
+      ]
+    : [];
+  const testTradeAnalytics = useMemo(() => {
+    const createGroup = (key) => ({
+      key,
+      trades: 0,
+      wins: 0,
+      losses: 0,
+      skipped: 0,
+      totalR: 0,
+      totalPnl: 0,
+      pnlCount: 0,
+    });
+    const addTrade = (group, trade) => {
+      const resultR = Number(trade.result_r);
+      const pnl = Number(trade.pnl);
+      const skipped = Boolean(trade.skipped_for_overlap);
+      const won =
+        !skipped &&
+        (Number(trade.trade_result) === 1 ||
+          (Number.isFinite(resultR) && resultR > 0) ||
+          (Number.isFinite(pnl) && pnl > 0));
+      const lost =
+        !skipped &&
+        (Number(trade.trade_result) === 2 ||
+          (Number.isFinite(resultR) && resultR < 0) ||
+          (Number.isFinite(pnl) && pnl < 0));
+
+      group.trades += 1;
+      if (skipped) group.skipped += 1;
+      if (won) group.wins += 1;
+      if (lost) group.losses += 1;
+      if (Number.isFinite(resultR)) group.totalR += resultR;
+      if (Number.isFinite(pnl)) {
+        group.totalPnl += pnl;
+        group.pnlCount += 1;
+      }
+    };
+    const finishGroup = (group) => ({
+      ...group,
+      avgR: group.trades ? group.totalR / group.trades : 0,
+      winRate: group.trades ? (group.wins / group.trades) * 100 : 0,
+      pnl: group.pnlCount ? group.totalPnl : null,
+    });
+    const symbolMap = new Map();
+    const exitMap = new Map();
+    const directionMap = new Map();
+    const resultMix = {
+      trades: routeTrades.length,
+      skipped: 0,
+      wins: 0,
+      losses: 0,
+      totalR: 0,
+      winR: 0,
+      winCount: 0,
+      lossR: 0,
+      lossCount: 0,
+    };
+
+    routeTrades.forEach((trade) => {
+      const symbol = trade.symbol || 'N/A';
+      const exitReason = trade.exit_reason ? formatRouteMode(trade.exit_reason) : 'Unknown';
+      const direction = getTradeSide(trade) ?? formatRouteMode(trade.trade_direction || 'Unknown');
+      const resultR = Number(trade.result_r);
+      const pnl = Number(trade.pnl);
+      const skipped = Boolean(trade.skipped_for_overlap);
+      const won =
+        !skipped &&
+        (Number(trade.trade_result) === 1 ||
+          (Number.isFinite(resultR) && resultR > 0) ||
+          (Number.isFinite(pnl) && pnl > 0));
+      const lost =
+        !skipped &&
+        (Number(trade.trade_result) === 2 ||
+          (Number.isFinite(resultR) && resultR < 0) ||
+          (Number.isFinite(pnl) && pnl < 0));
+
+      if (!symbolMap.has(symbol)) symbolMap.set(symbol, createGroup(symbol));
+      if (!exitMap.has(exitReason)) exitMap.set(exitReason, createGroup(exitReason));
+      if (!directionMap.has(direction)) directionMap.set(direction, createGroup(direction));
+      addTrade(symbolMap.get(symbol), trade);
+      addTrade(exitMap.get(exitReason), trade);
+      addTrade(directionMap.get(direction), trade);
+
+      if (skipped) resultMix.skipped += 1;
+      if (won) resultMix.wins += 1;
+      if (lost) resultMix.losses += 1;
+      if (Number.isFinite(resultR)) {
+        resultMix.totalR += resultR;
+        if (resultR > 0) {
+          resultMix.winR += resultR;
+          resultMix.winCount += 1;
+        }
+        if (resultR < 0) {
+          resultMix.lossR += resultR;
+          resultMix.lossCount += 1;
+        }
+      }
+    });
+
+    const symbols = Array.from(symbolMap.values()).map(finishGroup);
+    const exits = Array.from(exitMap.values()).map(finishGroup);
+    const directions = Array.from(directionMap.values()).map(finishGroup);
+    const byAvgR = [...symbols].sort((left, right) => right.avgR - left.avgR);
+    const byTotalR = [...symbols].sort((left, right) => right.totalR - left.totalR);
+    const byTrades = [...symbols].sort((left, right) => right.trades - left.trades);
+
+    return {
+      symbols,
+      symbolsByAvgR: byAvgR,
+      symbolsByTotalR: byTotalR,
+      symbolsByTrades: byTrades,
+      exits: exits.sort((left, right) => right.trades - left.trades),
+      directions: directions.sort((left, right) => right.trades - left.trades),
+      resultMix,
+    };
+  }, [routeTrades]);
+  const worstAvgSymbol =
+    testTradeAnalytics.symbolsByAvgR[testTradeAnalytics.symbolsByAvgR.length - 1] ?? null;
+  const bestPnlSymbol =
+    testTradeAnalytics.symbols
+      .filter((item) => item.pnl !== null)
+      .sort((left, right) => (right.pnl ?? 0) - (left.pnl ?? 0))[0] ?? null;
+  const selectedTestSymbolSections = selectedRoute
+    ? [
+        {
+          title: 'Symbol Leaders',
+          items: [
+            {
+              label: 'Best Avg R',
+              value: testTradeAnalytics.symbolsByAvgR[0]
+                ? `${testTradeAnalytics.symbolsByAvgR[0].key} / ${formatDecimal(testTradeAnalytics.symbolsByAvgR[0].avgR, 2)}R`
+                : 'N/A',
+              tone: testTradeAnalytics.symbolsByAvgR[0]?.avgR >= 0 ? 'win' : 'loss',
+              wide: true,
+            },
+            {
+              label: 'Best Total R',
+              value: testTradeAnalytics.symbolsByTotalR[0]
+                ? `${testTradeAnalytics.symbolsByTotalR[0].key} / ${formatDecimal(testTradeAnalytics.symbolsByTotalR[0].totalR, 2)}R`
+                : 'N/A',
+              tone: testTradeAnalytics.symbolsByTotalR[0]?.totalR >= 0 ? 'win' : 'loss',
+              wide: true,
+            },
+            {
+              label: 'Most Trades',
+              value: testTradeAnalytics.symbolsByTrades[0]
+                ? `${testTradeAnalytics.symbolsByTrades[0].key} / ${formatNumber(testTradeAnalytics.symbolsByTrades[0].trades)}`
+                : 'N/A',
+            },
+            {
+              label: 'Worst Avg R',
+              value: worstAvgSymbol
+                ? `${worstAvgSymbol.key} / ${formatDecimal(worstAvgSymbol.avgR, 2)}R`
+                : 'N/A',
+              tone: 'loss',
+            },
+          ],
+        },
+        {
+          title: 'Symbol Board',
+          items: testTradeAnalytics.symbolsByTotalR.slice(0, 10).map((symbol) => ({
+            label: symbol.key,
+            value: `${formatDecimal(symbol.avgR, 2)}R avg / ${formatDecimal(symbol.winRate, 0)}% / ${formatNumber(symbol.trades)} trades`,
+            tone: symbol.totalR < 0 ? 'loss' : 'win',
+            wide: true,
+          })),
+        },
+        {
+          title: 'Symbol Notes',
+          items: [
+            { label: 'Symbols', value: formatNumber(testTradeAnalytics.symbols.length) },
+            { label: 'Loaded Trades', value: formatNumber(routeTrades.length) },
+            { label: 'Best P/L', value: bestPnlSymbol ? `${bestPnlSymbol.key} / ${formatMoney(bestPnlSymbol.pnl)}` : 'N/A', tone: bestPnlSymbol && bestPnlSymbol.pnl < 0 ? 'loss' : 'win' },
+            { label: 'Use Next', value: 'Add session/day filters', wide: true },
+          ],
+        },
+      ]
+    : [];
+  const selectedTestOutcomeSections = selectedRoute
+    ? [
+        {
+          title: 'Result Mix',
+          items: [
+            { label: 'Wins', value: formatNumber(testTradeAnalytics.resultMix.wins), tone: 'win' },
+            { label: 'Losses', value: formatNumber(testTradeAnalytics.resultMix.losses), tone: 'loss' },
+            { label: 'Skipped', value: formatNumber(testTradeAnalytics.resultMix.skipped), tone: 'skipped' },
+            {
+              label: 'Total R',
+              value: `${formatDecimal(testTradeAnalytics.resultMix.totalR, 2)}R`,
+              tone: testTradeAnalytics.resultMix.totalR < 0 ? 'loss' : 'win',
+            },
+            {
+              label: 'Avg Win',
+              value: testTradeAnalytics.resultMix.winCount
+                ? `${formatDecimal(testTradeAnalytics.resultMix.winR / testTradeAnalytics.resultMix.winCount, 2)}R`
+                : 'N/A',
+              tone: 'win',
+            },
+            {
+              label: 'Avg Loss',
+              value: testTradeAnalytics.resultMix.lossCount
+                ? `${formatDecimal(testTradeAnalytics.resultMix.lossR / testTradeAnalytics.resultMix.lossCount, 2)}R`
+                : 'N/A',
+              tone: 'loss',
+            },
+          ],
+        },
+        {
+          title: 'Exit Reasons',
+          items: testTradeAnalytics.exits.map((item) => ({
+            label: item.key,
+            value: `${formatNumber(item.trades)} trades / ${formatDecimal(item.avgR, 2)}R avg`,
+            tone: item.key.toLowerCase().includes('stop') || item.avgR < 0 ? 'loss' : item.key.toLowerCase().includes('target') ? 'win' : '',
+            wide: true,
+          })),
+        },
+        {
+          title: 'Direction Split',
+          items: testTradeAnalytics.directions.map((item) => ({
+            label: item.key,
+            value: `${formatNumber(item.trades)} trades / ${formatDecimal(item.winRate, 0)}% / ${formatDecimal(item.totalR, 2)}R`,
+            tone: item.key === 'SHORT' ? 'loss' : item.key === 'LONG' ? 'win' : '',
+            wide: true,
+          })),
+        },
+      ]
+    : [];
+  const familyRouteAnalytics = useMemo(() => {
+    const routes = phase1Results.filter((route) => route && route.route_id);
+    const byScore = [...routes].sort((left, right) => Number(right.score) - Number(left.score));
+    const byAvgR = [...routes].sort((left, right) => Number(right.avg_r) - Number(left.avg_r));
+    const byTrades = [...routes].sort((left, right) => Number(right.trade_count) - Number(left.trade_count));
+    const byWin = [...routes].sort((left, right) => Number(right.win_rate) - Number(left.win_rate));
+    const byDrawdown = [...routes].sort((left, right) => Number(left.max_drawdown_r) - Number(right.max_drawdown_r));
+    const activeRoutes = routes.filter((route) => Number(route.trade_count) > 0);
+    const avgScore = routes.length
+      ? routes.reduce((sum, route) => sum + (Number(route.score) || 0), 0) / routes.length
+      : 0;
+    const totalTrades = routes.reduce((sum, route) => sum + (Number(route.trade_count) || 0), 0);
+
+    return {
+      routes,
+      activeRoutes,
+      byScore,
+      byAvgR,
+      byTrades,
+      byWin,
+      byDrawdown,
+      avgScore,
+      totalTrades,
+    };
+  }, [phase1Results]);
+  const selectedFamilyOverviewSections = selectedFamily
+    ? [
+        {
+          title: 'Family Identity',
+          items: [
+            { label: 'Family Key', value: selectedFamily.family_key, wide: true },
+            { label: 'Type', value: selectedFamilyLabel, wide: true },
+            { label: 'Setups', value: formatNumber(selectedFamily.setup_count) },
+            { label: 'Patterns Loaded', value: formatNumber(familyPatterns.length) },
+            { label: 'Symbols', value: formatNumber(selectedFamily.symbol_count) },
+            { label: 'Date Range', value: `${formatDate(selectedFamily.first_d_date)} to ${formatDate(selectedFamily.last_d_date)}`, wide: true },
+          ],
+        },
+        {
+          title: 'Family Test Leaders',
+          items: [
+            {
+              label: 'Best Score',
+              value: familyRouteAnalytics.byScore[0]
+                ? `#${familyRouteAnalytics.byScore[0].result_rank} / ${formatDecimal(familyRouteAnalytics.byScore[0].score, 1)}`
+                : 'N/A',
+              tone: 'win',
+            },
+            {
+              label: 'Best Avg R',
+              value: familyRouteAnalytics.byAvgR[0]
+                ? `${formatDecimal(familyRouteAnalytics.byAvgR[0].avg_r, 2)}R`
+                : 'N/A',
+              tone: familyRouteAnalytics.byAvgR[0] && Number(familyRouteAnalytics.byAvgR[0].avg_r) < 0 ? 'loss' : 'win',
+            },
+            {
+              label: 'Best Win',
+              value: familyRouteAnalytics.byWin[0]
+                ? `${formatDecimal(familyRouteAnalytics.byWin[0].win_rate, 1)}%`
+                : 'N/A',
+              tone: 'win',
+            },
+            {
+              label: 'Lowest DD',
+              value: familyRouteAnalytics.byDrawdown[0]
+                ? `${formatDecimal(familyRouteAnalytics.byDrawdown[0].max_drawdown_r, 2)}R`
+                : 'N/A',
+            },
+            { label: 'Tests Loaded', value: formatNumber(familyRouteAnalytics.routes.length) },
+            { label: 'Active Tests', value: formatNumber(familyRouteAnalytics.activeRoutes.length), tone: 'win' },
+            { label: 'Total Test Trades', value: formatNumber(familyRouteAnalytics.totalTrades), wide: true },
+            { label: 'Avg Score', value: formatDecimal(familyRouteAnalytics.avgScore, 1) },
+          ],
+        },
+        {
+          title: 'Top Tests In Family',
+          items: familyRouteAnalytics.byScore.slice(0, 8).map((route) => ({
+            label: `#${route.result_rank}`,
+            value: `${formatDecimal(route.score, 1)} score / ${formatDecimal(route.avg_r, 2)}R / ${formatDecimal(route.win_rate, 0)}%`,
+            tone: Number(route.avg_r) < 0 ? 'loss' : 'win',
+            wide: true,
+          })),
+        },
+      ]
+    : [];
+  const routeFamilyAnalytics = useMemo(() => {
+    const rows = routeFamilyRows.filter((row) => row && row.family_key);
+    const byScore = [...rows].sort((left, right) => Number(right.score) - Number(left.score));
+    const byAvgR = [...rows].sort((left, right) => Number(right.avg_r) - Number(left.avg_r));
+    const byTrades = [...rows].sort((left, right) => Number(right.trade_count) - Number(left.trade_count));
+    const byWin = [...rows].sort((left, right) => Number(right.win_rate) - Number(left.win_rate));
+    const byWorstYear = [...rows].sort((left, right) => Number(right.worst_year_avg_r) - Number(left.worst_year_avg_r));
+    const activeFamilies = rows.filter((row) => Number(row.trade_count) > 0);
+    const totalTrades = rows.reduce((sum, row) => sum + (Number(row.trade_count) || 0), 0);
+    const avgScore = rows.length
+      ? rows.reduce((sum, row) => sum + (Number(row.score) || 0), 0) / rows.length
+      : 0;
+
+    return {
+      rows,
+      activeFamilies,
+      byScore,
+      byAvgR,
+      byTrades,
+      byWin,
+      byWorstYear,
+      totalTrades,
+      avgScore,
+    };
+  }, [routeFamilyRows]);
+  const selectedRouteFamiliesSections = selectedRoute
+    ? [
+        {
+          title: 'Route Family Coverage',
+          items: [
+            { label: 'Families Ran', value: formatNumber(routeFamilyAnalytics.rows.length), tone: routeFamilyAnalytics.rows.length ? 'win' : '' },
+            { label: 'Active Families', value: formatNumber(routeFamilyAnalytics.activeFamilies.length), tone: routeFamilyAnalytics.activeFamilies.length ? 'win' : '' },
+            { label: 'Total Trades', value: formatNumber(routeFamilyAnalytics.totalTrades) },
+            { label: 'Avg Family Score', value: formatDecimal(routeFamilyAnalytics.avgScore, 1) },
+            {
+              label: 'Best Family',
+              value: routeFamilyAnalytics.byScore[0]
+                ? `${routeFamilyAnalytics.byScore[0].harmonic_type || 'Family'} / ${formatDecimal(routeFamilyAnalytics.byScore[0].score, 1)}`
+                : 'N/A',
+              tone: 'win',
+              wide: true,
+            },
+            {
+              label: 'Current Family',
+              value: selectedFamily?.family_key ?? 'N/A',
+              wide: true,
+            },
+          ],
+        },
+        {
+          title: 'Family Leaders',
+          items: [
+            {
+              label: 'Best Avg R',
+              value: routeFamilyAnalytics.byAvgR[0]
+                ? `${routeFamilyAnalytics.byAvgR[0].family_key} / ${formatDecimal(routeFamilyAnalytics.byAvgR[0].avg_r, 2)}R`
+                : 'N/A',
+              tone: routeFamilyAnalytics.byAvgR[0] && Number(routeFamilyAnalytics.byAvgR[0].avg_r) < 0 ? 'loss' : 'win',
+              wide: true,
+            },
+            {
+              label: 'Best Win Rate',
+              value: routeFamilyAnalytics.byWin[0]
+                ? `${routeFamilyAnalytics.byWin[0].family_key} / ${formatDecimal(routeFamilyAnalytics.byWin[0].win_rate, 1)}%`
+                : 'N/A',
+              tone: 'win',
+              wide: true,
+            },
+            {
+              label: 'Most Trades',
+              value: routeFamilyAnalytics.byTrades[0]
+                ? `${routeFamilyAnalytics.byTrades[0].family_key} / ${formatNumber(routeFamilyAnalytics.byTrades[0].trade_count)}`
+                : 'N/A',
+              wide: true,
+            },
+            {
+              label: 'Best Worst Year',
+              value: routeFamilyAnalytics.byWorstYear[0]
+                ? `${routeFamilyAnalytics.byWorstYear[0].family_key} / ${formatDecimal(routeFamilyAnalytics.byWorstYear[0].worst_year_avg_r, 2)}R`
+                : 'N/A',
+              tone: routeFamilyAnalytics.byWorstYear[0] && Number(routeFamilyAnalytics.byWorstYear[0].worst_year_avg_r) < 0 ? 'loss' : 'win',
+              wide: true,
+            },
+          ],
+        },
+        {
+          title: `Family Board (${formatNumber(routeFamilyAnalytics.byScore.length)})`,
+          items: routeFamilyAnalytics.byScore.map((row) => ({
+            label: row.harmonic_type || row.family_key,
+            value: `${formatDecimal(row.score, 1)} score / ${formatDecimal(row.avg_r, 2)}R / ${formatDecimal(row.win_rate, 0)}% / ${formatNumber(row.trade_count)} trades`,
+            tone: Number(row.avg_r) < 0 ? 'loss' : 'win',
+            wide: true,
+          })),
+        },
+      ]
+    : [];
+  const supplyAnalytics = useMemo(() => {
+    const apiSymbolRows = supplyData.symbols ?? [];
+    const apiFamilyRows = supplyData.families ?? [];
+    const selectedFamilySymbolMap = new Map();
+
+    familyPatterns.forEach((pattern) => {
+      const symbol = pattern.symbol || 'N/A';
+      const current = selectedFamilySymbolMap.get(symbol) ?? {
+        symbol,
+        setup_count: 0,
+        pattern_count: 0,
+        family_count: selectedFamily ? 1 : 0,
+        contract_count: 1,
+        first_d_date: pattern.d_date,
+        last_d_date: pattern.d_date,
+      };
+      current.setup_count += 1;
+      current.pattern_count += 1;
+      if (pattern.d_date && (!current.first_d_date || new Date(pattern.d_date) < new Date(current.first_d_date))) {
+        current.first_d_date = pattern.d_date;
+      }
+      if (pattern.d_date && (!current.last_d_date || new Date(pattern.d_date) > new Date(current.last_d_date))) {
+        current.last_d_date = pattern.d_date;
+      }
+      selectedFamilySymbolMap.set(symbol, current);
+    });
+
+    const fallbackFamilyRows = visibleFamilies.map((family) => ({
+      family_key: family.family_key,
+      harmonic_type: family.harmonic_type,
+      bin: family.bin,
+      size_bucket: family.size_bucket,
+      time_bin: family.time_bin,
+      x_strictness: family.x_strictness,
+      setup_count: family.setup_count,
+      pattern_count: family.setup_count,
+      symbol_count: family.symbol_count,
+      first_d_date: family.first_d_date,
+      last_d_date: family.last_d_date,
+    }));
+    const symbolRows = apiSymbolRows.length ? apiSymbolRows : Array.from(selectedFamilySymbolMap.values());
+    const familyRows = apiFamilyRows.length ? apiFamilyRows : fallbackFamilyRows;
+    const totalSetups = symbolRows.reduce((sum, row) => sum + (Number(row.setup_count) || 0), 0);
+    const totalPatterns = symbolRows.reduce((sum, row) => sum + (Number(row.pattern_count) || 0), 0);
+    const byFamilies = [...symbolRows].sort((left, right) => Number(right.family_count) - Number(left.family_count));
+    const byPatterns = [...symbolRows].sort((left, right) => Number(right.pattern_count) - Number(left.pattern_count));
+    const bySymbols = [...familyRows].sort((left, right) => Number(right.symbol_count) - Number(left.symbol_count));
+
+    return {
+      isFallback: !apiSymbolRows.length || !apiFamilyRows.length,
+      symbolScope: apiSymbolRows.length ? 'Universe' : 'Selected family',
+      familyScope: apiFamilyRows.length ? 'Universe' : 'Loaded families',
+      symbolRows,
+      familyRows,
+      totalSetups,
+      totalPatterns,
+      byFamilies,
+      byPatterns,
+      bySymbols,
+    };
+  }, [familyPatterns, selectedFamily, supplyData, visibleFamilies]);
+  const supplyOverviewSections = [
+    {
+      title: 'Supply Summary',
+      items: [
+        { label: 'Symbols', value: formatNumber(supplyAnalytics.symbolRows.length), tone: supplyAnalytics.symbolRows.length ? 'win' : '' },
+        { label: 'Families', value: formatNumber(supplyAnalytics.familyRows.length), tone: supplyAnalytics.familyRows.length ? 'win' : '' },
+        { label: 'Setups', value: formatNumber(supplyAnalytics.totalSetups), wide: true },
+        { label: 'Patterns', value: formatNumber(supplyAnalytics.totalPatterns), wide: true },
+        { label: 'Symbol Scope', value: supplyAnalytics.symbolScope, tone: supplyAnalytics.isFallback ? 'skipped' : 'win' },
+        { label: 'Family Scope', value: supplyAnalytics.familyScope, tone: supplyAnalytics.isFallback ? 'skipped' : 'win' },
+        {
+          label: 'Top Symbol',
+          value: supplyAnalytics.symbolRows[0]
+            ? `${supplyAnalytics.symbolRows[0].symbol} / ${formatNumber(supplyAnalytics.symbolRows[0].setup_count)} setups`
+            : 'N/A',
+          wide: true,
+        },
+        {
+          label: 'Most Families',
+          value: supplyAnalytics.byFamilies[0]
+            ? `${supplyAnalytics.byFamilies[0].symbol} / ${formatNumber(supplyAnalytics.byFamilies[0].family_count)} families`
+            : 'N/A',
+          wide: true,
+        },
+      ],
+    },
+    {
+      title: 'Symbol Supply',
+      items: supplyAnalytics.symbolRows.map((row) => ({
+        label: row.symbol,
+        value: `${formatNumber(row.setup_count)} setups / ${formatNumber(row.pattern_count)} patterns / ${formatNumber(row.family_count)} families`,
+        wide: true,
+      })),
+    },
+    {
+      title: 'Family Supply',
+      items: supplyAnalytics.familyRows.map((row) => ({
+        label: row.harmonic_type || row.family_key,
+        value: `${formatNumber(row.setup_count)} setups / ${formatNumber(row.pattern_count)} patterns / ${formatNumber(row.symbol_count)} symbols`,
+        wide: true,
+      })),
+    },
+  ];
+  const activeTestOverviewSections =
+    testOverviewTab === 'supply'
+      ? supplyOverviewSections
+      : testOverviewTab === 'families'
+      ? selectedRouteFamiliesSections
+      : testOverviewTab === 'family'
+      ? selectedFamilyOverviewSections
+      : testOverviewTab === 'symbols'
+      ? selectedTestSymbolSections
+      : testOverviewTab === 'outcomes'
+        ? selectedTestOutcomeSections
+        : selectedTestOverviewSections;
 
   useEffect(() => {
     if (initialFamilyKey) {
@@ -1112,6 +1699,89 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       setSelectedRouteKey(phase1Results[0] ? getRouteKey(phase1Results[0]) : null);
     }
   }, [phase1Results, selectedRouteKey]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadSupplyData = async () => {
+      try {
+        setSupplyLoading(true);
+        setSupplyError('');
+        const data = await fetchPhase1Supply({
+          sourceScope,
+          year: yearFilter === 'All' ? null : yearFilter,
+          limit: 500,
+        });
+
+        if (!isCancelled) {
+          setSupplyData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setSupplyError('Could not load supply data.');
+          setSupplyData({ symbols: [], families: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setSupplyLoading(false);
+        }
+      }
+    };
+
+    void loadSupplyData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [sourceScope, yearFilter]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadRouteFamilies = async () => {
+      if (!selectedRoute?.route_id) {
+        setRouteFamilyRows([]);
+        setRouteFamiliesError('');
+        setRouteFamiliesLoading(false);
+        return;
+      }
+
+      try {
+        setRouteFamiliesLoading(true);
+        setRouteFamiliesError('');
+        const rows = await fetchPhase1Leaderboard({
+          sourceScope,
+          year: yearFilter === 'All' ? null : yearFilter,
+          limit: 2000,
+          minTradeCount: 0,
+          minSetupCount: 0,
+          bestPerFamily: false,
+          routeId: selectedRoute.route_id,
+        });
+
+        if (!isCancelled) {
+          setRouteFamilyRows(rows);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setRouteFamiliesError('Could not load families for this test.');
+          setRouteFamilyRows([]);
+        }
+      } finally {
+        if (!isCancelled) {
+          setRouteFamiliesLoading(false);
+        }
+      }
+    };
+
+    void loadRouteFamilies();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedRoute?.route_id, sourceScope, yearFilter]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1468,26 +2138,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
             />
 
             <SelectedSummaryRow
-              actionDisabled={!phase1Results.length}
-              actionLabel="Browse Tests"
-              emptyText={phase1Error || 'No stored Entry / Exit results for this family.'}
-              index={2}
-              isLoading={isPhase1Loading}
-              label="Entry / Exit Test"
-              loadingText="Loading Phase 1 results..."
-              metrics={selectedRouteRowMetrics}
-              onAction={() => setBrowsePanel('routes')}
-              status={phase1Error || `${formatNumber(phase1Results.length)} tests`}
-              subtitle={selectedRoute?.route_id ?? 'Select a family to load tests'}
-              title={selectedRoute?.route_label ?? null}
-              tone="route"
-            />
-
-            <SelectedSummaryRow
               actionDisabled={isFamilyPatternsLoading}
               actionLabel="Browse Patterns"
               emptyText={familyPatternsError || (selectedFamily ? 'No family patterns loaded.' : 'Select a family before choosing a pattern.')}
-              index={3}
+              index={2}
               isLoading={isFamilyPatternsLoading}
               label="Pattern"
               loadingText="Loading family patterns..."
@@ -1501,6 +2155,22 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
               }
               title={selectedFamilyPattern?.pattern_id ?? selectedFamilyPattern?.pattern_group_id ?? null}
               tone="pattern"
+            />
+
+            <SelectedSummaryRow
+              actionDisabled={!phase1Results.length}
+              actionLabel="Browse Tests"
+              emptyText={phase1Error || 'No stored Entry / Exit results for this family.'}
+              index={3}
+              isLoading={isPhase1Loading}
+              label="Entry / Exit Test"
+              loadingText="Loading Phase 1 results..."
+              metrics={selectedRouteRowMetrics}
+              onAction={() => setBrowsePanel('routes')}
+              status={phase1Error || `${formatNumber(phase1Results.length)} tests`}
+              subtitle={selectedRoute?.route_id ?? 'Select a family to load tests'}
+              title={selectedRoute?.route_label ?? null}
+              tone="route"
             />
 
             <SelectedSummaryRow
@@ -1527,21 +2197,102 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
           <section className="pattern-family-sim-panel">
             <div className="pattern-family-sim-header">
               <div>
-                <span>Replay Tape</span>
+                <span>Data Center</span>
                 <strong>
-                  {selectedRoute ? `${simAccountSize} / ${simContractsCount}x / ${simTestsCount} test${simTestsCount === 1 ? '' : 's'}` : 'Route replay'}
+                  {selectedRoute ? 'Test Overview' : 'No test selected'}
                 </strong>
               </div>
               <small>
-                {selectedRoute ? selectedRoute.route_label : 'Select a route'}
+                {selectedRoute ? selectedRoute.route_label : 'Select an Entry / Exit Test'}
               </small>
             </div>
             <div className="pattern-family-sim-body">
-              <div className="pattern-family-sim-blank">
-                <span>Reserved</span>
-                <strong>Simulation workspace</strong>
-                <small>The replay area is intentionally blank while the selected rows and trade canvas are tuned.</small>
-              </div>
+              {selectedRoute ? (
+                <div className="pattern-family-test-overview">
+                  <div className="pattern-family-test-overview-tabs" aria-label="Test overview sections">
+                    {[
+                      { id: 'overview', label: 'Overview' },
+                      { id: 'supply', label: 'Supply' },
+                      { id: 'family', label: 'Family' },
+                      { id: 'families', label: 'Families' },
+                      { id: 'symbols', label: 'Symbols' },
+                      { id: 'outcomes', label: 'Outcomes' },
+                      { id: 'simulator', label: 'Simulator', disabled: true },
+                    ].map((tab) => (
+                      <button
+                        className={
+                          testOverviewTab === tab.id
+                            ? 'pattern-family-test-overview-tab pattern-family-test-overview-tab--active'
+                            : 'pattern-family-test-overview-tab'
+                        }
+                        disabled={tab.disabled}
+                        key={tab.id}
+                        onClick={() => setTestOverviewTab(tab.id)}
+                        type="button"
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    className={[
+                      'pattern-family-test-overview-loading',
+                      testOverviewTab === 'families' && routeFamiliesError ? 'pattern-family-test-overview-loading--error' : '',
+                      testOverviewTab === 'supply' && supplyError ? 'pattern-family-test-overview-loading--error' : '',
+                      (testOverviewTab === 'families' && (isRouteFamiliesLoading || routeFamiliesError)) ||
+                      (testOverviewTab === 'supply' && (isSupplyLoading || supplyError))
+                        ? ''
+                        : 'pattern-family-test-overview-loading--empty',
+                    ].filter(Boolean).join(' ')}
+                  >
+                    {testOverviewTab === 'supply' && supplyError
+                      ? supplyError
+                      : testOverviewTab === 'supply' && isSupplyLoading
+                        ? 'Loading supply data...'
+                        : testOverviewTab === 'families' && routeFamiliesError
+                      ? routeFamiliesError
+                      : testOverviewTab === 'families' && isRouteFamiliesLoading
+                        ? 'Loading families for this test...'
+                        : null}
+                  </div>
+                  <div className="pattern-family-test-overview-grid">
+                    {activeTestOverviewSections.map((section) => (
+                      <section className="pattern-family-test-overview-section" key={section.title}>
+                        <header>
+                          <span>{section.title}</span>
+                        </header>
+                        <div className="pattern-family-test-overview-cells">
+                          {section.items.length ? (
+                            section.items.map((item) => (
+                              <div
+                                className={[
+                                  'pattern-family-test-overview-cell',
+                                  item.wide ? 'pattern-family-test-overview-cell--wide' : '',
+                                  item.tone ? `pattern-family-test-overview-cell--${item.tone}` : '',
+                                ].filter(Boolean).join(' ')}
+                                key={`${section.title}-${item.label}`}
+                              >
+                                <span>{item.label}</span>
+                                <strong title={item.value}>{item.value}</strong>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="pattern-family-test-overview-empty">
+                              No trade breakdown data loaded yet.
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="pattern-family-sim-blank">
+                  <span>Test Overview</span>
+                  <strong>No Entry / Exit Test Selected</strong>
+                  <small>Choose a test to load performance, coverage, and route logic stats here.</small>
+                </div>
+              )}
             </div>
           </section>
         </main>
