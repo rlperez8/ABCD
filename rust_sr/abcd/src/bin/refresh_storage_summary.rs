@@ -21,15 +21,11 @@ const CANDLE_STORAGE_TABLES: [&str; 9] = [
 
 const ENGINE_STORAGE_TABLES: [&str; 3] = [
     "pattern_setups",
-    "pattern_outcomes_prop",
-    "pattern_forward_observations",
+    "pattern_harmonic_scores",
+    "phase1_strategy_results",
 ];
-const ROLLUP_STORAGE_TABLES: [&str; 4] = [
-    "prop_strategy_family_summary",
-    "prop_strategy_family_yearly",
-    "prop_strategy_contract_week_summary",
-    "prop_strategy_family_weekly_cadence",
-];
+const ROLLUP_STORAGE_TABLES: [&str; 2] =
+    ["pattern_family_summary", "pattern_family_source_summary"];
 
 #[derive(Clone)]
 struct TableSummary {

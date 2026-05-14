@@ -189,7 +189,6 @@ impl Accuracies {
             pattern.accuracies = accuracies;
             pattern.time_accuracies = time_accuracies;
             pattern.refresh_pattern_id();
-            pattern.refresh_prop_strategy_id();
         }
 
         xabcd_patterns

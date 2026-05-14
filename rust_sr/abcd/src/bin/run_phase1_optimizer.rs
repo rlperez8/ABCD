@@ -7,11 +7,14 @@ use sqlx::{MySql, MySqlPool, QueryBuilder};
 
 #[derive(Debug)]
 struct Args {
-    family_key: String,
+    family_key: Option<String>,
+    all_families: bool,
     source_scope: String,
     period_year: i64,
     max_setups: i64,
     max_forward_bars: i64,
+    family_limit: i64,
+    test_id: Option<String>,
 }
 
 #[derive(Clone, sqlx::FromRow)]
@@ -28,11 +31,14 @@ struct PatternFamilySummary {
 #[derive(Clone, sqlx::FromRow)]
 struct Phase1SetupSource {
     setup_id: String,
+    pattern_id: Option<String>,
+    pattern_group_id: String,
     symbol: String,
     source_table: Option<String>,
     source_timeframe: Option<String>,
     market: String,
     d_date: NaiveDateTime,
+    d_confirm_date: NaiveDateTime,
     x_high: f64,
     x_low: f64,
     b_high: f64,
@@ -48,13 +54,14 @@ struct Phase1SetupSource {
 
 #[derive(Clone, sqlx::FromRow)]
 struct Phase1ForwardCandle {
+    candle_date: NaiveDateTime,
     open: f64,
     high: f64,
     low: f64,
     close: f64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, sqlx::FromRow)]
 struct Phase1RouteSpec {
     route_id: String,
     route_label: String,
@@ -62,6 +69,32 @@ struct Phase1RouteSpec {
     stop_mode: String,
     target_r: f64,
     max_hold_multiple: i64,
+}
+
+struct EntryDecision {
+    index: usize,
+    price: f64,
+    direction: f64,
+}
+
+struct Phase1TradeDetail {
+    result_r: f64,
+    entry_date: NaiveDateTime,
+    exit_date: NaiveDateTime,
+    exit_price: f64,
+    entry_price: f64,
+    stop_price: f64,
+    target_price: f64,
+    lowest_price: f64,
+    highest_price: f64,
+    adverse_price: f64,
+    favorable_price: f64,
+    max_adverse_points: f64,
+    max_favorable_points: f64,
+    risk_points: f64,
+    trade_direction: f64,
+    trade_result: i64,
+    exit_reason: String,
 }
 
 struct Phase1RouteAccumulator {
@@ -137,6 +170,44 @@ struct Phase1YearlyResultRow {
     sum_r: f64,
     profit_factor: f64,
     max_drawdown_r: f64,
+}
+
+struct Phase1TradeRow {
+    trade_uid: String,
+    run_id: String,
+    family_key: String,
+    source_scope: String,
+    period_year: i64,
+    route_id: String,
+    route_label: String,
+    entry_mode: String,
+    stop_mode: String,
+    target_r: f64,
+    max_hold_multiple: i64,
+    setup_id: String,
+    pattern_id: Option<String>,
+    pattern_group_id: String,
+    symbol: String,
+    market: String,
+    d_date: NaiveDateTime,
+    d_confirm_date: NaiveDateTime,
+    entry_date: NaiveDateTime,
+    exit_date: NaiveDateTime,
+    entry_price: f64,
+    stop_price: f64,
+    target_price: f64,
+    exit_price: f64,
+    result_r: f64,
+    risk_points: f64,
+    trade_direction: String,
+    trade_result: i64,
+    exit_reason: String,
+    lowest_price: f64,
+    highest_price: f64,
+    adverse_price: f64,
+    favorable_price: f64,
+    max_adverse_points: f64,
+    max_favorable_points: f64,
 }
 
 impl Phase1YearlyAccumulator {
@@ -352,7 +423,7 @@ fn database_url_from_env() -> Result<String, Box<dyn std::error::Error>> {
 }
 
 fn usage() -> &'static str {
-    "Usage: cargo run --bin run_phase1_optimizer -- --family <family_key> [--source futures|daily|all] [--year YYYY] [--max-setups N] [--max-forward-bars N]\nNote: forward bars are dynamic per setup: min(full_pattern_length * 5, --max-forward-bars safety cap)."
+    "Usage: cargo run --bin run_phase1_optimizer -- (--family <family_key> | --all-families) [--source futures|daily|all] [--year YYYY] [--test-id TEST] [--family-limit N] [--max-setups N]\nNote: forward bars are dynamic per setup: full_pattern_length * 5."
 }
 
 fn arg_value(args: &[String], name: &str) -> Option<String> {
@@ -376,11 +447,14 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
         std::process::exit(0);
     }
 
+    let all_families = raw_args.iter().any(|arg| arg == "--all-families");
     let family_key = arg_value(&raw_args, "--family")
         .or_else(|| arg_value(&raw_args, "--family-key"))
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| format!("Missing --family argument.\n{}", usage()))?;
+        .filter(|value| !value.is_empty());
+    if !all_families && family_key.is_none() {
+        return Err(format!("Missing --family argument.\n{}", usage()).into());
+    }
     let source_scope = normalize_source_scope(arg_value(&raw_args, "--source"));
     let period_year = arg_value(&raw_args, "--year")
         .and_then(|value| value.parse::<i64>().ok())
@@ -392,15 +466,25 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
         .clamp(25, 25_000);
     let max_forward_bars = arg_value(&raw_args, "--max-forward-bars")
         .and_then(|value| value.parse::<i64>().ok())
-        .unwrap_or(420)
-        .clamp(40, 5_000);
+        .unwrap_or(0)
+        .max(0);
+    let family_limit = arg_value(&raw_args, "--family-limit")
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0)
+        .clamp(0, 100_000);
+    let test_id = arg_value(&raw_args, "--test-id")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     Ok(Args {
         family_key,
+        all_families,
         source_scope,
         period_year,
         max_setups,
         max_forward_bars,
+        family_limit,
+        test_id,
     })
 }
 
@@ -445,6 +529,7 @@ async fn ensure_phase1_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
         r#"
         CREATE TABLE IF NOT EXISTS phase1_strategy_results (
             id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            trade_uid VARCHAR(320) NOT NULL,
             run_id VARCHAR(64) NOT NULL,
             family_key CHAR(16) NOT NULL,
             source_scope VARCHAR(16) NOT NULL,
@@ -526,7 +611,193 @@ async fn ensure_phase1_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS phase1_strategy_trades (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            run_id VARCHAR(64) NOT NULL,
+            family_key CHAR(16) NOT NULL,
+            source_scope VARCHAR(16) NOT NULL,
+            period_year INT NOT NULL,
+            route_id VARCHAR(128) NOT NULL,
+            route_label VARCHAR(255) NOT NULL,
+            entry_mode VARCHAR(64) NOT NULL,
+            stop_mode VARCHAR(64) NOT NULL,
+            target_r DOUBLE NOT NULL,
+            max_hold_multiple BIGINT NOT NULL,
+            setup_id VARCHAR(64) NOT NULL,
+            pattern_id VARCHAR(64) NULL,
+            pattern_group_id VARCHAR(128) NOT NULL,
+            symbol VARCHAR(32) NOT NULL,
+            market VARCHAR(16) NOT NULL,
+            d_date DATETIME NOT NULL,
+            d_confirm_date DATETIME NOT NULL,
+            entry_date DATETIME NOT NULL,
+            exit_date DATETIME NOT NULL,
+            entry_price DOUBLE NOT NULL,
+            stop_price DOUBLE NOT NULL,
+            target_price DOUBLE NOT NULL,
+            exit_price DOUBLE NOT NULL,
+            result_r DOUBLE NOT NULL,
+            risk_points DOUBLE NOT NULL,
+            trade_direction VARCHAR(8) NOT NULL,
+            trade_result BIGINT NOT NULL,
+            exit_reason VARCHAR(16) NOT NULL,
+            lowest_price DOUBLE NOT NULL,
+            highest_price DOUBLE NOT NULL,
+            adverse_price DOUBLE NOT NULL,
+            favorable_price DOUBLE NOT NULL,
+            max_adverse_points DOUBLE NOT NULL,
+            max_favorable_points DOUBLE NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_phase1_trade_uid (trade_uid),
+            UNIQUE KEY uniq_phase1_trade (run_id, route_id, setup_id),
+            INDEX idx_phase1_trades_route (family_key, run_id, route_id, entry_date),
+            INDEX idx_phase1_trades_pattern (pattern_id, pattern_group_id),
+            INDEX idx_phase1_trades_test (route_id, source_scope, period_year)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        r#"
+        ALTER TABLE phase1_strategy_trades
+        ADD COLUMN trade_uid VARCHAR(320) NULL AFTER id
+        "#,
+    )
+    .execute(pool)
+    .await
+    .ok();
+    sqlx::query(
+        r#"
+        UPDATE phase1_strategy_trades
+        SET trade_uid = CONCAT(run_id, '::', route_id, '::', setup_id)
+        WHERE trade_uid IS NULL OR trade_uid = ''
+        "#,
+    )
+    .execute(pool)
+    .await
+    .ok();
+    sqlx::query(
+        r#"
+        ALTER TABLE phase1_strategy_trades
+        MODIFY COLUMN trade_uid VARCHAR(320) NOT NULL
+        "#,
+    )
+    .execute(pool)
+    .await
+    .ok();
+    sqlx::query(
+        r#"
+        ALTER TABLE phase1_strategy_trades
+        ADD UNIQUE KEY uniq_phase1_trade_uid (trade_uid)
+        "#,
+    )
+    .execute(pool)
+    .await
+    .ok();
+
     ensure_phase1_leaderboard_indexes(pool).await;
+    ensure_entry_exit_tests(pool).await?;
+
+    Ok(())
+}
+
+async fn ensure_entry_exit_tests(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_tests (
+            test_id VARCHAR(128) NOT NULL PRIMARY KEY,
+            test_name VARCHAR(255) NOT NULL,
+            entry_mode VARCHAR(64) NOT NULL,
+            stop_mode VARCHAR(64) NOT NULL,
+            target_r DOUBLE NOT NULL,
+            max_hold_multiple BIGINT NOT NULL,
+            is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            notes TEXT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_entry_exit_tests_enabled (is_enabled, updated_at)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    seed_entry_exit_tests(pool).await
+}
+
+async fn seed_entry_exit_tests(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    for route in default_entry_exit_tests(false) {
+        sqlx::query(
+            r#"
+            INSERT IGNORE INTO entry_exit_tests (
+                test_id, test_name, entry_mode, stop_mode, target_r, max_hold_multiple, is_enabled, notes
+            )
+            VALUES (?, ?, ?, ?, ?, ?, FALSE, ?)
+            "#,
+        )
+        .bind(&route.route_id)
+        .bind(&route.route_label)
+        .bind(&route.entry_mode)
+        .bind(&route.stop_mode)
+        .bind(route.target_r)
+        .bind(route.max_hold_multiple)
+        .bind("Legacy Phase 1 route candidate. Enable it when you want to include it in the test batch.")
+        .execute(pool)
+        .await?;
+    }
+
+    sqlx::query(
+        r#"
+        INSERT INTO entry_exit_tests (
+            test_id, test_name, entry_mode, stop_mode, target_r, max_hold_multiple, is_enabled, notes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, TRUE, ?)
+        ON DUPLICATE KEY UPDATE
+            test_name = VALUES(test_name),
+            entry_mode = VALUES(entry_mode),
+            stop_mode = VALUES(stop_mode),
+            target_r = VALUES(target_r),
+            max_hold_multiple = VALUES(max_hold_multiple),
+            notes = VALUES(notes)
+        "#,
+    )
+    .bind("post_confirm_decision__c_extreme__4R__1x")
+    .bind("Post-confirm decision + C stop + 4R target + 1x pattern hold")
+    .bind("post_confirm_decision")
+    .bind("c_extreme")
+    .bind(4.0)
+    .bind(1_i64)
+    .bind("Decision candle test: bullish setup enters at the decision candle open, long if that candle closes above the confirmation open, short only if it closes back below D high. Bearish setup mirrors this: short below confirmation open, long only back above D low.")
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO entry_exit_tests (
+            test_id, test_name, entry_mode, stop_mode, target_r, max_hold_multiple, is_enabled, notes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, TRUE, ?)
+        ON DUPLICATE KEY UPDATE
+            test_name = VALUES(test_name),
+            entry_mode = VALUES(entry_mode),
+            stop_mode = VALUES(stop_mode),
+            target_r = VALUES(target_r),
+            max_hold_multiple = VALUES(max_hold_multiple),
+            notes = VALUES(notes)
+        "#,
+    )
+    .bind("confirm_p1_body_signal_p2_open__c_extreme__4R__1x")
+    .bind("Confirmation +1 body signal + Confirmation +2 open + C stop + 4R target + 1x hold")
+    .bind("confirm_p1_body_signal_p2_open")
+    .bind("c_extreme")
+    .bind(4.0)
+    .bind(1_i64)
+    .bind("Body signal test: bearish setup requires Confirmation +1 close below Confirmation body low, then enters short at Confirmation +2 open only if that open is below Confirmation body low and below Confirmation +1 body high. Bullish setup mirrors this above Confirmation body high and above Confirmation +1 body low.")
+    .execute(pool)
+    .await?;
 
     Ok(())
 }
@@ -586,122 +857,53 @@ async fn fetch_family(
     .await
 }
 
-fn accuracy_bin_expr(accuracy_expr: &str) -> String {
-    format!(
-        "CASE
-            WHEN {accuracy_expr} <= 10 THEN '0-10'
-            WHEN {accuracy_expr} <= 20 THEN '10-20'
-            WHEN {accuracy_expr} <= 30 THEN '20-30'
-            WHEN {accuracy_expr} <= 40 THEN '30-40'
-            WHEN {accuracy_expr} <= 50 THEN '40-50'
-            WHEN {accuracy_expr} <= 60 THEN '50-60'
-            WHEN {accuracy_expr} <= 70 THEN '60-70'
-            WHEN {accuracy_expr} <= 80 THEN '70-80'
-            WHEN {accuracy_expr} <= 90 THEN '80-90'
-            ELSE '90-100'
-        END"
-    )
-}
-
-fn size_bucket_expr(total_bars_expr: &str) -> String {
-    format!(
-        "CASE
-            WHEN {total_bars_expr} <= 20 THEN 'Micro'
-            WHEN {total_bars_expr} <= 60 THEN 'Small'
-            WHEN {total_bars_expr} <= 180 THEN 'Normal'
-            WHEN {total_bars_expr} <= 365 THEN 'Large'
-            ELSE 'Massive'
-        END"
-    )
-}
-
-fn x_strictness_expr(alias: &str) -> String {
-    format!(
-        "CASE
-        WHEN COALESCE({alias}.x_length, 0) <= 0 THEN 'Loose'
-        WHEN COALESCE({alias}.x_bars_left, 0) >= COALESCE({alias}.x_length, 0) THEN 'Strict'
-        WHEN COALESCE({alias}.x_bars_left, 0) * 2 >= COALESCE({alias}.x_length, 0) THEN 'Normal'
-        ELSE 'Loose'
-    END"
-    )
-}
-
-fn setup_ratio_expr(numerator_expr: &str, denominator_expr: &str) -> String {
-    format!(
-        "CASE
-            WHEN COALESCE({denominator_expr}, 0.0) > 0
-            THEN (CAST({numerator_expr} AS DOUBLE) / CAST({denominator_expr} AS DOUBLE)) * 100.0
-            ELSE 0.0
-        END"
-    )
-}
-
-fn leg_accuracy_expr(current_expr: &str, target: f64) -> String {
-    format!(
-        "CASE
-            WHEN COALESCE({current_expr}, 0.0) <= 0 THEN 0.0
-            ELSE LEAST(
-                GREATEST(
-                    100.0 * (1.0 - ABS((CAST({current_expr} AS DOUBLE) / 100.0) - {target}) / {target}),
-                    0.0
-                ),
-                100.0
-            )
-        END"
-    )
-}
-
-fn harmonic_score_select(
-    harmonic_type: &str,
-    ab_xa: f64,
-    bc_ab: f64,
-    cd_bc: f64,
-    d_completion: f64,
-) -> String {
-    let ab_xa_price = setup_ratio_expr("ab_price_length", "xa_price_length");
-    let bc_ab_price = setup_ratio_expr("bc_price_length", "ab_price_length");
-    let cd_bc_price = setup_ratio_expr("cd_price_length", "bc_price_length");
-    let d_completion_price = setup_ratio_expr("ABS(a_min_max - d_min_max)", "xa_price_length");
-    let ab_xa_time = setup_ratio_expr("a_length", "x_length");
-    let bc_ab_time = setup_ratio_expr("b_length", "a_length");
-    let cd_bc_time = setup_ratio_expr("c_length", "b_length");
-    let cd_xa_time = setup_ratio_expr("c_length", "x_length");
-
-    format!(
+async fn fetch_families(
+    pool: &MySqlPool,
+    source_scope: &str,
+    period_year: i64,
+    limit: i64,
+) -> Result<Vec<PatternFamilySummary>, sqlx::Error> {
+    let sql = if limit > 0 {
         r#"
         SELECT
-            setup_id,
-            '{harmonic_type}' AS harmonic_type,
-            (
-                {price_ab_xa} + {price_bc_ab} + {price_cd_bc} + {price_d_completion}
-            ) / 4.0 AS price_accuracy,
-            (
-                {time_ab_xa} + {time_bc_ab} + {time_cd_bc} + {time_cd_xa}
-            ) / 4.0 AS time_accuracy
-        FROM filtered_setups
-        "#,
-        price_ab_xa = leg_accuracy_expr(&ab_xa_price, ab_xa),
-        price_bc_ab = leg_accuracy_expr(&bc_ab_price, bc_ab),
-        price_cd_bc = leg_accuracy_expr(&cd_bc_price, cd_bc),
-        price_d_completion = leg_accuracy_expr(&d_completion_price, d_completion),
-        time_ab_xa = leg_accuracy_expr(&ab_xa_time, ab_xa),
-        time_bc_ab = leg_accuracy_expr(&bc_ab_time, bc_ab),
-        time_cd_bc = leg_accuracy_expr(&cd_bc_time, cd_bc),
-        time_cd_xa = leg_accuracy_expr(&cd_xa_time, d_completion),
-    )
-}
+            family_key,
+            harmonic_type,
+            bin,
+            size_bucket,
+            time_bin,
+            x_strictness,
+            CAST(setup_count AS SIGNED) AS setup_count
+        FROM pattern_family_source_summary
+        WHERE source_scope = ?
+          AND period_year = ?
+        ORDER BY setup_count DESC, family_key ASC
+        LIMIT ?
+        "#
+    } else {
+        r#"
+        SELECT
+            family_key,
+            harmonic_type,
+            bin,
+            size_bucket,
+            time_bin,
+            x_strictness,
+            CAST(setup_count AS SIGNED) AS setup_count
+        FROM pattern_family_source_summary
+        WHERE source_scope = ?
+          AND period_year = ?
+        ORDER BY setup_count DESC, family_key ASC
+        "#
+    };
 
-fn harmonic_score_selects() -> String {
-    [
-        harmonic_score_select("Bat", 0.500, 0.382, 1.618, 0.886),
-        harmonic_score_select("AlternateBat", 0.382, 0.382, 2.000, 1.130),
-        harmonic_score_select("Butterfly", 0.786, 0.382, 1.618, 1.272),
-        harmonic_score_select("Gartley", 0.618, 0.382, 1.272, 0.786),
-        harmonic_score_select("Crab", 0.382, 0.382, 2.618, 1.618),
-        harmonic_score_select("DeepCrab", 0.886, 0.382, 2.618, 1.618),
-        harmonic_score_select("Shark", 0.500, 1.130, 1.618, 0.886),
-    ]
-    .join("\nUNION ALL\n")
+    let mut query = sqlx::query_as::<_, PatternFamilySummary>(sql)
+        .bind(source_scope)
+        .bind(period_year);
+    if limit > 0 {
+        query = query.bind(limit);
+    }
+
+    query.fetch_all(pool).await
 }
 
 async fn fetch_setups(
@@ -723,156 +925,47 @@ async fn fetch_setups(
     } else {
         ""
     };
-    let bin_expr = accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
-    let time_bin_expr = accuracy_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
-    let size_bucket_expr = size_bucket_expr(
-        "CAST(COALESCE(fs.x_length, 0) + COALESCE(fs.a_length, 0) + COALESCE(fs.b_length, 0) + COALESCE(fs.c_length, 0) AS DOUBLE)",
-    );
-    let x_strictness_expr = x_strictness_expr("fs");
-    let score_selects = harmonic_score_selects();
     let sql = format!(
         r#"
-        WITH filtered_setups AS (
-            SELECT
-                ps.setup_id,
-                ps.symbol,
-                ps.source_table,
-                ps.source_timeframe,
-                ps.market,
-                ps.d_date,
-                ps.x_high,
-                ps.x_low,
-                ps.b_high,
-                ps.b_low,
-                ps.c_high,
-                ps.c_low,
-                ps.d_high,
-                ps.d_low,
-                ps.d_close,
-                ps.cd_price_length,
-                ps.full_pattern_length,
-                ps.xa_price_length,
-                ps.ab_price_length,
-                ps.bc_price_length,
-                ps.a_min_max,
-                ps.d_min_max,
-                ps.x_bars_left,
-                ps.x_length,
-                ps.a_length,
-                ps.b_length,
-                ps.c_length
-            FROM pattern_setups ps
-            WHERE ps.d_date IS NOT NULL
-              {source_filter}
-              {year_filter}
-        ),
-        setup_scores AS (
-            {score_selects}
-        ),
-        best_harmonic AS (
-            SELECT
-                setup_id,
-                SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        harmonic_type
-                        ORDER BY
-                            COALESCE(price_accuracy, 0.0) DESC,
-                            COALESCE(time_accuracy, 0.0) DESC,
-                            harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS harmonic_type,
-                CAST(SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        COALESCE(CAST(price_accuracy AS CHAR), '0')
-                        ORDER BY
-                            COALESCE(price_accuracy, 0.0) DESC,
-                            COALESCE(time_accuracy, 0.0) DESC,
-                            harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS DOUBLE) AS price_accuracy,
-                CAST(SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        COALESCE(CAST(time_accuracy AS CHAR), '0')
-                        ORDER BY
-                            COALESCE(price_accuracy, 0.0) DESC,
-                            COALESCE(time_accuracy, 0.0) DESC,
-                            harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS DOUBLE) AS time_accuracy
-            FROM setup_scores
-            GROUP BY setup_id
-        ),
-        pattern_rows AS (
-            SELECT
-                fs.*,
-                COALESCE(best_harmonic.harmonic_type, 'Unknown') AS best_harmonic_type,
-                {bin_expr} AS best_bin,
-                {time_bin_expr} AS best_time_bin,
-                {size_bucket_expr} AS best_size_bucket,
-                {x_strictness_expr} AS best_x_strictness
-            FROM filtered_setups fs
-            LEFT JOIN best_harmonic
-              ON best_harmonic.setup_id = fs.setup_id
-        )
         SELECT
-            setup_id,
-            symbol,
-            source_table,
-            source_timeframe,
-            market,
-            d_date,
-            x_high,
-            x_low,
-            b_high,
-            b_low,
-            c_high,
-            c_low,
-            d_high,
-            d_low,
-            d_close,
-            cd_price_length,
-            CAST(full_pattern_length AS SIGNED) AS full_pattern_length
-        FROM pattern_rows
-        WHERE best_harmonic_type = ?
-          AND best_bin = ?
-          AND best_size_bucket = ?
-          AND best_time_bin = ?
-          AND best_x_strictness = ?
-        ORDER BY d_date ASC, setup_id ASC
+            ps.setup_id,
+            ps.pattern_id,
+            ps.pattern_group_id,
+            ps.symbol,
+            ps.source_table,
+            ps.source_timeframe,
+            ps.market,
+            ps.d_date,
+            COALESCE(ps.d_confirm_date, ps.d_date) AS d_confirm_date,
+            ps.x_high,
+            ps.x_low,
+            ps.b_high,
+            ps.b_low,
+            ps.c_high,
+            ps.c_low,
+            ps.d_high,
+            ps.d_low,
+            ps.d_close,
+            ps.cd_price_length,
+            CAST(ps.full_pattern_length AS SIGNED) AS full_pattern_length
+        FROM pattern_setups ps
+        WHERE ps.pattern_family_key = ?
+          AND ps.d_date IS NOT NULL
+          {source_filter}
+          {year_filter}
+        ORDER BY ps.d_date ASC, ps.setup_id ASC
         LIMIT ?
         "#,
         source_filter = source_filter,
         year_filter = year_filter,
-        score_selects = score_selects,
-        bin_expr = bin_expr,
-        time_bin_expr = time_bin_expr,
-        size_bucket_expr = size_bucket_expr,
-        x_strictness_expr = x_strictness_expr,
     );
 
-    let mut query = sqlx::query_as::<_, Phase1SetupSource>(&sql);
+    let mut query = sqlx::query_as::<_, Phase1SetupSource>(&sql).bind(&family.family_key);
     if period_year > 0 {
         query = query.bind(period_year);
     }
 
-    query
-        .bind(&family.harmonic_type)
-        .bind(&family.bin)
-        .bind(&family.size_bucket)
-        .bind(&family.time_bin)
-        .bind(&family.x_strictness)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
+    query.bind(limit).fetch_all(pool).await
 }
 
 fn futures_candle_table(source_table: Option<&str>) -> &'static str {
@@ -909,20 +1002,21 @@ async fn fetch_forward_candles(
         return sqlx::query_as::<_, Phase1ForwardCandle>(
             r#"
             SELECT
+                CAST(date AS DATETIME) AS candle_date,
                 CAST(open AS DOUBLE) AS open,
                 CAST(high AS DOUBLE) AS high,
                 CAST(low AS DOUBLE) AS low,
                 CAST(close AS DOUBLE) AS close
             FROM candles
             WHERE symbol = ?
-              AND date > ?
+              AND date >= ?
             ORDER BY date ASC
             LIMIT ?
             "#,
         )
         .bind(&setup.symbol)
-        .bind(setup.d_date.date())
-        .bind(max_forward_bars)
+        .bind(setup.d_confirm_date.date())
+        .bind(max_forward_bars.saturating_add(1))
         .fetch_all(pool)
         .await;
     }
@@ -931,13 +1025,14 @@ async fn fetch_forward_candles(
     let sql = format!(
         r#"
         SELECT
+            ts_utc AS candle_date,
             CAST(open AS DOUBLE) AS open,
             CAST(high AS DOUBLE) AS high,
             CAST(low AS DOUBLE) AS low,
             CAST(close AS DOUBLE) AS close
         FROM {candle_table}
         WHERE symbol = ?
-          AND ts_utc > ?
+          AND ts_utc >= ?
         ORDER BY ts_utc ASC
         LIMIT ?
         "#
@@ -945,13 +1040,13 @@ async fn fetch_forward_candles(
 
     sqlx::query_as::<_, Phase1ForwardCandle>(&sql)
         .bind(&setup.symbol)
-        .bind(setup.d_date)
-        .bind(max_forward_bars)
+        .bind(setup.d_confirm_date)
+        .bind(max_forward_bars.saturating_add(1))
         .fetch_all(pool)
         .await
 }
 
-fn build_routes() -> Vec<Phase1RouteSpec> {
+fn default_entry_exit_tests(include_decision_test: bool) -> Vec<Phase1RouteSpec> {
     let entries = [
         ("next_open", "Next open"),
         ("d_break", "Break D"),
@@ -997,7 +1092,79 @@ fn build_routes() -> Vec<Phase1RouteSpec> {
         }
     }
 
+    if include_decision_test {
+        routes.push(Phase1RouteSpec {
+            route_id: "post_confirm_decision__c_extreme__4R__1x".to_string(),
+            route_label: "Post-confirm decision + C stop + 4R target + 1x pattern hold".to_string(),
+            entry_mode: "post_confirm_decision".to_string(),
+            stop_mode: "c_extreme".to_string(),
+            target_r: 4.0,
+            max_hold_multiple: 1,
+        });
+        routes.push(Phase1RouteSpec {
+            route_id: "confirm_p1_body_signal_p2_open__c_extreme__4R__1x".to_string(),
+            route_label:
+                "Confirmation +1 body signal + Confirmation +2 open + C stop + 4R target + 1x hold"
+                    .to_string(),
+            entry_mode: "confirm_p1_body_signal_p2_open".to_string(),
+            stop_mode: "c_extreme".to_string(),
+            target_r: 4.0,
+            max_hold_multiple: 1,
+        });
+    }
+
     routes
+}
+
+async fn fetch_entry_exit_tests(
+    pool: &MySqlPool,
+    test_id: Option<&str>,
+) -> Result<Vec<Phase1RouteSpec>, sqlx::Error> {
+    let rows = if let Some(test_id) = test_id {
+        sqlx::query_as::<_, Phase1RouteSpec>(
+            r#"
+            SELECT
+                test_id AS route_id,
+                test_name AS route_label,
+                entry_mode,
+                stop_mode,
+                target_r,
+                CAST(max_hold_multiple AS SIGNED) AS max_hold_multiple
+            FROM entry_exit_tests
+            WHERE test_id = ?
+            LIMIT 1
+            "#,
+        )
+        .bind(test_id)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as::<_, Phase1RouteSpec>(
+            r#"
+            SELECT
+                test_id AS route_id,
+                test_name AS route_label,
+                entry_mode,
+                stop_mode,
+                target_r,
+                CAST(max_hold_multiple AS SIGNED) AS max_hold_multiple
+            FROM entry_exit_tests
+            WHERE is_enabled = TRUE
+            ORDER BY updated_at DESC, test_name ASC
+            "#,
+        )
+        .fetch_all(pool)
+        .await?
+    };
+
+    if rows.is_empty() {
+        Ok(default_entry_exit_tests(true)
+            .into_iter()
+            .filter(|route| route.entry_mode == "post_confirm_decision")
+            .collect())
+    } else {
+        Ok(rows)
+    }
 }
 
 fn direction(setup: &Phase1SetupSource) -> f64 {
@@ -1018,145 +1185,393 @@ fn break_entry(direction: f64, level: f64, candle: &Phase1ForwardCandle) -> Opti
     }
 }
 
+fn forward_start_index(setup: &Phase1SetupSource, candles: &[Phase1ForwardCandle]) -> usize {
+    candles
+        .first()
+        .filter(|candle| candle.candle_date <= setup.d_confirm_date)
+        .map(|_| 1)
+        .unwrap_or(0)
+}
+
 fn find_entry(
     route: &Phase1RouteSpec,
     setup: &Phase1SetupSource,
     candles: &[Phase1ForwardCandle],
-) -> Option<(usize, f64)> {
-    let direction = direction(setup);
-    let entry_scan_limit = candles.len().min(80);
+) -> Option<EntryDecision> {
+    let setup_direction = direction(setup);
+    let start_index = forward_start_index(setup, candles);
+    let entry_scan_limit = candles.len().min(start_index.saturating_add(80));
 
     match route.entry_mode.as_str() {
-        "next_open" => candles.first().map(|candle| (0, candle.open)),
+        "next_open" => candles.get(start_index).map(|candle| EntryDecision {
+            index: start_index,
+            price: candle.open,
+            direction: setup_direction,
+        }),
+        "post_confirm_decision" => {
+            if start_index == 0 || start_index >= candles.len() {
+                return None;
+            }
+
+            let confirmation = &candles[start_index - 1];
+            let decision = &candles[start_index];
+
+            if setup_direction > 0.0 {
+                if decision.close > confirmation.open {
+                    Some(EntryDecision {
+                        index: start_index,
+                        price: decision.open,
+                        direction: 1.0,
+                    })
+                } else if decision.close < setup.d_high {
+                    Some(EntryDecision {
+                        index: start_index,
+                        price: decision.open,
+                        direction: -1.0,
+                    })
+                } else {
+                    None
+                }
+            } else if decision.close < confirmation.open {
+                Some(EntryDecision {
+                    index: start_index,
+                    price: decision.open,
+                    direction: -1.0,
+                })
+            } else if decision.close > setup.d_low {
+                Some(EntryDecision {
+                    index: start_index,
+                    price: decision.open,
+                    direction: 1.0,
+                })
+            } else {
+                None
+            }
+        }
+        "confirm_p1_body_signal_p2_open" => {
+            if start_index == 0 || start_index + 1 >= candles.len() {
+                return None;
+            }
+
+            let confirmation = &candles[start_index - 1];
+            let confirmation_plus_one = &candles[start_index];
+            let confirmation_plus_two = &candles[start_index + 1];
+
+            let confirmation_body_low = confirmation.open.min(confirmation.close);
+            let confirmation_body_high = confirmation.open.max(confirmation.close);
+            let plus_one_body_low = confirmation_plus_one.open.min(confirmation_plus_one.close);
+            let plus_one_body_high = confirmation_plus_one.open.max(confirmation_plus_one.close);
+
+            if setup_direction > 0.0 {
+                let signal = confirmation_plus_one.close > confirmation_body_high;
+                let entry_valid = confirmation_plus_two.open > confirmation_body_high
+                    && confirmation_plus_two.open > plus_one_body_low;
+                (signal && entry_valid).then_some(EntryDecision {
+                    index: start_index + 1,
+                    price: confirmation_plus_two.open,
+                    direction: 1.0,
+                })
+            } else {
+                let signal = confirmation_plus_one.close < confirmation_body_low;
+                let entry_valid = confirmation_plus_two.open < confirmation_body_low
+                    && confirmation_plus_two.open < plus_one_body_high;
+                (signal && entry_valid).then_some(EntryDecision {
+                    index: start_index + 1,
+                    price: confirmation_plus_two.open,
+                    direction: -1.0,
+                })
+            }
+        }
         "d_break" => {
-            let level = if direction > 0.0 {
+            let level = if setup_direction > 0.0 {
                 setup.d_high
             } else {
                 setup.d_low
             };
             candles
                 .iter()
+                .skip(start_index)
                 .take(entry_scan_limit)
                 .enumerate()
                 .find_map(|(index, candle)| {
-                    break_entry(direction, level, candle).map(|entry| (index, entry))
+                    break_entry(setup_direction, level, candle).map(|entry| EntryDecision {
+                        index: start_index + index,
+                        price: entry,
+                        direction: setup_direction,
+                    })
                 })
         }
-        "d_close_confirm" => {
-            candles
-                .iter()
-                .take(entry_scan_limit)
-                .enumerate()
-                .find_map(|(index, candle)| {
-                    let confirms = (direction > 0.0 && candle.close > setup.d_close)
-                        || (direction < 0.0 && candle.close < setup.d_close);
-                    confirms.then_some((index, candle.close))
+        "d_close_confirm" => candles
+            .iter()
+            .skip(start_index)
+            .take(entry_scan_limit)
+            .enumerate()
+            .find_map(|(index, candle)| {
+                let confirms = (setup_direction > 0.0 && candle.close > setup.d_close)
+                    || (setup_direction < 0.0 && candle.close < setup.d_close);
+                confirms.then_some(EntryDecision {
+                    index: start_index + index,
+                    price: candle.close,
+                    direction: setup_direction,
                 })
-        }
+            }),
         "c_break" => {
-            let level = if direction > 0.0 {
+            let level = if setup_direction > 0.0 {
                 setup.c_high
             } else {
                 setup.c_low
             };
             candles
                 .iter()
+                .skip(start_index)
                 .take(entry_scan_limit)
                 .enumerate()
                 .find_map(|(index, candle)| {
-                    break_entry(direction, level, candle).map(|entry| (index, entry))
+                    break_entry(setup_direction, level, candle).map(|entry| EntryDecision {
+                        index: start_index + index,
+                        price: entry,
+                        direction: setup_direction,
+                    })
                 })
         }
         "b_break" => {
-            let level = if direction > 0.0 {
+            let level = if setup_direction > 0.0 {
                 setup.b_high
             } else {
                 setup.b_low
             };
             candles
                 .iter()
+                .skip(start_index)
                 .take(entry_scan_limit)
                 .enumerate()
                 .find_map(|(index, candle)| {
-                    break_entry(direction, level, candle).map(|entry| (index, entry))
+                    break_entry(setup_direction, level, candle).map(|entry| EntryDecision {
+                        index: start_index + index,
+                        price: entry,
+                        direction: setup_direction,
+                    })
                 })
         }
         _ => None,
     }
 }
 
-fn stop_price(route: &Phase1RouteSpec, setup: &Phase1SetupSource, entry_price: f64) -> f64 {
-    let direction = direction(setup);
+fn stop_price(
+    route: &Phase1RouteSpec,
+    setup: &Phase1SetupSource,
+    entry_price: f64,
+    trade_direction: f64,
+) -> f64 {
     match route.stop_mode.as_str() {
         "d_extreme" => {
-            if direction > 0.0 {
+            if trade_direction > 0.0 {
                 setup.d_low
             } else {
                 setup.d_high
             }
         }
         "c_extreme" => {
-            if direction > 0.0 {
+            if trade_direction > 0.0 {
                 setup.c_low
             } else {
                 setup.c_high
             }
         }
         "x_extreme" => {
-            if direction > 0.0 {
+            if trade_direction > 0.0 {
                 setup.x_low
             } else {
                 setup.x_high
             }
         }
-        "cd_025" => entry_price - direction * setup.cd_price_length.abs() * 0.25,
-        "cd_050" => entry_price - direction * setup.cd_price_length.abs() * 0.50,
-        "cd_075" => entry_price - direction * setup.cd_price_length.abs() * 0.75,
-        "cd_100" => entry_price - direction * setup.cd_price_length.abs() * 1.00,
-        "cd_150" => entry_price - direction * setup.cd_price_length.abs() * 1.50,
-        _ => entry_price - direction * setup.cd_price_length.abs(),
+        "cd_025" => entry_price - trade_direction * setup.cd_price_length.abs() * 0.25,
+        "cd_050" => entry_price - trade_direction * setup.cd_price_length.abs() * 0.50,
+        "cd_075" => entry_price - trade_direction * setup.cd_price_length.abs() * 0.75,
+        "cd_100" => entry_price - trade_direction * setup.cd_price_length.abs() * 1.00,
+        "cd_150" => entry_price - trade_direction * setup.cd_price_length.abs() * 1.50,
+        _ => entry_price - trade_direction * setup.cd_price_length.abs(),
     }
 }
 
-fn replay_route(
+fn replay_route_detail(
     route: &Phase1RouteSpec,
     setup: &Phase1SetupSource,
     candles: &[Phase1ForwardCandle],
-) -> Option<f64> {
-    let direction = direction(setup);
-    let (entry_index, entry_price) = find_entry(route, setup, candles)?;
-    let stop_price = stop_price(route, setup, entry_price);
-    let risk = (entry_price - stop_price) * direction;
+) -> Option<Phase1TradeDetail> {
+    let entry = find_entry(route, setup, candles)?;
+    let stop_price = stop_price(route, setup, entry.price, entry.direction);
+    let risk = (entry.price - stop_price) * entry.direction;
     if !risk.is_finite() || risk <= 0.0 {
         return None;
     }
 
-    let target_price = entry_price + direction * risk * route.target_r;
+    let target_price = entry.price + entry.direction * risk * route.target_r;
     let max_hold_bars = setup
         .full_pattern_length
         .saturating_mul(route.max_hold_multiple.max(1))
         .max(1) as usize;
-    let end_index = candles.len().min(entry_index.saturating_add(max_hold_bars));
-    if end_index <= entry_index {
+    let end_index = candles.len().min(entry.index.saturating_add(max_hold_bars));
+    if end_index <= entry.index {
         return None;
     }
 
-    for candle in &candles[entry_index..end_index] {
-        let stop_hit = (direction > 0.0 && candle.low <= stop_price)
-            || (direction < 0.0 && candle.high >= stop_price);
-        if stop_hit {
-            return Some(-1.0);
+    let mut lowest_price = f64::INFINITY;
+    let mut highest_price = f64::NEG_INFINITY;
+    let mut max_adverse_points = 0.0f64;
+    let mut max_favorable_points = 0.0f64;
+    let mut adverse_price = entry.price;
+    let mut favorable_price = entry.price;
+
+    for (offset, candle) in candles[entry.index..end_index].iter().enumerate() {
+        lowest_price = lowest_price.min(candle.low);
+        highest_price = highest_price.max(candle.high);
+
+        let (adverse_points, candidate_adverse_price) = if entry.direction > 0.0 {
+            ((entry.price - candle.low).max(0.0), candle.low)
+        } else {
+            ((candle.high - entry.price).max(0.0), candle.high)
+        };
+        if adverse_points > max_adverse_points {
+            max_adverse_points = adverse_points;
+            adverse_price = candidate_adverse_price;
         }
 
-        let target_hit = (direction > 0.0 && candle.high >= target_price)
-            || (direction < 0.0 && candle.low <= target_price);
+        let (favorable_points, candidate_favorable_price) = if entry.direction > 0.0 {
+            ((candle.high - entry.price).max(0.0), candle.high)
+        } else {
+            ((entry.price - candle.low).max(0.0), candle.low)
+        };
+        if favorable_points > max_favorable_points {
+            max_favorable_points = favorable_points;
+            favorable_price = candidate_favorable_price;
+        }
+
+        let candle_index = entry.index + offset;
+        let stop_hit = (entry.direction > 0.0 && candle.low <= stop_price)
+            || (entry.direction < 0.0 && candle.high >= stop_price);
+        if stop_hit {
+            return Some(Phase1TradeDetail {
+                result_r: -1.0,
+                entry_date: candles[entry.index].candle_date,
+                exit_date: candles[candle_index].candle_date,
+                exit_price: stop_price,
+                entry_price: entry.price,
+                stop_price,
+                target_price,
+                lowest_price,
+                highest_price,
+                adverse_price: stop_price,
+                favorable_price,
+                max_adverse_points: risk.abs().max(max_adverse_points),
+                max_favorable_points,
+                risk_points: risk.abs(),
+                trade_direction: entry.direction,
+                trade_result: 2,
+                exit_reason: "stop".to_string(),
+            });
+        }
+
+        let target_hit = (entry.direction > 0.0 && candle.high >= target_price)
+            || (entry.direction < 0.0 && candle.low <= target_price);
         if target_hit {
-            return Some(route.target_r);
+            return Some(Phase1TradeDetail {
+                result_r: route.target_r,
+                entry_date: candles[entry.index].candle_date,
+                exit_date: candles[candle_index].candle_date,
+                exit_price: target_price,
+                entry_price: entry.price,
+                stop_price,
+                target_price,
+                lowest_price,
+                highest_price,
+                adverse_price,
+                favorable_price: target_price,
+                max_adverse_points,
+                max_favorable_points: (risk.abs() * route.target_r).max(max_favorable_points),
+                risk_points: risk.abs(),
+                trade_direction: entry.direction,
+                trade_result: 1,
+                exit_reason: "target".to_string(),
+            });
         }
     }
 
-    let exit_close = candles[end_index - 1].close;
-    Some(((exit_close - entry_price) * direction) / risk)
+    let exit_index = end_index - 1;
+    let exit_close = candles[exit_index].close;
+    let result_r = ((exit_close - entry.price) * entry.direction) / risk;
+    Some(Phase1TradeDetail {
+        result_r,
+        entry_date: candles[entry.index].candle_date,
+        exit_date: candles[exit_index].candle_date,
+        exit_price: exit_close,
+        entry_price: entry.price,
+        stop_price,
+        target_price,
+        lowest_price,
+        highest_price,
+        adverse_price,
+        favorable_price,
+        max_adverse_points,
+        max_favorable_points,
+        risk_points: risk.abs(),
+        trade_direction: entry.direction,
+        trade_result: if result_r > 0.0 { 1 } else { 2 },
+        exit_reason: "time".to_string(),
+    })
+}
+
+fn trade_row_from_detail(
+    run_id: &str,
+    family_key: &str,
+    source_scope: &str,
+    period_year: i64,
+    route: &Phase1RouteSpec,
+    setup: &Phase1SetupSource,
+    detail: &Phase1TradeDetail,
+) -> Phase1TradeRow {
+    let trade_uid = format!("{run_id}::{}::{}", route.route_id, setup.setup_id);
+    Phase1TradeRow {
+        trade_uid,
+        run_id: run_id.to_string(),
+        family_key: family_key.to_string(),
+        source_scope: source_scope.to_string(),
+        period_year,
+        route_id: route.route_id.clone(),
+        route_label: route.route_label.clone(),
+        entry_mode: route.entry_mode.clone(),
+        stop_mode: route.stop_mode.clone(),
+        target_r: route.target_r,
+        max_hold_multiple: route.max_hold_multiple,
+        setup_id: setup.setup_id.clone(),
+        pattern_id: setup.pattern_id.clone(),
+        pattern_group_id: setup.pattern_group_id.clone(),
+        symbol: setup.symbol.clone(),
+        market: setup.market.clone(),
+        d_date: setup.d_date,
+        d_confirm_date: setup.d_confirm_date,
+        entry_date: detail.entry_date,
+        exit_date: detail.exit_date,
+        entry_price: detail.entry_price,
+        stop_price: detail.stop_price,
+        target_price: detail.target_price,
+        exit_price: detail.exit_price,
+        result_r: detail.result_r,
+        risk_points: detail.risk_points,
+        trade_direction: if detail.trade_direction > 0.0 {
+            "long".to_string()
+        } else {
+            "short".to_string()
+        },
+        trade_result: detail.trade_result,
+        exit_reason: detail.exit_reason.clone(),
+        lowest_price: detail.lowest_price,
+        highest_price: detail.highest_price,
+        adverse_price: detail.adverse_price,
+        favorable_price: detail.favorable_price,
+        max_adverse_points: detail.max_adverse_points,
+        max_favorable_points: detail.max_favorable_points,
+    }
 }
 
 async fn insert_results(
@@ -1169,6 +1584,7 @@ async fn insert_results(
     elapsed_ms: i64,
     results: &[Phase1ResultRow],
     yearly_results: &[Phase1YearlyResultRow],
+    trade_rows: &[Phase1TradeRow],
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
     sqlx::query(
@@ -1309,6 +1725,89 @@ async fn insert_results(
         yearly_builder.build().execute(&mut *tx).await?;
     }
 
+    if !trade_rows.is_empty() {
+        let mut trade_builder = QueryBuilder::<MySql>::new(
+            r#"
+            INSERT INTO phase1_strategy_trades (
+                trade_uid,
+                run_id,
+                family_key,
+                source_scope,
+                period_year,
+                route_id,
+                route_label,
+                entry_mode,
+                stop_mode,
+                target_r,
+                max_hold_multiple,
+                setup_id,
+                pattern_id,
+                pattern_group_id,
+                symbol,
+                market,
+                d_date,
+                d_confirm_date,
+                entry_date,
+                exit_date,
+                entry_price,
+                stop_price,
+                target_price,
+                exit_price,
+                result_r,
+                risk_points,
+                trade_direction,
+                trade_result,
+                exit_reason,
+                lowest_price,
+                highest_price,
+                adverse_price,
+                favorable_price,
+                max_adverse_points,
+                max_favorable_points
+            )
+            "#,
+        );
+
+        trade_builder.push_values(trade_rows, |mut row, trade| {
+            row.push_bind(&trade.trade_uid)
+                .push_bind(&trade.run_id)
+                .push_bind(&trade.family_key)
+                .push_bind(&trade.source_scope)
+                .push_bind(trade.period_year)
+                .push_bind(&trade.route_id)
+                .push_bind(&trade.route_label)
+                .push_bind(&trade.entry_mode)
+                .push_bind(&trade.stop_mode)
+                .push_bind(trade.target_r)
+                .push_bind(trade.max_hold_multiple)
+                .push_bind(&trade.setup_id)
+                .push_bind(&trade.pattern_id)
+                .push_bind(&trade.pattern_group_id)
+                .push_bind(&trade.symbol)
+                .push_bind(&trade.market)
+                .push_bind(trade.d_date)
+                .push_bind(trade.d_confirm_date)
+                .push_bind(trade.entry_date)
+                .push_bind(trade.exit_date)
+                .push_bind(trade.entry_price)
+                .push_bind(trade.stop_price)
+                .push_bind(trade.target_price)
+                .push_bind(trade.exit_price)
+                .push_bind(trade.result_r)
+                .push_bind(trade.risk_points)
+                .push_bind(&trade.trade_direction)
+                .push_bind(trade.trade_result)
+                .push_bind(&trade.exit_reason)
+                .push_bind(trade.lowest_price)
+                .push_bind(trade.highest_price)
+                .push_bind(trade.adverse_price)
+                .push_bind(trade.favorable_price)
+                .push_bind(trade.max_adverse_points)
+                .push_bind(trade.max_favorable_points);
+        });
+        trade_builder.build().execute(&mut *tx).await?;
+    }
+
     tx.commit().await?;
 
     Ok(())
@@ -1331,32 +1830,17 @@ fn print_top_results(results: &[Phase1ResultRow]) {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenvy::dotenv().ok();
-
-    let args = parse_args()?;
+async fn run_family(
+    pool: &MySqlPool,
+    family: &PatternFamilySummary,
+    args: &Args,
+    routes: &[Phase1RouteSpec],
+) -> Result<(), Box<dyn std::error::Error>> {
     let started = Instant::now();
     let run_id = run_id();
-    let pool = MySqlPool::connect(&database_url_from_env()?).await?;
-    ensure_phase1_tables(&pool).await?;
-
-    let family = fetch_family(
-        &pool,
-        &args.family_key,
-        &args.source_scope,
-        args.period_year,
-    )
-    .await?
-    .ok_or_else(|| {
-        format!(
-            "Family {} not found for source={} year={}",
-            args.family_key, args.source_scope, args.period_year
-        )
-    })?;
 
     println!(
-        "Phase 1 run {run_id}: family={} {} / {} / {} / {} / {}, source={}, year={}, family setups={}, max setups={}, forward bars={}",
+        "Phase 1 test run {run_id}: family={} {} / {} / {} / {} / {}, source={}, year={}, family setups={}, max setups={}, forward bars=5x pattern length, tests={}",
         family.family_key,
         family.harmonic_type,
         family.bin,
@@ -1367,43 +1851,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if args.period_year > 0 { args.period_year.to_string() } else { "all".to_string() },
         family.setup_count,
         args.max_setups,
-        args.max_forward_bars
-    );
-    println!(
-        "Forward window: min(full_pattern_length * 5, {} safety cap). Time exits: 1x, 2x, 3x, 5x pattern length.",
-        args.max_forward_bars
+        routes.len()
     );
 
     let setups = fetch_setups(
-        &pool,
-        &family,
+        pool,
+        family,
         &args.source_scope,
         args.period_year,
         args.max_setups,
     )
     .await?;
     if setups.is_empty() {
-        println!("No setups matched this family.");
+        println!("No setups matched family {}.", family.family_key);
         return Ok(());
     }
 
-    let routes = build_routes();
-    println!(
-        "Testing {} setups against {} entry/exit routes...",
-        setups.len(),
-        routes.len()
-    );
     let mut accumulators = routes
-        .into_iter()
+        .iter()
+        .cloned()
         .map(Phase1RouteAccumulator::new)
         .collect::<Vec<_>>();
+    let mut trade_rows = Vec::new();
 
     for (index, setup) in setups.iter().enumerate() {
-        let setup_forward_bars = setup
-            .full_pattern_length
-            .saturating_mul(5)
-            .clamp(40, args.max_forward_bars);
-        let candles = fetch_forward_candles(&pool, setup, setup_forward_bars)
+        let setup_forward_bars = setup.full_pattern_length.saturating_mul(5).max(1);
+        let candles = fetch_forward_candles(pool, setup, setup_forward_bars)
             .await
             .unwrap_or_else(|error| {
                 eprintln!(
@@ -1412,7 +1885,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
                 Vec::new()
             });
-        let year = setup.d_date.year();
+        let year = setup.d_confirm_date.year();
 
         for accumulator in &mut accumulators {
             if candles.is_empty() {
@@ -1420,14 +1893,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
 
-            match replay_route(&accumulator.spec, setup, &candles) {
-                Some(result_r) if result_r.is_finite() => accumulator.record_trade(year, result_r),
+            match replay_route_detail(&accumulator.spec, setup, &candles) {
+                Some(detail) if detail.result_r.is_finite() => {
+                    accumulator.record_trade(year, detail.result_r);
+                    trade_rows.push(trade_row_from_detail(
+                        &run_id,
+                        &family.family_key,
+                        &args.source_scope,
+                        args.period_year,
+                        &accumulator.spec,
+                        setup,
+                        &detail,
+                    ));
+                }
                 _ => accumulator.record_no_entry(year),
             }
         }
 
         if (index + 1) % 100 == 0 || index + 1 == setups.len() {
-            println!("Processed {}/{} setups", index + 1, setups.len());
+            println!(
+                "Family {} processed {}/{} setups",
+                family.family_key,
+                index + 1,
+                setups.len()
+            );
         }
     }
 
@@ -1463,25 +1952,75 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let elapsed_ms = started.elapsed().as_millis() as i64;
     insert_results(
-        &pool,
+        pool,
         &run_id,
-        &family,
-        &args,
+        family,
+        args,
         setups.len() as i64,
         results.len() as i64,
         elapsed_ms,
         &results,
         &yearly_results,
+        &trade_rows,
     )
     .await?;
 
     println!(
-        "Stored {} Phase 1 route results and {} yearly rows in {:.2}s",
+        "Stored {} Entry / Exit test results, {} yearly rows, and {} trade rows for family {} in {:.2}s",
         results.len(),
         yearly_results.len(),
+        trade_rows.len(),
+        family.family_key,
         elapsed_ms as f64 / 1000.0
     );
     print_top_results(&results);
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenvy::dotenv().ok();
+
+    let args = parse_args()?;
+    let pool = MySqlPool::connect(&database_url_from_env()?).await?;
+    ensure_phase1_tables(&pool).await?;
+    let routes = fetch_entry_exit_tests(&pool, args.test_id.as_deref()).await?;
+    println!(
+        "Testing {} enabled Entry / Exit definition(s). Forward window: full_pattern_length * 5.",
+        routes.len()
+    );
+
+    let families = if args.all_families {
+        fetch_families(
+            &pool,
+            &args.source_scope,
+            args.period_year,
+            args.family_limit,
+        )
+        .await?
+    } else {
+        let family_key = args.family_key.as_deref().unwrap_or_default();
+        vec![
+            fetch_family(&pool, family_key, &args.source_scope, args.period_year)
+                .await?
+                .ok_or_else(|| {
+                    format!(
+                        "Family {} not found for source={} year={}",
+                        family_key, args.source_scope, args.period_year
+                    )
+                })?,
+        ]
+    };
+
+    println!(
+        "Running Entry / Exit tests across {} family/families.",
+        families.len()
+    );
+    for (index, family) in families.iter().enumerate() {
+        println!("Family batch {}/{}", index + 1, families.len());
+        run_family(&pool, family, &args, &routes).await?;
+    }
 
     Ok(())
 }

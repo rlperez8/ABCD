@@ -679,6 +679,63 @@ const getReplayEventStatus = (event = {}) => {
   return 'won';
 };
 
+const findReplayTradeForPattern = (trades = [], pattern = {}) => {
+  if (!pattern || !trades?.length) {
+    return null;
+  }
+
+  const patternTestIndex = Number(pattern.simulator_result_test_index);
+  const patternTradeIndex = Number(pattern.simulator_result_trade_index);
+  if (Number.isFinite(patternTestIndex) && Number.isFinite(patternTradeIndex)) {
+    const indexedTrade = trades.find(
+      (trade) =>
+        Number(trade?.test_index) === patternTestIndex &&
+        Number(trade?.trade_index) === patternTradeIndex
+    );
+    if (indexedTrade) {
+      return indexedTrade;
+    }
+  }
+
+  const patternKeys = new Set(getReplayPatternMatchKeys(pattern));
+  if (!patternKeys.size) {
+    return null;
+  }
+
+  return (
+    trades.find((trade) => getReplayPatternMatchKeys(trade).some((key) => patternKeys.has(key))) ??
+    null
+  );
+};
+
+const withReplayTradeForCanvas = (pattern = {}, trade = null) => {
+  if (!trade) {
+    return pattern;
+  }
+
+  const exitPrice =
+    trade.exit_price ??
+    trade.trade_exit_price ??
+    (Number(trade.trade_result) === 2
+      ? trade.trade_risk_exit_price
+      : trade.trade_reward_exit_price);
+
+  return {
+    ...pattern,
+    prop_outcome_mode: pattern?.prop_outcome_mode ?? trade?.prop_outcome_mode ?? null,
+    entry_date: trade.entry_date ?? pattern?.entry_date,
+    target_date: trade.target_date ?? pattern?.target_date,
+    trade_enter_price: trade.trade_enter_price ?? pattern?.trade_enter_price,
+    trade_risk_exit_price: trade.trade_risk_exit_price ?? pattern?.trade_risk_exit_price,
+    trade_reward_exit_price: trade.trade_reward_exit_price ?? pattern?.trade_reward_exit_price,
+    trade_current_price: exitPrice ?? pattern?.trade_current_price,
+    target_close: exitPrice ?? pattern?.target_close,
+    trade_result: trade.trade_result ?? pattern?.trade_result,
+    result_r: trade.result_r ?? pattern?.result_r,
+    risk_points: trade.risk_points ?? pattern?.risk_points,
+  };
+};
+
 const getPatternEntryTime = (pattern = {}) =>
   getDateTimeForCompare(pattern.entry_date ?? pattern.reversal_detect_date ?? pattern.d_confirm_date ?? pattern.d_date);
 
@@ -719,6 +776,7 @@ const App = () => {
   const [leaderChartStartIndex, setLeaderChartStartIndex] = useState(0);
   const [strategyTrades, setStrategyTrades] = useState([]);
   const [simulatorReplay, setSimulatorReplay] = useState(null);
+  const [selectedSimulatorReplayTrade, setSelectedSimulatorReplayTrade] = useState(null);
   const [simulatorFirstStartDate, setSimulatorFirstStartDate] = useState('2021-04-26');
   const [strategyTradeDateRange, setStrategyTradeDateRange] = useState({
     earliest: null,
@@ -1113,6 +1171,14 @@ const App = () => {
   const handleSelectSimulatorPattern = useCallback((trade, rowIndex) => {
     setSelectedStrategyTradeIndex(rowIndex);
     setSelectedStrategyTradeKey(getPatternSelectionKey(trade));
+    setSelectedSimulatorReplayTrade(findReplayTradeForPattern(simulatorReplay?.trades ?? [], trade));
+  }, [simulatorReplay]);
+
+  const handleSimulatorReplayChange = useCallback((nextReplay) => {
+    setSimulatorReplay(nextReplay);
+    if (!nextReplay) {
+      setSelectedSimulatorReplayTrade(null);
+    }
   }, []);
 
   const handleSelectStrategy = useCallback(
@@ -1132,6 +1198,7 @@ const App = () => {
       setHasMoreStrategyTrades(false);
       setSelectedStrategyTradeIndex(0);
       setSelectedStrategyTradeKey('');
+      setSelectedSimulatorReplayTrade(null);
       if (
         strategyMode !== STRATEGY_MODE_PROP ||
         strategyLibraryPatternView !== STRATEGY_LIBRARY_VIEW_CURRENT
@@ -2030,10 +2097,46 @@ const App = () => {
 
     return sortStrategyTrades(rows);
   }, [selectedStrategy, simulatorFirstStartDate, simulatorReplay, strategyTrades]);
+
+  const handleSimulatorReplayTradeSelect = useCallback(
+    async (trade) => {
+      setSelectedSimulatorReplayTrade(trade ?? null);
+      if (!trade) {
+        return;
+      }
+
+      const tradeKeys = new Set(getReplayPatternMatchKeys(trade));
+      const matchingRowIndex = simulatorPatternRows.findIndex((row) =>
+        getReplayPatternMatchKeys(row).some((key) => tradeKeys.has(key))
+      );
+
+      if (matchingRowIndex >= 0) {
+        const matchingRow = simulatorPatternRows[matchingRowIndex];
+        setSelectedStrategyTradeIndex(matchingRowIndex);
+        setSelectedStrategyTradeKey(getPatternSelectionKey(matchingRow));
+
+        try {
+          await updateSimulatorPatternForChart(withReplayTradeForCanvas(matchingRow, trade));
+        } catch (error) {
+          console.error('Error loading replay trade on canvas:', error);
+        }
+        return;
+      }
+
+      try {
+        await updateSimulatorPatternForChart(withReplayTradeForCanvas(trade, trade));
+      } catch (error) {
+        console.error('Error loading replay trade on canvas:', error);
+      }
+    },
+    [simulatorPatternRows, updateSimulatorPatternForChart]
+  );
+
   const activeSimulatorPatternKeys = useMemo(() => {
     const lastReplayTrade = simulatorReplay?.trades?.[simulatorReplay.trades.length - 1] ?? null;
-    return lastReplayTrade ? getReplayPatternMatchKeys(lastReplayTrade) : [];
-  }, [simulatorReplay]);
+    const activeTrade = selectedSimulatorReplayTrade ?? lastReplayTrade;
+    return activeTrade ? getReplayPatternMatchKeys(activeTrade) : [];
+  }, [selectedSimulatorReplayTrade, simulatorReplay]);
 
   const updateStrategyFilter = (key, value) => {
     setStrategyFilters((prev) => ({
@@ -2308,8 +2411,10 @@ const App = () => {
                   familyOptionsCount={strategyTableSnapshots.length}
                   isLoadingFamilyOptions={isLoadingStrategyUniverse}
                   onSelectFamilyId={setSelectedStrategyId}
-                  onReplayChange={setSimulatorReplay}
+                  onReplayChange={handleSimulatorReplayChange}
                   onFirstStartDateChange={setSimulatorFirstStartDate}
+                  selectedReplayTrade={selectedSimulatorReplayTrade}
+                  onReplayTradeSelect={handleSimulatorReplayTradeSelect}
                   highlightedPatternKeys={activeSimulatorPatternKeys}
                   loadedTrades={strategyTrades}
                   loadedCandles={strategyChartData.candles}

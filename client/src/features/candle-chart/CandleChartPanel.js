@@ -135,6 +135,9 @@ const CandleChartPanel = ({
   activeReversalFilter = null,
   overlayTopOffset = 0,
   overlayTableProps,
+  showCandles = true,
+  presentationMode = 'chart',
+  routeLogicHover = null,
 }) => {
   const isPropFocus = focusMode === 'prop';
   const [isAbcdPattern, setAbcdPattern] = useState(
@@ -576,6 +579,9 @@ const CandleChartPanel = ({
               market={market}
               activeReversalFilter={activeReversalFilter}
               set_hovered_candle={setHoveredCandle}
+              showCandles={showCandles}
+              presentationMode={presentationMode}
+              routeLogicHover={routeLogicHover}
             />
           </div>
         </div>

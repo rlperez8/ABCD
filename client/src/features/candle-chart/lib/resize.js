@@ -9,6 +9,7 @@ const CHART_FIT_PADDING = {
 };
 const MIN_FIT_PRICE_SPAN_RATIO = 0.001;
 const PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO = 0.00005;
+const GRAPH_MIN_FIT_PRICE_SPAN_RATIO = 0.00001;
 const MIN_FIT_PRICE_SPAN_ABSOLUTE = 0.01;
 const MIN_FIT_COMPLETE_CANDLE_WIDTH = 0.18;
 const MAX_FIT_COMPLETE_CANDLE_WIDTH = 180;
@@ -165,7 +166,7 @@ const getPropFocusBounds = (chartStateRef, rustPattern) => {
   const minFocusPrice = Math.min(...focusPrices);
   const maxFocusPrice = Math.max(...focusPrices);
   const pricePadding = Math.max(
-    (maxFocusPrice - minFocusPrice) * 0.18,
+    (maxFocusPrice - minFocusPrice) * 0.06,
     getMinimumFitPriceSpan(maxFocusPrice)
   );
 
@@ -248,14 +249,48 @@ const getPropTradeFocusBounds = (chartStateRef, rustPattern) => {
   };
 };
 
+const getGraphFocusBounds = (rustPattern) => {
+  const baseBounds = getPatternBounds(rustPattern);
+
+  if (!baseBounds) {
+    return null;
+  }
+
+  const graphPrices = [
+    baseBounds.minPrice,
+    baseBounds.maxPrice,
+    Number(rustPattern?.trade_enter_price),
+    Number(rustPattern?.trade_risk_exit_price),
+    Number(rustPattern?.trade_reward_exit_price),
+    Number(rustPattern?.exit_price ?? rustPattern?.target_close ?? rustPattern?.trade_current_price),
+  ].filter((value) => Number.isFinite(value));
+  const minFocusPrice = Math.min(...graphPrices);
+  const maxFocusPrice = Math.max(...graphPrices);
+  const pricePadding = Math.max(
+    (maxFocusPrice - minFocusPrice) * 0.035,
+    getMinimumFitPriceSpan(maxFocusPrice, GRAPH_MIN_FIT_PRICE_SPAN_RATIO)
+  );
+
+  return {
+    minPrice: minFocusPrice - pricePadding,
+    maxPrice: maxFocusPrice + pricePadding,
+    minIndex: baseBounds.minIndex,
+    maxIndex: baseBounds.maxIndex,
+    anchorIndex: (baseBounds.minIndex + baseBounds.maxIndex) / 2,
+  };
+};
+
 const applyHorizontalFit = (chartStateRef, minIndex, maxIndex, options = {}) => {
   const chartState = chartStateRef.current;
-  const horizontalPadding = Math.min(
-    CHART_FIT_PADDING.horizontal,
-    Math.max(chartState.canvas.width * 0.08, 12)
-  );
+  const isGraphFocus = options.focusMode === 'graph';
+  const horizontalPadding = isGraphFocus
+    ? Math.max(chartState.canvas.width * 0.025, 8)
+    : Math.min(
+        CHART_FIT_PADDING.horizontal,
+        Math.max(chartState.canvas.width * 0.08, 12)
+      );
   const drawableWidth = Math.max(chartState.canvas.width - horizontalPadding * 2, 1);
-  const edgeBufferCandles = options.focusMode === 'reversal' ? 2 : 4;
+  const edgeBufferCandles = isGraphFocus ? 0.5 : options.focusMode === 'reversal' ? 2 : 4;
   const spanInCandles = Math.max(maxIndex - minIndex + 1 + edgeBufferCandles * 2, 1);
   const completeWidth = clamp(
     drawableWidth / spanInCandles,
@@ -294,20 +329,25 @@ const applyHorizontalFit = (chartStateRef, minIndex, maxIndex, options = {}) => 
 const applyVerticalFit = (chartStateRef, minPrice, maxPrice, options = {}) => {
   const chartState = chartStateRef.current;
   const isPropTradeFocus = options.focusMode === 'propTrade';
+  const isGraphFocus = options.focusMode === 'graph';
   const priceSpan = Math.max(
     maxPrice - minPrice,
     getMinimumFitPriceSpan(
       maxPrice,
-      isPropTradeFocus ? PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO : MIN_FIT_PRICE_SPAN_RATIO
+      isGraphFocus
+        ? GRAPH_MIN_FIT_PRICE_SPAN_RATIO
+        : isPropTradeFocus
+          ? PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO
+          : MIN_FIT_PRICE_SPAN_RATIO
     )
   );
   const verticalTopPadding = Math.min(
-    isPropTradeFocus ? 18 : CHART_FIT_PADDING.verticalTop,
-    Math.max(chartState.canvas.height * (isPropTradeFocus ? 0.055 : 0.12), 10)
+    isGraphFocus ? 12 : isPropTradeFocus ? 18 : CHART_FIT_PADDING.verticalTop,
+    Math.max(chartState.canvas.height * (isGraphFocus ? 0.015 : isPropTradeFocus ? 0.055 : 0.12), 3)
   );
   const verticalBottomPadding = Math.min(
-    isPropTradeFocus ? 16 : CHART_FIT_PADDING.verticalBottom,
-    Math.max(chartState.canvas.height * (isPropTradeFocus ? 0.05 : 0.1), 10)
+    isGraphFocus ? 12 : isPropTradeFocus ? 16 : CHART_FIT_PADDING.verticalBottom,
+    Math.max(chartState.canvas.height * (isGraphFocus ? 0.015 : isPropTradeFocus ? 0.05 : 0.1), 3)
   );
   const availableHeight = Math.max(
     chartState.canvas.height - verticalTopPadding - verticalBottomPadding,
@@ -326,7 +366,9 @@ const applyVerticalFit = (chartStateRef, minPrice, maxPrice, options = {}) => {
   chartState.price.priceUnitPixelSize = basePixelsPerGrid;
 
   const priceScale = getPriceScale(chartState);
-  chartState.viewport.baselineY = verticalTopPadding + maxPrice * priceScale;
+  chartState.viewport.baselineY = isGraphFocus
+    ? verticalTopPadding + availableHeight / 2 + ((minPrice + maxPrice) / 2) * priceScale
+    : verticalTopPadding + maxPrice * priceScale;
   chartState.viewport.prevBaselineY = chartState.viewport.baselineY;
 
   const midPrice = utilities.get_mid_price(chartStateRef);
@@ -403,6 +445,8 @@ export const reposition_candles = (chartStateRef, rustPattern, options = {}) => 
     options.focusMode === 'reversal'
       ? getReversalFocusBounds(chartStateRef, rustPattern, options.activeReversalFilter) ??
         getPatternBounds(rustPattern)
+      : options.focusMode === 'graph'
+        ? getGraphFocusBounds(rustPattern) ?? getPatternBounds(rustPattern)
       : options.focusMode === 'propTrade'
         ? getPropTradeFocusBounds(chartStateRef, rustPattern) ??
           getPropFocusBounds(chartStateRef, rustPattern) ??

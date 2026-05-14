@@ -203,6 +203,8 @@ const AdminRunsPage = () => {
   const engineProgress = status?.engine_progress ?? null;
   const tableSnapshots = status?.table_snapshots ?? [];
   const cacheStates = status?.cache_states ?? [];
+  const entryExitTests = status?.entry_exit_tests ?? [];
+  const enabledEntryExitTests = entryExitTests.filter((test) => test.is_enabled);
   const activeOperation = runningOperations[0] ?? latestOperation;
   const latestLog =
     latestOperation?.error_message ||
@@ -243,6 +245,14 @@ const AdminRunsPage = () => {
 
   const clearEngine = () => {
     startAction('clear_engine', { confirmText: 'CLEAR ENGINE' });
+  };
+
+  const clearPhase1Routes = () => {
+    startAction('clear_phase1_routes', { confirmText: 'CLEAR PHASE1 ROUTES' });
+  };
+
+  const runEntryExitTests = () => {
+    startAction('run_entry_exit_tests');
   };
 
   return (
@@ -424,13 +434,78 @@ const AdminRunsPage = () => {
           <section className="admin-panel admin-panel--danger">
             <AdminPanelHead eyebrow="Danger Zone" title="Clear Engine" />
             <div className="admin-danger-body">
-              <p>Generated engine tables, forward observations, and rollups.</p>
-              <button type="button" onClick={clearEngine} disabled={isSubmitting}>
-                Clear Engine
-              </button>
+              <div className="admin-danger-action">
+                <p>Phase 1 route runs, route results, and yearly route cache only.</p>
+                <button type="button" onClick={clearPhase1Routes} disabled={isSubmitting}>
+                  Clear Phase 1 Routes
+                </button>
+              </div>
+              <div className="admin-danger-action admin-danger-action--critical">
+                <p>Generated engine tables, forward observations, and rollups.</p>
+                <button type="button" onClick={clearEngine} disabled={isSubmitting}>
+                  Clear Engine
+                </button>
+              </div>
             </div>
           </section>
         </aside>
+
+        <section className="admin-panel admin-panel--tables">
+          <AdminPanelHead
+            eyebrow="Entry / Exit"
+            title="Test Definitions"
+            detail={`${enabledEntryExitTests.length} enabled / ${entryExitTests.length} total`}
+          />
+          <div className="admin-entry-exit-toolbar">
+            <div>
+              <strong>Run enabled tests on all families</strong>
+              <small>Standard run: futures source, all years, max 1k setups per family, forward window is 5x pattern length.</small>
+            </div>
+            <button type="button" onClick={runEntryExitTests} disabled={isSubmitting}>
+              Run Entry / Exit Tests
+            </button>
+          </div>
+          <div className="admin-table-shell admin-entry-exit-table">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Test</th>
+                  <th>Entry</th>
+                  <th>Stop</th>
+                  <th>Target</th>
+                  <th>Hold</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entryExitTests.length ? (
+                  entryExitTests.map((test) => (
+                    <tr key={test.test_id}>
+                      <td>
+                        <span
+                          className={`admin-status-pill ${
+                            test.is_enabled ? 'admin-status-pill--completed' : 'admin-status-pill--queued'
+                          }`}
+                        >
+                          {test.is_enabled ? 'enabled' : 'off'}
+                        </span>
+                      </td>
+                      <td title={test.notes || test.test_id}>{test.test_name}</td>
+                      <td>{test.entry_mode}</td>
+                      <td>{test.stop_mode}</td>
+                      <td>{formatNumber(test.target_r, 2)}R</td>
+                      <td>{formatNumber(test.max_hold_multiple)}x</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6">Run Entry / Exit Tests once to create the test definition table.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <section className="admin-panel admin-panel--tables">
           <AdminPanelHead eyebrow="Storage" title="Table Health" detail={`${tableSnapshots.length} tracked`} />

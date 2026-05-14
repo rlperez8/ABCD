@@ -59,6 +59,13 @@ const PATTERN_SETUP_CSV_HEADERS: &[&str] = &[
     "market",
     "harmonic_type",
     "prop_strategy_id",
+    "pattern_family_key",
+    "pattern_family_name",
+    "pattern_family_harmonic_type",
+    "pattern_family_bin",
+    "pattern_family_size_bucket",
+    "pattern_family_time_bin",
+    "pattern_family_x_strictness",
     "x_date",
     "x_open",
     "x_high",
@@ -91,6 +98,7 @@ const PATTERN_SETUP_CSV_HEADERS: &[&str] = &[
     "c_min_max",
     "bc_price_length",
     "d_date",
+    "d_confirm_date",
     "d_open",
     "d_high",
     "d_low",
@@ -705,69 +713,6 @@ fn leg_accuracy_sql_expr(current_expr: &str, target_leg: f64) -> String {
     )
 }
 
-fn setup_ratio_expr(numerator_expr: &str, denominator_expr: &str) -> String {
-    format!(
-        "CASE
-            WHEN COALESCE({denominator_expr}, 0.0) > 0
-            THEN (CAST({numerator_expr} AS DOUBLE) / CAST({denominator_expr} AS DOUBLE)) * 100.0
-            ELSE 0.0
-        END"
-    )
-}
-
-fn harmonic_setup_score_select(
-    harmonic_type: &str,
-    ab_xa: f64,
-    bc_ab: f64,
-    cd_bc: f64,
-    d_completion: f64,
-) -> String {
-    let ab_xa_price = setup_ratio_expr("ab_price_length", "xa_price_length");
-    let bc_ab_price = setup_ratio_expr("bc_price_length", "ab_price_length");
-    let cd_bc_price = setup_ratio_expr("cd_price_length", "bc_price_length");
-    let d_completion_price = setup_ratio_expr("ABS(a_min_max - d_min_max)", "xa_price_length");
-    let ab_xa_time = setup_ratio_expr("a_length", "x_length");
-    let bc_ab_time = setup_ratio_expr("b_length", "a_length");
-    let cd_bc_time = setup_ratio_expr("c_length", "b_length");
-    let cd_xa_time = setup_ratio_expr("c_length", "x_length");
-
-    format!(
-        r#"
-        SELECT
-            setup_id,
-            '{harmonic_type}' AS harmonic_type,
-            (
-                {price_ab_xa} + {price_bc_ab} + {price_cd_bc} + {price_d_completion}
-            ) / 4.0 AS price_accuracy,
-            (
-                {time_ab_xa} + {time_bc_ab} + {time_cd_bc} + {time_cd_xa}
-            ) / 4.0 AS time_accuracy
-        FROM pattern_setups
-        "#,
-        price_ab_xa = leg_accuracy_sql_expr(&ab_xa_price, ab_xa),
-        price_bc_ab = leg_accuracy_sql_expr(&bc_ab_price, bc_ab),
-        price_cd_bc = leg_accuracy_sql_expr(&cd_bc_price, cd_bc),
-        price_d_completion = leg_accuracy_sql_expr(&d_completion_price, d_completion),
-        time_ab_xa = leg_accuracy_sql_expr(&ab_xa_time, ab_xa),
-        time_bc_ab = leg_accuracy_sql_expr(&bc_ab_time, bc_ab),
-        time_cd_bc = leg_accuracy_sql_expr(&cd_bc_time, cd_bc),
-        time_cd_xa = leg_accuracy_sql_expr(&cd_xa_time, d_completion),
-    )
-}
-
-fn harmonic_setup_score_selects() -> String {
-    [
-        harmonic_setup_score_select("Bat", 0.500, 0.382, 1.618, 0.886),
-        harmonic_setup_score_select("AlternateBat", 0.382, 0.382, 2.000, 1.130),
-        harmonic_setup_score_select("Butterfly", 0.786, 0.382, 1.618, 1.272),
-        harmonic_setup_score_select("Gartley", 0.618, 0.382, 1.272, 0.786),
-        harmonic_setup_score_select("Crab", 0.382, 0.382, 2.618, 1.618),
-        harmonic_setup_score_select("DeepCrab", 0.886, 0.382, 2.618, 1.618),
-        harmonic_setup_score_select("Shark", 0.500, 1.130, 1.618, 0.886),
-    ]
-    .join("\nUNION ALL\n")
-}
-
 fn harmonic_time_accuracy_sql_expr(ab_xa: f64, bc_ab: f64, cd_bc: f64, cd_xa: f64) -> String {
     format!(
         "(
@@ -999,27 +944,6 @@ fn concrete_pattern_family_key_expr(table_alias: &str) -> String {
             LOWER({alias}.time_bin),
             LOWER({alias}.x_strictness)
         )), 16)",
-        alias = table_alias,
-    )
-}
-
-fn pattern_setup_reversal_type_expr(table_alias: &str) -> String {
-    format!(
-        "CASE
-            WHEN {alias}.bullish_key_reversal THEN 'BullishKeyReversal'
-            WHEN {alias}.bearish_key_reversal THEN 'BearishKeyReversal'
-            WHEN {alias}.bullish_engulfing THEN 'BullishEngulfing'
-            WHEN {alias}.bearish_engulfing THEN 'BearishEngulfing'
-            WHEN {alias}.bullish_outside_reversal THEN 'BullishOutsideReversal'
-            WHEN {alias}.bearish_outside_reversal THEN 'BearishOutsideReversal'
-            WHEN {alias}.morning_star THEN 'MorningStar'
-            WHEN {alias}.evening_star THEN 'EveningStar'
-            WHEN {alias}.three_white_soldiers THEN 'ThreeWhiteSoldiers'
-            WHEN {alias}.three_black_crows THEN 'ThreeBlackCrows'
-            WHEN {alias}.hammer THEN 'Hammer'
-            WHEN {alias}.shooting_star THEN 'ShootingStar'
-            ELSE 'None'
-        END",
         alias = table_alias,
     )
 }
@@ -1435,35 +1359,7 @@ impl EngineCsvOutputWriter {
             writer.flush()?;
         }
 
-        let mut seen_direct_row_ids = HashSet::new();
-        for pattern in patterns
-            .iter()
-            .filter(|pattern| !pattern.pattern_id.is_empty())
-            .filter(|pattern| !target_ready_only || pattern.target_candle.is_some())
-        {
-            let outcome_row_id = format!("{:x}", md5::compute(format!("{}|D", pattern.pattern_id)));
-            if !seen_direct_row_ids.insert(outcome_row_id.clone()) {
-                continue;
-            }
-
-            self.prop_outcomes_writer
-                .write_record(direct_prop_outcome_csv_record(pattern, &outcome_row_id))?;
-            counts.prop_outcome_rows += 1;
-        }
-
-        let mut seen_reversal_row_ids = HashSet::new();
-        for outcome in outcomes
-            .iter()
-            .filter(|item| !target_ready_only || item.target_ready)
-        {
-            if !seen_reversal_row_ids.insert(outcome.reversal_row_id.clone()) {
-                continue;
-            }
-
-            self.prop_outcomes_writer
-                .write_record(reversal_prop_outcome_csv_record(outcome))?;
-            counts.prop_outcome_rows += 1;
-        }
+        let _ = (outcomes, target_ready_only);
         self.prop_outcomes_writer.flush()?;
 
         self.setup_rows += counts.setup_rows;
@@ -1568,10 +1464,6 @@ fn csv_value<T: ToString>(value: T) -> String {
     value.to_string()
 }
 
-fn csv_opt<T: ToString>(value: Option<T>) -> String {
-    value.map(csv_value).unwrap_or_else(csv_null)
-}
-
 fn csv_opt_ref(value: Option<&str>) -> String {
     value.map(str::to_string).unwrap_or_else(csv_null)
 }
@@ -1588,11 +1480,8 @@ fn csv_opt_bool(value: Option<bool>) -> String {
     value.map(csv_bool).unwrap_or_else(csv_null)
 }
 
-fn csv_date(value: &str) -> String {
-    value.split_whitespace().next().unwrap_or(value).to_string()
-}
-
 fn pattern_setup_csv_record(csv: &XABCD_CSV, setup_id: &str) -> Vec<String> {
+    let family = pattern_family_identity(csv);
     vec![
         setup_id.to_string(),
         setup_id.to_string(),
@@ -1605,15 +1494,22 @@ fn pattern_setup_csv_record(csv: &XABCD_CSV, setup_id: &str) -> Vec<String> {
         csv_value(csv.x_bars_left),
         format!("{:?}", csv.market),
         csv.harmonic_type.clone(),
-        csv.prop_strategy_id.clone(),
-        csv_date(&csv.x_date),
+        csv_null(),
+        family.key,
+        family.name.to_string(),
+        family.harmonic_type.to_string(),
+        family.bin.to_string(),
+        family.size_bucket.to_string(),
+        family.time_bin.to_string(),
+        family.x_strictness.to_string(),
+        csv.x_date.clone(),
         csv_value(csv.x_open),
         csv_value(csv.x_high),
         csv_value(csv.x_low),
         csv_value(csv.x_close),
         csv_value(csv.x_length),
         csv_value(csv.x_min_max),
-        csv_date(&csv.a_date),
+        csv.a_date.clone(),
         csv_value(csv.a_open),
         csv_value(csv.a_high),
         csv_value(csv.a_low),
@@ -1621,7 +1517,7 @@ fn pattern_setup_csv_record(csv: &XABCD_CSV, setup_id: &str) -> Vec<String> {
         csv_value(csv.a_length),
         csv_value(csv.a_min_max),
         csv_value(csv.xa_price_length),
-        csv_date(&csv.b_date),
+        csv.b_date.clone(),
         csv_value(csv.b_open),
         csv_value(csv.b_high),
         csv_value(csv.b_low),
@@ -1629,7 +1525,7 @@ fn pattern_setup_csv_record(csv: &XABCD_CSV, setup_id: &str) -> Vec<String> {
         csv_value(csv.b_length),
         csv_value(csv.b_min_max),
         csv_value(csv.ab_price_length),
-        csv_date(&csv.c_date),
+        csv.c_date.clone(),
         csv_value(csv.c_open),
         csv_value(csv.c_high),
         csv_value(csv.c_low),
@@ -1637,7 +1533,8 @@ fn pattern_setup_csv_record(csv: &XABCD_CSV, setup_id: &str) -> Vec<String> {
         csv_value(csv.c_length),
         csv_value(csv.c_min_max),
         csv_value(csv.bc_price_length),
-        csv_date(&csv.d_date),
+        csv.d_date.clone(),
+        csv.d_confirm_date.clone(),
         csv_value(csv.d_open),
         csv_value(csv.d_high),
         csv_value(csv.d_low),
@@ -1661,162 +1558,6 @@ fn pattern_setup_csv_record(csv: &XABCD_CSV, setup_id: &str) -> Vec<String> {
         csv_opt_bool(csv.three_month),
         csv_opt_bool(csv.six_month),
         csv_opt_bool(csv.twelve_month),
-    ]
-}
-
-fn direct_prop_outcome_csv_record(pattern: &PatternXABCD, outcome_row_id: &str) -> Vec<String> {
-    let setup_id = pattern.pattern_id.clone();
-    let pattern_group_id = format!("{}{}", pattern.symbol, pattern.a.date);
-    let market = format!("{:?}", pattern.market);
-    let lens = pattern.dominant_harmonic_lens();
-    let size_bucket = route_size_bucket(
-        pattern.x.length,
-        pattern.a.length,
-        pattern.b.length,
-        pattern.c.length,
-    );
-    let target = pattern.target_candle;
-
-    vec![
-        outcome_row_id.to_string(),
-        setup_id.clone(),
-        pattern.prop_strategy_id.clone(),
-        "D".to_string(),
-        csv_bool(false),
-        "None".to_string(),
-        csv_null(),
-        csv_null(),
-        setup_id,
-        pattern_group_id,
-        csv_value(pattern.x_bars_left),
-        pattern.symbol.to_string(),
-        csv_opt_ref(pattern.root_symbol.as_deref()),
-        csv_opt_ref(pattern.contract_symbol.as_deref()),
-        pattern.source_table.to_string(),
-        pattern.source_timeframe.to_string(),
-        csv_value(pattern.d.date),
-        csv_opt(pattern.contract_week_index),
-        csv_opt(pattern.contract_days_from_start),
-        csv_value(pattern.trade.entry_date),
-        market,
-        lens.harmonic_type.to_string(),
-        lens.bin.to_string(),
-        size_bucket.to_string(),
-        lens.time_bin.to_string(),
-        trend_label(pattern.three_month).to_string(),
-        trend_label(pattern.six_month).to_string(),
-        trend_label(pattern.twelve_month).to_string(),
-        csv_value(pattern.x.length),
-        csv_value(pattern.a.length),
-        csv_value(pattern.b.length),
-        csv_value(pattern.c.length),
-        csv_value(pattern.d.length),
-        csv_value(
-            pattern.x.length
-                + pattern.a.length
-                + pattern.b.length
-                + pattern.c.length
-                + pattern.d.length,
-        ),
-        csv_value(pattern.trade.enter_price),
-        csv_value(pattern.trade.risk_exit_price),
-        csv_value(pattern.trade.reward_exit_price),
-        csv_bool(pattern.trade.open),
-        csv_value(pattern.trade.current_price),
-        csv_value(pattern.trade.pnl),
-        csv_value(pattern.trade.lowest_price),
-        csv_value(pattern.trade.highest_price),
-        csv_value(pattern.trade.adverse_price),
-        csv_value(pattern.trade.favorable_price),
-        csv_value(pattern.trade.max_adverse_points),
-        csv_value(pattern.trade.max_favorable_points),
-        csv_value(pattern.trade.bars_held),
-        csv_value(pattern.trade.minutes_held),
-        csv_value(pattern.d_confirm_date),
-        csv_value(pattern.trade.result),
-        csv_bool(target.is_some()),
-        csv_opt(target.map(|target| target.date)),
-        csv_opt(target.map(|target| target.open)),
-        csv_opt(target.map(|target| target.high)),
-        csv_opt(target.map(|target| target.low)),
-        csv_opt(target.map(|target| target.close)),
-        csv_opt(target.map(|target| target.volume)),
-        csv_opt_bool(target.map(|target| target.is_green)),
-        csv_opt(target.map(|target| target.close_vs_open_pct)),
-        csv_opt(target.map(|target| target.high_vs_open_pct)),
-        csv_opt(target.map(|target| target.low_vs_open_pct)),
-        csv_opt(target.map(|target| target.range_pct)),
-        csv_opt_bool(target.map(|target| target.breaks_d_high)),
-        csv_opt_bool(target.map(|target| target.breaks_d_low)),
-    ]
-}
-
-fn reversal_prop_outcome_csv_record(item: &PropReversalOutcome) -> Vec<String> {
-    vec![
-        item.reversal_row_id.clone(),
-        item.setup_id.clone(),
-        item.prop_strategy_id.clone(),
-        "DReversal".to_string(),
-        csv_bool(true),
-        item.reversal_type.clone(),
-        csv_value(item.reversal_detect_date),
-        csv_value(item.reversal_bars_after_d),
-        csv_opt_ref(item.pattern_id.as_deref()),
-        item.pattern_group_id.clone(),
-        csv_value(item.x_bars_left),
-        item.symbol.clone(),
-        csv_opt_ref(item.root_symbol.as_deref()),
-        csv_opt_ref(item.contract_symbol.as_deref()),
-        item.source_table.clone(),
-        item.source_timeframe.clone(),
-        csv_value(item.d_date),
-        csv_opt(item.contract_week_index),
-        csv_opt(item.contract_days_from_start),
-        csv_value(item.entry_date),
-        item.market.clone(),
-        item.harmonic_type.clone(),
-        item.bin.clone(),
-        item.size_bucket.clone(),
-        item.time_bin.clone(),
-        item.three_month_trend.clone(),
-        item.six_month_trend.clone(),
-        item.twelve_month_trend.clone(),
-        csv_value(item.x_length),
-        csv_value(item.a_length),
-        csv_value(item.b_length),
-        csv_value(item.c_length),
-        csv_value(item.d_length),
-        csv_value(item.full_pattern_length),
-        csv_value(item.trade_enter_price),
-        csv_value(item.trade_risk_exit_price),
-        csv_value(item.trade_reward_exit_price),
-        csv_bool(item.trade_open),
-        csv_value(item.trade_current_price),
-        csv_value(item.trade_pnl),
-        csv_value(item.trade_lowest_price),
-        csv_value(item.trade_highest_price),
-        csv_value(item.trade_adverse_price),
-        csv_value(item.trade_favorable_price),
-        csv_value(item.max_adverse_points),
-        csv_value(item.max_favorable_points),
-        csv_value(item.bars_held),
-        csv_value(item.minutes_held),
-        csv_value(item.d_confirm_date),
-        csv_value(item.trade_result),
-        csv_bool(item.target_ready),
-        csv_opt(item.target_date),
-        csv_opt(item.target_open),
-        csv_opt(item.target_high),
-        csv_opt(item.target_low),
-        csv_opt(item.target_close),
-        csv_opt(item.target_volume),
-        csv_opt_bool(item.target_is_green),
-        csv_opt(item.target_close_vs_open_pct),
-        csv_opt(item.target_high_vs_open_pct),
-        csv_opt(item.target_low_vs_open_pct),
-        csv_opt(item.target_range_pct),
-        csv_opt_bool(item.target_breaks_reversal_high),
-        csv_opt_bool(item.target_breaks_reversal_low),
     ]
 }
 
@@ -1868,6 +1609,92 @@ fn route_size_bucket(x_length: i64, a_length: i64, b_length: i64, c_length: i64)
         "Large"
     } else {
         "Massive"
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PatternFamilyIdentity {
+    key: String,
+    name: &'static str,
+    harmonic_type: &'static str,
+    bin: &'static str,
+    size_bucket: &'static str,
+    time_bin: &'static str,
+    x_strictness: &'static str,
+}
+
+fn accuracy_bucket(value: f64) -> &'static str {
+    if value <= 10.0 {
+        "0-10"
+    } else if value <= 20.0 {
+        "10-20"
+    } else if value <= 30.0 {
+        "20-30"
+    } else if value <= 40.0 {
+        "30-40"
+    } else if value <= 50.0 {
+        "40-50"
+    } else if value <= 60.0 {
+        "50-60"
+    } else if value <= 70.0 {
+        "60-70"
+    } else if value <= 80.0 {
+        "70-80"
+    } else if value <= 90.0 {
+        "80-90"
+    } else {
+        "90-100"
+    }
+}
+
+fn pattern_x_strictness(x_bars_left: i64, x_length: i64) -> &'static str {
+    if x_length <= 0 {
+        "Loose"
+    } else if x_bars_left >= x_length {
+        "Strict"
+    } else if x_bars_left * 2 >= x_length {
+        "Normal"
+    } else {
+        "Loose"
+    }
+}
+
+fn pattern_family_identity(csv: &XABCD_CSV) -> PatternFamilyIdentity {
+    let mut best = ("Shark", csv.shark_accuracy, csv.shark_time_accuracy);
+    for candidate in harmonic_score_values(csv) {
+        let is_better = candidate.1 > best.1
+            || (candidate.1 == best.1 && candidate.2 > best.2)
+            || (candidate.1 == best.1 && candidate.2 == best.2 && candidate.0 < best.0);
+        if is_better {
+            best = candidate;
+        }
+    }
+
+    let name = "concrete_pattern";
+    let harmonic_type = best.0;
+    let bin = accuracy_bucket(best.1);
+    let size_bucket = route_size_bucket(csv.x_length, csv.a_length, csv.b_length, csv.c_length);
+    let time_bin = accuracy_bucket(best.2);
+    let x_strictness = pattern_x_strictness(csv.x_bars_left, csv.x_length);
+    let canonical_key = format!(
+        "pattern-family-v1|{}|{}|{}|{}|{}|{}",
+        name.to_lowercase(),
+        harmonic_type.to_lowercase(),
+        bin.to_lowercase(),
+        size_bucket.to_lowercase(),
+        time_bin.to_lowercase(),
+        x_strictness.to_lowercase()
+    );
+    let hash = format!("{:x}", md5::compute(canonical_key.as_bytes()));
+
+    PatternFamilyIdentity {
+        key: hash[..16].to_string(),
+        name,
+        harmonic_type,
+        bin,
+        size_bucket,
+        time_bin,
+        x_strictness,
     }
 }
 
@@ -2475,7 +2302,9 @@ impl Database {
         if output_options.write_swing_outcomes {
             tables.push("pattern_outcomes_swing");
         }
-        tables.push("pattern_outcomes_prop");
+        if output_options.write_prop_outcomes {
+            tables.push("pattern_outcomes_prop");
+        }
         if output_options.write_forward_observations {
             tables.push("pattern_forward_observations");
         }
@@ -2515,30 +2344,16 @@ impl Database {
     }
 
     pub async fn clear_generated_rollups_for_output_swap(&self) -> Result<(), sqlx::Error> {
-        self.ensure_prop_strategy_family_yearly_table().await?;
-        self.ensure_prop_strategy_family_summary_table().await?;
         self.ensure_pattern_family_summary_table().await?;
         self.ensure_pattern_family_source_summary_table().await?;
         self.ensure_dashboard_cache_state_table().await?;
 
-        for table in [
-            "prop_strategy_family_yearly",
-            "prop_strategy_family_summary",
-            "pattern_family_summary",
-            "pattern_family_source_summary",
-        ] {
+        for table in ["pattern_family_summary", "pattern_family_source_summary"] {
             sqlx::query(&format!("TRUNCATE TABLE {table}"))
                 .execute(&self.pool)
                 .await?;
         }
 
-        self.set_dashboard_cache_state(
-            "prop_strategy_family_rollups",
-            false,
-            None,
-            Some("cleared"),
-        )
-        .await?;
         self.set_dashboard_cache_state("pattern_family_universe", false, None, Some("cleared"))
             .await?;
         self.set_dashboard_cache_state(
@@ -3438,14 +3253,21 @@ impl Database {
                 market VARCHAR(16) NOT NULL,
                 harmonic_type VARCHAR(24) NOT NULL,
                 prop_strategy_id CHAR(16) NULL,
-                x_date DATE NOT NULL,
+                pattern_family_key CHAR(16) NULL,
+                pattern_family_name VARCHAR(32) NOT NULL DEFAULT 'concrete_pattern',
+                pattern_family_harmonic_type VARCHAR(24) NULL,
+                pattern_family_bin VARCHAR(16) NULL,
+                pattern_family_size_bucket VARCHAR(16) NULL,
+                pattern_family_time_bin VARCHAR(16) NULL,
+                pattern_family_x_strictness VARCHAR(16) NULL,
+                x_date DATETIME NOT NULL,
                 x_open DOUBLE NOT NULL,
                 x_high DOUBLE NOT NULL,
                 x_low DOUBLE NOT NULL,
                 x_close DOUBLE NOT NULL,
                 x_length BIGINT NOT NULL,
                 x_min_max DOUBLE NOT NULL,
-                a_date DATE NOT NULL,
+                a_date DATETIME NOT NULL,
                 a_open DOUBLE NOT NULL,
                 a_high DOUBLE NOT NULL,
                 a_low DOUBLE NOT NULL,
@@ -3453,7 +3275,7 @@ impl Database {
                 a_length BIGINT NOT NULL,
                 a_min_max DOUBLE NOT NULL,
                 xa_price_length DOUBLE NOT NULL,
-                b_date DATE NOT NULL,
+                b_date DATETIME NOT NULL,
                 b_open DOUBLE NOT NULL,
                 b_high DOUBLE NOT NULL,
                 b_low DOUBLE NOT NULL,
@@ -3461,7 +3283,7 @@ impl Database {
                 b_length BIGINT NOT NULL,
                 b_min_max DOUBLE NOT NULL,
                 ab_price_length DOUBLE NOT NULL,
-                c_date DATE NOT NULL,
+                c_date DATETIME NOT NULL,
                 c_open DOUBLE NOT NULL,
                 c_high DOUBLE NOT NULL,
                 c_low DOUBLE NOT NULL,
@@ -3469,7 +3291,8 @@ impl Database {
                 c_length BIGINT NOT NULL,
                 c_min_max DOUBLE NOT NULL,
                 bc_price_length DOUBLE NOT NULL,
-                d_date DATE NOT NULL,
+                d_date DATETIME NOT NULL,
+                d_confirm_date DATETIME NOT NULL,
                 d_open DOUBLE NOT NULL,
                 d_high DOUBLE NOT NULL,
                 d_low DOUBLE NOT NULL,
@@ -3499,13 +3322,15 @@ impl Database {
                 INDEX idx_pattern_setups_pattern_id (pattern_id),
                 INDEX idx_pattern_setups_x_bars_left (x_bars_left),
                 INDEX idx_pattern_setups_symbol_d_date (symbol, d_date),
+                INDEX idx_pattern_setups_symbol_d_confirm_date (symbol, d_confirm_date),
                 INDEX idx_pattern_setups_source_contract (
                     source_table,
                     source_timeframe,
                     root_symbol,
                     contract_symbol
                 ),
-                INDEX idx_pattern_setups_prop_strategy_id (prop_strategy_id)
+                INDEX idx_pattern_setups_prop_strategy_id (prop_strategy_id),
+                INDEX idx_pattern_setups_pattern_family (pattern_family_key, source_table, d_date)
             )
             "#,
         )
@@ -3562,12 +3387,48 @@ impl Database {
             "source_timeframe VARCHAR(16) NULL AFTER source_table",
         )
         .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "d_confirm_date",
+            "d_confirm_date DATETIME NULL AFTER d_date",
+        )
+        .await?;
+        self.ensure_pattern_setup_family_identity_columns().await?;
+        for definition in [
+            "x_date DATETIME NOT NULL",
+            "a_date DATETIME NOT NULL",
+            "b_date DATETIME NOT NULL",
+            "c_date DATETIME NOT NULL",
+            "d_date DATETIME NOT NULL",
+        ] {
+            let sql = format!("ALTER TABLE pattern_setups MODIFY COLUMN {definition}");
+            if let Err(error) = sqlx::query(&sql).execute(&self.pool).await {
+                let is_noop = match &error {
+                    sqlx::Error::Database(db_error) => {
+                        db_error.message().contains("already")
+                            || db_error.message().contains("Duplicate")
+                    }
+                    _ => false,
+                };
+                if !is_noop {
+                    return Err(error);
+                }
+            }
+        }
         self.create_index_if_missing(
             "CREATE INDEX idx_pattern_setups_x_bars_left ON pattern_setups (x_bars_left)",
         )
         .await?;
         self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_setups_symbol_d_confirm_date ON pattern_setups (symbol, d_confirm_date)",
+        )
+        .await?;
+        self.create_index_if_missing(
             "CREATE INDEX idx_pattern_setups_source_contract ON pattern_setups (source_table, source_timeframe, root_symbol, contract_symbol)",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_setups_pattern_family ON pattern_setups (pattern_family_key, source_table, d_date)",
         )
         .await?;
         sqlx::query(
@@ -4080,6 +3941,193 @@ impl Database {
         Ok(())
     }
 
+    async fn ensure_pattern_setup_family_identity_columns(&self) -> Result<(), sqlx::Error> {
+        self.add_column_if_missing(
+            "pattern_setups",
+            "pattern_family_key",
+            "pattern_family_key CHAR(16) NULL AFTER prop_strategy_id",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "pattern_family_name",
+            "pattern_family_name VARCHAR(32) NOT NULL DEFAULT 'concrete_pattern' AFTER pattern_family_key",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "pattern_family_harmonic_type",
+            "pattern_family_harmonic_type VARCHAR(24) NULL AFTER pattern_family_name",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "pattern_family_bin",
+            "pattern_family_bin VARCHAR(16) NULL AFTER pattern_family_harmonic_type",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "pattern_family_size_bucket",
+            "pattern_family_size_bucket VARCHAR(16) NULL AFTER pattern_family_bin",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "pattern_family_time_bin",
+            "pattern_family_time_bin VARCHAR(16) NULL AFTER pattern_family_size_bucket",
+        )
+        .await?;
+        self.add_column_if_missing(
+            "pattern_setups",
+            "pattern_family_x_strictness",
+            "pattern_family_x_strictness VARCHAR(16) NULL AFTER pattern_family_time_bin",
+        )
+        .await?;
+        self.create_index_if_missing(
+            "CREATE INDEX idx_pattern_setups_pattern_family ON pattern_setups (pattern_family_key, source_table, d_date)",
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn refresh_pattern_setup_family_identity(
+        &self,
+        run_id: Option<&str>,
+    ) -> Result<i64, sqlx::Error> {
+        let started = Instant::now();
+        self.ensure_pattern_setup_family_identity_columns().await?;
+        self.ensure_pattern_harmonic_scores_table().await?;
+
+        let mut conn = self.pool.acquire().await?;
+        sqlx::query("DROP TEMPORARY TABLE IF EXISTS tmp_pattern_setup_family_identity")
+            .execute(&mut *conn)
+            .await?;
+
+        let family_key_expr = concrete_pattern_family_key_expr("base");
+        let bin_expr = accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
+        let time_bin_expr = time_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
+        let size_bucket_expr = structure_size_bucket_expr(
+            "CAST(COALESCE(ps.x_length, 0) + COALESCE(ps.a_length, 0) + COALESCE(ps.b_length, 0) + COALESCE(ps.c_length, 0) AS DOUBLE)",
+        );
+        let x_strictness_expr = x_strictness_expr("ps.x_bars_left", "ps.x_length");
+        let sql = format!(
+            r#"
+            CREATE TEMPORARY TABLE tmp_pattern_setup_family_identity AS
+            SELECT
+                base.setup_id,
+                {family_key_expr} AS family_key,
+                'concrete_pattern' AS family_name,
+                base.harmonic_type,
+                base.bin,
+                base.size_bucket,
+                base.time_bin,
+                base.x_strictness
+            FROM (
+                SELECT
+                    ps.setup_id,
+                    COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) AS harmonic_type,
+                    {bin_expr} AS bin,
+                    {size_bucket_expr} AS size_bucket,
+                    {time_bin_expr} AS time_bin,
+                    {x_strictness_expr} AS x_strictness
+                FROM pattern_setups ps
+                LEFT JOIN (
+                    SELECT
+                        setup_id,
+                        SUBSTRING_INDEX(
+                            GROUP_CONCAT(
+                                harmonic_type
+                                ORDER BY
+                                    COALESCE(price_accuracy, 0.0) DESC,
+                                    COALESCE(time_accuracy, 0.0) DESC,
+                                    harmonic_type ASC
+                                SEPARATOR '|'
+                            ),
+                            '|',
+                            1
+                        ) AS harmonic_type,
+                        CAST(SUBSTRING_INDEX(
+                            GROUP_CONCAT(
+                                COALESCE(CAST(price_accuracy AS CHAR), '0')
+                                ORDER BY
+                                    COALESCE(price_accuracy, 0.0) DESC,
+                                    COALESCE(time_accuracy, 0.0) DESC,
+                                    harmonic_type ASC
+                                SEPARATOR '|'
+                            ),
+                            '|',
+                            1
+                        ) AS DOUBLE) AS price_accuracy,
+                        CAST(SUBSTRING_INDEX(
+                            GROUP_CONCAT(
+                                COALESCE(CAST(time_accuracy AS CHAR), '0')
+                                ORDER BY
+                                    COALESCE(price_accuracy, 0.0) DESC,
+                                    COALESCE(time_accuracy, 0.0) DESC,
+                                    harmonic_type ASC
+                                SEPARATOR '|'
+                            ),
+                            '|',
+                            1
+                        ) AS DOUBLE) AS time_accuracy
+                    FROM pattern_harmonic_scores
+                    GROUP BY setup_id
+                ) best_harmonic
+                  ON best_harmonic.setup_id = ps.setup_id
+                WHERE ps.d_date IS NOT NULL
+            ) base
+            WHERE base.harmonic_type IS NOT NULL
+              AND base.bin IS NOT NULL
+              AND base.size_bucket IS NOT NULL
+              AND base.time_bin IS NOT NULL
+              AND base.x_strictness IS NOT NULL
+            "#,
+            family_key_expr = family_key_expr,
+            bin_expr = bin_expr,
+            size_bucket_expr = size_bucket_expr,
+            time_bin_expr = time_bin_expr,
+            x_strictness_expr = x_strictness_expr,
+        );
+        sqlx::query(&sql).execute(&mut *conn).await?;
+        sqlx::query(
+            "CREATE INDEX idx_tmp_pattern_setup_family_identity ON tmp_pattern_setup_family_identity (setup_id)",
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        let result = sqlx::query(
+            r#"
+            UPDATE pattern_setups ps
+            INNER JOIN tmp_pattern_setup_family_identity identity
+              ON identity.setup_id = ps.setup_id
+            SET
+                ps.pattern_family_key = identity.family_key,
+                ps.pattern_family_name = identity.family_name,
+                ps.pattern_family_harmonic_type = identity.harmonic_type,
+                ps.pattern_family_bin = identity.bin,
+                ps.pattern_family_size_bucket = identity.size_bucket,
+                ps.pattern_family_time_bin = identity.time_bin,
+                ps.pattern_family_x_strictness = identity.x_strictness
+            "#,
+        )
+        .execute(&mut *conn)
+        .await?;
+
+        let rows = result.rows_affected() as i64;
+        self.record_optional_engine_phase_timing(
+            run_id,
+            "refresh_pattern_setup_family_identity",
+            Some(rows),
+            started.elapsed(),
+            Some("stored pattern family identity on pattern_setups"),
+        )
+        .await?;
+
+        Ok(rows)
+    }
+
     pub async fn rebuild_pattern_mode_tables_from_xabcd(&self) -> Result<(), sqlx::Error> {
         self.ensure_xabcd_patterns_table().await?;
         self.ensure_xabcd_pattern_id_column().await?;
@@ -4123,7 +4171,7 @@ impl Database {
                 a_date, a_open, a_high, a_low, a_close, a_length, a_min_max, xa_price_length,
                 b_date, b_open, b_high, b_low, b_close, b_length, b_min_max, ab_price_length,
                 c_date, c_open, c_high, c_low, c_close, c_length, c_min_max, bc_price_length,
-                d_date, d_open, d_high, d_low, d_close, d_length, d_min_max, cd_price_length,
+                d_date, d_confirm_date, d_open, d_high, d_low, d_close, d_length, d_min_max, cd_price_length,
                 full_pattern_length,
                 bullish_key_reversal, bearish_key_reversal,
                 bullish_engulfing, bearish_engulfing,
@@ -4140,12 +4188,12 @@ impl Database {
                 COALESCE(NULLIF(x_bars_left, 0), x_length + a_length + b_length + c_length),
                 market,
                 'Multi',
-                NULLIF(prop_strategy_id, ''),
+                NULL,
                 x_date, x_open, x_high, x_low, x_close, x_length, x_min_max,
                 a_date, a_open, a_high, a_low, a_close, a_length, a_min_max, xa_price_length,
                 b_date, b_open, b_high, b_low, b_close, b_length, b_min_max, ab_price_length,
                 c_date, c_open, c_high, c_low, c_close, c_length, c_min_max, bc_price_length,
-                d_date, d_open, d_high, d_low, d_close, d_length, d_min_max, cd_price_length,
+                d_date, COALESCE(d_confirm_date, d_date), d_open, d_high, d_low, d_close, d_length, d_min_max, cd_price_length,
                 full_pattern_length,
                 bullish_key_reversal, bearish_key_reversal,
                 bullish_engulfing, bearish_engulfing,
@@ -4367,11 +4415,13 @@ impl Database {
                     INSERT INTO {} (
                         setup_id, pattern_id, symbol, root_symbol, contract_symbol, source_table, source_timeframe,
                         pattern_group_id, x_bars_left, market, harmonic_type, prop_strategy_id,
+                        pattern_family_key, pattern_family_name, pattern_family_harmonic_type, pattern_family_bin,
+                        pattern_family_size_bucket, pattern_family_time_bin, pattern_family_x_strictness,
                         x_date, x_open, x_high, x_low, x_close, x_length, x_min_max,
                         a_date, a_open, a_high, a_low, a_close, a_length, a_min_max, xa_price_length,
                         b_date, b_open, b_high, b_low, b_close, b_length, b_min_max, ab_price_length,
                         c_date, c_open, c_high, c_low, c_close, c_length, c_min_max, bc_price_length,
-                        d_date, d_open, d_high, d_low, d_close, d_length, d_min_max, cd_price_length,
+                        d_date, d_confirm_date, d_open, d_high, d_low, d_close, d_length, d_min_max, cd_price_length,
                         full_pattern_length,
                         bullish_key_reversal, bearish_key_reversal,
                         bullish_engulfing, bearish_engulfing,
@@ -4386,6 +4436,7 @@ impl Database {
 
                 setup_builder.push_values(chunk, |mut row, p| {
                     let pattern_id = build_pattern_setup_id(p);
+                    let family = pattern_family_identity(p);
                     row.push_bind(pattern_id.clone())
                         .push_bind(pattern_id)
                         .push_bind(&p.symbol)
@@ -4397,7 +4448,14 @@ impl Database {
                         .push_bind(p.x_bars_left)
                         .push_bind(format!("{:?}", p.market))
                         .push_bind(&p.harmonic_type)
-                        .push_bind(&p.prop_strategy_id)
+                        .push_bind(None::<&str>)
+                        .push_bind(family.key)
+                        .push_bind(family.name)
+                        .push_bind(family.harmonic_type)
+                        .push_bind(family.bin)
+                        .push_bind(family.size_bucket)
+                        .push_bind(family.time_bin)
+                        .push_bind(family.x_strictness)
                         .push_bind(&p.x_date)
                         .push_bind(p.x_open)
                         .push_bind(p.x_high)
@@ -4430,6 +4488,7 @@ impl Database {
                         .push_bind(p.c_min_max)
                         .push_bind(p.bc_price_length)
                         .push_bind(&p.d_date)
+                        .push_bind(&p.d_confirm_date)
                         .push_bind(p.d_open)
                         .push_bind(p.d_high)
                         .push_bind(p.d_low)
@@ -4465,6 +4524,16 @@ impl Database {
                             source_table = VALUES(source_table),
                             source_timeframe = VALUES(source_timeframe),
                             x_bars_left = VALUES(x_bars_left),
+                            d_confirm_date = VALUES(d_confirm_date),
+                            pattern_family_key = VALUES(pattern_family_key),
+                            pattern_family_name = VALUES(pattern_family_name),
+                            pattern_family_harmonic_type = VALUES(pattern_family_harmonic_type),
+                            pattern_family_bin = VALUES(pattern_family_bin),
+                            pattern_family_size_bucket = VALUES(pattern_family_size_bucket),
+                            pattern_family_time_bin = VALUES(pattern_family_time_bin),
+                            pattern_family_x_strictness = VALUES(pattern_family_x_strictness),
+                            d_length = VALUES(d_length),
+                            full_pattern_length = VALUES(full_pattern_length),
                             prop_strategy_id = VALUES(prop_strategy_id),
                             bullish_key_reversal = VALUES(bullish_key_reversal),
                             bearish_key_reversal = VALUES(bearish_key_reversal),
@@ -5627,12 +5696,6 @@ impl Database {
     }
 
     pub async fn clear_generated_outputs(&self) -> Result<(), sqlx::Error> {
-        self.ensure_prop_strategy_family_yearly_table().await?;
-        self.ensure_prop_strategy_family_summary_table().await?;
-        self.ensure_prop_strategy_contract_week_summary_table()
-            .await?;
-        self.ensure_prop_strategy_family_weekly_cadence_table()
-            .await?;
         self.ensure_dashboard_cache_state_table().await?;
         self.ensure_pattern_mode_tables().await?;
         self.ensure_pattern_family_summary_table().await?;
@@ -5640,6 +5703,12 @@ impl Database {
 
         for table in [
             "prop_strategy_family_members",
+            "prop_strategy_family_yearly",
+            "prop_strategy_family_summary",
+            "prop_strategy_contract_week_summary",
+            "prop_strategy_family_weekly_cadence",
+            "pattern_outcomes_prop",
+            "pattern_forward_observations",
             "pattern_outcomes_prop_reversal",
             "pattern_outcomes_swing",
             "pattern_harmonic_scores",
@@ -5664,23 +5733,7 @@ impl Database {
                 .await?;
         }
 
-        sqlx::query("TRUNCATE TABLE pattern_outcomes_prop")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE pattern_forward_observations")
-            .execute(&self.pool)
-            .await?;
-
         sqlx::query("TRUNCATE TABLE pattern_setups")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE prop_strategy_family_yearly")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE prop_strategy_family_summary")
             .execute(&self.pool)
             .await?;
 
@@ -5692,30 +5745,6 @@ impl Database {
             .execute(&self.pool)
             .await?;
 
-        sqlx::query("TRUNCATE TABLE prop_strategy_contract_week_summary")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("TRUNCATE TABLE prop_strategy_family_weekly_cadence")
-            .execute(&self.pool)
-            .await?;
-
-        self.set_dashboard_cache_state("accuracy_bin_rollup", false, None, Some("cleared"))
-            .await?;
-
-        self.set_dashboard_cache_state("structure_rollups", false, None, Some("cleared"))
-            .await?;
-
-        self.set_dashboard_cache_state("swing_strategy_rollups", false, None, Some("cleared"))
-            .await?;
-
-        self.set_dashboard_cache_state(
-            "prop_strategy_family_rollups",
-            false,
-            None,
-            Some("cleared"),
-        )
-        .await?;
         self.set_dashboard_cache_state("pattern_family_universe", false, None, Some("cleared"))
             .await?;
         self.set_dashboard_cache_state(
@@ -8237,6 +8266,7 @@ impl Database {
 
         self.set_dashboard_cache_state("pattern_family_universe", false, None, Some("refreshing"))
             .await?;
+        self.refresh_pattern_setup_family_identity(run_id).await?;
 
         let phase_started = Instant::now();
         sqlx::query("TRUNCATE TABLE pattern_family_summary")
@@ -8251,20 +8281,8 @@ impl Database {
         )
         .await?;
 
-        let family_key_expr = concrete_pattern_family_key_expr("p");
-        let reversal_type_expr = pattern_setup_reversal_type_expr("ps");
-        let size_bucket_expr = structure_size_bucket_expr(
-            "CAST(COALESCE(ps.x_length, 0) + COALESCE(ps.a_length, 0) + COALESCE(ps.b_length, 0) + COALESCE(ps.c_length, 0) AS DOUBLE)",
-        );
-        let x_strictness_expr = x_strictness_expr("ps.x_bars_left", "ps.x_length");
-        let bin_expr = accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
-        let time_bin_expr = time_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
-        let three_month_trend_expr = trend_bucket_expr("ps.three_month");
-        let six_month_trend_expr = trend_bucket_expr("ps.six_month");
-        let twelve_month_trend_expr = trend_bucket_expr("ps.twelve_month");
         let phase_started = Instant::now();
-        let sql = format!(
-            r#"
+        let sql = r#"
             INSERT INTO pattern_family_summary (
                 family_key,
                 family_name,
@@ -8287,82 +8305,42 @@ impl Database {
                 last_d_date
             )
             SELECT
-                {family_key_expr} AS family_key,
-                'concrete_pattern' AS family_name,
+                ps.pattern_family_key AS family_key,
+                COALESCE(ps.pattern_family_name, 'concrete_pattern') AS family_name,
                 5 AS family_level,
                 'harmonic_type,bin,size_bucket,time_bin,x_strictness' AS included_dimensions,
                 'D' AS outcome_model,
                 'All' AS market,
-                p.harmonic_type,
-                p.bin,
+                ps.pattern_family_harmonic_type AS harmonic_type,
+                ps.pattern_family_bin AS bin,
                 'All' AS reversal_type,
-                p.size_bucket,
-                p.time_bin,
-                p.x_strictness,
+                ps.pattern_family_size_bucket AS size_bucket,
+                ps.pattern_family_time_bin AS time_bin,
+                ps.pattern_family_x_strictness AS x_strictness,
                 'All' AS three_month_trend,
                 'All' AS six_month_trend,
                 'All' AS twelve_month_trend,
                 CAST(COUNT(*) AS SIGNED) AS setup_count,
-                CAST(COUNT(DISTINCT p.symbol) AS SIGNED) AS symbol_count,
-                MIN(p.d_date) AS first_d_date,
-                MAX(p.d_date) AS last_d_date
-            FROM (
-                SELECT
-                    ps.setup_id,
-                    ps.symbol,
-                    ps.d_date,
-                    ps.market,
-                    COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) AS harmonic_type,
-                    {bin_expr} AS bin,
-                    {reversal_type_expr} AS reversal_type,
-                    {size_bucket_expr} AS size_bucket,
-                    {time_bin_expr} AS time_bin,
-                    {x_strictness_expr} AS x_strictness,
-                    {three_month_trend_expr} AS three_month_trend,
-                    {six_month_trend_expr} AS six_month_trend,
-                    {twelve_month_trend_expr} AS twelve_month_trend
-                FROM pattern_setups ps
-                LEFT JOIN (
-                    SELECT setup_id, harmonic_type, price_accuracy, time_accuracy
-                    FROM (
-                        SELECT
-                            setup_id,
-                            harmonic_type,
-                            price_accuracy,
-                            time_accuracy,
-                            ROW_NUMBER() OVER (
-                                PARTITION BY setup_id
-                                ORDER BY price_accuracy DESC, time_accuracy DESC, harmonic_type ASC
-                            ) AS harmonic_rank
-                        FROM pattern_harmonic_scores
-                    ) ranked_harmonics
-                    WHERE harmonic_rank = 1
-                ) best_harmonic
-                  ON best_harmonic.setup_id = ps.setup_id
-            ) p
-            WHERE p.harmonic_type IS NOT NULL
-              AND p.bin IS NOT NULL
-              AND p.size_bucket IS NOT NULL
-              AND p.time_bin IS NOT NULL
-              AND p.d_date IS NOT NULL
+                CAST(COUNT(DISTINCT ps.symbol) AS SIGNED) AS symbol_count,
+                MIN(ps.d_date) AS first_d_date,
+                MAX(ps.d_date) AS last_d_date
+            FROM pattern_setups ps
+            WHERE ps.pattern_family_key IS NOT NULL
+              AND ps.pattern_family_harmonic_type IS NOT NULL
+              AND ps.pattern_family_bin IS NOT NULL
+              AND ps.pattern_family_size_bucket IS NOT NULL
+              AND ps.pattern_family_time_bin IS NOT NULL
+              AND ps.d_date IS NOT NULL
             GROUP BY
-                p.harmonic_type,
-                p.bin,
-                p.size_bucket,
-                p.time_bin,
-                p.x_strictness
-            "#,
-            family_key_expr = family_key_expr,
-            bin_expr = bin_expr,
-            reversal_type_expr = reversal_type_expr,
-            size_bucket_expr = size_bucket_expr,
-            time_bin_expr = time_bin_expr,
-            x_strictness_expr = x_strictness_expr,
-            three_month_trend_expr = three_month_trend_expr,
-            six_month_trend_expr = six_month_trend_expr,
-            twelve_month_trend_expr = twelve_month_trend_expr,
-        );
-        let rows_written = sqlx::query(&sql).execute(&self.pool).await?.rows_affected() as i64;
+                ps.pattern_family_key,
+                ps.pattern_family_name,
+                ps.pattern_family_harmonic_type,
+                ps.pattern_family_bin,
+                ps.pattern_family_size_bucket,
+                ps.pattern_family_time_bin,
+                ps.pattern_family_x_strictness
+            "#;
+        let rows_written = sqlx::query(sql).execute(&self.pool).await?.rows_affected() as i64;
         self.record_optional_engine_phase_timing(
             run_id,
             "refresh_pattern_family_summary",
@@ -8404,6 +8382,7 @@ impl Database {
             Some("refreshing"),
         )
         .await?;
+        self.refresh_pattern_setup_family_identity(run_id).await?;
 
         let mut conn = self.pool.acquire().await?;
 
@@ -8423,84 +8402,8 @@ impl Database {
         )
         .await?;
 
-        let phase_started = Instant::now();
-        sqlx::query("DROP TEMPORARY TABLE IF EXISTS tmp_pattern_family_best_harmonic")
-            .execute(&mut *conn)
-            .await?;
-        let setup_score_selects = harmonic_setup_score_selects();
-        let best_harmonic_sql = format!(
-            r#"
-            CREATE TEMPORARY TABLE tmp_pattern_family_best_harmonic AS
-            SELECT
-                setup_id,
-                SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        harmonic_type
-                        ORDER BY
-                            COALESCE(price_accuracy, 0.0) DESC,
-                            COALESCE(time_accuracy, 0.0) DESC,
-                            harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS harmonic_type,
-                CAST(SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        COALESCE(CAST(price_accuracy AS CHAR), '0')
-                        ORDER BY
-                            COALESCE(price_accuracy, 0.0) DESC,
-                            COALESCE(time_accuracy, 0.0) DESC,
-                            harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS DOUBLE) AS price_accuracy,
-                CAST(SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        COALESCE(CAST(time_accuracy AS CHAR), '0')
-                        ORDER BY
-                            COALESCE(price_accuracy, 0.0) DESC,
-                            COALESCE(time_accuracy, 0.0) DESC,
-                            harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS DOUBLE) AS time_accuracy
-            FROM (
-                {setup_score_selects}
-            ) setup_scores
-            GROUP BY setup_id
-            "#,
-            setup_score_selects = setup_score_selects,
-        );
-        sqlx::query(&best_harmonic_sql).execute(&mut *conn).await?;
-        sqlx::query(
-            "CREATE INDEX idx_tmp_pattern_family_best_setup ON tmp_pattern_family_best_harmonic (setup_id)",
-        )
-        .execute(&mut *conn)
-        .await?;
-        self.record_optional_engine_phase_timing(
-            run_id,
-            "refresh_pattern_family_source_best_harmonic",
-            None,
-            phase_started.elapsed(),
-            Some("temporary best harmonic lookup built"),
-        )
-        .await?;
-
-        let family_key_expr = concrete_pattern_family_key_expr("g");
-        let size_bucket_expr = structure_size_bucket_expr(
-            "CAST(COALESCE(ps.x_length, 0) + COALESCE(ps.a_length, 0) + COALESCE(ps.b_length, 0) + COALESCE(ps.c_length, 0) AS DOUBLE)",
-        );
-        let x_strictness_expr = x_strictness_expr("ps.x_bars_left", "ps.x_length");
-        let bin_expr = accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
-        let time_bin_expr = time_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
         let source_insert_started = Instant::now();
-        let sql = format!(
-            r#"
+        let sql = r#"
             INSERT INTO pattern_family_source_summary (
                 source_scope,
                 period_year,
@@ -8527,7 +8430,7 @@ impl Database {
             SELECT
                 g.source_scope,
                 g.period_year,
-                {family_key_expr} AS family_key,
+                g.family_key,
                 'concrete_pattern' AS family_name,
                 5 AS family_level,
                 'harmonic_type,bin,size_bucket,time_bin,x_strictness' AS included_dimensions,
@@ -8556,6 +8459,7 @@ impl Database {
                         WHEN expansion.period_mode = 'all' THEN 0
                         ELSE YEAR(base.d_date)
                     END AS period_year,
+                    base.family_key,
                     base.harmonic_type,
                     base.bin,
                     base.size_bucket,
@@ -8578,15 +8482,15 @@ impl Database {
                         ps.setup_id,
                         ps.symbol,
                         ps.d_date,
-                        COALESCE(best_harmonic.harmonic_type, ps.harmonic_type) AS harmonic_type,
-                        {bin_expr} AS bin,
-                        {size_bucket_expr} AS size_bucket,
-                        {time_bin_expr} AS time_bin,
-                        {x_strictness_expr} AS x_strictness
+                        ps.pattern_family_key AS family_key,
+                        ps.pattern_family_harmonic_type AS harmonic_type,
+                        ps.pattern_family_bin AS bin,
+                        ps.pattern_family_size_bucket AS size_bucket,
+                        ps.pattern_family_time_bin AS time_bin,
+                        ps.pattern_family_x_strictness AS x_strictness
                     FROM pattern_setups ps
-                    LEFT JOIN tmp_pattern_family_best_harmonic best_harmonic
-                      ON best_harmonic.setup_id = ps.setup_id
                     WHERE ps.d_date IS NOT NULL
+                      AND ps.pattern_family_key IS NOT NULL
                 ) base
                 JOIN (
                     SELECT 'all' AS scope_mode, 'all' AS period_mode
@@ -8603,6 +8507,7 @@ impl Database {
                 GROUP BY
                     source_scope,
                     period_year,
+                    base.family_key,
                     base.harmonic_type,
                     base.bin,
                     base.size_bucket,
@@ -8610,14 +8515,8 @@ impl Database {
                     base.x_strictness
             ) g
             WHERE g.source_scope IN ('all', 'futures', 'daily')
-            "#,
-            family_key_expr = family_key_expr,
-            bin_expr = bin_expr,
-            size_bucket_expr = size_bucket_expr,
-            time_bin_expr = time_bin_expr,
-            x_strictness_expr = x_strictness_expr,
-        );
-        let rows_written = sqlx::query(&sql).execute(&mut *conn).await?.rows_affected() as i64;
+            "#;
+        let rows_written = sqlx::query(sql).execute(&mut *conn).await?.rows_affected() as i64;
         let phase_started = Instant::now();
         let all_source_rows_written = sqlx::query(
             r#"
@@ -8679,9 +8578,6 @@ impl Database {
         )
         .await?;
 
-        sqlx::query("DROP TEMPORARY TABLE IF EXISTS tmp_pattern_family_best_harmonic")
-            .execute(&mut *conn)
-            .await?;
         drop(conn);
 
         self.record_optional_engine_phase_timing(

@@ -1,5 +1,6 @@
 import {
   formatCandleDate,
+  clamp,
   getCanvasX,
   getCanvasY,
   getHoveredCandleIndex,
@@ -7,25 +8,25 @@ import {
   getPriceAtCanvasY,
 } from './geometry.js';
 
-const BULLISH_COLOR = 'rgba(0, 180, 180, 1)';
-const BEARISH_COLOR = 'rgb(214, 112, 112)';
-const GRID_COLOR = 'rgba(102, 124, 157, 0.14)';
-const GRID_MAJOR_COLOR = 'rgba(124, 150, 190, 0.24)';
-const CROSSHAIR_COLOR = 'rgba(223, 233, 247, 0.7)';
-const PRICE_PANEL_BACKGROUND = 'rgba(15, 21, 34, 0.94)';
-const DATE_PANEL_BACKGROUND = 'rgba(15, 21, 34, 0.96)';
-const TAG_BORDER_COLOR = 'rgba(91, 118, 158, 0.46)';
-const AXIS_TEXT_COLOR = 'rgba(189, 205, 229, 0.78)';
-const AXIS_MUTED_TEXT_COLOR = 'rgba(149, 170, 201, 0.62)';
+const BULLISH_COLOR = 'rgba(15, 198, 91, 1)';
+const BEARISH_COLOR = 'rgb(237, 55, 63)';
+const GRID_COLOR = 'rgba(89, 101, 112, 0.18)';
+const GRID_MAJOR_COLOR = 'rgba(126, 139, 151, 0.28)';
+const CROSSHAIR_COLOR = 'rgba(232, 238, 240, 0.72)';
+const PRICE_PANEL_BACKGROUND = 'rgba(16, 18, 19, 0.98)';
+const DATE_PANEL_BACKGROUND = 'rgba(16, 18, 19, 0.98)';
+const TAG_BORDER_COLOR = 'rgba(116, 128, 135, 0.56)';
+const AXIS_TEXT_COLOR = 'rgba(224, 229, 230, 0.82)';
+const AXIS_MUTED_TEXT_COLOR = 'rgba(156, 166, 169, 0.68)';
 const TARGET_PRICE_GRID_PX = 58;
-const RETRACEMENT_COLOR = 'rgba(226, 234, 245, 0.62)';
-const LABEL_BACKGROUND = 'rgba(18, 29, 45, 0.92)';
-const LABEL_TEXT_COLOR = '#f8fbff';
-const LABEL_BORDER_COLOR = 'rgba(114, 148, 206, 0.3)';
-const REVERSAL_D_CANDLE_COLOR = '#f3d33b';
+const RETRACEMENT_COLOR = 'rgba(227, 230, 221, 0.58)';
+const LABEL_BACKGROUND = 'rgba(13, 15, 16, 0.94)';
+const LABEL_TEXT_COLOR = '#f4f7f7';
+const LABEL_BORDER_COLOR = 'rgba(94, 210, 255, 0.34)';
+const REVERSAL_D_CANDLE_COLOR = '#f5d742';
 const PROP_ENTRY_COLOR = '#ffffff';
 const TRADE_TARGET_COLOR = '#53f0a7';
-const TRADE_STOP_COLOR = '#ff5f6d';
+const TRADE_STOP_COLOR = 'rgb(237, 55, 63)';
 const TRADE_PROFIT_ZONE = 'rgba(83, 240, 167, 0.14)';
 const TRADE_LOSS_ZONE = 'rgba(255, 95, 109, 0.14)';
 const TREND_LINE_SERIES = [
@@ -58,6 +59,13 @@ const BEARISH_PALETTE = {
   fill: 'rgba(174, 70, 93, 0.26)',
   node: '#ffc1c1',
   zone: 'rgba(174, 70, 93, 0.24)',
+};
+const GRAPH_PALETTE = {
+  line: '#7dd3fc',
+  glow: 'rgba(14, 165, 233, 0.26)',
+  fill: 'rgba(56, 189, 248, 0.08)',
+  node: '#e0f2fe',
+  zone: 'rgba(14, 165, 233, 0.12)',
 };
 
 const REVERSAL_SIGNAL_META = {
@@ -464,6 +472,17 @@ export class Chart {
   constructor(chartStateRef) {
     this.chartStateRef = chartStateRef;
   }
+
+  graphBackground = (ctx, canvas) => {
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    gradient.addColorStop(0, '#0f1b28');
+    gradient.addColorStop(1, '#060a0f');
+
+    ctx.save();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  };
 
   getVisibleCandleRange = (canvasWidth, overscan = 0) => {
     const chartState = this.chartStateRef.current;
@@ -886,21 +905,56 @@ export class ABCD {
     ctx.lineTo(d.x, d.y);
   };
 
-  drawSetupNodes = (ctx, coordinates, palette) => {
+  drawSetupNodes = (ctx, coordinates, palette, options = {}) => {
     const orderedPoints = [coordinates.x, coordinates.a, coordinates.b, coordinates.c, coordinates.d].filter(Boolean);
+    const radius = options?.radius ?? 4.5;
+    const haloRadius = options?.haloRadius ?? 0;
 
     orderedPoints.forEach((point) => {
+      if (haloRadius > 0) {
+        ctx.beginPath();
+        ctx.fillStyle = options?.haloColor ?? palette.glow;
+        ctx.arc(point.x, point.y, haloRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       ctx.beginPath();
       ctx.fillStyle = palette.node;
-      ctx.arc(point.x, point.y, 4.5, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(9, 15, 24, 0.9)';
-      ctx.lineWidth = 2;
-      ctx.arc(point.x, point.y, 4.5, 0, Math.PI * 2);
+      ctx.strokeStyle = options?.strokeStyle ?? 'rgba(9, 15, 24, 0.9)';
+      ctx.lineWidth = options?.strokeWidth ?? 2;
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
       ctx.stroke();
     });
+  };
+
+  drawGraphLabel = (ctx, label, point) => {
+    const pillHeight = 42;
+    const pillPadding = 16;
+
+    ctx.save();
+    ctx.font = '950 22px "Segoe UI"';
+    const pillWidth = Math.max(28, ctx.measureText(label).width + pillPadding * 2);
+    const pillX = clamp(point.x - pillWidth / 2, 8, Math.max(8, ctx.canvas.width - pillWidth - 8));
+    const preferredY = point.y - pillHeight - 20;
+    const pillY = preferredY < 8 ? point.y + 20 : preferredY;
+
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(8, 15, 26, 0.9)';
+    ctx.strokeStyle = 'rgba(125, 211, 252, 0.42)';
+    ctx.lineWidth = 1;
+    ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 11);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, pillX + pillWidth / 2, pillY + pillHeight / 2);
+    ctx.restore();
   };
 
   drawPatternOverlay = (ctx, pattern, { withArrow = true } = {}) => {
@@ -929,9 +983,13 @@ export class ABCD {
     }
   };
 
-  drawSetupOverlay = (ctx, pattern) => {
+  drawSetupOverlay = (ctx, pattern, options = {}) => {
     const coordinates = getPatternCoordinates(this.chartStateRef.current, pattern);
-    const palette = this.getOverlayPalette(pattern);
+    const isGraphPresentation = options?.presentationMode === 'graph';
+    const palette = isGraphPresentation ? GRAPH_PALETTE : this.getOverlayPalette(pattern);
+    const glowWidth = isGraphPresentation ? 18 : 10;
+    const lineWidth = isGraphPresentation ? 4.5 : 4;
+    const nodeRadius = isGraphPresentation ? 6.5 : 4.5;
 
     if (!coordinates?.x || !coordinates?.a || !coordinates?.b || !coordinates?.c || !coordinates?.d) {
       return;
@@ -940,23 +998,37 @@ export class ABCD {
     ctx.save();
     this.drawSetupPath(ctx, coordinates, palette, true);
     ctx.strokeStyle = palette.glow;
-    ctx.lineWidth = 10;
+    ctx.lineWidth = glowWidth;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.stroke();
 
     this.drawSetupPath(ctx, coordinates, palette, false);
     ctx.strokeStyle = palette.line;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = lineWidth;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.stroke();
-    this.drawSetupNodes(ctx, coordinates, palette);
-    this.drawLabel(ctx, 'X', coordinates.x);
-    this.drawLabel(ctx, 'A', coordinates.a);
-    this.drawLabel(ctx, 'B', coordinates.b);
-    this.drawLabel(ctx, 'C', coordinates.c);
-    this.drawLabel(ctx, 'D', coordinates.d);
+    this.drawSetupNodes(ctx, coordinates, palette, {
+      radius: nodeRadius,
+      strokeWidth: isGraphPresentation ? 3 : 2,
+      strokeStyle: isGraphPresentation ? 'rgba(8, 15, 26, 0.95)' : undefined,
+      haloRadius: isGraphPresentation ? 12 : 0,
+      haloColor: isGraphPresentation ? 'rgba(125, 211, 252, 0.2)' : undefined,
+    });
+    if (isGraphPresentation) {
+      this.drawGraphLabel(ctx, 'X', coordinates.x);
+      this.drawGraphLabel(ctx, 'A', coordinates.a);
+      this.drawGraphLabel(ctx, 'B', coordinates.b);
+      this.drawGraphLabel(ctx, 'C', coordinates.c);
+      this.drawGraphLabel(ctx, 'D', coordinates.d);
+    } else {
+      this.drawLabel(ctx, 'X', coordinates.x);
+      this.drawLabel(ctx, 'A', coordinates.a);
+      this.drawLabel(ctx, 'B', coordinates.b);
+      this.drawLabel(ctx, 'C', coordinates.c);
+      this.drawLabel(ctx, 'D', coordinates.d);
+    }
     ctx.restore();
   };
 
@@ -1085,6 +1157,89 @@ export class ABCD {
     ctx.restore();
   };
 
+  route_logic_highlight = (ctx, pattern, activeKey) => {
+    if (activeKey !== 'entry') {
+      return;
+    }
+
+    const chartState = this.chartStateRef.current;
+    const entryIndex = Number(pattern?.entry);
+    const entryPrice = Number(pattern?.trade_enter_price);
+
+    if (
+      !chartState?.canvas ||
+      !Number.isFinite(entryIndex) ||
+      entryIndex < 1 ||
+      !Number.isFinite(entryPrice)
+    ) {
+      return;
+    }
+
+    const x = getCanvasX(chartState, entryIndex);
+    const y = getCanvasY(chartState, entryPrice);
+    const candle = chartState?.candles?.items?.[Math.round(entryIndex) - 1];
+    const geometry = candle ? new Chart(this.chartStateRef).getCandleGeometry(candle, x) : null;
+    const bandWidth = Math.max(28, (chartState.candles.completeWidth || 8) * 1.8);
+    const labelText = 'ROUTE ENTRY';
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(94, 214, 255, 0.14)';
+    ctx.fillRect(x - bandWidth / 2, 0, bandWidth, chartState.canvas.height);
+
+    ctx.strokeStyle = 'rgba(94, 214, 255, 0.95)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, chartState.canvas.height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    if (geometry) {
+      const top = Math.max(2, Math.min(geometry.highY, geometry.candleTopY) - 8);
+      const height = Math.min(
+        chartState.canvas.height - top - 2,
+        Math.max(24, Math.max(geometry.lowY, geometry.candleBottomY) - top + 8)
+      );
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.94)';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(
+        geometry.candleLeftX - 3,
+        top,
+        geometry.candleRenderWidth + 6,
+        height
+      );
+    }
+
+    ctx.beginPath();
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = 'rgba(7, 55, 71, 0.95)';
+    ctx.lineWidth = 3;
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = '900 13px "Segoe UI"';
+    const labelWidth = Math.max(112, ctx.measureText(labelText).width + 24);
+    const labelHeight = 28;
+    const labelX = clamp(x - labelWidth / 2, 8, chartState.canvas.width - labelWidth - 8);
+    const labelY = clamp(y - labelHeight - 18, 8, chartState.canvas.height - labelHeight - 8);
+
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(5, 8, 8, 0.86)';
+    ctx.strokeStyle = 'rgba(94, 214, 255, 0.86)';
+    ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#dff7ff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(labelText, labelX + labelWidth / 2, labelY + labelHeight / 2);
+    ctx.restore();
+  };
+
   reversal_signal = (ctx, pattern, activeReversalFilter) => {
     const matchedLabel = getMatchedReversalLabel(pattern, activeReversalFilter);
 
@@ -1149,8 +1304,60 @@ export class ABCD {
     ctx.restore();
   };
 
+  trade_path = (ctx, pattern) => {
+    const chartState = this.chartStateRef.current;
+    const entryIndex = Number(pattern?.entry);
+    const exitIndex = Number(pattern?.exit_date);
+    const entryPrice = Number(pattern?.trade_enter_price);
+    const exitPrice = Number(pattern?.exit_price ?? pattern?.trade_current_price);
+
+    if (
+      !Number.isFinite(entryIndex) ||
+      !Number.isFinite(exitIndex) ||
+      entryIndex < 1 ||
+      exitIndex < 1 ||
+      !Number.isFinite(entryPrice) ||
+      !Number.isFinite(exitPrice)
+    ) {
+      return;
+    }
+
+    const entryPoint = {
+      x: getCanvasX(chartState, entryIndex),
+      y: getCanvasY(chartState, entryPrice),
+    };
+    const exitPoint = {
+      x: getCanvasX(chartState, exitIndex),
+      y: getCanvasY(chartState, exitPrice),
+    };
+    const resultIsLoss = Number(pattern?.trade_result) === 2 || Number(pattern?.result_r) < 0;
+    const pathColor = resultIsLoss ? TRADE_STOP_COLOR : TRADE_TARGET_COLOR;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.strokeStyle = pathColor;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 6]);
+    ctx.moveTo(entryPoint.x, entryPoint.y);
+    ctx.lineTo(exitPoint.x, exitPoint.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    [entryPoint, exitPoint].forEach((point, index) => {
+      ctx.beginPath();
+      ctx.fillStyle = index === 0 ? PROP_ENTRY_COLOR : pathColor;
+      ctx.strokeStyle = LABEL_BACKGROUND;
+      ctx.lineWidth = 2;
+      ctx.arc(point.x, point.y, index === 0 ? 5 : 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.restore();
+  };
+
   prop_events = (ctx, pattern) => {
     const entryIndex = Number(pattern?.entry);
+    const exitIndex = Number(pattern?.exit_date);
 
     if (Number.isFinite(entryIndex) && entryIndex >= 1) {
       this.drawEventMarker(ctx, pattern, {
@@ -1160,6 +1367,237 @@ export class ABCD {
         stackOrder: 1,
       });
     }
+
+    if (Number.isFinite(exitIndex) && exitIndex >= 1) {
+      const resultIsLoss = Number(pattern?.trade_result) === 2 || Number(pattern?.result_r) < 0;
+      this.drawEventMarker(ctx, pattern, {
+        index: exitIndex,
+        label: resultIsLoss ? 'Stop' : 'Exit',
+        color: resultIsLoss ? TRADE_STOP_COLOR : TRADE_TARGET_COLOR,
+        guideFromIndex: Number.isFinite(entryIndex) ? entryIndex : undefined,
+        stackOrder: 0,
+      });
+    }
+  };
+
+  graph_retracements = (ctx, pattern) => {
+    const coordinates = getPatternCoordinates(this.chartStateRef.current, pattern);
+
+    if (!coordinates?.x || !coordinates?.a || !coordinates?.b || !coordinates?.c || !coordinates?.d) {
+      return;
+    }
+
+    const formatRatio = (value) => {
+      const numericValue = Number(value);
+
+      if (!Number.isFinite(numericValue)) {
+        return null;
+      }
+
+      return numericValue >= 8
+        ? `${numericValue.toFixed(1)}%`
+        : `${(numericValue * 100).toFixed(1)}%`;
+    };
+    const rows = [
+      {
+        key: 'ab',
+        label: 'AB',
+        ratio: formatRatio(pattern?.trade_ab_price_retracement),
+        from: coordinates.x,
+        to: coordinates.b,
+      },
+      {
+        key: 'bc',
+        label: 'BC',
+        ratio: formatRatio(pattern?.trade_bc_price_retracement),
+        from: coordinates.a,
+        to: coordinates.c,
+      },
+      {
+        key: 'cd-bc',
+        label: 'CD/BC',
+        ratio: formatRatio(pattern?.trade_cd_bc_price_retracement),
+        from: coordinates.b,
+        to: coordinates.d,
+      },
+      {
+        key: 'cd-xa',
+        label: 'CD/XA',
+        ratio: formatRatio(pattern?.trade_cd_xa_price_retracement),
+        from: coordinates.x,
+        to: coordinates.d,
+      },
+    ].filter((row) => row.from && row.to);
+
+    ctx.save();
+    ctx.font = '900 20px "Segoe UI"';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    rows.forEach((row, index) => {
+      const midX = (row.from.x + row.to.x) / 2;
+      const midY = (row.from.y + row.to.y) / 2;
+      const label = row.ratio ? `${row.label} ${row.ratio}` : row.label;
+      const labelWidth = Math.max(86, ctx.measureText(label).width + 24);
+      const labelHeight = 36;
+      const offsetY = index % 2 === 0 ? -34 : 34;
+      const labelX = clamp(midX - labelWidth / 2, 8, Math.max(8, ctx.canvas.width - labelWidth - 8));
+      const labelY = clamp(midY + offsetY - labelHeight / 2, 8, Math.max(8, ctx.canvas.height - labelHeight - 8));
+
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.3)';
+      ctx.lineWidth = 1.3;
+      ctx.setLineDash([5, 7]);
+      ctx.moveTo(row.from.x, row.from.y);
+      ctx.lineTo(row.to.x, row.to.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(8, 15, 26, 0.72)';
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+      ctx.lineWidth = 1;
+      ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.86)';
+      ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
+    });
+
+    ctx.restore();
+  };
+
+  graph_trade_levels = (ctx, canvas, pattern) => {
+    const chartState = this.chartStateRef.current;
+    const exitPrice = Number(
+      pattern?.exit_price ??
+        pattern?.target_close ??
+        pattern?.trade_current_price ??
+        (Number(pattern?.trade_result) === 2
+          ? pattern?.trade_risk_exit_price
+          : pattern?.trade_reward_exit_price)
+    );
+    const levels = [
+      {
+        key: 'entry',
+        label: 'Entry',
+        price: Number(pattern?.trade_enter_price),
+        color: 'rgba(248, 250, 252, 0.86)',
+        dash: [3, 5],
+      },
+      {
+        key: 'stop',
+        label: 'SL',
+        price: Number(pattern?.trade_risk_exit_price),
+        color: TRADE_STOP_COLOR,
+        labelTextColor: '#fecaca',
+        labelBackground: 'rgba(69, 10, 10, 0.9)',
+        dash: [7, 7],
+      },
+      {
+        key: 'target',
+        label: 'Target',
+        price: Number(pattern?.trade_reward_exit_price),
+        color: 'rgba(74, 222, 128, 0.92)',
+        dash: [7, 7],
+      },
+      {
+        key: 'exit',
+        label: 'Exit',
+        price: exitPrice,
+        color: 'rgba(74, 222, 128, 0.92)',
+        dash: [7, 7],
+      },
+    ].filter((level) => Number.isFinite(level.price));
+
+    if (!levels.length || !chartState?.canvas) {
+      return;
+    }
+
+    ctx.save();
+    ctx.font = '950 22px "Segoe UI"';
+    const leftX = 22;
+    const rightX = canvas.width - 22;
+    const labels = [];
+
+    levels.forEach((level) => {
+      const y = getCanvasY(chartState, level.price);
+
+      if (!Number.isFinite(y) || y < -40 || y > canvas.height + 40) {
+        return;
+      }
+
+      ctx.beginPath();
+      ctx.strokeStyle = level.color;
+      ctx.lineWidth = level.key === 'entry' ? 2.2 : 2.4;
+      ctx.setLineDash(level.dash);
+      ctx.moveTo(leftX, y);
+      ctx.lineTo(rightX, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      labels.push({
+        ...level,
+        y,
+        text: `${level.label} ${level.price.toFixed(2)}`,
+      });
+    });
+
+    labels.sort((left, right) => left.y - right.y);
+    labels.forEach((level, index) => {
+      const labelHeight = 42;
+      const labelGap = 8;
+      const labelWidth = Math.max(154, ctx.measureText(level.text).width + 28);
+      const labelX = Math.max(30, canvas.width - labelWidth - 34);
+      const labelY = clamp(level.y - labelHeight / 2, 8, canvas.height - labelHeight - 8);
+
+      level.labelWidth = labelWidth;
+      level.labelX = labelX;
+      level.labelY =
+        index > 0
+          ? Math.max(labelY, labels[index - 1].labelY + labelHeight + labelGap)
+          : labelY;
+    });
+
+    const overflow = labels.length
+      ? labels[labels.length - 1].labelY + 24 + 8 - canvas.height
+      : 0;
+
+    if (overflow > 0) {
+      for (let index = labels.length - 1; index >= 0; index -= 1) {
+        labels[index].labelY -= overflow;
+      }
+    }
+
+    labels.forEach((level) => {
+      const labelHeight = 42;
+      const labelCenterY = level.labelY + labelHeight / 2;
+
+      ctx.beginPath();
+      ctx.strokeStyle = level.color;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 4]);
+      ctx.moveTo(rightX - 18, level.y);
+      ctx.lineTo(level.labelX, labelCenterY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.fillStyle = level.labelBackground ?? 'rgba(8, 15, 26, 0.88)';
+      ctx.strokeStyle = level.color;
+      ctx.lineWidth = 1;
+      ctx.roundRect(level.labelX, level.labelY, level.labelWidth, labelHeight, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = level.labelTextColor ?? '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(level.text, level.labelX + level.labelWidth / 2, labelCenterY);
+    });
+
+    ctx.restore();
   };
 
   price_levels = (ctxPrice, ctx, canvas, pattern, options = {}) => {

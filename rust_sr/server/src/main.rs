@@ -189,6 +189,7 @@ struct AdminStatusResponse {
     engine_phases: Vec<AdminEnginePhaseSnapshot>,
     engine_progress: Option<AdminEngineProgressSnapshot>,
     cache_states: Vec<AdminCacheStateSnapshot>,
+    entry_exit_tests: Vec<AdminEntryExitTestSnapshot>,
 }
 
 #[derive(Serialize)]
@@ -248,6 +249,19 @@ struct AdminCacheStateSnapshot {
     is_ready: bool,
     updated_at: Option<String>,
     note: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AdminEntryExitTestSnapshot {
+    test_id: String,
+    test_name: String,
+    entry_mode: String,
+    stop_mode: String,
+    target_r: f64,
+    max_hold_multiple: i64,
+    is_enabled: bool,
+    notes: Option<String>,
+    updated_at: Option<String>,
 }
 
 #[derive(Clone)]
@@ -381,6 +395,33 @@ struct SimulatorReplayParams {
     pub use_candidate_logic: Option<bool>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct Phase1SimulatorReplayParams {
+    pub family_key: Option<String>,
+    pub run_id: Option<String>,
+    pub route_id: Option<String>,
+    pub first_start_date: Option<String>,
+    pub tests_to_chain: Option<i64>,
+    pub contracts: Option<i64>,
+    pub starting_balance: Option<f64>,
+    pub profit_target: Option<f64>,
+    pub max_drawdown: Option<f64>,
+    pub daily_loss_limit: Option<f64>,
+    pub drawdown_model: Option<String>,
+    pub one_trade_at_a_time: Option<bool>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct Phase1PatternRouteReplayParams {
+    pub family_key: Option<String>,
+    pub run_id: Option<String>,
+    pub route_id: Option<String>,
+    pub pattern_id: Option<String>,
+    pub pattern_group_id: Option<String>,
+    pub d_date: Option<NaiveDateTime>,
+    pub contracts: Option<i64>,
+}
+
 #[derive(Debug, Clone)]
 struct CandidateLogicReplayFilter {
     title: String,
@@ -390,6 +431,9 @@ struct CandidateLogicReplayFilter {
 
 #[derive(Clone, sqlx::FromRow, serde::Serialize)]
 struct SimulatorReplaySourceTrade {
+    trade_id: Option<i64>,
+    trade_uid: Option<String>,
+    trade_direction: Option<String>,
     symbol: String,
     pattern_id: Option<String>,
     pattern_group_id: String,
@@ -401,6 +445,9 @@ struct SimulatorReplaySourceTrade {
     trade_enter_price: f64,
     trade_risk_exit_price: f64,
     trade_reward_exit_price: f64,
+    exit_price: Option<f64>,
+    result_r: Option<f64>,
+    risk_points: Option<f64>,
     trade_lowest_price: Option<f64>,
     trade_highest_price: Option<f64>,
     trade_adverse_price: Option<f64>,
@@ -408,10 +455,14 @@ struct SimulatorReplaySourceTrade {
     max_adverse_points: Option<f64>,
     max_favorable_points: Option<f64>,
     trade_result: i64,
+    exit_reason: Option<String>,
 }
 
 #[derive(serde::Serialize)]
 struct SimulatorReplayTradeEvent {
+    trade_id: Option<i64>,
+    trade_uid: Option<String>,
+    trade_direction: Option<String>,
     test_index: i64,
     trade_index: i64,
     symbol: String,
@@ -420,6 +471,13 @@ struct SimulatorReplayTradeEvent {
     entry_date: NaiveDateTime,
     target_date: Option<NaiveDateTime>,
     trade_result: i64,
+    exit_reason: Option<String>,
+    trade_enter_price: f64,
+    trade_risk_exit_price: f64,
+    trade_reward_exit_price: f64,
+    exit_price: Option<f64>,
+    result_r: Option<f64>,
+    risk_points: Option<f64>,
     pnl: f64,
     closed_pnl: f64,
     point_value: f64,
@@ -841,11 +899,14 @@ struct Phase1YearlyRouteContext {
 #[derive(Clone, sqlx::FromRow)]
 struct Phase1ReplaySetup {
     setup_id: String,
+    pattern_id: Option<String>,
+    pattern_group_id: String,
     symbol: String,
     source_table: Option<String>,
     source_timeframe: Option<String>,
     market: String,
     d_date: NaiveDateTime,
+    d_confirm_date: NaiveDateTime,
     x_high: f64,
     x_low: f64,
     b_high: f64,
@@ -861,10 +922,36 @@ struct Phase1ReplaySetup {
 
 #[derive(Clone, sqlx::FromRow)]
 struct Phase1ReplayCandle {
+    candle_date: NaiveDateTime,
     open: f64,
     high: f64,
     low: f64,
     close: f64,
+}
+
+struct Phase1ReplayTradeDetail {
+    result_r: f64,
+    entry_date: NaiveDateTime,
+    exit_date: NaiveDateTime,
+    exit_price: f64,
+    entry_price: f64,
+    stop_price: f64,
+    target_price: f64,
+    lowest_price: f64,
+    highest_price: f64,
+    adverse_price: f64,
+    favorable_price: f64,
+    max_adverse_points: f64,
+    max_favorable_points: f64,
+    risk_points: f64,
+    trade_result: i64,
+    exit_reason: String,
+}
+
+struct Phase1EntryDecision {
+    index: usize,
+    price: f64,
+    direction: f64,
 }
 
 #[derive(sqlx::FromRow, Serialize)]
@@ -1789,7 +1876,29 @@ fn cargo_admin_command(
     envs: Vec<(String, String)>,
     env_removes: Vec<String>,
 ) -> AdminCommandSpec {
-    let args = vec!["run".to_string(), "--bin".to_string(), bin_name.to_string()];
+    cargo_admin_command_with_args(
+        abcd_dir,
+        bin_name,
+        action_label,
+        Vec::new(),
+        envs,
+        env_removes,
+    )
+}
+
+fn cargo_admin_command_with_args(
+    abcd_dir: PathBuf,
+    bin_name: &str,
+    action_label: &str,
+    bin_args: Vec<String>,
+    envs: Vec<(String, String)>,
+    env_removes: Vec<String>,
+) -> AdminCommandSpec {
+    let mut args = vec!["run".to_string(), "--bin".to_string(), bin_name.to_string()];
+    if !bin_args.is_empty() {
+        args.push("--".to_string());
+        args.extend(bin_args);
+    }
     let command_text = format!(
         "{action_label}: cargo {}",
         args.iter()
@@ -1857,6 +1966,37 @@ fn build_admin_command(params: &AdminActionParams) -> Result<AdminCommandSpec, S
                 clean_env,
             ))
         }
+        "clear_phase1_routes" => {
+            if params.confirm_text.as_deref() != Some("CLEAR PHASE1 ROUTES") {
+                return Err(
+                    "Type CLEAR PHASE1 ROUTES before clearing Phase 1 route tables.".to_string(),
+                );
+            }
+
+            Ok(cargo_admin_command(
+                abcd_dir,
+                "clear_phase1_routes",
+                "Clear Phase 1 routes",
+                Vec::new(),
+                clean_env,
+            ))
+        }
+        "run_entry_exit_tests" => Ok(cargo_admin_command_with_args(
+            abcd_dir,
+            "run_phase1_optimizer",
+            "Run Entry / Exit tests",
+            vec![
+                "--all-families".to_string(),
+                "--source".to_string(),
+                "futures".to_string(),
+                "--year".to_string(),
+                "0".to_string(),
+                "--max-setups".to_string(),
+                "1000".to_string(),
+            ],
+            Vec::new(),
+            clean_env,
+        )),
         "run_engine_scan" => {
             let timeframe = normalize_admin_timeframe(params.source_timeframe.as_deref())?;
             let root_symbol = normalize_admin_symbol(params.root_symbol.as_deref());
@@ -2421,6 +2561,125 @@ async fn fetch_admin_cache_states(
         .collect())
 }
 
+async fn fetch_admin_entry_exit_tests(
+    pool: &MySqlPool,
+) -> Result<Vec<AdminEntryExitTestSnapshot>, sqlx::Error> {
+    ensure_admin_entry_exit_tests_table(pool).await?;
+    if !table_exists(pool, "entry_exit_tests").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            test_id,
+            test_name,
+            entry_mode,
+            stop_mode,
+            target_r,
+            CAST(max_hold_multiple AS SIGNED) AS max_hold_multiple,
+            is_enabled,
+            notes,
+            updated_at
+        FROM entry_exit_tests
+        ORDER BY is_enabled DESC, updated_at DESC, test_name ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| AdminEntryExitTestSnapshot {
+            test_id: row.try_get("test_id").unwrap_or_default(),
+            test_name: row.try_get("test_name").unwrap_or_default(),
+            entry_mode: row.try_get("entry_mode").unwrap_or_default(),
+            stop_mode: row.try_get("stop_mode").unwrap_or_default(),
+            target_r: row.try_get("target_r").unwrap_or_default(),
+            max_hold_multiple: read_i64_or_zero(&row, "max_hold_multiple"),
+            is_enabled: row
+                .try_get::<bool, _>("is_enabled")
+                .unwrap_or_else(|_| read_i64_or_zero(&row, "is_enabled") != 0),
+            notes: row.try_get("notes").ok(),
+            updated_at: row.try_get("updated_at").ok(),
+        })
+        .collect())
+}
+
+async fn ensure_admin_entry_exit_tests_table(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_tests (
+            test_id VARCHAR(128) NOT NULL PRIMARY KEY,
+            test_name VARCHAR(255) NOT NULL,
+            entry_mode VARCHAR(64) NOT NULL,
+            stop_mode VARCHAR(64) NOT NULL,
+            target_r DOUBLE NOT NULL,
+            max_hold_multiple BIGINT NOT NULL,
+            is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            notes TEXT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_entry_exit_tests_enabled (is_enabled, updated_at)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO entry_exit_tests (
+            test_id, test_name, entry_mode, stop_mode, target_r, max_hold_multiple, is_enabled, notes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, TRUE, ?)
+        ON DUPLICATE KEY UPDATE
+            test_name = VALUES(test_name),
+            entry_mode = VALUES(entry_mode),
+            stop_mode = VALUES(stop_mode),
+            target_r = VALUES(target_r),
+            max_hold_multiple = VALUES(max_hold_multiple),
+            notes = VALUES(notes)
+        "#,
+    )
+    .bind("post_confirm_decision__c_extreme__4R__1x")
+    .bind("Post-confirm decision + C stop + 4R target + 1x pattern hold")
+    .bind("post_confirm_decision")
+    .bind("c_extreme")
+    .bind(4.0)
+    .bind(1_i64)
+    .bind("Decision candle test: bullish setup enters at the decision candle open, long if that candle closes above the confirmation open, short only if it closes back below D high. Bearish setup mirrors this: short below confirmation open, long only back above D low.")
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO entry_exit_tests (
+            test_id, test_name, entry_mode, stop_mode, target_r, max_hold_multiple, is_enabled, notes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, TRUE, ?)
+        ON DUPLICATE KEY UPDATE
+            test_name = VALUES(test_name),
+            entry_mode = VALUES(entry_mode),
+            stop_mode = VALUES(stop_mode),
+            target_r = VALUES(target_r),
+            max_hold_multiple = VALUES(max_hold_multiple),
+            notes = VALUES(notes)
+        "#,
+    )
+    .bind("confirm_p1_body_signal_p2_open__c_extreme__4R__1x")
+    .bind("Confirmation +1 body signal + Confirmation +2 open + C stop + 4R target + 1x hold")
+    .bind("confirm_p1_body_signal_p2_open")
+    .bind("c_extreme")
+    .bind(4.0)
+    .bind(1_i64)
+    .bind("Body signal test: bearish setup requires Confirmation +1 close below Confirmation body low, then enters short at Confirmation +2 open only if that open is below Confirmation body low and below Confirmation +1 body high. Bullish setup mirrors this above Confirmation body high and above Confirmation +1 body low.")
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 async fn build_admin_status_response(pool: &MySqlPool) -> Result<AdminStatusResponse, sqlx::Error> {
     ensure_admin_operation_table(pool).await?;
 
@@ -2433,6 +2692,7 @@ async fn build_admin_status_response(pool: &MySqlPool) -> Result<AdminStatusResp
         engine_phases: fetch_admin_engine_phases(pool).await?,
         engine_progress: fetch_admin_engine_progress(pool).await?,
         cache_states: fetch_admin_cache_states(pool).await?,
+        entry_exit_tests: fetch_admin_entry_exit_tests(pool).await?,
     })
 }
 
@@ -3638,6 +3898,13 @@ fn futures_point_value(symbol: &str) -> f64 {
 }
 
 fn simulator_trade_pnl(trade: &SimulatorReplaySourceTrade, contracts: i64) -> f64 {
+    if let (Some(result_r), Some(risk_points)) = (trade.result_r, trade.risk_points) {
+        return result_r
+            * risk_points.abs()
+            * contracts as f64
+            * futures_point_value(&trade.symbol);
+    }
+
     let point_move = match trade.trade_result {
         1 => (trade.trade_reward_exit_price - trade.trade_enter_price).abs(),
         2 => -(trade.trade_risk_exit_price - trade.trade_enter_price).abs(),
@@ -3746,6 +4013,248 @@ fn simulator_next_peak_balance(
             .max(balance)
     } else {
         previous_peak_balance.max(balance)
+    }
+}
+
+fn build_simulator_replay_response(
+    family_key: &str,
+    rows: &[SimulatorReplaySourceTrade],
+    first_start_date: NaiveDateTime,
+    tests_to_chain: i64,
+    contracts: i64,
+    starting_balance: f64,
+    profit_target: f64,
+    max_drawdown: f64,
+    daily_loss_limit: Option<f64>,
+    drawdown_model: &str,
+    one_trade_at_a_time: bool,
+    candidate_logic_applied: bool,
+    candidate_logic_filters: Vec<String>,
+) -> SimulatorReplayResponse {
+    let mut tests = Vec::new();
+    let mut events = Vec::new();
+    let mut cursor = 0usize;
+    let mut next_start_date = first_start_date;
+
+    for test_index in 1..=tests_to_chain {
+        while cursor < rows.len() && rows[cursor].entry_date < next_start_date {
+            cursor += 1;
+        }
+
+        let test_start_date = rows
+            .get(cursor)
+            .map(|trade| trade.entry_date)
+            .unwrap_or(next_start_date);
+        let mut balance = starting_balance;
+        let mut peak_balance = starting_balance;
+        let mut max_drawdown_seen = 0.0f64;
+        let mut trade_count = 0i64;
+        let mut skipped_overlap_count = 0i64;
+        let mut status = String::from("waiting");
+        let mut end_date = None;
+        let mut busy_until: Option<NaiveDateTime> = None;
+        let mut day = test_start_date.date();
+        let mut day_start_balance = starting_balance;
+
+        while cursor < rows.len() {
+            let trade = &rows[cursor];
+            cursor += 1;
+
+            if trade.entry_date.date() != day {
+                day = trade.entry_date.date();
+                day_start_balance = balance;
+            }
+
+            if one_trade_at_a_time
+                && busy_until
+                    .map(|date| trade.entry_date < date)
+                    .unwrap_or(false)
+            {
+                skipped_overlap_count += 1;
+                events.push(SimulatorReplayTradeEvent {
+                    trade_id: trade.trade_id,
+                    trade_uid: trade.trade_uid.clone(),
+                    trade_direction: trade.trade_direction.clone(),
+                    test_index,
+                    trade_index: trade_count + skipped_overlap_count,
+                    symbol: trade.symbol.clone(),
+                    pattern_id: trade.pattern_id.clone(),
+                    pattern_group_id: trade.pattern_group_id.clone(),
+                    entry_date: trade.entry_date,
+                    target_date: trade.target_date,
+                    trade_result: trade.trade_result,
+                    exit_reason: trade.exit_reason.clone(),
+                    trade_enter_price: trade.trade_enter_price,
+                    trade_risk_exit_price: trade.trade_risk_exit_price,
+                    trade_reward_exit_price: trade.trade_reward_exit_price,
+                    exit_price: trade.exit_price,
+                    result_r: trade.result_r,
+                    risk_points: trade.risk_points,
+                    pnl: 0.0,
+                    closed_pnl: 0.0,
+                    point_value: futures_point_value(&trade.symbol),
+                    balance_before: balance,
+                    balance,
+                    closed_balance: balance,
+                    intratrade_low_balance: balance,
+                    intratrade_high_balance: balance,
+                    intratrade_adverse_pnl: 0.0,
+                    intratrade_favorable_pnl: 0.0,
+                    drawdown: balance - peak_balance,
+                    trade_lowest_price: trade.trade_lowest_price,
+                    trade_highest_price: trade.trade_highest_price,
+                    trade_adverse_price: trade.trade_adverse_price,
+                    trade_favorable_price: trade.trade_favorable_price,
+                    max_adverse_points: trade.max_adverse_points.unwrap_or(0.0).max(0.0),
+                    max_favorable_points: trade.max_favorable_points.unwrap_or(0.0).max(0.0),
+                    failed_intratrade_drawdown: false,
+                    failure_reason: Some(String::from("Skipped while prior trade was open")),
+                    skipped_for_overlap: true,
+                });
+                continue;
+            }
+
+            let point_value = futures_point_value(&trade.symbol);
+            let balance_before = balance;
+            let closed_pnl = simulator_trade_pnl(trade, contracts);
+            let closed_balance = balance_before + closed_pnl;
+            let (
+                max_adverse_points,
+                max_favorable_points,
+                intratrade_adverse_pnl,
+                intratrade_favorable_pnl,
+            ) = simulator_trade_excursion(trade, contracts, point_value);
+            let intratrade_low_balance = balance_before + intratrade_adverse_pnl;
+            let intratrade_high_balance = balance_before + intratrade_favorable_pnl;
+            let pre_close_peak_balance = peak_balance;
+            let intratrade_peak_balance = simulator_intratrade_peak_balance(
+                drawdown_model,
+                pre_close_peak_balance,
+                intratrade_high_balance,
+            );
+            let intratrade_trailing_floor = intratrade_peak_balance - max_drawdown;
+            let daily_floor = daily_loss_limit.map(|limit| day_start_balance - limit);
+
+            let intratrade_failure_reason = simulator_intratrade_failure_reason(
+                drawdown_model,
+                max_drawdown,
+                intratrade_low_balance,
+                intratrade_trailing_floor,
+                daily_floor,
+            );
+
+            let failed_intratrade_drawdown = intratrade_failure_reason.is_some();
+            let pnl = if failed_intratrade_drawdown {
+                intratrade_adverse_pnl
+            } else {
+                closed_pnl
+            };
+            balance = if failed_intratrade_drawdown {
+                intratrade_low_balance
+            } else {
+                closed_balance
+            };
+            peak_balance = simulator_next_peak_balance(
+                drawdown_model,
+                failed_intratrade_drawdown,
+                pre_close_peak_balance,
+                intratrade_high_balance,
+                balance,
+            );
+            let drawdown = balance - peak_balance;
+            max_drawdown_seen = if drawdown_model == SIMULATOR_DRAWDOWN_MODEL_INTRADAY {
+                max_drawdown_seen
+                    .min(intratrade_low_balance - intratrade_peak_balance)
+                    .min(drawdown)
+            } else {
+                max_drawdown_seen.min(drawdown)
+            };
+            trade_count += 1;
+            busy_until = trade.target_date;
+            end_date = trade.target_date.or(Some(trade.entry_date));
+
+            events.push(SimulatorReplayTradeEvent {
+                trade_id: trade.trade_id,
+                trade_uid: trade.trade_uid.clone(),
+                trade_direction: trade.trade_direction.clone(),
+                test_index,
+                trade_index: trade_count,
+                symbol: trade.symbol.clone(),
+                pattern_id: trade.pattern_id.clone(),
+                pattern_group_id: trade.pattern_group_id.clone(),
+                entry_date: trade.entry_date,
+                target_date: trade.target_date,
+                trade_result: trade.trade_result,
+                exit_reason: trade.exit_reason.clone(),
+                trade_enter_price: trade.trade_enter_price,
+                trade_risk_exit_price: trade.trade_risk_exit_price,
+                trade_reward_exit_price: trade.trade_reward_exit_price,
+                exit_price: trade.exit_price,
+                result_r: trade.result_r,
+                risk_points: trade.risk_points,
+                pnl,
+                closed_pnl,
+                point_value,
+                balance_before,
+                balance,
+                closed_balance,
+                intratrade_low_balance,
+                intratrade_high_balance,
+                intratrade_adverse_pnl,
+                intratrade_favorable_pnl,
+                drawdown,
+                trade_lowest_price: trade.trade_lowest_price,
+                trade_highest_price: trade.trade_highest_price,
+                trade_adverse_price: trade.trade_adverse_price,
+                trade_favorable_price: trade.trade_favorable_price,
+                max_adverse_points,
+                max_favorable_points,
+                failed_intratrade_drawdown,
+                failure_reason: intratrade_failure_reason.clone(),
+                skipped_for_overlap: false,
+            });
+
+            let trailing_floor = peak_balance - max_drawdown;
+            if failed_intratrade_drawdown
+                || balance <= trailing_floor
+                || daily_floor.map(|floor| balance <= floor).unwrap_or(false)
+            {
+                status = String::from("failed");
+                break;
+            }
+            if balance >= starting_balance + profit_target {
+                status = String::from("passed");
+                break;
+            }
+        }
+
+        tests.push(SimulatorReplayTestResult {
+            test_index,
+            status: status.clone(),
+            start_date: test_start_date,
+            end_date,
+            starting_balance,
+            ending_balance: balance,
+            peak_balance,
+            max_drawdown: max_drawdown_seen,
+            trade_count,
+            skipped_overlap_count,
+        });
+
+        if status == "waiting" {
+            break;
+        }
+
+        next_start_date = end_date.unwrap_or(test_start_date);
+    }
+
+    SimulatorReplayResponse {
+        family_key: family_key.to_string(),
+        tests,
+        trades: events,
+        eligible_trade_count: rows.len() as i64,
+        candidate_logic_applied,
+        candidate_logic_filters,
     }
 }
 
@@ -3897,6 +4406,16 @@ async fn fetch_simulator_family_replay(
                 CAST(p.trade_enter_price AS DOUBLE) AS trade_enter_price,
                 CAST(p.trade_risk_exit_price AS DOUBLE) AS trade_risk_exit_price,
                 CAST(p.trade_reward_exit_price AS DOUBLE) AS trade_reward_exit_price,
+                CAST(COALESCE(
+                    p.target_close,
+                    CASE
+                        WHEN p.prop_result = 1 THEN p.trade_reward_exit_price
+                        WHEN p.prop_result = 2 THEN p.trade_risk_exit_price
+                        ELSE p.trade_enter_price
+                    END
+                ) AS DOUBLE) AS exit_price,
+                CAST(NULL AS DOUBLE) AS result_r,
+                CAST(NULL AS DOUBLE) AS risk_points,
                 CAST(p.trade_lowest_price AS DOUBLE) AS trade_lowest_price,
                 CAST(p.trade_highest_price AS DOUBLE) AS trade_highest_price,
                 CAST(p.trade_adverse_price AS DOUBLE) AS trade_adverse_price,
@@ -3951,214 +4470,24 @@ async fn fetch_simulator_family_replay(
         }
     };
 
-    let mut tests = Vec::new();
-    let mut events = Vec::new();
-    let mut cursor = 0usize;
-    let mut next_start_date = first_start_date;
-
-    for test_index in 1..=tests_to_chain {
-        while cursor < rows.len() && rows[cursor].entry_date < next_start_date {
-            cursor += 1;
-        }
-
-        let test_start_date = rows
-            .get(cursor)
-            .map(|trade| trade.entry_date)
-            .unwrap_or(next_start_date);
-        let mut balance = starting_balance;
-        let mut peak_balance = starting_balance;
-        let mut max_drawdown_seen = 0.0f64;
-        let mut trade_count = 0i64;
-        let mut skipped_overlap_count = 0i64;
-        let mut status = String::from("waiting");
-        let mut end_date = None;
-        let mut busy_until: Option<NaiveDateTime> = None;
-        let mut day = test_start_date.date();
-        let mut day_start_balance = starting_balance;
-
-        while cursor < rows.len() {
-            let trade = &rows[cursor];
-            cursor += 1;
-
-            if trade.entry_date.date() != day {
-                day = trade.entry_date.date();
-                day_start_balance = balance;
-            }
-
-            if one_trade_at_a_time
-                && busy_until
-                    .map(|date| trade.entry_date < date)
-                    .unwrap_or(false)
-            {
-                skipped_overlap_count += 1;
-                events.push(SimulatorReplayTradeEvent {
-                    test_index,
-                    trade_index: trade_count + skipped_overlap_count,
-                    symbol: trade.symbol.clone(),
-                    pattern_id: trade.pattern_id.clone(),
-                    pattern_group_id: trade.pattern_group_id.clone(),
-                    entry_date: trade.entry_date,
-                    target_date: trade.target_date,
-                    trade_result: trade.trade_result,
-                    pnl: 0.0,
-                    closed_pnl: 0.0,
-                    point_value: futures_point_value(&trade.symbol),
-                    balance_before: balance,
-                    balance,
-                    closed_balance: balance,
-                    intratrade_low_balance: balance,
-                    intratrade_high_balance: balance,
-                    intratrade_adverse_pnl: 0.0,
-                    intratrade_favorable_pnl: 0.0,
-                    drawdown: balance - peak_balance,
-                    trade_lowest_price: trade.trade_lowest_price,
-                    trade_highest_price: trade.trade_highest_price,
-                    trade_adverse_price: trade.trade_adverse_price,
-                    trade_favorable_price: trade.trade_favorable_price,
-                    max_adverse_points: trade.max_adverse_points.unwrap_or(0.0).max(0.0),
-                    max_favorable_points: trade.max_favorable_points.unwrap_or(0.0).max(0.0),
-                    failed_intratrade_drawdown: false,
-                    failure_reason: Some(String::from("Skipped while prior trade was open")),
-                    skipped_for_overlap: true,
-                });
-                continue;
-            }
-
-            let point_value = futures_point_value(&trade.symbol);
-            let balance_before = balance;
-            let closed_pnl = simulator_trade_pnl(trade, contracts);
-            let closed_balance = balance_before + closed_pnl;
-            let (
-                max_adverse_points,
-                max_favorable_points,
-                intratrade_adverse_pnl,
-                intratrade_favorable_pnl,
-            ) = simulator_trade_excursion(trade, contracts, point_value);
-            let intratrade_low_balance = balance_before + intratrade_adverse_pnl;
-            let intratrade_high_balance = balance_before + intratrade_favorable_pnl;
-            let pre_close_peak_balance = peak_balance;
-            let intratrade_peak_balance = simulator_intratrade_peak_balance(
-                drawdown_model,
-                pre_close_peak_balance,
-                intratrade_high_balance,
-            );
-            let intratrade_trailing_floor = intratrade_peak_balance - max_drawdown;
-            let daily_floor = daily_loss_limit.map(|limit| day_start_balance - limit);
-
-            let intratrade_failure_reason = simulator_intratrade_failure_reason(
-                drawdown_model,
-                max_drawdown,
-                intratrade_low_balance,
-                intratrade_trailing_floor,
-                daily_floor,
-            );
-
-            let failed_intratrade_drawdown = intratrade_failure_reason.is_some();
-            let pnl = if failed_intratrade_drawdown {
-                intratrade_adverse_pnl
-            } else {
-                closed_pnl
-            };
-            balance = if failed_intratrade_drawdown {
-                intratrade_low_balance
-            } else {
-                closed_balance
-            };
-            peak_balance = simulator_next_peak_balance(
-                drawdown_model,
-                failed_intratrade_drawdown,
-                pre_close_peak_balance,
-                intratrade_high_balance,
-                balance,
-            );
-            let drawdown = balance - peak_balance;
-            max_drawdown_seen = if drawdown_model == SIMULATOR_DRAWDOWN_MODEL_INTRADAY {
-                max_drawdown_seen
-                    .min(intratrade_low_balance - intratrade_peak_balance)
-                    .min(drawdown)
-            } else {
-                max_drawdown_seen.min(drawdown)
-            };
-            trade_count += 1;
-            busy_until = trade.target_date;
-            end_date = trade.target_date.or(Some(trade.entry_date));
-
-            events.push(SimulatorReplayTradeEvent {
-                test_index,
-                trade_index: trade_count,
-                symbol: trade.symbol.clone(),
-                pattern_id: trade.pattern_id.clone(),
-                pattern_group_id: trade.pattern_group_id.clone(),
-                entry_date: trade.entry_date,
-                target_date: trade.target_date,
-                trade_result: trade.trade_result,
-                pnl,
-                closed_pnl,
-                point_value,
-                balance_before,
-                balance,
-                closed_balance,
-                intratrade_low_balance,
-                intratrade_high_balance,
-                intratrade_adverse_pnl,
-                intratrade_favorable_pnl,
-                drawdown,
-                trade_lowest_price: trade.trade_lowest_price,
-                trade_highest_price: trade.trade_highest_price,
-                trade_adverse_price: trade.trade_adverse_price,
-                trade_favorable_price: trade.trade_favorable_price,
-                max_adverse_points,
-                max_favorable_points,
-                failed_intratrade_drawdown,
-                failure_reason: intratrade_failure_reason.clone(),
-                skipped_for_overlap: false,
-            });
-
-            let trailing_floor = peak_balance - max_drawdown;
-            if failed_intratrade_drawdown
-                || balance <= trailing_floor
-                || daily_floor.map(|floor| balance <= floor).unwrap_or(false)
-            {
-                status = String::from("failed");
-                break;
-            }
-            if balance >= starting_balance + profit_target {
-                status = String::from("passed");
-                break;
-            }
-        }
-
-        tests.push(SimulatorReplayTestResult {
-            test_index,
-            status: status.clone(),
-            start_date: test_start_date,
-            end_date,
-            starting_balance,
-            ending_balance: balance,
-            peak_balance,
-            max_drawdown: max_drawdown_seen,
-            trade_count,
-            skipped_overlap_count,
-        });
-
-        if status == "waiting" {
-            break;
-        }
-
-        next_start_date = end_date.unwrap_or(test_start_date);
-    }
-
-    HttpResponse::Ok().json(SimulatorReplayResponse {
-        family_key: prop_strategy_id.to_string(),
-        tests,
-        trades: events,
-        eligible_trade_count: rows.len() as i64,
-        candidate_logic_applied: use_candidate_logic && !candidate_logic_filters.is_empty(),
-        candidate_logic_filters: candidate_logic_filters
+    HttpResponse::Ok().json(build_simulator_replay_response(
+        prop_strategy_id,
+        &rows,
+        first_start_date,
+        tests_to_chain,
+        contracts,
+        starting_balance,
+        profit_target,
+        max_drawdown,
+        daily_loss_limit,
+        drawdown_model,
+        one_trade_at_a_time,
+        use_candidate_logic && !candidate_logic_filters.is_empty(),
+        candidate_logic_filters
             .iter()
             .map(|filter| filter.label.clone())
             .collect(),
-    })
+    ))
 }
 
 #[route("/current-open-setups", method = "GET", method = "POST")]
@@ -4949,6 +5278,8 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_pattern_discovery_family)
             .service(save_pattern_discovery_logic)
             .service(fetch_simulator_family_replay)
+            .service(fetch_simulator_phase1_route_replay)
+            .service(fetch_simulator_phase1_pattern_route_replay)
             .service(fetch_current_open_setups)
             .service(fetch_current_setup_strategies)
             .service(fetch_pattern_detail)
@@ -5131,8 +5462,8 @@ async fn fetch_pattern_detail_from_pattern_setups(
             CAST(ps.full_pattern_length AS SIGNED) AS full_pattern_length,
             CAST(ps.d_min_max AS DECIMAL(18,6)) AS d_min_max,
             TRUE AS trade_open,
-            CAST(ps.d_date AS DATETIME) AS entry_date,
-            CAST(NULL AS DATETIME) AS d_confirm_date,
+            CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS entry_date,
+            CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS d_confirm_date,
             CAST(NULL AS DATETIME) AS reversal_detect_date,
             CAST(NULL AS DATETIME) AS target_date,
             CAST(NULL AS DECIMAL(18,6)) AS target_open,
@@ -5154,7 +5485,7 @@ async fn fetch_pattern_detail_from_pattern_setups(
             CAST(0 AS DECIMAL(18,0)) AS trade_length,
             CAST(0 AS DECIMAL(18,6)) AS trade_pnl,
             CAST(0 AS SIGNED) AS trade_result,
-            CAST(ps.d_date AS DATETIME) AS trade_date,
+            CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS trade_date,
             CAST(COALESCE(ABS(ps.b_min_max - ps.a_min_max) / NULLIF(ABS(ps.a_min_max - ps.x_min_max), 0) * 100.0, 0.0) AS DECIMAL(12,4)) AS trade_ab_price_retracement,
             CAST(COALESCE(ABS(ps.c_min_max - ps.b_min_max) / NULLIF(ABS(ps.b_min_max - ps.a_min_max), 0) * 100.0, 0.0) AS DECIMAL(12,4)) AS trade_bc_price_retracement,
             CAST(COALESCE(ABS(ps.d_min_max - ps.c_min_max) / NULLIF(ABS(ps.c_min_max - ps.b_min_max), 0) * 100.0, 0.0) AS DECIMAL(12,4)) AS trade_cd_bc_price_retracement,
@@ -5166,9 +5497,9 @@ async fn fetch_pattern_detail_from_pattern_setups(
             CAST(COALESCE(ps.d_length / NULLIF(ps.c_length, 0) * 100.0, 0.0) AS DOUBLE) AS trade_cd_bc_bar_retracement,
             CAST(COALESCE(ps.d_length / NULLIF(ps.x_length, 0) * 100.0, 0.0) AS DOUBLE) AS trade_cd_xa_bar_retracement,
             CAST(0.0 AS DECIMAL(18,6)) AS trade_snr,
-            CAST(YEAR(ps.d_date) AS SIGNED) AS trade_year,
-            CAST(MONTH(ps.d_date) AS SIGNED) AS trade_month,
-            CAST(DAY(ps.d_date) AS SIGNED) AS trade_day,
+            CAST(YEAR(COALESCE(ps.d_confirm_date, ps.d_date)) AS SIGNED) AS trade_year,
+            CAST(MONTH(COALESCE(ps.d_confirm_date, ps.d_date)) AS SIGNED) AS trade_month,
+            CAST(DAY(COALESCE(ps.d_confirm_date, ps.d_date)) AS SIGNED) AS trade_day,
             'None' AS reversal_type,
             ps.bullish_key_reversal,
             ps.bearish_key_reversal,
@@ -6356,165 +6687,65 @@ async fn fetch_phase1_family_patterns(
     } else {
         ""
     };
-    let bin_expr = phase1_accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
-    let time_bin_expr = phase1_accuracy_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
-    let size_bucket_expr = phase1_size_bucket_expr(
-        "CAST(COALESCE(fs.x_length, 0) + COALESCE(fs.a_length, 0) + COALESCE(fs.b_length, 0) + COALESCE(fs.c_length, 0) AS DOUBLE)",
-    );
-    let x_strictness = x_strictness_expr("fs.x_bars_left", "fs.x_length");
     let sql = format!(
         r#"
-        WITH eligible_setups AS (
-            SELECT
-                ps.setup_id,
-                ps.pattern_id,
-                ps.symbol,
-                ps.market,
-                ps.pattern_group_id,
-                ps.d_date,
-                ps.d_high,
-                ps.d_low,
-                ps.d_close,
-                ps.full_pattern_length,
-                ps.x_bars_left,
-                ps.x_length,
-                ps.a_length,
-                ps.b_length,
-                ps.c_length,
-                ps.d_length
-            FROM pattern_setups ps
-            WHERE ps.d_date IS NOT NULL
-              {source_filter}
-              {year_filter}
-        ),
-        best_harmonic AS (
-            SELECT
-                hs.setup_id,
-                SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        hs.harmonic_type
-                        ORDER BY
-                            COALESCE(hs.price_accuracy, 0.0) DESC,
-                            COALESCE(hs.time_accuracy, 0.0) DESC,
-                            hs.harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS harmonic_type,
-                CAST(SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        COALESCE(CAST(hs.price_accuracy AS CHAR), '0')
-                        ORDER BY
-                            COALESCE(hs.price_accuracy, 0.0) DESC,
-                            COALESCE(hs.time_accuracy, 0.0) DESC,
-                            hs.harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS DOUBLE) AS price_accuracy,
-                CAST(SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        COALESCE(CAST(hs.time_accuracy AS CHAR), '0')
-                        ORDER BY
-                            COALESCE(hs.price_accuracy, 0.0) DESC,
-                            COALESCE(hs.time_accuracy, 0.0) DESC,
-                            hs.harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS DOUBLE) AS time_accuracy
-            FROM pattern_harmonic_scores hs
-            INNER JOIN eligible_setups es
-              ON es.setup_id = hs.setup_id
-            GROUP BY hs.setup_id
-        ),
-        pattern_rows AS (
-            SELECT
-                fs.*,
-                COALESCE(best_harmonic.harmonic_type, 'Unknown') AS best_harmonic_type,
-                COALESCE(best_harmonic.price_accuracy, 0.0) AS best_price_accuracy,
-                COALESCE(best_harmonic.time_accuracy, 0.0) AS best_time_accuracy,
-                {bin_expr} AS best_bin,
-                {time_bin_expr} AS best_time_bin,
-                {size_bucket_expr} AS best_size_bucket,
-                {x_strictness} AS best_x_strictness
-            FROM eligible_setups fs
-            LEFT JOIN best_harmonic
-              ON best_harmonic.setup_id = fs.setup_id
-        )
         SELECT
-            symbol,
-            CAST(CONCAT(d_date, ' 00:00:00') AS DATETIME) AS d_date,
-            CAST(NULL AS DATETIME) AS d_confirm_date,
+            ps.symbol,
+            CAST(ps.d_date AS DATETIME) AS d_date,
+            CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS d_confirm_date,
             CAST(NULL AS DATETIME) AS reversal_detect_date,
-            CAST(CONCAT(d_date, ' 00:00:00') AS DATETIME) AS entry_date,
+            CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS entry_date,
             CAST(NULL AS DATETIME) AS target_date,
             CAST(NULL AS DECIMAL(18,6)) AS target_open,
             CAST(NULL AS DECIMAL(18,6)) AS target_high,
             CAST(NULL AS DECIMAL(18,6)) AS target_low,
             CAST(NULL AS DECIMAL(18,6)) AS target_close,
-            CAST(COALESCE(d_close, 0) AS DECIMAL(18,6)) AS trade_enter_price,
-            CAST(CASE WHEN market = 'Bullish' THEN COALESCE(d_low, d_close, 0) ELSE COALESCE(d_high, d_close, 0) END AS DECIMAL(18,6)) AS trade_risk_exit_price,
-            CAST(COALESCE(d_close, 0) AS DECIMAL(18,6)) AS trade_reward_exit_price,
+            CAST(COALESCE(ps.d_close, 0) AS DECIMAL(18,6)) AS trade_enter_price,
+            CAST(CASE WHEN ps.market = 'Bullish' THEN COALESCE(ps.d_low, ps.d_close, 0) ELSE COALESCE(ps.d_high, ps.d_close, 0) END AS DECIMAL(18,6)) AS trade_risk_exit_price,
+            CAST(COALESCE(ps.d_close, 0) AS DECIMAL(18,6)) AS trade_reward_exit_price,
             CAST(0 AS SIGNED) AS trade_result,
-            market,
-            pattern_id,
-            pattern_group_id,
-            CAST(? AS CHAR) AS prop_strategy_id,
-            best_harmonic_type AS harmonic_type,
+            ps.market,
+            ps.pattern_id,
+            ps.pattern_group_id,
+            ps.pattern_family_key AS prop_strategy_id,
+            ps.pattern_family_harmonic_type AS harmonic_type,
             'None' AS reversal_type,
-            best_size_bucket AS size_bucket,
+            ps.pattern_family_size_bucket AS size_bucket,
             CAST(NULL AS CHAR) AS balance_bucket,
-            best_time_bin AS time_bin,
-            best_x_strictness AS x_strictness,
+            ps.pattern_family_time_bin AS time_bin,
+            ps.pattern_family_x_strictness AS x_strictness,
             CAST(NULL AS CHAR) AS three_month_trend,
             CAST(NULL AS CHAR) AS six_month_trend,
             CAST(NULL AS CHAR) AS twelve_month_trend,
-            CAST(best_time_accuracy AS DOUBLE) AS time_accuracy,
-            CAST(x_length AS SIGNED) AS x_length,
-            CAST(a_length AS SIGNED) AS a_length,
-            CAST(b_length AS SIGNED) AS b_length,
-            CAST(c_length AS SIGNED) AS c_length,
-            CAST(d_length AS SIGNED) AS d_length,
-            CAST(full_pattern_length AS SIGNED) AS full_pattern_length,
-            CAST(CASE WHEN best_harmonic_type IN ('Bat', 'AlternateBat') THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS bat_accuracy,
-            CAST(CASE WHEN best_harmonic_type = 'Butterfly' THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS butterfly_accuracy,
-            CAST(CASE WHEN best_harmonic_type = 'Gartley' THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS gartley_accuracy,
-            CAST(CASE WHEN best_harmonic_type IN ('Crab', 'DeepCrab') THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS crab_accuracy,
-            CAST(CASE WHEN best_harmonic_type = 'Shark' THEN best_price_accuracy ELSE NULL END AS DECIMAL(18,6)) AS shark_accuracy
-        FROM pattern_rows
-        WHERE best_harmonic_type = ?
-          AND best_bin = ?
-          AND best_size_bucket = ?
-          AND best_time_bin = ?
-          AND best_x_strictness = ?
-        ORDER BY d_date ASC, setup_id ASC
+            CAST(NULL AS DOUBLE) AS time_accuracy,
+            CAST(ps.x_length AS SIGNED) AS x_length,
+            CAST(ps.a_length AS SIGNED) AS a_length,
+            CAST(ps.b_length AS SIGNED) AS b_length,
+            CAST(ps.c_length AS SIGNED) AS c_length,
+            CAST(ps.d_length AS SIGNED) AS d_length,
+            CAST(ps.full_pattern_length AS SIGNED) AS full_pattern_length,
+            CAST(NULL AS DECIMAL(18,6)) AS bat_accuracy,
+            CAST(NULL AS DECIMAL(18,6)) AS butterfly_accuracy,
+            CAST(NULL AS DECIMAL(18,6)) AS gartley_accuracy,
+            CAST(NULL AS DECIMAL(18,6)) AS crab_accuracy,
+            CAST(NULL AS DECIMAL(18,6)) AS shark_accuracy
+        FROM pattern_setups ps
+        WHERE ps.pattern_family_key = ?
+          AND ps.d_date IS NOT NULL
+          {source_filter}
+          {year_filter}
+        ORDER BY ps.d_date ASC, ps.setup_id ASC
         LIMIT ? OFFSET ?
         "#,
         source_filter = source_filter,
         year_filter = year_filter,
-        bin_expr = bin_expr,
-        size_bucket_expr = size_bucket_expr,
-        time_bin_expr = time_bin_expr,
-        x_strictness = x_strictness,
     );
 
-    let mut query = sqlx::query_as::<_, PatternSummary>(&sql);
+    let mut query = sqlx::query_as::<_, PatternSummary>(&sql).bind(family_key);
     if period_year > 0 {
         query = query.bind(period_year);
     }
-    query = query
-        .bind(family_key)
-        .bind(&family.harmonic_type)
-        .bind(&family.bin)
-        .bind(&family.size_bucket)
-        .bind(&family.time_bin)
-        .bind(&family.x_strictness)
-        .bind(limit)
-        .bind(offset);
+    query = query.bind(limit).bind(offset);
 
     let patterns = match query.fetch_all(pool.get_ref()).await {
         Ok(patterns) => patterns,
@@ -6627,43 +6858,86 @@ async fn fetch_phase1_leaderboard(
     let sql = if best_per_family {
         r#"
         SELECT
-            rr.run_id,
-            rr.family_key,
-            rr.source_scope,
-            CAST(rr.period_year AS SIGNED) AS period_year,
-            rr.route_id,
-            rr.route_label,
-            CAST(rr.result_rank AS SIGNED) AS result_rank,
-            rr.entry_mode,
-            rr.stop_mode,
-            CAST(rr.target_r AS DOUBLE) AS target_r,
-            CAST(rr.max_hold_multiple AS SIGNED) AS max_hold_multiple,
-            CAST(rr.setup_count AS SIGNED) AS setup_count,
-            CAST(rr.trade_count AS SIGNED) AS trade_count,
-            CAST(rr.no_entry_count AS SIGNED) AS no_entry_count,
-            CAST(rr.win_count AS SIGNED) AS win_count,
-            CAST(rr.loss_count AS SIGNED) AS loss_count,
-            CAST(rr.win_rate AS DOUBLE) AS win_rate,
-            CAST(rr.avg_r AS DOUBLE) AS avg_r,
-            CAST(rr.profit_factor AS DOUBLE) AS profit_factor,
-            CAST(rr.max_drawdown_r AS DOUBLE) AS max_drawdown_r,
-            CAST(rr.worst_year_avg_r AS DOUBLE) AS worst_year_avg_r,
-            CAST(rr.score AS DOUBLE) AS score,
-            rr.created_at,
-            r.harmonic_type,
-            r.bin,
-            r.size_bucket,
-            r.time_bin,
-            r.x_strictness
-        FROM phase1_strategy_results rr FORCE INDEX (idx_phase1_results_best_leaderboard)
-        INNER JOIN phase1_strategy_runs r
-          ON r.run_id = rr.run_id
-        WHERE rr.source_scope = ?
-          AND rr.period_year = ?
-          AND rr.result_rank = 1
-          AND rr.trade_count >= ?
-          AND rr.setup_count >= ?
-        ORDER BY rr.score DESC, rr.avg_r DESC, rr.trade_count DESC, rr.result_rank ASC
+            ranked.run_id,
+            ranked.family_key,
+            ranked.source_scope,
+            ranked.period_year,
+            ranked.route_id,
+            ranked.route_label,
+            ranked.result_rank,
+            ranked.entry_mode,
+            ranked.stop_mode,
+            ranked.target_r,
+            ranked.max_hold_multiple,
+            ranked.setup_count,
+            ranked.trade_count,
+            ranked.no_entry_count,
+            ranked.win_count,
+            ranked.loss_count,
+            ranked.win_rate,
+            ranked.avg_r,
+            ranked.profit_factor,
+            ranked.max_drawdown_r,
+            ranked.worst_year_avg_r,
+            ranked.score,
+            ranked.created_at,
+            ranked.harmonic_type,
+            ranked.bin,
+            ranked.size_bucket,
+            ranked.time_bin,
+            ranked.x_strictness
+        FROM (
+            SELECT
+                rr.run_id,
+                rr.family_key,
+                rr.source_scope,
+                CAST(rr.period_year AS SIGNED) AS period_year,
+                rr.route_id,
+                rr.route_label,
+                CAST(rr.result_rank AS SIGNED) AS result_rank,
+                rr.entry_mode,
+                rr.stop_mode,
+                CAST(rr.target_r AS DOUBLE) AS target_r,
+                CAST(rr.max_hold_multiple AS SIGNED) AS max_hold_multiple,
+                CAST(rr.setup_count AS SIGNED) AS setup_count,
+                CAST(rr.trade_count AS SIGNED) AS trade_count,
+                CAST(rr.no_entry_count AS SIGNED) AS no_entry_count,
+                CAST(rr.win_count AS SIGNED) AS win_count,
+                CAST(rr.loss_count AS SIGNED) AS loss_count,
+                CAST(rr.win_rate AS DOUBLE) AS win_rate,
+                CAST(rr.avg_r AS DOUBLE) AS avg_r,
+                CAST(rr.profit_factor AS DOUBLE) AS profit_factor,
+                CAST(rr.max_drawdown_r AS DOUBLE) AS max_drawdown_r,
+                CAST(rr.worst_year_avg_r AS DOUBLE) AS worst_year_avg_r,
+                CAST(rr.score AS DOUBLE) AS score,
+                rr.created_at,
+                r.harmonic_type,
+                r.bin,
+                r.size_bucket,
+                r.time_bin,
+                r.x_strictness,
+                ROW_NUMBER() OVER (
+                    PARTITION BY rr.family_key
+                    ORDER BY rr.score DESC, rr.avg_r DESC, rr.trade_count DESC, rr.result_rank ASC
+                ) AS family_route_rank
+            FROM phase1_strategy_results rr FORCE INDEX (idx_phase1_results_all_leaderboard)
+            INNER JOIN phase1_strategy_runs r
+              ON r.run_id = rr.run_id
+            INNER JOIN (
+                SELECT family_key, MAX(id) AS latest_id
+                FROM phase1_strategy_runs
+                WHERE source_scope = ?
+                  AND period_year = ?
+                GROUP BY family_key
+            ) latest_runs
+              ON latest_runs.latest_id = r.id
+            WHERE rr.source_scope = ?
+              AND rr.period_year = ?
+              AND rr.trade_count >= ?
+              AND rr.setup_count >= ?
+        ) ranked
+        WHERE ranked.family_route_rank = 1
+        ORDER BY ranked.score DESC, ranked.avg_r DESC, ranked.trade_count DESC, ranked.result_rank ASC
         LIMIT ?
         "#
     } else {
@@ -6700,6 +6974,14 @@ async fn fetch_phase1_leaderboard(
         FROM phase1_strategy_results rr FORCE INDEX (idx_phase1_results_all_leaderboard)
         INNER JOIN phase1_strategy_runs r
           ON r.run_id = rr.run_id
+        INNER JOIN (
+            SELECT family_key, MAX(id) AS latest_id
+            FROM phase1_strategy_runs
+            WHERE source_scope = ?
+              AND period_year = ?
+            GROUP BY family_key
+        ) latest_runs
+          ON latest_runs.latest_id = r.id
         WHERE rr.source_scope = ?
           AND rr.period_year = ?
           AND rr.trade_count >= ?
@@ -6709,14 +6991,17 @@ async fn fetch_phase1_leaderboard(
         "#
     };
 
-    let rows = sqlx::query_as::<_, Phase1LeaderboardResult>(sql)
+    let mut query = sqlx::query_as::<_, Phase1LeaderboardResult>(sql)
+        .bind(source_scope)
+        .bind(period_year)
         .bind(source_scope)
         .bind(period_year)
         .bind(min_trade_count)
-        .bind(min_setup_count)
-        .bind(candidate_limit)
-        .fetch_all(pool.get_ref())
-        .await;
+        .bind(min_setup_count);
+
+    query = query.bind(candidate_limit);
+
+    let rows = query.fetch_all(pool.get_ref()).await;
 
     match rows {
         Ok(candidate_rows) => {
@@ -6736,114 +7021,6 @@ async fn fetch_phase1_leaderboard(
             HttpResponse::InternalServerError().finish()
         }
     }
-}
-
-fn phase1_accuracy_bin_expr(accuracy_expr: &str) -> String {
-    format!(
-        "CASE
-            WHEN {accuracy_expr} <= 10 THEN '0-10'
-            WHEN {accuracy_expr} <= 20 THEN '10-20'
-            WHEN {accuracy_expr} <= 30 THEN '20-30'
-            WHEN {accuracy_expr} <= 40 THEN '30-40'
-            WHEN {accuracy_expr} <= 50 THEN '40-50'
-            WHEN {accuracy_expr} <= 60 THEN '50-60'
-            WHEN {accuracy_expr} <= 70 THEN '60-70'
-            WHEN {accuracy_expr} <= 80 THEN '70-80'
-            WHEN {accuracy_expr} <= 90 THEN '80-90'
-            ELSE '90-100'
-        END"
-    )
-}
-
-fn phase1_size_bucket_expr(total_bars_expr: &str) -> String {
-    format!(
-        "CASE
-            WHEN {total_bars_expr} <= 20 THEN 'Micro'
-            WHEN {total_bars_expr} <= 60 THEN 'Small'
-            WHEN {total_bars_expr} <= 180 THEN 'Normal'
-            WHEN {total_bars_expr} <= 365 THEN 'Large'
-            ELSE 'Massive'
-        END"
-    )
-}
-
-fn phase1_setup_ratio_expr(numerator_expr: &str, denominator_expr: &str) -> String {
-    format!(
-        "CASE
-            WHEN COALESCE({denominator_expr}, 0.0) > 0
-            THEN (CAST({numerator_expr} AS DOUBLE) / CAST({denominator_expr} AS DOUBLE)) * 100.0
-            ELSE 0.0
-        END"
-    )
-}
-
-fn phase1_leg_accuracy_expr(current_expr: &str, target: f64) -> String {
-    format!(
-        "CASE
-            WHEN COALESCE({current_expr}, 0.0) <= 0 THEN 0.0
-            ELSE LEAST(
-                GREATEST(
-                    100.0 * (1.0 - ABS((CAST({current_expr} AS DOUBLE) / 100.0) - {target}) / {target}),
-                    0.0
-                ),
-                100.0
-            )
-        END"
-    )
-}
-
-fn phase1_harmonic_score_select(
-    harmonic_type: &str,
-    ab_xa: f64,
-    bc_ab: f64,
-    cd_bc: f64,
-    d_completion: f64,
-) -> String {
-    let ab_xa_price = phase1_setup_ratio_expr("ab_price_length", "xa_price_length");
-    let bc_ab_price = phase1_setup_ratio_expr("bc_price_length", "ab_price_length");
-    let cd_bc_price = phase1_setup_ratio_expr("cd_price_length", "bc_price_length");
-    let d_completion_price =
-        phase1_setup_ratio_expr("ABS(a_min_max - d_min_max)", "xa_price_length");
-    let ab_xa_time = phase1_setup_ratio_expr("a_length", "x_length");
-    let bc_ab_time = phase1_setup_ratio_expr("b_length", "a_length");
-    let cd_bc_time = phase1_setup_ratio_expr("c_length", "b_length");
-    let cd_xa_time = phase1_setup_ratio_expr("c_length", "x_length");
-
-    format!(
-        r#"
-        SELECT
-            setup_id,
-            '{harmonic_type}' AS harmonic_type,
-            (
-                {price_ab_xa} + {price_bc_ab} + {price_cd_bc} + {price_d_completion}
-            ) / 4.0 AS price_accuracy,
-            (
-                {time_ab_xa} + {time_bc_ab} + {time_cd_bc} + {time_cd_xa}
-            ) / 4.0 AS time_accuracy
-        FROM filtered_setups
-        "#,
-        price_ab_xa = phase1_leg_accuracy_expr(&ab_xa_price, ab_xa),
-        price_bc_ab = phase1_leg_accuracy_expr(&bc_ab_price, bc_ab),
-        price_cd_bc = phase1_leg_accuracy_expr(&cd_bc_price, cd_bc),
-        price_d_completion = phase1_leg_accuracy_expr(&d_completion_price, d_completion),
-        time_ab_xa = phase1_leg_accuracy_expr(&ab_xa_time, ab_xa),
-        time_bc_ab = phase1_leg_accuracy_expr(&bc_ab_time, bc_ab),
-        time_cd_bc = phase1_leg_accuracy_expr(&cd_bc_time, cd_bc),
-        time_cd_xa = phase1_leg_accuracy_expr(&cd_xa_time, d_completion),
-    )
-}
-
-fn phase1_harmonic_score_selects() -> String {
-    [
-        phase1_harmonic_score_select("Bat", 0.500, 0.382, 1.618, 0.886),
-        phase1_harmonic_score_select("AlternateBat", 0.382, 0.382, 2.000, 1.130),
-        phase1_harmonic_score_select("Butterfly", 0.786, 0.382, 1.618, 1.272),
-        phase1_harmonic_score_select("Gartley", 0.618, 0.382, 1.272, 0.786),
-        phase1_harmonic_score_select("Crab", 0.382, 0.382, 2.618, 1.618),
-        phase1_harmonic_score_select("DeepCrab", 0.886, 0.382, 2.618, 1.618),
-        phase1_harmonic_score_select("Shark", 0.500, 1.130, 1.618, 0.886),
-    ]
-    .join("\nUNION ALL\n")
 }
 
 fn phase1_futures_candle_table(source_table: Option<&str>) -> &'static str {
@@ -6876,156 +7053,143 @@ async fn fetch_phase1_replay_setups(
     } else {
         ""
     };
-    let bin_expr = phase1_accuracy_bin_expr("COALESCE(best_harmonic.price_accuracy, 0.0)");
-    let time_bin_expr = phase1_accuracy_bin_expr("COALESCE(best_harmonic.time_accuracy, 0.0)");
-    let size_bucket_expr = phase1_size_bucket_expr(
-        "CAST(COALESCE(fs.x_length, 0) + COALESCE(fs.a_length, 0) + COALESCE(fs.b_length, 0) + COALESCE(fs.c_length, 0) AS DOUBLE)",
-    );
-    let x_strictness = x_strictness_expr("fs.x_bars_left", "fs.x_length");
-    let score_selects = phase1_harmonic_score_selects();
     let sql = format!(
         r#"
-        WITH filtered_setups AS (
-            SELECT
-                ps.setup_id,
-                ps.symbol,
-                ps.source_table,
-                ps.source_timeframe,
-                ps.market,
-                ps.d_date,
-                ps.x_high,
-                ps.x_low,
-                ps.b_high,
-                ps.b_low,
-                ps.c_high,
-                ps.c_low,
-                ps.d_high,
-                ps.d_low,
-                ps.d_close,
-                ps.cd_price_length,
-                ps.full_pattern_length,
-                ps.xa_price_length,
-                ps.ab_price_length,
-                ps.bc_price_length,
-                ps.a_min_max,
-                ps.d_min_max,
-                ps.x_bars_left,
-                ps.x_length,
-                ps.a_length,
-                ps.b_length,
-                ps.c_length
-            FROM pattern_setups ps
-            WHERE ps.d_date IS NOT NULL
-              {source_filter}
-              {year_filter}
-        ),
-        setup_scores AS (
-            {score_selects}
-        ),
-        best_harmonic AS (
-            SELECT
-                setup_id,
-                SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        harmonic_type
-                        ORDER BY
-                            COALESCE(price_accuracy, 0.0) DESC,
-                            COALESCE(time_accuracy, 0.0) DESC,
-                            harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS harmonic_type,
-                CAST(SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        COALESCE(CAST(price_accuracy AS CHAR), '0')
-                        ORDER BY
-                            COALESCE(price_accuracy, 0.0) DESC,
-                            COALESCE(time_accuracy, 0.0) DESC,
-                            harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS DOUBLE) AS price_accuracy,
-                CAST(SUBSTRING_INDEX(
-                    GROUP_CONCAT(
-                        COALESCE(CAST(time_accuracy AS CHAR), '0')
-                        ORDER BY
-                            COALESCE(price_accuracy, 0.0) DESC,
-                            COALESCE(time_accuracy, 0.0) DESC,
-                            harmonic_type ASC
-                        SEPARATOR '|'
-                    ),
-                    '|',
-                    1
-                ) AS DOUBLE) AS time_accuracy
-            FROM setup_scores
-            GROUP BY setup_id
-        ),
-        pattern_rows AS (
-            SELECT
-                fs.*,
-                COALESCE(best_harmonic.harmonic_type, 'Unknown') AS best_harmonic_type,
-                {bin_expr} AS best_bin,
-                {time_bin_expr} AS best_time_bin,
-                {size_bucket_expr} AS best_size_bucket,
-                {x_strictness} AS best_x_strictness
-            FROM filtered_setups fs
-            LEFT JOIN best_harmonic
-              ON best_harmonic.setup_id = fs.setup_id
-        )
         SELECT
-            setup_id,
-            symbol,
-            source_table,
-            source_timeframe,
-            market,
-            d_date,
-            x_high,
-            x_low,
-            b_high,
-            b_low,
-            c_high,
-            c_low,
-            d_high,
-            d_low,
-            d_close,
-            cd_price_length,
-            CAST(full_pattern_length AS SIGNED) AS full_pattern_length
-        FROM pattern_rows
-        WHERE best_harmonic_type = ?
-          AND best_bin = ?
-          AND best_size_bucket = ?
-          AND best_time_bin = ?
-          AND best_x_strictness = ?
-        ORDER BY d_date ASC, setup_id ASC
+            ps.setup_id,
+            ps.pattern_id,
+            ps.pattern_group_id,
+            ps.symbol,
+            ps.source_table,
+            ps.source_timeframe,
+            ps.market,
+            ps.d_date,
+            CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS d_confirm_date,
+            ps.x_high,
+            ps.x_low,
+            ps.b_high,
+            ps.b_low,
+            ps.c_high,
+            ps.c_low,
+            ps.d_high,
+            ps.d_low,
+            ps.d_close,
+            ps.cd_price_length,
+            CAST(ps.full_pattern_length AS SIGNED) AS full_pattern_length
+        FROM pattern_setups ps
+        WHERE ps.pattern_family_key = ?
+          AND ps.d_date IS NOT NULL
+          {source_filter}
+          {year_filter}
+        ORDER BY ps.d_date ASC, ps.setup_id ASC
         LIMIT ?
         "#,
         source_filter = source_filter,
         year_filter = year_filter,
-        score_selects = score_selects,
-        bin_expr = bin_expr,
-        size_bucket_expr = size_bucket_expr,
-        time_bin_expr = time_bin_expr,
-        x_strictness = x_strictness,
     );
 
-    let mut query = sqlx::query_as::<_, Phase1ReplaySetup>(&sql);
+    let mut query = sqlx::query_as::<_, Phase1ReplaySetup>(&sql).bind(&context.family_key);
     if context.period_year > 0 {
         query = query.bind(context.period_year);
     }
 
-    query
-        .bind(&context.harmonic_type)
-        .bind(&context.bin)
-        .bind(&context.size_bucket)
-        .bind(&context.time_bin)
-        .bind(&context.x_strictness)
-        .bind(context.setup_count.max(1))
-        .fetch_all(pool)
-        .await
+    query.bind(context.setup_count.max(1)).fetch_all(pool).await
+}
+
+async fn fetch_phase1_replay_setup_for_pattern(
+    pool: &MySqlPool,
+    context: &Phase1YearlyRouteContext,
+    pattern_id: Option<&str>,
+    pattern_group_id: Option<&str>,
+    d_date: Option<NaiveDateTime>,
+) -> Result<Option<Phase1ReplaySetup>, sqlx::Error> {
+    let pattern_id = pattern_id.map(str::trim).filter(|value| !value.is_empty());
+    let pattern_group_id = pattern_group_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if pattern_id.is_none() && pattern_group_id.is_none() {
+        return Ok(None);
+    }
+
+    let source_filter = match context.source_scope.as_str() {
+        "futures" => "AND COALESCE(ps.source_table, '') LIKE 'futures_contract_%_candles'",
+        "daily" => {
+            "AND COALESCE(ps.source_table, '') = 'candles' AND COALESCE(ps.source_timeframe, '') = 'daily'"
+        }
+        _ => "",
+    };
+    let year_filter = if context.period_year > 0 {
+        "AND YEAR(ps.d_date) = ?"
+    } else {
+        ""
+    };
+    let d_date_filter = if d_date.is_some() {
+        "AND ps.d_date = ?"
+    } else {
+        ""
+    };
+    let mut identifier_filters = Vec::new();
+    if pattern_id.is_some() {
+        identifier_filters.push("ps.pattern_id = ?");
+    }
+    if pattern_group_id.is_some() {
+        identifier_filters.push("ps.pattern_group_id = ?");
+    }
+
+    let sql = format!(
+        r#"
+        SELECT
+            ps.setup_id,
+            ps.pattern_id,
+            ps.pattern_group_id,
+            ps.symbol,
+            ps.source_table,
+            ps.source_timeframe,
+            ps.market,
+            ps.d_date,
+            CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS d_confirm_date,
+            ps.x_high,
+            ps.x_low,
+            ps.b_high,
+            ps.b_low,
+            ps.c_high,
+            ps.c_low,
+            ps.d_high,
+            ps.d_low,
+            ps.d_close,
+            ps.cd_price_length,
+            CAST(ps.full_pattern_length AS SIGNED) AS full_pattern_length
+        FROM pattern_setups ps
+        WHERE ps.pattern_family_key = ?
+          AND ps.d_date IS NOT NULL
+          AND ({identifier_filter})
+          {source_filter}
+          {year_filter}
+          {d_date_filter}
+        ORDER BY ps.d_date ASC, ps.setup_id ASC
+        LIMIT 1
+        "#,
+        identifier_filter = identifier_filters.join(" OR "),
+        source_filter = source_filter,
+        year_filter = year_filter,
+        d_date_filter = d_date_filter,
+    );
+
+    let mut query = sqlx::query_as::<_, Phase1ReplaySetup>(&sql).bind(&context.family_key);
+    if let Some(pattern_id) = pattern_id {
+        query = query.bind(pattern_id);
+    }
+    if let Some(pattern_group_id) = pattern_group_id {
+        query = query.bind(pattern_group_id);
+    }
+    if context.period_year > 0 {
+        query = query.bind(context.period_year);
+    }
+    if let Some(d_date) = d_date {
+        query = query.bind(d_date);
+    }
+
+    query.fetch_optional(pool).await
 }
 
 async fn fetch_phase1_forward_candles(
@@ -7048,20 +7212,21 @@ async fn fetch_phase1_forward_candles(
         return sqlx::query_as::<_, Phase1ReplayCandle>(
             r#"
             SELECT
+                CAST(date AS DATETIME) AS candle_date,
                 CAST(open AS DOUBLE) AS open,
                 CAST(high AS DOUBLE) AS high,
                 CAST(low AS DOUBLE) AS low,
                 CAST(close AS DOUBLE) AS close
             FROM candles
             WHERE symbol = ?
-              AND date > ?
+              AND date >= ?
             ORDER BY date ASC
             LIMIT ?
             "#,
         )
         .bind(&setup.symbol)
-        .bind(setup.d_date.date())
-        .bind(max_forward_bars)
+        .bind(setup.d_confirm_date.date())
+        .bind(max_forward_bars.saturating_add(1))
         .fetch_all(pool)
         .await;
     }
@@ -7070,13 +7235,14 @@ async fn fetch_phase1_forward_candles(
     let sql = format!(
         r#"
         SELECT
+            ts_utc AS candle_date,
             CAST(open AS DOUBLE) AS open,
             CAST(high AS DOUBLE) AS high,
             CAST(low AS DOUBLE) AS low,
             CAST(close AS DOUBLE) AS close
         FROM {candle_table}
         WHERE symbol = ?
-          AND ts_utc > ?
+          AND ts_utc >= ?
         ORDER BY ts_utc ASC
         LIMIT ?
         "#
@@ -7084,8 +7250,8 @@ async fn fetch_phase1_forward_candles(
 
     sqlx::query_as::<_, Phase1ReplayCandle>(&sql)
         .bind(&setup.symbol)
-        .bind(setup.d_date)
-        .bind(max_forward_bars)
+        .bind(setup.d_confirm_date)
+        .bind(max_forward_bars.saturating_add(1))
         .fetch_all(pool)
         .await
 }
@@ -7108,67 +7274,178 @@ fn phase1_break_entry(direction: f64, level: f64, candle: &Phase1ReplayCandle) -
     }
 }
 
+fn phase1_forward_start_index(setup: &Phase1ReplaySetup, candles: &[Phase1ReplayCandle]) -> usize {
+    candles
+        .first()
+        .filter(|candle| candle.candle_date <= setup.d_confirm_date)
+        .map(|_| 1)
+        .unwrap_or(0)
+}
+
 fn phase1_find_entry(
     context: &Phase1YearlyRouteContext,
     setup: &Phase1ReplaySetup,
     candles: &[Phase1ReplayCandle],
-) -> Option<(usize, f64)> {
-    let direction = phase1_direction(setup);
-    let entry_scan_limit = candles.len().min(80);
+) -> Option<Phase1EntryDecision> {
+    let setup_direction = phase1_direction(setup);
+    let start_index = phase1_forward_start_index(setup, candles);
+    let entry_scan_limit = candles.len().min(start_index.saturating_add(80));
 
     match context.entry_mode.as_str() {
-        "next_open" => candles.first().map(|candle| (0, candle.open)),
+        "next_open" => candles.get(start_index).map(|candle| Phase1EntryDecision {
+            index: start_index,
+            price: candle.open,
+            direction: setup_direction,
+        }),
+        "post_confirm_decision" => {
+            if start_index == 0 || start_index >= candles.len() {
+                return None;
+            }
+
+            let confirmation = &candles[start_index - 1];
+            let decision = &candles[start_index];
+
+            if setup_direction > 0.0 {
+                if decision.close > confirmation.open {
+                    Some(Phase1EntryDecision {
+                        index: start_index,
+                        price: decision.open,
+                        direction: 1.0,
+                    })
+                } else if decision.close < setup.d_high {
+                    Some(Phase1EntryDecision {
+                        index: start_index,
+                        price: decision.open,
+                        direction: -1.0,
+                    })
+                } else {
+                    None
+                }
+            } else if decision.close < confirmation.open {
+                Some(Phase1EntryDecision {
+                    index: start_index,
+                    price: decision.open,
+                    direction: -1.0,
+                })
+            } else if decision.close > setup.d_low {
+                Some(Phase1EntryDecision {
+                    index: start_index,
+                    price: decision.open,
+                    direction: 1.0,
+                })
+            } else {
+                None
+            }
+        }
+        "confirm_p1_body_signal_p2_open" => {
+            if start_index == 0 || start_index + 1 >= candles.len() {
+                return None;
+            }
+
+            let confirmation = &candles[start_index - 1];
+            let confirmation_plus_one = &candles[start_index];
+            let confirmation_plus_two = &candles[start_index + 1];
+
+            let confirmation_body_low = confirmation.open.min(confirmation.close);
+            let confirmation_body_high = confirmation.open.max(confirmation.close);
+            let plus_one_body_low = confirmation_plus_one.open.min(confirmation_plus_one.close);
+            let plus_one_body_high = confirmation_plus_one.open.max(confirmation_plus_one.close);
+
+            if setup_direction > 0.0 {
+                let signal = confirmation_plus_one.close > confirmation_body_high;
+                let entry_valid = confirmation_plus_two.open > confirmation_body_high
+                    && confirmation_plus_two.open > plus_one_body_low;
+                (signal && entry_valid).then_some(Phase1EntryDecision {
+                    index: start_index + 1,
+                    price: confirmation_plus_two.open,
+                    direction: 1.0,
+                })
+            } else {
+                let signal = confirmation_plus_one.close < confirmation_body_low;
+                let entry_valid = confirmation_plus_two.open < confirmation_body_low
+                    && confirmation_plus_two.open < plus_one_body_high;
+                (signal && entry_valid).then_some(Phase1EntryDecision {
+                    index: start_index + 1,
+                    price: confirmation_plus_two.open,
+                    direction: -1.0,
+                })
+            }
+        }
         "d_break" => {
-            let level = if direction > 0.0 {
+            let level = if setup_direction > 0.0 {
                 setup.d_high
             } else {
                 setup.d_low
             };
             candles
                 .iter()
-                .take(entry_scan_limit)
+                .skip(start_index)
+                .take(entry_scan_limit.saturating_sub(start_index))
                 .enumerate()
                 .find_map(|(index, candle)| {
-                    phase1_break_entry(direction, level, candle).map(|entry| (index, entry))
+                    phase1_break_entry(setup_direction, level, candle).map(|entry| {
+                        Phase1EntryDecision {
+                            index: start_index + index,
+                            price: entry,
+                            direction: setup_direction,
+                        }
+                    })
                 })
         }
-        "d_close_confirm" => {
-            candles
-                .iter()
-                .take(entry_scan_limit)
-                .enumerate()
-                .find_map(|(index, candle)| {
-                    let confirms = (direction > 0.0 && candle.close > setup.d_close)
-                        || (direction < 0.0 && candle.close < setup.d_close);
-                    confirms.then_some((index, candle.close))
+        "d_close_confirm" => candles
+            .iter()
+            .skip(start_index)
+            .take(entry_scan_limit.saturating_sub(start_index))
+            .enumerate()
+            .find_map(|(index, candle)| {
+                let confirms = (setup_direction > 0.0 && candle.close > setup.d_close)
+                    || (setup_direction < 0.0 && candle.close < setup.d_close);
+                confirms.then_some(Phase1EntryDecision {
+                    index: start_index + index,
+                    price: candle.close,
+                    direction: setup_direction,
                 })
-        }
+            }),
         "c_break" => {
-            let level = if direction > 0.0 {
+            let level = if setup_direction > 0.0 {
                 setup.c_high
             } else {
                 setup.c_low
             };
             candles
                 .iter()
-                .take(entry_scan_limit)
+                .skip(start_index)
+                .take(entry_scan_limit.saturating_sub(start_index))
                 .enumerate()
                 .find_map(|(index, candle)| {
-                    phase1_break_entry(direction, level, candle).map(|entry| (index, entry))
+                    phase1_break_entry(setup_direction, level, candle).map(|entry| {
+                        Phase1EntryDecision {
+                            index: start_index + index,
+                            price: entry,
+                            direction: setup_direction,
+                        }
+                    })
                 })
         }
         "b_break" => {
-            let level = if direction > 0.0 {
+            let level = if setup_direction > 0.0 {
                 setup.b_high
             } else {
                 setup.b_low
             };
             candles
                 .iter()
-                .take(entry_scan_limit)
+                .skip(start_index)
+                .take(entry_scan_limit.saturating_sub(start_index))
                 .enumerate()
                 .find_map(|(index, candle)| {
-                    phase1_break_entry(direction, level, candle).map(|entry| (index, entry))
+                    phase1_break_entry(setup_direction, level, candle).map(|entry| {
+                        Phase1EntryDecision {
+                            index: start_index + index,
+                            price: entry,
+                            direction: setup_direction,
+                        }
+                    })
                 })
         }
         _ => None,
@@ -7179,36 +7456,36 @@ fn phase1_stop_price(
     context: &Phase1YearlyRouteContext,
     setup: &Phase1ReplaySetup,
     entry_price: f64,
+    trade_direction: f64,
 ) -> f64 {
-    let direction = phase1_direction(setup);
     match context.stop_mode.as_str() {
         "d_extreme" => {
-            if direction > 0.0 {
+            if trade_direction > 0.0 {
                 setup.d_low
             } else {
                 setup.d_high
             }
         }
         "c_extreme" => {
-            if direction > 0.0 {
+            if trade_direction > 0.0 {
                 setup.c_low
             } else {
                 setup.c_high
             }
         }
         "x_extreme" => {
-            if direction > 0.0 {
+            if trade_direction > 0.0 {
                 setup.x_low
             } else {
                 setup.x_high
             }
         }
-        "cd_025" => entry_price - direction * setup.cd_price_length.abs() * 0.25,
-        "cd_050" => entry_price - direction * setup.cd_price_length.abs() * 0.50,
-        "cd_075" => entry_price - direction * setup.cd_price_length.abs() * 0.75,
-        "cd_100" => entry_price - direction * setup.cd_price_length.abs() * 1.00,
-        "cd_150" => entry_price - direction * setup.cd_price_length.abs() * 1.50,
-        _ => entry_price - direction * setup.cd_price_length.abs(),
+        "cd_025" => entry_price - trade_direction * setup.cd_price_length.abs() * 0.25,
+        "cd_050" => entry_price - trade_direction * setup.cd_price_length.abs() * 0.50,
+        "cd_075" => entry_price - trade_direction * setup.cd_price_length.abs() * 0.75,
+        "cd_100" => entry_price - trade_direction * setup.cd_price_length.abs() * 1.00,
+        "cd_150" => entry_price - trade_direction * setup.cd_price_length.abs() * 1.50,
+        _ => entry_price - trade_direction * setup.cd_price_length.abs(),
     }
 }
 
@@ -7217,9 +7494,19 @@ fn phase1_replay_route(
     setup: &Phase1ReplaySetup,
     candles: &[Phase1ReplayCandle],
 ) -> Option<f64> {
-    let direction = phase1_direction(setup);
-    let (entry_index, entry_price) = phase1_find_entry(context, setup, candles)?;
-    let stop_price = phase1_stop_price(context, setup, entry_price);
+    phase1_replay_route_detail(context, setup, candles).map(|trade| trade.result_r)
+}
+
+fn phase1_replay_route_detail(
+    context: &Phase1YearlyRouteContext,
+    setup: &Phase1ReplaySetup,
+    candles: &[Phase1ReplayCandle],
+) -> Option<Phase1ReplayTradeDetail> {
+    let entry = phase1_find_entry(context, setup, candles)?;
+    let direction = entry.direction;
+    let entry_index = entry.index;
+    let entry_price = entry.price;
+    let stop_price = phase1_stop_price(context, setup, entry_price, direction);
     let risk = (entry_price - stop_price) * direction;
     if !risk.is_finite() || risk <= 0.0 {
         return None;
@@ -7235,22 +7522,106 @@ fn phase1_replay_route(
         return None;
     }
 
-    for candle in &candles[entry_index..end_index] {
+    let mut lowest_price = f64::INFINITY;
+    let mut highest_price = f64::NEG_INFINITY;
+    let mut max_adverse_points = 0.0f64;
+    let mut max_favorable_points = 0.0f64;
+    let mut adverse_price = entry_price;
+    let mut favorable_price = entry_price;
+
+    for (offset, candle) in candles[entry_index..end_index].iter().enumerate() {
+        lowest_price = lowest_price.min(candle.low);
+        highest_price = highest_price.max(candle.high);
+
+        let (adverse_points, candidate_adverse_price) = if direction > 0.0 {
+            ((entry_price - candle.low).max(0.0), candle.low)
+        } else {
+            ((candle.high - entry_price).max(0.0), candle.high)
+        };
+        if adverse_points > max_adverse_points {
+            max_adverse_points = adverse_points;
+            adverse_price = candidate_adverse_price;
+        }
+
+        let (favorable_points, candidate_favorable_price) = if direction > 0.0 {
+            ((candle.high - entry_price).max(0.0), candle.high)
+        } else {
+            ((entry_price - candle.low).max(0.0), candle.low)
+        };
+        if favorable_points > max_favorable_points {
+            max_favorable_points = favorable_points;
+            favorable_price = candidate_favorable_price;
+        }
+
+        let candle_index = entry_index + offset;
         let stop_hit = (direction > 0.0 && candle.low <= stop_price)
             || (direction < 0.0 && candle.high >= stop_price);
         if stop_hit {
-            return Some(-1.0);
+            return Some(Phase1ReplayTradeDetail {
+                result_r: -1.0,
+                entry_date: candles[entry_index].candle_date,
+                exit_date: candles[candle_index].candle_date,
+                exit_price: stop_price,
+                entry_price,
+                stop_price,
+                target_price,
+                lowest_price,
+                highest_price,
+                adverse_price: stop_price,
+                favorable_price,
+                max_adverse_points: risk.abs().max(max_adverse_points),
+                max_favorable_points,
+                risk_points: risk.abs(),
+                trade_result: 2,
+                exit_reason: "stop".to_string(),
+            });
         }
 
         let target_hit = (direction > 0.0 && candle.high >= target_price)
             || (direction < 0.0 && candle.low <= target_price);
         if target_hit {
-            return Some(context.target_r);
+            return Some(Phase1ReplayTradeDetail {
+                result_r: context.target_r,
+                entry_date: candles[entry_index].candle_date,
+                exit_date: candles[candle_index].candle_date,
+                exit_price: target_price,
+                entry_price,
+                stop_price,
+                target_price,
+                lowest_price,
+                highest_price,
+                adverse_price,
+                favorable_price: target_price,
+                max_adverse_points,
+                max_favorable_points: (risk.abs() * context.target_r).max(max_favorable_points),
+                risk_points: risk.abs(),
+                trade_result: 1,
+                exit_reason: "target".to_string(),
+            });
         }
     }
 
-    let exit_close = candles[end_index - 1].close;
-    Some(((exit_close - entry_price) * direction) / risk)
+    let exit_index = end_index - 1;
+    let exit_close = candles[exit_index].close;
+    let result_r = ((exit_close - entry_price) * direction) / risk;
+    Some(Phase1ReplayTradeDetail {
+        result_r,
+        entry_date: candles[entry_index].candle_date,
+        exit_date: candles[exit_index].candle_date,
+        exit_price: exit_close,
+        entry_price,
+        stop_price,
+        target_price,
+        lowest_price,
+        highest_price,
+        adverse_price,
+        favorable_price,
+        max_adverse_points,
+        max_favorable_points,
+        risk_points: risk.abs(),
+        trade_result: if result_r > 0.0 { 1 } else { 2 },
+        exit_reason: "time".to_string(),
+    })
 }
 
 impl Phase1YearlyAccumulator {
@@ -7472,6 +7843,558 @@ fn phase1_context_route(context: &Phase1YearlyRouteContext) -> Phase1Leaderboard
     }
 }
 
+async fn fetch_phase1_route_context(
+    pool: &MySqlPool,
+    family_key: &str,
+    run_id: &str,
+    route_id: &str,
+) -> Result<Option<Phase1YearlyRouteContext>, sqlx::Error> {
+    sqlx::query_as::<_, Phase1YearlyRouteContext>(
+        r#"
+        SELECT
+            rr.run_id,
+            rr.family_key,
+            rr.source_scope,
+            CAST(rr.period_year AS SIGNED) AS period_year,
+            rr.route_id,
+            rr.route_label,
+            CAST(rr.result_rank AS SIGNED) AS result_rank,
+            rr.entry_mode,
+            rr.stop_mode,
+            CAST(rr.target_r AS DOUBLE) AS target_r,
+            CAST(rr.max_hold_multiple AS SIGNED) AS max_hold_multiple,
+            CAST(rr.setup_count AS SIGNED) AS setup_count,
+            CAST(rr.trade_count AS SIGNED) AS trade_count,
+            CAST(rr.no_entry_count AS SIGNED) AS no_entry_count,
+            CAST(rr.win_count AS SIGNED) AS win_count,
+            CAST(rr.loss_count AS SIGNED) AS loss_count,
+            CAST(rr.win_rate AS DOUBLE) AS win_rate,
+            CAST(rr.avg_r AS DOUBLE) AS avg_r,
+            CAST(rr.profit_factor AS DOUBLE) AS profit_factor,
+            CAST(rr.max_drawdown_r AS DOUBLE) AS max_drawdown_r,
+            CAST(rr.worst_year_avg_r AS DOUBLE) AS worst_year_avg_r,
+            CAST(rr.score AS DOUBLE) AS score,
+            rr.created_at,
+            CAST(r.max_forward_bars AS SIGNED) AS max_forward_bars,
+            r.harmonic_type,
+            r.bin,
+            r.size_bucket,
+            r.time_bin,
+            r.x_strictness
+        FROM phase1_strategy_results rr
+        INNER JOIN phase1_strategy_runs r
+          ON r.run_id = rr.run_id
+        WHERE rr.family_key = ?
+          AND rr.run_id = ?
+          AND rr.route_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(family_key)
+    .bind(run_id)
+    .bind(route_id)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn fetch_stored_phase1_route_trades(
+    pool: &MySqlPool,
+    family_key: &str,
+    run_id: &str,
+    route_id: &str,
+) -> Result<Vec<SimulatorReplaySourceTrade>, sqlx::Error> {
+    sqlx::query_as::<_, SimulatorReplaySourceTrade>(
+        r#"
+        SELECT
+            CAST(id AS SIGNED) AS trade_id,
+            trade_uid,
+            trade_direction,
+            symbol,
+            pattern_id,
+            pattern_group_id,
+            d_date,
+            d_confirm_date,
+            CAST(NULL AS DATETIME) AS reversal_detect_date,
+            entry_date,
+            exit_date AS target_date,
+            CAST(entry_price AS DOUBLE) AS trade_enter_price,
+            CAST(stop_price AS DOUBLE) AS trade_risk_exit_price,
+            CAST(target_price AS DOUBLE) AS trade_reward_exit_price,
+            CAST(exit_price AS DOUBLE) AS exit_price,
+            CAST(result_r AS DOUBLE) AS result_r,
+            CAST(risk_points AS DOUBLE) AS risk_points,
+            CAST(lowest_price AS DOUBLE) AS trade_lowest_price,
+            CAST(highest_price AS DOUBLE) AS trade_highest_price,
+            CAST(adverse_price AS DOUBLE) AS trade_adverse_price,
+            CAST(favorable_price AS DOUBLE) AS trade_favorable_price,
+            CAST(max_adverse_points AS DOUBLE) AS max_adverse_points,
+            CAST(max_favorable_points AS DOUBLE) AS max_favorable_points,
+            CAST(trade_result AS SIGNED) AS trade_result,
+            exit_reason
+        FROM phase1_strategy_trades
+        WHERE family_key = ?
+          AND run_id = ?
+          AND route_id = ?
+        ORDER BY entry_date ASC, id ASC
+        "#,
+    )
+    .bind(family_key)
+    .bind(run_id)
+    .bind(route_id)
+    .fetch_all(pool)
+    .await
+}
+
+async fn fetch_stored_phase1_pattern_route_trade(
+    pool: &MySqlPool,
+    family_key: &str,
+    run_id: &str,
+    route_id: &str,
+    pattern_id: Option<&str>,
+    pattern_group_id: Option<&str>,
+) -> Result<Vec<SimulatorReplaySourceTrade>, sqlx::Error> {
+    let pattern_id = pattern_id.map(str::trim).filter(|value| !value.is_empty());
+    let pattern_group_id = pattern_group_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if pattern_id.is_none() && pattern_group_id.is_none() {
+        return Ok(Vec::new());
+    }
+
+    let mut filters = Vec::new();
+    if pattern_id.is_some() {
+        filters.push("pattern_id = ?");
+    }
+    if pattern_group_id.is_some() {
+        filters.push("pattern_group_id = ?");
+    }
+
+    let sql = format!(
+        r#"
+        SELECT
+            CAST(id AS SIGNED) AS trade_id,
+            trade_uid,
+            trade_direction,
+            symbol,
+            pattern_id,
+            pattern_group_id,
+            d_date,
+            d_confirm_date,
+            CAST(NULL AS DATETIME) AS reversal_detect_date,
+            entry_date,
+            exit_date AS target_date,
+            CAST(entry_price AS DOUBLE) AS trade_enter_price,
+            CAST(stop_price AS DOUBLE) AS trade_risk_exit_price,
+            CAST(target_price AS DOUBLE) AS trade_reward_exit_price,
+            CAST(exit_price AS DOUBLE) AS exit_price,
+            CAST(result_r AS DOUBLE) AS result_r,
+            CAST(risk_points AS DOUBLE) AS risk_points,
+            CAST(lowest_price AS DOUBLE) AS trade_lowest_price,
+            CAST(highest_price AS DOUBLE) AS trade_highest_price,
+            CAST(adverse_price AS DOUBLE) AS trade_adverse_price,
+            CAST(favorable_price AS DOUBLE) AS trade_favorable_price,
+            CAST(max_adverse_points AS DOUBLE) AS max_adverse_points,
+            CAST(max_favorable_points AS DOUBLE) AS max_favorable_points,
+            CAST(trade_result AS SIGNED) AS trade_result,
+            exit_reason
+        FROM phase1_strategy_trades
+        WHERE family_key = ?
+          AND run_id = ?
+          AND route_id = ?
+          AND ({})
+        ORDER BY entry_date ASC, id ASC
+        LIMIT 1
+        "#,
+        filters.join(" OR "),
+    );
+
+    let mut query = sqlx::query_as::<_, SimulatorReplaySourceTrade>(&sql)
+        .bind(family_key)
+        .bind(run_id)
+        .bind(route_id);
+    if let Some(pattern_id) = pattern_id {
+        query = query.bind(pattern_id);
+    }
+    if let Some(pattern_group_id) = pattern_group_id {
+        query = query.bind(pattern_group_id);
+    }
+
+    query.fetch_all(pool).await
+}
+
+#[route("/simulator/phase1-route-replay", method = "GET", method = "POST")]
+async fn fetch_simulator_phase1_route_replay(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<Phase1SimulatorReplayParams>,
+) -> impl Responder {
+    let Some(family_key) = params
+        .family_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Phase 1 replay requires family_key");
+    };
+    let Some(run_id) = params
+        .run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Phase 1 replay requires run_id");
+    };
+    let Some(route_id) = params
+        .route_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Phase 1 replay requires route_id");
+    };
+    let Some(first_start_date) = parse_simulator_start_date(params.first_start_date.as_deref())
+    else {
+        return HttpResponse::BadRequest().body("Phase 1 replay requires first start date");
+    };
+
+    let tests_to_chain = params.tests_to_chain.unwrap_or(1).clamp(1, 250);
+    let contracts = params.contracts.unwrap_or(1).clamp(1, 500);
+    let starting_balance = params.starting_balance.unwrap_or(50_000.0).max(0.0);
+    let profit_target = params.profit_target.unwrap_or(3_000.0).max(0.0);
+    let max_drawdown = params.max_drawdown.unwrap_or(2_000.0).max(0.0);
+    let daily_loss_limit = params.daily_loss_limit.filter(|value| *value > 0.0);
+    let drawdown_model = normalize_simulator_drawdown_model(params.drawdown_model.as_deref());
+    let one_trade_at_a_time = params.one_trade_at_a_time.unwrap_or(true);
+
+    let context =
+        match fetch_phase1_route_context(pool.get_ref(), family_key, run_id, route_id).await {
+            Ok(Some(context)) => context,
+            Ok(None) => return HttpResponse::NotFound().body("Phase 1 route not found"),
+            Err(error) if is_missing_table_error(&error) => {
+                return HttpResponse::Ok().json(SimulatorReplayResponse {
+                    family_key: family_key.to_string(),
+                    tests: Vec::new(),
+                    trades: Vec::new(),
+                    eligible_trade_count: 0,
+                    candidate_logic_applied: false,
+                    candidate_logic_filters: Vec::new(),
+                });
+            }
+            Err(error) => {
+                eprintln!("Phase 1 simulator route DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+
+    match fetch_stored_phase1_route_trades(pool.get_ref(), family_key, run_id, route_id).await {
+        Ok(rows) if !rows.is_empty() => {
+            return HttpResponse::Ok().json(build_simulator_replay_response(
+                family_key,
+                &rows,
+                first_start_date,
+                tests_to_chain,
+                contracts,
+                starting_balance,
+                profit_target,
+                max_drawdown,
+                daily_loss_limit,
+                drawdown_model,
+                one_trade_at_a_time,
+                false,
+                vec![context.route_label],
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if is_missing_table_error(&error) => {}
+        Err(error) => {
+            eprintln!("Phase 1 stored trade DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let setups = match fetch_phase1_replay_setups(pool.get_ref(), &context).await {
+        Ok(setups) => setups,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Phase 1 simulator setup DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let mut rows = Vec::new();
+    for setup in &setups {
+        let setup_forward_bars = setup.full_pattern_length.saturating_mul(5).max(1);
+        let candles = fetch_phase1_forward_candles(pool.get_ref(), setup, setup_forward_bars)
+            .await
+            .unwrap_or_else(|error| {
+                eprintln!(
+                    "Phase 1 simulator candle fetch failed for setup {} ({}): {:?}",
+                    setup.setup_id, setup.symbol, error
+                );
+                Vec::new()
+            });
+
+        let Some(detail) = phase1_replay_route_detail(&context, setup, &candles) else {
+            continue;
+        };
+        if !detail.result_r.is_finite() {
+            continue;
+        }
+
+        rows.push(SimulatorReplaySourceTrade {
+            trade_id: None,
+            trade_uid: None,
+            trade_direction: None,
+            symbol: setup.symbol.clone(),
+            pattern_id: setup
+                .pattern_id
+                .clone()
+                .or_else(|| Some(setup.setup_id.clone())),
+            pattern_group_id: setup.pattern_group_id.clone(),
+            d_date: setup.d_date,
+            d_confirm_date: Some(setup.d_confirm_date),
+            reversal_detect_date: None,
+            entry_date: detail.entry_date,
+            target_date: Some(detail.exit_date),
+            trade_enter_price: detail.entry_price,
+            trade_risk_exit_price: detail.stop_price,
+            trade_reward_exit_price: detail.target_price,
+            exit_price: Some(detail.exit_price),
+            result_r: Some(detail.result_r),
+            risk_points: Some(detail.risk_points),
+            trade_lowest_price: Some(detail.lowest_price),
+            trade_highest_price: Some(detail.highest_price),
+            trade_adverse_price: Some(detail.adverse_price),
+            trade_favorable_price: Some(detail.favorable_price),
+            max_adverse_points: Some(detail.max_adverse_points),
+            max_favorable_points: Some(detail.max_favorable_points),
+            trade_result: detail.trade_result,
+            exit_reason: Some(detail.exit_reason),
+        });
+    }
+
+    rows.sort_by(|left, right| {
+        left.entry_date
+            .cmp(&right.entry_date)
+            .then_with(|| left.target_date.cmp(&right.target_date))
+            .then_with(|| left.symbol.cmp(&right.symbol))
+    });
+
+    HttpResponse::Ok().json(build_simulator_replay_response(
+        family_key,
+        &rows,
+        first_start_date,
+        tests_to_chain,
+        contracts,
+        starting_balance,
+        profit_target,
+        max_drawdown,
+        daily_loss_limit,
+        drawdown_model,
+        one_trade_at_a_time,
+        false,
+        vec![context.route_label],
+    ))
+}
+
+#[route(
+    "/simulator/phase1-pattern-route-replay",
+    method = "GET",
+    method = "POST"
+)]
+async fn fetch_simulator_phase1_pattern_route_replay(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<Phase1PatternRouteReplayParams>,
+) -> impl Responder {
+    let Some(family_key) = params
+        .family_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Phase 1 pattern replay requires family_key");
+    };
+    let Some(run_id) = params
+        .run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Phase 1 pattern replay requires run_id");
+    };
+    let Some(route_id) = params
+        .route_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpResponse::BadRequest().body("Phase 1 pattern replay requires route_id");
+    };
+
+    let context =
+        match fetch_phase1_route_context(pool.get_ref(), family_key, run_id, route_id).await {
+            Ok(Some(context)) => context,
+            Ok(None) => return HttpResponse::NotFound().body("Phase 1 route not found"),
+            Err(error) if is_missing_table_error(&error) => {
+                return HttpResponse::Ok().json(SimulatorReplayResponse {
+                    family_key: family_key.to_string(),
+                    tests: Vec::new(),
+                    trades: Vec::new(),
+                    eligible_trade_count: 0,
+                    candidate_logic_applied: false,
+                    candidate_logic_filters: Vec::new(),
+                });
+            }
+            Err(error) => {
+                eprintln!("Phase 1 pattern route DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+
+    match fetch_stored_phase1_pattern_route_trade(
+        pool.get_ref(),
+        family_key,
+        run_id,
+        route_id,
+        params.pattern_id.as_deref(),
+        params.pattern_group_id.as_deref(),
+    )
+    .await
+    {
+        Ok(rows) if !rows.is_empty() => {
+            let first_start_date = rows[0].entry_date;
+            let contracts = params.contracts.unwrap_or(1).clamp(1, 500);
+            return HttpResponse::Ok().json(build_simulator_replay_response(
+                family_key,
+                &rows,
+                first_start_date,
+                1,
+                contracts,
+                50_000.0,
+                3_000.0,
+                2_000.0,
+                None,
+                SIMULATOR_DRAWDOWN_MODEL_INTRADAY,
+                false,
+                false,
+                vec![context.route_label],
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if is_missing_table_error(&error) => {}
+        Err(error) => {
+            eprintln!("Phase 1 stored pattern trade DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let setup = match fetch_phase1_replay_setup_for_pattern(
+        pool.get_ref(),
+        &context,
+        params.pattern_id.as_deref(),
+        params.pattern_group_id.as_deref(),
+        params.d_date,
+    )
+    .await
+    {
+        Ok(Some(setup)) => setup,
+        Ok(None) => {
+            return HttpResponse::Ok().json(SimulatorReplayResponse {
+                family_key: family_key.to_string(),
+                tests: Vec::new(),
+                trades: Vec::new(),
+                eligible_trade_count: 0,
+                candidate_logic_applied: false,
+                candidate_logic_filters: vec![String::from("Selected pattern was not found")],
+            });
+        }
+        Err(error) if is_missing_table_error(&error) => {
+            return HttpResponse::Ok().json(SimulatorReplayResponse {
+                family_key: family_key.to_string(),
+                tests: Vec::new(),
+                trades: Vec::new(),
+                eligible_trade_count: 0,
+                candidate_logic_applied: false,
+                candidate_logic_filters: Vec::new(),
+            });
+        }
+        Err(error) => {
+            eprintln!("Phase 1 selected pattern setup DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let setup_forward_bars = setup.full_pattern_length.saturating_mul(5).max(1);
+    let candles =
+        match fetch_phase1_forward_candles(pool.get_ref(), &setup, setup_forward_bars).await {
+            Ok(candles) => candles,
+            Err(error) => {
+                eprintln!(
+                    "Phase 1 selected pattern candle fetch failed for setup {} ({}): {:?}",
+                    setup.setup_id, setup.symbol, error
+                );
+                Vec::new()
+            }
+        };
+
+    let mut rows = Vec::new();
+    if let Some(detail) = phase1_replay_route_detail(&context, &setup, &candles) {
+        if detail.result_r.is_finite() {
+            rows.push(SimulatorReplaySourceTrade {
+                trade_id: None,
+                trade_uid: None,
+                trade_direction: None,
+                symbol: setup.symbol.clone(),
+                pattern_id: setup
+                    .pattern_id
+                    .clone()
+                    .or_else(|| Some(setup.setup_id.clone())),
+                pattern_group_id: setup.pattern_group_id.clone(),
+                d_date: setup.d_date,
+                d_confirm_date: Some(setup.d_confirm_date),
+                reversal_detect_date: None,
+                entry_date: detail.entry_date,
+                target_date: Some(detail.exit_date),
+                trade_enter_price: detail.entry_price,
+                trade_risk_exit_price: detail.stop_price,
+                trade_reward_exit_price: detail.target_price,
+                exit_price: Some(detail.exit_price),
+                result_r: Some(detail.result_r),
+                risk_points: Some(detail.risk_points),
+                trade_lowest_price: Some(detail.lowest_price),
+                trade_highest_price: Some(detail.highest_price),
+                trade_adverse_price: Some(detail.adverse_price),
+                trade_favorable_price: Some(detail.favorable_price),
+                max_adverse_points: Some(detail.max_adverse_points),
+                max_favorable_points: Some(detail.max_favorable_points),
+                trade_result: detail.trade_result,
+                exit_reason: Some(detail.exit_reason),
+            });
+        }
+    }
+
+    let first_start_date = rows
+        .first()
+        .map(|trade| trade.entry_date)
+        .unwrap_or(setup.d_confirm_date);
+    let contracts = params.contracts.unwrap_or(1).clamp(1, 500);
+
+    HttpResponse::Ok().json(build_simulator_replay_response(
+        family_key,
+        &rows,
+        first_start_date,
+        1,
+        contracts,
+        50_000.0,
+        3_000.0,
+        2_000.0,
+        None,
+        SIMULATOR_DRAWDOWN_MODEL_INTRADAY,
+        false,
+        false,
+        vec![context.route_label],
+    ))
+}
+
 #[route("/phase1/yearly-breakdown", method = "GET", method = "POST")]
 async fn fetch_phase1_yearly_breakdown(
     pool: web::Data<MySqlPool>,
@@ -7636,10 +8559,7 @@ async fn fetch_phase1_yearly_breakdown(
     for setup in &setups {
         let year = setup.d_date.year();
         let accumulator = yearly.entry(year).or_default();
-        let setup_forward_bars = setup
-            .full_pattern_length
-            .saturating_mul(5)
-            .clamp(40, context.max_forward_bars.max(40));
+        let setup_forward_bars = setup.full_pattern_length.saturating_mul(5).max(1);
         let candles = fetch_phase1_forward_candles(pool.get_ref(), setup, setup_forward_bars)
             .await
             .unwrap_or_else(|error| {

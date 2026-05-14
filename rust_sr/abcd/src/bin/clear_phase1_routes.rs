@@ -5,51 +5,10 @@ use sqlx::mysql::{MySqlPool, MySqlPoolOptions};
 use sqlx::MySqlConnection;
 use tokio::time::sleep;
 
-const ENGINE_TABLES: [&str; 7] = [
-    "pattern_setups",
-    "pattern_harmonic_scores",
-    "pattern_family_summary",
-    "pattern_family_source_summary",
-    "phase1_strategy_runs",
-    "phase1_strategy_results",
+const PHASE1_ROUTE_TABLES: [&str; 3] = [
     "phase1_strategy_yearly_results",
-];
-
-const CACHE_STATES: [&str; 3] = [
-    "pattern_family_universe",
-    "pattern_family_source_universe",
-    "phase1_leaderboard",
-];
-
-const LEGACY_TABLES: [&str; 28] = [
-    "prop_strategy_family_members",
-    "prop_strategy_family_yearly",
-    "prop_strategy_family_summary",
-    "prop_strategy_contract_week_summary",
-    "prop_strategy_family_weekly_cadence",
-    "prop_strategy_cohort_summary_cache",
-    "prop_strategy_yearly_rollup",
-    "prop_strategy_yearly",
-    "prop_strategy_summary",
-    "pattern_outcomes_prop",
-    "pattern_forward_observations",
-    "pattern_outcomes_prop_reversal",
-    "pattern_outcomes_swing",
-    "xabcd_patterns",
-    "swing_strategy_yearly",
-    "swing_strategy_summary",
-    "strategy_cohort_summary_cache",
-    "strategy_yearly_rollup",
-    "strategy_trade_summary_cache",
-    "current_open_setups_cache",
-    "prop_reversal_strategy_cohort_summary_cache",
-    "prop_reversal_strategy_yearly_rollup",
-    "prop_reversal_strategy_yearly",
-    "prop_reversal_strategy_summary",
-    "pattern_setups_build",
-    "pattern_harmonic_scores_build",
-    "pattern_outcomes_prop_build",
-    "pattern_forward_observations_build",
+    "phase1_strategy_results",
+    "phase1_strategy_runs",
 ];
 
 fn database_url_from_env() -> Result<String, Box<dyn std::error::Error>> {
@@ -99,7 +58,7 @@ async fn ensure_dashboard_cache_state_table(pool: &MySqlPool) -> Result<(), sqlx
     Ok(())
 }
 
-async fn mark_cache_cleared(pool: &MySqlPool, cache_name: &str) -> Result<(), sqlx::Error> {
+async fn mark_phase1_cache_cleared(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         INSERT INTO dashboard_cache_state (
@@ -108,14 +67,13 @@ async fn mark_cache_cleared(pool: &MySqlPool, cache_name: &str) -> Result<(), sq
             last_completed_year,
             note
         )
-        VALUES (?, FALSE, NULL, 'cleared')
+        VALUES ('phase1_leaderboard', FALSE, NULL, 'phase1 routes cleared')
         ON DUPLICATE KEY UPDATE
             is_ready = VALUES(is_ready),
             last_completed_year = VALUES(last_completed_year),
             note = VALUES(note)
         "#,
     )
-    .bind(cache_name)
     .execute(pool)
     .await?;
 
@@ -157,15 +115,6 @@ async fn clear_table_with_retry(
     Ok(())
 }
 
-async fn drop_table_if_present(pool: &MySqlPool, table: &str) -> Result<(), sqlx::Error> {
-    sqlx::query(&format!("DROP TABLE IF EXISTS {table}"))
-        .execute(pool)
-        .await?;
-    println!("dropped legacy table if present: {table}");
-
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
@@ -178,8 +127,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut existing_tables = Vec::new();
 
-    println!("Clearing generated engine tables with TRUNCATE TABLE:");
-    for table in ENGINE_TABLES {
+    println!("Clearing Phase 1 route tables with TRUNCATE TABLE:");
+    for table in PHASE1_ROUTE_TABLES {
         if table_exists(&pool, table).await? {
             println!("before {table}={}", table_count(&pool, table).await?);
             existing_tables.push(table);
@@ -206,19 +155,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     drop(conn);
-
     clear_result?;
 
-    println!("Dropping legacy generated engine tables:");
-    for table in LEGACY_TABLES {
-        drop_table_if_present(&pool, table).await?;
-    }
-
     ensure_dashboard_cache_state_table(&pool).await?;
-    for cache_name in CACHE_STATES {
-        mark_cache_cleared(&pool, cache_name).await?;
-        println!("marked {cache_name}=cleared");
-    }
+    mark_phase1_cache_cleared(&pool).await?;
+    println!("marked phase1_leaderboard=cleared");
 
     println!("Counts after clear:");
     for table in existing_tables {

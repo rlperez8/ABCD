@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import CandleChartPanel from '../candle-chart/CandleChartPanel';
-import { fetchSimulatorFamilyReplay } from '../../services/patternApi';
+import {
+  fetchPhase1Results,
+  fetchPhase1RouteReplay,
+  fetchSimulatorFamilyReplay,
+} from '../../services/patternApi';
 
 const APEX_ACCOUNT_RULES = {
   '25K': {
@@ -98,6 +102,7 @@ const SIMULATOR_PLAYBACK_SPEEDS = {
   fast: { label: 'Fast', intervalMs: 24 },
 };
 const SIMULATOR_START_DATE = '2021-01-01';
+const EMPTY_CHART_CANDLES = [];
 
 const formatMoney = (value) =>
   new Intl.NumberFormat('en-US', {
@@ -205,6 +210,108 @@ const getFamilyOptionId = (strategy = {}) =>
 
 const isPhase1FamilyId = (value = '') =>
   /^[a-f0-9]{16}$/i.test(String(value ?? '').trim());
+
+const getPhase1RouteKey = (route = {}) => `${route.run_id ?? ''}|${route.route_id ?? ''}`;
+
+const formatPhase1RouteOption = (route = {}) => {
+  const rank = Number(route.result_rank);
+  const rankLabel = Number.isFinite(rank) && rank > 0 ? `#${rank}` : 'Route';
+  const avgR = Number(route.avg_r);
+  const avgRLabel = Number.isFinite(avgR) ? `${avgR.toFixed(2)}R` : 'R N/A';
+  const trades = Number(route.trade_count);
+  const tradeLabel = Number.isFinite(trades) ? `${trades.toLocaleString()} trades` : 'trades N/A';
+
+  return `${rankLabel} ${route.route_label ?? route.route_id ?? 'Phase 1 route'} / ${avgRLabel} / ${tradeLabel}`;
+};
+
+const formatRouteMode = (value = '') =>
+  String(value || 'N/A')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => (part.length <= 2 ? part.toUpperCase() : `${part[0].toUpperCase()}${part.slice(1)}`))
+    .join(' ');
+
+const getFiniteNumber = (value, fallback = null) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : fallback;
+};
+
+const getDateTimeKey = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}:\d{2}(?::\d{2})?))?/);
+    if (match) {
+      const time = match[2] ? (match[2].length === 5 ? `${match[2]}:00` : match[2]) : '00:00:00';
+      return `${match[1]} ${time}`;
+    }
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
+};
+
+const findCandleIndexByDate = (candles = [], value = null) => {
+  const targetKey = getDateTimeKey(value);
+  if (!targetKey) {
+    return -1;
+  }
+
+  const exactIndex = candles.findIndex((candle) =>
+    getDateTimeKey(candle?.candle_date ?? candle?.date) === targetKey
+  );
+  if (exactIndex >= 0) {
+    return exactIndex + 1;
+  }
+
+  const targetDay = targetKey.slice(0, 10);
+  const dayIndex = candles.findIndex((candle) =>
+    getDateTimeKey(candle?.candle_date ?? candle?.date)?.slice(0, 10) === targetDay
+  );
+  return dayIndex >= 0 ? dayIndex + 1 : -1;
+};
+
+const mergeSelectedTradeIntoChartPattern = (pattern = null, trade = null, candles = []) => {
+  if (!pattern || !trade) {
+    return pattern;
+  }
+
+  const entryIndex = findCandleIndexByDate(candles, trade.entry_date);
+  const exitIndex = findCandleIndexByDate(candles, trade.target_date);
+  const exitPrice = getFiniteNumber(
+    trade.exit_price ??
+      trade.trade_exit_price ??
+      (Number(trade.trade_result) === 2
+        ? trade.trade_risk_exit_price
+        : trade.trade_reward_exit_price),
+    pattern.exit_price
+  );
+
+  return {
+    ...pattern,
+    entry_date: trade.entry_date ?? pattern.entry_date,
+    target_date: trade.target_date ?? pattern.target_date,
+    trade_enter_price: getFiniteNumber(trade.trade_enter_price, pattern.trade_enter_price),
+    trade_risk_exit_price: getFiniteNumber(trade.trade_risk_exit_price, pattern.trade_risk_exit_price),
+    trade_reward_exit_price: getFiniteNumber(trade.trade_reward_exit_price, pattern.trade_reward_exit_price),
+    trade_current_price: exitPrice,
+    target_close: exitPrice,
+    exit_price: exitPrice,
+    entry: entryIndex > 0 ? entryIndex : pattern.entry,
+    target: exitIndex > 0 ? exitIndex : pattern.target,
+    exit_date: exitIndex > 0 ? exitIndex : pattern.exit_date,
+    trade_result: trade.trade_result ?? pattern.trade_result,
+    result_r: trade.result_r ?? pattern.result_r,
+    risk_points: trade.risk_points ?? pattern.risk_points,
+  };
+};
 
 const formatFamilyOptionLabel = (strategy = {}) => {
   const familyId = getFamilyOptionId(strategy);
@@ -723,10 +830,70 @@ const formatTradePrice = (value) => {
   return Number.isFinite(numericValue) ? numericValue.toFixed(2) : 'N/A';
 };
 
+const TradeCanvasOverlay = ({ trade = null, selectedPhase1Route = null }) => {
+  if (!trade) {
+    return null;
+  }
+
+  const pnl = Number(trade.pnl);
+  const resultR = Number(trade.result_r);
+  const exitPrice =
+    trade.exit_price ??
+    trade.trade_exit_price ??
+    (Number(trade.trade_result) === 2
+      ? trade.trade_risk_exit_price
+      : trade.trade_reward_exit_price);
+  const isLoss =
+    Boolean(trade.failed_intratrade_drawdown) ||
+    Number(trade.trade_result) === 2 ||
+    (Number.isFinite(pnl) && pnl < 0) ||
+    (Number.isFinite(resultR) && resultR < 0);
+  const rows = [
+    { label: 'Entry', value: formatTradePrice(trade.trade_enter_price), tone: 'entry' },
+    { label: 'Stop', value: formatTradePrice(trade.trade_risk_exit_price), tone: 'stop' },
+    { label: 'Target', value: formatTradePrice(trade.trade_reward_exit_price), tone: 'target' },
+    { label: 'Exit', value: formatTradePrice(exitPrice), tone: isLoss ? 'stop' : 'target' },
+    { label: 'Entry Time', value: formatShortDate(trade.entry_date) },
+    { label: 'Exit Time', value: formatShortDate(trade.target_date) },
+    {
+      label: 'Result',
+      value: Number.isFinite(resultR)
+        ? `${resultR.toFixed(2)}R`
+        : Number.isFinite(pnl)
+        ? formatMoney(pnl)
+        : 'N/A',
+      tone: isLoss ? 'stop' : 'target',
+    },
+  ];
+
+  return (
+    <div className={`simulator-canvas-trade-strip${isLoss ? ' simulator-canvas-trade-strip--loss' : ''}`}>
+      <div className="simulator-canvas-trade-strip__head">
+        <span>Selected Trade</span>
+        <strong>
+          {trade.symbol ?? 'N/A'} #{trade.trade_index ?? '-'}
+        </strong>
+        <small title={selectedPhase1Route?.route_label ?? ''}>
+          {selectedPhase1Route?.route_label ?? 'Route replay'}
+        </small>
+      </div>
+      <div className="simulator-canvas-trade-strip__grid">
+        {rows.map((row) => (
+          <div className={row.tone ? `simulator-canvas-trade-strip__metric simulator-canvas-trade-strip__metric--${row.tone}` : 'simulator-canvas-trade-strip__metric'} key={row.label}>
+            <span>{row.label}</span>
+            <strong>{row.value}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const TradeCanvasDetails = ({
   trade = null,
   tradePattern = null,
   selectedReplayTest = null,
+  selectedPhase1Route = null,
   accountRules,
   contracts = 1,
 }) => {
@@ -772,6 +939,38 @@ const TradeCanvasDetails = ({
     Number.isFinite(pointValue) && pointValue > 0 ? closedPnl / (pointValue * contractCount) : null;
   const resultTone = trade?.failed_intratrade_drawdown || pnl < 0 ? 'negative' : 'positive';
   const patternId = tradePattern?.pattern_id ?? trade?.pattern_id ?? 'N/A';
+  const routeRows = selectedPhase1Route
+    ? [
+        { label: 'Rank', value: `#${selectedPhase1Route.result_rank || '-'}` },
+        { label: 'Entry', value: formatRouteMode(selectedPhase1Route.entry_mode) },
+        { label: 'Stop', value: formatRouteMode(selectedPhase1Route.stop_mode) },
+        {
+          label: 'Target',
+          value: Number.isFinite(Number(selectedPhase1Route.target_r))
+            ? `${Number(selectedPhase1Route.target_r).toFixed(2)}R`
+            : 'N/A',
+        },
+        { label: 'Hold', value: `${selectedPhase1Route.max_hold_multiple || '-'}x` },
+        {
+          label: 'Avg R',
+          value: Number.isFinite(Number(selectedPhase1Route.avg_r))
+            ? Number(selectedPhase1Route.avg_r).toFixed(3)
+            : 'N/A',
+        },
+        {
+          label: 'Win',
+          value: Number.isFinite(Number(selectedPhase1Route.win_rate))
+            ? `${Number(selectedPhase1Route.win_rate).toFixed(1)}%`
+            : 'N/A',
+        },
+        {
+          label: 'PF',
+          value: Number.isFinite(Number(selectedPhase1Route.profit_factor))
+            ? Number(selectedPhase1Route.profit_factor).toFixed(2)
+            : 'N/A',
+        },
+      ]
+    : [];
 
   if (!trade) {
     return (
@@ -792,6 +991,14 @@ const TradeCanvasDetails = ({
         </div>
 
         <div className="simulator-trade-detail-empty-grid">
+          {selectedPhase1Route ? (
+            <div className="simulator-trade-detail-id-tile">
+              <span>Route</span>
+              <strong title={selectedPhase1Route.route_label}>
+                {selectedPhase1Route.route_label}
+              </strong>
+            </div>
+          ) : null}
           <div className="simulator-trade-detail-id-tile">
             <span>Pattern ID</span>
             <strong title={patternId}>{patternId}</strong>
@@ -818,10 +1025,10 @@ const TradeCanvasDetails = ({
   }
 
   const priceRows = [
-    { label: 'Entry', value: formatTradePrice(tradePattern?.trade_enter_price) },
-    { label: 'Stop', value: formatTradePrice(tradePattern?.trade_risk_exit_price) },
-    { label: 'Target', value: formatTradePrice(tradePattern?.trade_reward_exit_price) },
-    { label: 'Exit', value: formatTradePrice(tradePattern?.exit_price) },
+    { label: 'Entry', value: formatTradePrice(trade?.trade_enter_price ?? tradePattern?.trade_enter_price) },
+    { label: 'Stop', value: formatTradePrice(trade?.trade_risk_exit_price ?? tradePattern?.trade_risk_exit_price) },
+    { label: 'Target', value: formatTradePrice(trade?.trade_reward_exit_price ?? tradePattern?.trade_reward_exit_price) },
+    { label: 'Exit', value: formatTradePrice(trade?.exit_price ?? tradePattern?.exit_price) },
     {
       label: 'Low',
       value: formatTradePrice(trade?.trade_lowest_price ?? tradePattern?.trade_lowest_price),
@@ -905,6 +1112,20 @@ const TradeCanvasDetails = ({
         </small>
       </div>
 
+      {selectedPhase1Route ? (
+        <div className="simulator-trade-detail-section">
+          <span title={selectedPhase1Route.route_label}>Route</span>
+          <div className="simulator-trade-detail-grid">
+            {routeRows.map((row) => (
+              <div key={row.label}>
+                <span>{row.label}</span>
+                <strong>{row.value}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="simulator-trade-detail-mini-grid">
         <div>
           <span>Contracts</span>
@@ -965,6 +1186,8 @@ const TradeSimulatorPanel = ({
   onSelectFamilyId = null,
   onReplayChange = null,
   onFirstStartDateChange = null,
+  selectedReplayTrade = null,
+  onReplayTradeSelect = null,
   highlightedPatternKeys = [],
   loadedTrades = [],
   loadedCandles = [],
@@ -995,6 +1218,9 @@ const TradeSimulatorPanel = ({
   const [playbackSpeed, setPlaybackSpeed] = useState('medium');
   const [isRunningReplay, setRunningReplay] = useState(false);
   const [replayError, setReplayError] = useState('');
+  const [phase1Routes, setPhase1Routes] = useState([]);
+  const [isLoadingPhase1Routes, setLoadingPhase1Routes] = useState(false);
+  const [selectedPhase1RouteKey, setSelectedPhase1RouteKey] = useState('');
   const [selectedCanvasTradeKey, setSelectedCanvasTradeKey] = useState('');
   const [selectedCanvasTrade, setSelectedCanvasTrade] = useState(null);
   const [isLoadingTradeCanvas, setLoadingTradeCanvas] = useState(false);
@@ -1002,6 +1228,7 @@ const TradeSimulatorPanel = ({
 
   const selectedFamilyId = selectedStrategy?.propStrategyId ?? selectedStrategy?.id ?? '';
   const isPhase1FamilyView = selectedStrategy?.outcomeModel === 'phase1-family';
+  const isPhase1ReplayMode = isPhase1FamilyView || isPhase1FamilyId(familyId);
   const familyDropdownOptions = useMemo(() => {
     const seen = new Set();
     const options = [];
@@ -1031,6 +1258,13 @@ const TradeSimulatorPanel = ({
     [familyDropdownOptions]
   );
   const hasFamilyDropdownOptions = familyDropdownOptions.length > 0;
+  const selectedPhase1Route = useMemo(
+    () =>
+      phase1Routes.find((route) => getPhase1RouteKey(route) === selectedPhase1RouteKey) ??
+      phase1Routes[0] ??
+      null,
+    [phase1Routes, selectedPhase1RouteKey]
+  );
   const familyStartDateSelectOptions = useMemo(() => {
     const seen = new Set();
     const options = [];
@@ -1108,6 +1342,43 @@ const TradeSimulatorPanel = ({
     setTradeCanvasError('');
     onReplayChange?.(null);
   }, [onReplayChange, selectedFamilyId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadPhase1Routes = async () => {
+      if (!familyId || !isPhase1ReplayMode) {
+        setPhase1Routes([]);
+        setSelectedPhase1RouteKey('');
+        setLoadingPhase1Routes(false);
+        return;
+      }
+
+      setLoadingPhase1Routes(true);
+      const routes = await fetchPhase1Results({
+        familyKey: familyId,
+        sourceScope: 'futures',
+        limit: 250,
+      });
+
+      if (isCancelled) {
+        return;
+      }
+
+      setPhase1Routes(routes);
+      setSelectedPhase1RouteKey((currentKey) => {
+        const stillExists = routes.some((route) => getPhase1RouteKey(route) === currentKey);
+        return stillExists ? currentKey : getPhase1RouteKey(routes[0] ?? {});
+      });
+      setLoadingPhase1Routes(false);
+    };
+
+    void loadPhase1Routes();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [familyId, isPhase1ReplayMode]);
 
   useEffect(() => {
     if (!simulatorReplay?.trades?.length || !isPlaybackRunning) {
@@ -1347,6 +1618,10 @@ const TradeSimulatorPanel = ({
 
     return isReplayComplete ? 'Complete' : 'Paused';
   }, [hasSimulatorReplay, isPlaybackRunning, isReplayComplete, totalReplayTakenTrades, visibleReplayTakenTrades]);
+  const replayButtonDisabled =
+    !familyId ||
+    isRunningReplay ||
+    (isPhase1ReplayMode && (isLoadingPhase1Routes || !selectedPhase1Route));
 
   const selectedReplayTest = useMemo(
     () =>
@@ -1366,10 +1641,21 @@ const TradeSimulatorPanel = ({
     ? (Number(selectedReplayTest.ending_balance) || 0) -
       (Number(selectedReplayTest.starting_balance) || 0)
     : 0;
-  const tradeChartCandles = tradeChartData?.candles ?? [];
+  const tradeChartCandles = tradeChartData?.candles ?? EMPTY_CHART_CANDLES;
   const tradeChartPattern = tradeChartData?.rust_patterns ?? null;
+  const tradeChartPatternForCanvas = useMemo(
+    () => mergeSelectedTradeIntoChartPattern(tradeChartPattern, selectedCanvasTrade, tradeChartCandles),
+    [selectedCanvasTrade, tradeChartCandles, tradeChartPattern]
+  );
+  const tradeChartDataForCanvas = useMemo(
+    () => ({
+      ...tradeChartData,
+      rust_patterns: tradeChartPatternForCanvas,
+    }),
+    [tradeChartData, tradeChartPatternForCanvas]
+  );
   const tradeChartMarket =
-    tradeChartPattern?.market ?? selectedCanvasTrade?.market ?? selectedStrategy?.market ?? 'Bullish';
+    tradeChartPatternForCanvas?.market ?? selectedCanvasTrade?.market ?? selectedStrategy?.market ?? 'Bullish';
   const isUsingSelectedFamily = Boolean(familyId && selectedFamilyId && familyId === selectedFamilyId);
 
   const restartReplayPlayback = () => {
@@ -1398,11 +1684,49 @@ const TradeSimulatorPanel = ({
     setPlaybackRunning(false);
   };
 
-  const runReplay = async () => {
-    if (!familyId || isRunningReplay || isPhase1FamilyView) {
-      if (isPhase1FamilyView) {
-        setReplayError('Phase 1 family rows are loaded in the table. Route replay is not wired yet.');
+  const handleSelectReplayTrade = useCallback(
+    (trade, pointIndex = '', { notify = true } = {}) => {
+      if (!trade) {
+        return;
       }
+
+      setSelectedCanvasTradeKey(getSimulatorTradeKey(trade, pointIndex));
+      setSelectedCanvasTrade(trade);
+      setChartPanelView('canvas');
+
+      const nextTestIndex = Number(trade.test_index);
+      if (Number.isFinite(nextTestIndex) && nextTestIndex > 0) {
+        setSelectedReplayTestIndex(nextTestIndex);
+      }
+
+      if (notify) {
+        onReplayTradeSelect?.(trade);
+      }
+    },
+    [onReplayTradeSelect]
+  );
+
+  useEffect(() => {
+    if (!selectedReplayTrade) {
+      return;
+    }
+
+    handleSelectReplayTrade(selectedReplayTrade, selectedReplayTrade.trade_index ?? '', {
+      notify: false,
+    });
+  }, [handleSelectReplayTrade, selectedReplayTrade]);
+
+  const runReplay = async () => {
+    if (!familyId || isRunningReplay) {
+      return;
+    }
+
+    if (isPhase1ReplayMode && !selectedPhase1Route) {
+      setReplayError(
+        isLoadingPhase1Routes
+          ? 'Phase 1 routes are still loading.'
+          : 'No stored Phase 1 route was found for this family.'
+      );
       return;
     }
 
@@ -1413,23 +1737,40 @@ const TradeSimulatorPanel = ({
 
     setRunningReplay(true);
     setReplayError('');
-    const result = await fetchSimulatorFamilyReplay({
-      familyId,
-      firstStartDate,
-      testsToChain: parsedTestsToChain,
-      contracts,
-      accountRules: {
-        ...accountRules,
-        dailyLossLimit,
-      },
-      drawdownModel,
-      oneTradeAtATime,
-      useCandidateLogic,
-    });
+    const replayAccountRules = {
+      ...accountRules,
+      dailyLossLimit,
+    };
+    const result = isPhase1ReplayMode
+      ? await fetchPhase1RouteReplay({
+          familyKey: familyId,
+          runId: selectedPhase1Route.run_id,
+          routeId: selectedPhase1Route.route_id,
+          firstStartDate,
+          testsToChain: parsedTestsToChain,
+          contracts,
+          accountRules: replayAccountRules,
+          drawdownModel,
+          oneTradeAtATime,
+        })
+      : await fetchSimulatorFamilyReplay({
+          familyId,
+          firstStartDate,
+          testsToChain: parsedTestsToChain,
+          contracts,
+          accountRules: replayAccountRules,
+          drawdownModel,
+          oneTradeAtATime,
+          useCandidateLogic,
+        });
 
     setRunningReplay(false);
     if (!result) {
-      setReplayError('Replay failed. Check that the server is running and the family has rows.');
+      setReplayError(
+        isPhase1ReplayMode
+          ? 'Route replay failed. Check that this route has stored Phase 1 results.'
+          : 'Replay failed. Check that the server is running and the family has rows.'
+      );
       return;
     }
 
@@ -1570,6 +1911,34 @@ const TradeSimulatorPanel = ({
               </small>
             </label>
 
+            {isPhase1ReplayMode ? (
+              <label className="simulator-field simulator-date-select">
+                <span>Phase 1 Route</span>
+                <select
+                  value={selectedPhase1Route ? getPhase1RouteKey(selectedPhase1Route) : ''}
+                  onChange={(event) => setSelectedPhase1RouteKey(event.target.value)}
+                  disabled={isLoadingPhase1Routes || !phase1Routes.length}
+                >
+                  {phase1Routes.length ? (
+                    phase1Routes.map((route) => (
+                      <option value={getPhase1RouteKey(route)} key={getPhase1RouteKey(route)}>
+                        {formatPhase1RouteOption(route)}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">
+                      {isLoadingPhase1Routes ? 'Loading routes...' : 'No stored routes'}
+                    </option>
+                  )}
+                </select>
+                <small>
+                  {selectedPhase1Route
+                    ? `${selectedPhase1Route.route_id} / ${selectedPhase1Route.win_rate.toFixed(1)}% win`
+                    : 'Select a stored optimizer route'}
+                </small>
+              </label>
+            ) : null}
+
             <div className="simulator-field-row">
               <label className="simulator-field">
                 <span>Tests</span>
@@ -1602,14 +1971,16 @@ const TradeSimulatorPanel = ({
               <span>Skip Overlapping Setups</span>
             </label>
 
-            <label className="simulator-check simulator-check--switch">
-              <input
-                type="checkbox"
-                checked={useCandidateLogic}
-                onChange={(event) => setUseCandidateLogic(event.target.checked)}
-              />
-              <span>Use Candidate Logic</span>
-            </label>
+            {!isPhase1ReplayMode ? (
+              <label className="simulator-check simulator-check--switch">
+                <input
+                  type="checkbox"
+                  checked={useCandidateLogic}
+                  onChange={(event) => setUseCandidateLogic(event.target.checked)}
+                />
+                <span>Use Candidate Logic</span>
+              </label>
+            ) : null}
           </div>
 
           <div className="simulator-rail-card simulator-rail-card--rules">
@@ -1671,13 +2042,13 @@ const TradeSimulatorPanel = ({
             type="button"
             className="simulator-primary-button"
             onClick={runReplay}
-            disabled={!familyId || isRunningReplay || isPhase1FamilyView}
+            disabled={replayButtonDisabled}
           >
             {isRunningReplay
               ? `Running ${Number(testsToChain) === 1 ? 'Test' : 'Tests'}...`
-              : isPhase1FamilyView
-                ? 'Pattern Table Loaded'
-              : `Run ${Number(testsToChain) === 1 ? 'Test' : 'Tests'}`}
+              : isPhase1ReplayMode
+                ? `Replay Route`
+                : `Run ${Number(testsToChain) === 1 ? 'Test' : 'Tests'}`}
           </button>
 
           <div className="simulator-playback-controls" aria-label="Replay controls">
@@ -1866,8 +2237,8 @@ const TradeSimulatorPanel = ({
                       {chartPanelView === 'canvas'
                         ? selectedCanvasTrade
                           ? `${selectedCanvasTrade.symbol ?? 'N/A'} / ${formatMoney(selectedCanvasTrade.pnl)}`
-                          : tradeChartPattern
-                          ? `${tradeChartPattern.symbol ?? 'N/A'} / XABCD pattern`
+                          : tradeChartPatternForCanvas
+                          ? `${tradeChartPatternForCanvas.symbol ?? 'N/A'} / XABCD pattern`
                           : 'Click a trade row or graph dot to load the candle chart'
                         : hasSimulatorReplay
                         ? `${replaySummary.trades}/${selectedReplayTest?.totalTrades ?? 0} trades shown`
@@ -1913,17 +2284,22 @@ const TradeSimulatorPanel = ({
                   <div className="simulator-trade-canvas-layout">
                     <TradeCanvasDetails
                       trade={selectedCanvasTrade}
-                      tradePattern={tradeChartPattern}
+                      tradePattern={tradeChartPatternForCanvas}
                       selectedReplayTest={selectedReplayTest}
+                      selectedPhase1Route={selectedPhase1Route}
                       accountRules={accountRules}
                       contracts={contracts}
                     />
                     <div className="simulator-trade-canvas-stage">
                       {chartPanelView === 'canvas' ? (
-                        tradeChartCandles.length && tradeChartPattern && !isLoadingTradeCanvas && !tradeCanvasError ? (
+                        tradeChartCandles.length && tradeChartPatternForCanvas && !isLoadingTradeCanvas && !tradeCanvasError ? (
                           <div className="simulator-chart-canvas-shell">
+                            <TradeCanvasOverlay
+                              trade={selectedCanvasTrade}
+                              selectedPhase1Route={selectedPhase1Route}
+                            />
                             <CandleChartPanel
-                              chartData={tradeChartData}
+                              chartData={tradeChartDataForCanvas}
                               isSectionsExpanded={isTradeChartExpanded}
                               setSectionsExpanded={setTradeChartExpanded}
                               focusMode="prop"
@@ -1947,6 +2323,7 @@ const TradeSimulatorPanel = ({
                           showThresholds={pnlMode === 'total'}
                           totalPointCount={Math.max(selectedReplayTest?.totalTrades ?? 0, 1)}
                           selectedTradeKey={selectedCanvasTradeKey}
+                          onSelectTrade={handleSelectReplayTrade}
                           highlightedPatternKeys={highlightedPatternKeys}
                         />
                       )}

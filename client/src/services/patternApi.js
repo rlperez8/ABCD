@@ -433,9 +433,19 @@ const parseSimulatorReplayResponse = (data) => ({
   trades: Array.isArray(data?.trades)
     ? data.trades.map((trade) => ({
         ...trade,
+        trade_id: parseOptionalInt(trade?.trade_id),
+        trade_uid: trade?.trade_uid ?? null,
+        trade_direction: trade?.trade_direction ?? null,
         test_index: parseOptionalInt(trade?.test_index) ?? 0,
         trade_index: parseOptionalInt(trade?.trade_index) ?? 0,
         trade_result: parseOptionalInt(trade?.trade_result) ?? 0,
+        exit_reason: trade?.exit_reason ?? null,
+        trade_enter_price: parseOptionalFloat(trade?.trade_enter_price),
+        trade_risk_exit_price: parseOptionalFloat(trade?.trade_risk_exit_price),
+        trade_reward_exit_price: parseOptionalFloat(trade?.trade_reward_exit_price),
+        exit_price: parseOptionalFloat(trade?.exit_price),
+        result_r: parseOptionalFloat(trade?.result_r),
+        risk_points: parseOptionalFloat(trade?.risk_points),
         pnl: parseOptionalFloat(trade?.pnl) ?? 0,
         closed_pnl: parseOptionalFloat(trade?.closed_pnl) ?? parseOptionalFloat(trade?.pnl) ?? 0,
         point_value: parseOptionalFloat(trade?.point_value) ?? 0,
@@ -846,6 +856,80 @@ export const fetchSimulatorFamilyReplay = async ({
       drawdown_model: drawdownModel ?? null,
       one_trade_at_a_time: oneTradeAtATime,
       use_candidate_logic: useCandidateLogic,
+    });
+
+    const replay = parseSimulatorReplayResponse(data);
+    return {
+      ...replay,
+      trades: replay.trades.map((trade) => ({
+        ...trade,
+        prop_outcome_mode: 'phase1-family',
+      })),
+    };
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
+export const fetchPhase1RouteReplay = async ({
+  familyKey,
+  runId,
+  routeId,
+  firstStartDate,
+  testsToChain,
+  contracts,
+  accountRules,
+  drawdownModel,
+  oneTradeAtATime,
+}) => {
+  if (!familyKey || !runId || !routeId) {
+    return null;
+  }
+
+  try {
+    const data = await postJson('/simulator/phase1-route-replay', {
+      family_key: familyKey,
+      run_id: runId,
+      route_id: routeId,
+      first_start_date: firstStartDate,
+      tests_to_chain: testsToChain,
+      contracts,
+      starting_balance: accountRules?.startingBalance ?? null,
+      profit_target: accountRules?.profitTarget ?? null,
+      max_drawdown: accountRules?.maxDrawdown ?? null,
+      daily_loss_limit: accountRules?.dailyLossLimit ?? null,
+      drawdown_model: drawdownModel ?? null,
+      one_trade_at_a_time: oneTradeAtATime,
+    });
+
+    return parseSimulatorReplayResponse(data);
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
+export const fetchPhase1PatternRouteReplay = async ({
+  familyKey,
+  runId,
+  routeId,
+  patternId = null,
+  patternGroupId = null,
+  contracts = 1,
+}) => {
+  if (!familyKey || !runId || !routeId || (!patternId && !patternGroupId)) {
+    return null;
+  }
+
+  try {
+    const data = await postJson('/simulator/phase1-pattern-route-replay', {
+      family_key: familyKey,
+      run_id: runId,
+      route_id: routeId,
+      pattern_id: patternId,
+      pattern_group_id: patternGroupId,
+      contracts,
     });
 
     return parseSimulatorReplayResponse(data);
