@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import CandleChartPanel from '../candle-chart/CandleChartPanel';
 import {
+  fetchEntryExitTemplateBreakdown,
+  fetchEntryExitTemplates,
   fetchPatternDetail,
   fetchPatternFamilies,
   fetchPhase1FamilyPatterns,
@@ -23,6 +25,15 @@ const formatDate = (value) => {
   return text.length > 10 ? text.slice(0, 10) : text;
 };
 
+const compactText = (value = '', maxLength = 18) => {
+  const text = String(value || 'N/A');
+  if (text.length <= maxLength) return text;
+  if (maxLength <= 6) return text.slice(0, maxLength);
+  const left = Math.ceil((maxLength - 3) / 2);
+  const right = Math.floor((maxLength - 3) / 2);
+  return `${text.slice(0, left)}...${text.slice(text.length - right)}`;
+};
+
 const formatDecimal = (value, digits = 2) =>
   Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '0.00';
 
@@ -41,6 +52,37 @@ const formatRouteMode = (value = '') =>
     .filter(Boolean)
     .map((part) => (part.length <= 2 ? part.toUpperCase() : `${part[0].toUpperCase()}${part.slice(1)}`))
     .join(' ');
+
+const parseTemplateRuleJson = (template = {}) => {
+  if (!template.rule_json || typeof template.rule_json !== 'string') {
+    return null;
+  }
+
+  try {
+    return JSON.parse(template.rule_json);
+  } catch (_error) {
+    return null;
+  }
+};
+
+const getTemplateEntryOffset = (template = {}) => {
+  const parsedRule = parseTemplateRuleJson(template);
+  const ruleOffset = Number(parsedRule?.entry?.offset_from_confirmation);
+  if (Number.isFinite(ruleOffset)) {
+    return ruleOffset;
+  }
+
+  return null;
+};
+
+const formatEntryExitTemplateRule = (template = {}) => {
+  const direction = template.direction_mode === 'inverse_pattern' ? 'INV' : 'PAT';
+  const entryOffset = getTemplateEntryOffset(template);
+  const entry = entryOffset ? `C+${entryOffset}` : formatRouteMode(template.entry_kind);
+  const risk = `${formatDecimal(template.risk_multiple, 3)}CD`;
+  const target = `${formatDecimal(template.target_r, 2).replace('.00', '')}R`;
+  return `${direction} ${entry} ${risk} ${target}`;
+};
 
 const ROUTE_ENTRY_COPY = {
   next_open: 'enters on the next open after the pattern completes',
@@ -479,49 +521,51 @@ const SelectedSummaryRow = ({
   metrics = [],
   onAction,
   status,
-  subtitle,
-  title,
   tone = 'neutral',
-}) => (
-  <section className={`pattern-family-selected-card pattern-family-selected-card--${tone}`}>
-    <header className="pattern-family-selected-head">
-      <span className="pattern-family-selected-index">{String(index).padStart(2, '0')}</span>
-      <strong>{label}</strong>
-    </header>
-    <div className="pattern-family-selected-data">
-      <div className="pattern-family-selected-data-head">
-        <span>Data</span>
-        {status ? <strong title={status}>{status}</strong> : null}
+}) => {
+  return (
+    <section className={`pattern-family-selected-card pattern-family-selected-card--${tone}`}>
+      <header className="pattern-family-selected-head">
+        <span className="pattern-family-selected-index">{String(index).padStart(2, '0')}</span>
+        <div className="pattern-family-selected-head-copy">
+          <strong>{label}</strong>
+        </div>
+      </header>
+      <div className="pattern-family-selected-data">
+        <div className="pattern-family-selected-data-head">
+          <span>Data</span>
+          {status ? <strong title={status}>{status}</strong> : null}
+        </div>
+        <div className="pattern-family-selected-metrics">
+          {isLoading ? (
+            <div className="pattern-family-selected-empty">{loadingText}</div>
+          ) : metrics.length ? (
+            metrics.map((item) => (
+              <div
+                className={[
+                  'pattern-family-selected-metric',
+                  item.wide ? 'pattern-family-selected-metric--wide' : '',
+                  item.tone ? `pattern-family-selected-metric--${item.tone}` : '',
+                ].filter(Boolean).join(' ')}
+                key={item.label}
+              >
+                <span>{item.label}</span>
+                <strong title={item.value}>{item.value}</strong>
+              </div>
+            ))
+          ) : (
+            <div className="pattern-family-selected-empty">{emptyText}</div>
+          )}
+        </div>
       </div>
-      <div className="pattern-family-selected-metrics">
-        {isLoading ? (
-          <div className="pattern-family-selected-empty">{loadingText}</div>
-        ) : metrics.length ? (
-          metrics.map((item) => (
-            <div
-              className={[
-                'pattern-family-selected-metric',
-                item.wide ? 'pattern-family-selected-metric--wide' : '',
-                item.tone ? `pattern-family-selected-metric--${item.tone}` : '',
-              ].filter(Boolean).join(' ')}
-              key={item.label}
-            >
-              <span>{item.label}</span>
-              <strong title={item.value}>{item.value}</strong>
-            </div>
-          ))
-        ) : (
-          <div className="pattern-family-selected-empty">{emptyText}</div>
-        )}
+      <div className="pattern-family-selected-action-wrap">
+        <button type="button" onClick={onAction} disabled={actionDisabled}>
+          {actionLabel}
+        </button>
       </div>
-    </div>
-    <div className="pattern-family-selected-action-wrap">
-      <button type="button" onClick={onAction} disabled={actionDisabled}>
-        {actionLabel}
-      </button>
-    </div>
-  </section>
-);
+    </section>
+  );
+};
 
 const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const [families, setFamilies] = useState([]);
@@ -551,6 +595,12 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const [supplyData, setSupplyData] = useState({ symbols: [], families: [] });
   const [isSupplyLoading, setSupplyLoading] = useState(false);
   const [supplyError, setSupplyError] = useState('');
+  const [entryExitData, setEntryExitData] = useState({ run: null, templates: [] });
+  const [isEntryExitLoading, setEntryExitLoading] = useState(false);
+  const [entryExitError, setEntryExitError] = useState('');
+  const [entryExitTemplateBreakdown, setEntryExitTemplateBreakdown] = useState({ market: [] });
+  const [isEntryExitTemplateBreakdownLoading, setEntryExitTemplateBreakdownLoading] = useState(false);
+  const [entryExitTemplateBreakdownError, setEntryExitTemplateBreakdownError] = useState('');
   const [selectedRouteTradeKey, setSelectedRouteTradeKey] = useState(null);
   const [selectedPatternRouteTrade, setSelectedPatternRouteTrade] = useState(null);
   const [isPatternRouteTradeLoading, setPatternRouteTradeLoading] = useState(false);
@@ -570,6 +620,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const simOneTradeAtATime = false;
   const [browsePanel, setBrowsePanel] = useState(null);
   const [testOverviewTab, setTestOverviewTab] = useState('overview');
+  const [isSelectedDataCollapsed, setSelectedDataCollapsed] = useState(false);
+  const [isInspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [selectedEntryExitTemplateUid, setSelectedEntryExitTemplateUid] = useState(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1552,9 +1605,221 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       })),
     },
   ];
+  const entryExitRun = entryExitData.run;
+  const entryExitTemplates = entryExitData.templates ?? [];
+  const displayedEntryExitTemplates = Array.from(
+    new Map(
+      entryExitTemplates.map((template) => [
+        template.template_uid || `${template.created_from_symbol}-${template.created_from_d_confirm_date}`,
+        template,
+      ])
+    ).values()
+  ).slice(0, entryExitRun?.templates_created || entryExitTemplates.length);
+  const getEntryExitTemplateLabel = (template) => {
+    const index = displayedEntryExitTemplates.findIndex(
+      (item) => item.template_uid === template?.template_uid
+    );
+    return `T${String(index >= 0 ? index + 1 : 0).padStart(2, '0')}`;
+  };
+  const entryExitBestTemplate =
+    displayedEntryExitTemplates
+      .filter((template) => Number(template.eval_count) > 0)
+      .sort((left, right) => {
+        const leftPassRate = Number(left.pass_count || 0) / Math.max(1, Number(left.eval_count || 0));
+        const rightPassRate = Number(right.pass_count || 0) / Math.max(1, Number(right.eval_count || 0));
+        return (
+          Number(right.avg_r || 0) - Number(left.avg_r || 0) ||
+          rightPassRate - leftPassRate ||
+          Number(right.pass_count || 0) - Number(left.pass_count || 0)
+        );
+      })[0] ?? null;
+  const selectedEntryExitTemplate =
+    displayedEntryExitTemplates.find((template) => template.template_uid === selectedEntryExitTemplateUid) ??
+    displayedEntryExitTemplates[0] ??
+    null;
+  const selectedEntryExitTemplateLabel = selectedEntryExitTemplate
+    ? getEntryExitTemplateLabel(selectedEntryExitTemplate)
+    : 'T--';
+  const selectedEntryExitEvalCount = Number(selectedEntryExitTemplate?.eval_count || 0);
+  const selectedEntryExitPassRate = selectedEntryExitEvalCount
+    ? (Number(selectedEntryExitTemplate?.pass_count || 0) / selectedEntryExitEvalCount) * 100
+    : 0;
+  const selectedEntryExitFailRate = selectedEntryExitEvalCount
+    ? (Number(selectedEntryExitTemplate?.fail_count || 0) / selectedEntryExitEvalCount) * 100
+    : 0;
+  const selectedEntryExitNoEntryRate = selectedEntryExitEvalCount
+    ? (Number(selectedEntryExitTemplate?.no_entry_count || 0) / selectedEntryExitEvalCount) * 100
+    : 0;
+  const selectedEntryExitEntryOffset = getTemplateEntryOffset(selectedEntryExitTemplate ?? {});
+  const selectedEntryExitMarketBreakdown = entryExitTemplateBreakdown.market ?? [];
+  const generatedEntryExitTemplateRows = displayedEntryExitTemplates.map((template, index) => {
+    const evalCount = Number(template.eval_count || 0);
+    const passRate = evalCount ? (Number(template.pass_count || 0) / evalCount) * 100 : 0;
+    const bullishEvalCount = Number(template.bullish_eval_count || 0);
+    const bullishPassRate = bullishEvalCount
+      ? (Number(template.bullish_pass_count || 0) / bullishEvalCount) * 100
+      : 0;
+    const bearishEvalCount = Number(template.bearish_eval_count || 0);
+    const bearishPassRate = bearishEvalCount
+      ? (Number(template.bearish_pass_count || 0) / bearishEvalCount) * 100
+      : 0;
+    const isSelected =
+      template.template_uid === (selectedEntryExitTemplate?.template_uid ?? null);
+
+    return {
+      template,
+      label: `T${String(index + 1).padStart(2, '0')}`,
+      rule: formatEntryExitTemplateRule(template),
+      evalCount,
+      passRate,
+      bullishEvalCount,
+      bullishPassRate,
+      bearishEvalCount,
+      bearishPassRate,
+      isSelected,
+    };
+  });
+  const entryExitTemplateSections = [
+    {
+      title: 'Template Creator Run',
+      items: entryExitRun
+        ? [
+            { label: 'Run ID', value: compactText(entryExitRun.run_id, 24), title: entryExitRun.run_id, compact: true, wide: true },
+            { label: 'Patterns', value: formatNumber(entryExitRun.scanned_patterns) },
+            { label: 'Templates', value: formatNumber(entryExitRun.templates_created), tone: 'win' },
+            { label: 'Prior Passes', value: formatNumber(entryExitRun.existing_template_passes), tone: 'win' },
+            { label: 'Failed Create', value: formatNumber(entryExitRun.failed_to_create), tone: entryExitRun.failed_to_create ? 'loss' : '' },
+            { label: 'Results', value: formatNumber(entryExitRun.result_rows) },
+            { label: 'Scope', value: `${formatRouteMode(entryExitRun.source_scope)} / ${entryExitRun.period_year || 'All'}` },
+            { label: 'Elapsed', value: `${formatDecimal((entryExitRun.elapsed_ms || 0) / 1000, 2)}s` },
+            {
+              label: 'Best Template',
+              value: entryExitBestTemplate
+                ? `${getEntryExitTemplateLabel(entryExitBestTemplate)} | ${formatDecimal(entryExitBestTemplate.avg_r, 2)}R`
+                : 'N/A',
+              compact: true,
+              tone: entryExitBestTemplate && Number(entryExitBestTemplate.avg_r) < 0 ? 'loss' : 'win',
+              wide: true,
+            },
+          ]
+        : [],
+    },
+    {
+      title: `Selected Template ${selectedEntryExitTemplateLabel}`,
+      items: selectedEntryExitTemplate
+        ? [
+            {
+              label: 'Template ID',
+              value: compactText(selectedEntryExitTemplate.template_uid, 30),
+              title: selectedEntryExitTemplate.template_uid,
+              compact: true,
+              wide: true,
+            },
+            {
+              label: 'Rule Name',
+              value: selectedEntryExitTemplate.template_name,
+              title: selectedEntryExitTemplate.template_name,
+              wide: true,
+            },
+            { label: 'Rule', value: formatEntryExitTemplateRule(selectedEntryExitTemplate), wide: true },
+            {
+              label: 'Direction',
+              value: selectedEntryExitTemplate.direction_mode === 'inverse_pattern' ? 'Inverse Pattern' : 'Pattern Direction',
+            },
+            {
+              label: 'Entry',
+              value: selectedEntryExitEntryOffset
+                ? `Confirmation +${selectedEntryExitEntryOffset} open`
+                : formatRouteMode(selectedEntryExitTemplate.entry_kind),
+              wide: true,
+            },
+            { label: 'Risk', value: `${formatDecimal(selectedEntryExitTemplate.risk_multiple, 3)} CD` },
+            { label: 'Target', value: `${formatDecimal(selectedEntryExitTemplate.target_r, 2)}R`, tone: 'win' },
+            { label: 'Hold', value: `${selectedEntryExitTemplate.max_hold_multiple || 0}x pattern` },
+            { label: 'Evaluations', value: formatNumber(selectedEntryExitTemplate.eval_count) },
+            { label: 'Passes', value: formatNumber(selectedEntryExitTemplate.pass_count), tone: 'win' },
+            { label: 'Fails', value: formatNumber(selectedEntryExitTemplate.fail_count), tone: 'loss' },
+            { label: 'No Entry', value: formatNumber(selectedEntryExitTemplate.no_entry_count), tone: 'skipped' },
+            { label: 'Pass Rate', value: `${formatDecimal(selectedEntryExitPassRate, 1)}%`, tone: 'win' },
+            { label: 'Fail Rate', value: `${formatDecimal(selectedEntryExitFailRate, 1)}%`, tone: 'loss' },
+            { label: 'No Entry Rate', value: `${formatDecimal(selectedEntryExitNoEntryRate, 1)}%`, tone: 'skipped' },
+            {
+              label: 'Avg R',
+              value: `${formatDecimal(selectedEntryExitTemplate.avg_r, 3)}R`,
+              tone: Number(selectedEntryExitTemplate.avg_r) < 0 ? 'loss' : 'win',
+            },
+            { label: 'Origin Symbol', value: selectedEntryExitTemplate.created_from_symbol || 'N/A' },
+            { label: 'Origin Market', value: selectedEntryExitTemplate.created_from_market || 'N/A' },
+            {
+              label: 'Origin Family',
+              value: compactText(selectedEntryExitTemplate.created_from_family_key || 'N/A', 24),
+              title: selectedEntryExitTemplate.created_from_family_key,
+              compact: true,
+            },
+            { label: 'Origin D Confirm', value: formatDate(selectedEntryExitTemplate.created_from_d_confirm_date), wide: true },
+            {
+              label: 'Origin Setup',
+              value: compactText(selectedEntryExitTemplate.created_from_setup_id || 'N/A', 28),
+              title: selectedEntryExitTemplate.created_from_setup_id,
+              compact: true,
+              wide: true,
+            },
+            {
+              label: 'Origin Pattern',
+              value: compactText(selectedEntryExitTemplate.created_from_pattern_id || 'N/A', 28),
+              title: selectedEntryExitTemplate.created_from_pattern_id,
+              compact: true,
+              wide: true,
+            },
+          ]
+        : [],
+    },
+    {
+      title: 'Pattern Market Split',
+      items: isEntryExitTemplateBreakdownLoading
+        ? [
+            {
+              label: 'Loading',
+              value: 'Fetching Bullish / Bearish split...',
+              wide: true,
+            },
+          ]
+        : entryExitTemplateBreakdownError
+        ? [
+            {
+              label: 'Error',
+              value: entryExitTemplateBreakdownError,
+              tone: 'loss',
+              wide: true,
+            },
+          ]
+        : selectedEntryExitMarketBreakdown.map((row) => {
+            const evalCount = Number(row.eval_count || 0);
+            const passRate = evalCount ? (Number(row.pass_count || 0) / evalCount) * 100 : 0;
+            const failRate = evalCount ? (Number(row.fail_count || 0) / evalCount) * 100 : 0;
+            const noEntryRate = evalCount ? (Number(row.no_entry_count || 0) / evalCount) * 100 : 0;
+            return {
+              label: `${row.market || 'Unknown'} | ${formatNumber(evalCount)} tests`,
+              value: `${formatDecimal(passRate, 1)}% WR / ${formatDecimal(row.avg_r, 3)}R`,
+              title: `Pass ${formatNumber(row.pass_count)} / Fail ${formatNumber(row.fail_count)} / No Entry ${formatNumber(row.no_entry_count)} | Fail ${formatDecimal(failRate, 1)}% | No Entry ${formatDecimal(noEntryRate, 1)}% | Best ${formatDecimal(row.best_r, 2)}R | Worst ${formatDecimal(row.worst_r, 2)}R`,
+              tone: Number(row.avg_r) < 0 ? 'loss' : 'win',
+              wide: true,
+            };
+          }),
+    },
+    {
+      title: `Generated Templates (${formatNumber(displayedEntryExitTemplates.length)})`,
+      items: [],
+      tableRows: generatedEntryExitTemplateRows,
+      variant: 'templateTable',
+      wide: true,
+    },
+  ];
   const activeTestOverviewSections =
     testOverviewTab === 'supply'
       ? supplyOverviewSections
+      : testOverviewTab === 'entryExit'
+      ? entryExitTemplateSections
       : testOverviewTab === 'families'
       ? selectedRouteFamiliesSections
       : testOverviewTab === 'family'
@@ -1735,6 +2000,84 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       isCancelled = true;
     };
   }, [sourceScope, yearFilter]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitTemplates = async () => {
+      try {
+        setEntryExitLoading(true);
+        setEntryExitError('');
+        const data = await fetchEntryExitTemplates({
+          sourceScope,
+          year: yearFilter === 'All' ? null : yearFilter,
+          limit: 250,
+        });
+
+        if (!isCancelled) {
+          setEntryExitData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitError('Could not load Entry / Exit templates.');
+          setEntryExitData({ run: null, templates: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitTemplates();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [sourceScope, yearFilter]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitTemplateBreakdown = async () => {
+      if (!selectedEntryExitTemplate?.template_uid || !selectedEntryExitTemplate?.origin_run_id) {
+        setEntryExitTemplateBreakdown({ market: [] });
+        setEntryExitTemplateBreakdownError('');
+        setEntryExitTemplateBreakdownLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitTemplateBreakdownLoading(true);
+        setEntryExitTemplateBreakdownError('');
+        const data = await fetchEntryExitTemplateBreakdown({
+          runId: selectedEntryExitTemplate.origin_run_id,
+          templateUid: selectedEntryExitTemplate.template_uid,
+        });
+
+        if (!isCancelled) {
+          setEntryExitTemplateBreakdown(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitTemplateBreakdownError('Could not load pattern market split.');
+          setEntryExitTemplateBreakdown({ market: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitTemplateBreakdownLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitTemplateBreakdown();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitTemplate?.origin_run_id, selectedEntryExitTemplate?.template_uid]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -2067,8 +2410,19 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
 
       {error ? <div className="pattern-family-error">{error}</div> : null}
 
-      <div className="pattern-family-workspace pattern-family-one-page">
-        <main className="pattern-family-table-stack">
+      <div
+        className={[
+          'pattern-family-workspace',
+          'pattern-family-one-page',
+          isInspectorCollapsed ? 'pattern-family-one-page--inspector-collapsed' : '',
+        ].filter(Boolean).join(' ')}
+      >
+        <main
+          className={[
+            'pattern-family-table-stack',
+            isSelectedDataCollapsed ? 'pattern-family-table-stack--selected-collapsed' : '',
+          ].filter(Boolean).join(' ')}
+        >
           <section className="pattern-family-controls">
             <label className="pattern-family-search-field">
               <span>Search</span>
@@ -2121,77 +2475,99 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
             </label>
           </section>
 
-          <section className="pattern-family-selected-columns">
-            <SelectedSummaryRow
-              actionLabel="Browse Families"
-              emptyText="No pattern family selected."
-              index={1}
-              isLoading={isLoading}
-              label="Family"
-              loadingText="Loading pattern families..."
-              metrics={selectedFamilyRowMetrics}
-              onAction={() => setBrowsePanel('families')}
-              status={`${formatNumber(visibleFamilies.length)} visible`}
-              subtitle={selectedFamilyLabel}
-              title={selectedFamily?.family_key ?? null}
-              tone="family"
-            />
+          <section
+            className={[
+              'pattern-family-selected-shell',
+              isSelectedDataCollapsed ? 'pattern-family-selected-shell--collapsed' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            <div className="pattern-family-selected-collapse-bar">
+              <button
+                aria-label={isSelectedDataCollapsed ? 'Expand selected data' : 'Collapse selected data'}
+                type="button"
+                onClick={() => setSelectedDataCollapsed((current) => !current)}
+              >
+                <span
+                  className={
+                    isSelectedDataCollapsed
+                      ? 'pattern-family-selected-collapse-arrow pattern-family-selected-collapse-arrow--down'
+                      : 'pattern-family-selected-collapse-arrow pattern-family-selected-collapse-arrow--up'
+                  }
+                />
+              </button>
+            </div>
+            <div className="pattern-family-selected-columns">
+              <SelectedSummaryRow
+                actionLabel="Browse Families"
+                emptyText="No pattern family selected."
+                index={1}
+                isLoading={isLoading}
+                label="Family"
+                loadingText="Loading pattern families..."
+                metrics={selectedFamilyRowMetrics}
+                onAction={() => setBrowsePanel('families')}
+                status={`${formatNumber(visibleFamilies.length)} visible`}
+                subtitle={selectedFamilyLabel}
+                title={selectedFamily?.family_key ?? null}
+                tone="family"
+              />
 
-            <SelectedSummaryRow
-              actionDisabled={isFamilyPatternsLoading}
-              actionLabel="Browse Patterns"
-              emptyText={familyPatternsError || (selectedFamily ? 'No family patterns loaded.' : 'Select a family before choosing a pattern.')}
-              index={2}
-              isLoading={isFamilyPatternsLoading}
-              label="Pattern"
-              loadingText="Loading family patterns..."
-              metrics={selectedPatternRowMetrics}
-              onAction={() => setBrowsePanel('patterns')}
-              status={familyPatternsError || `${formatNumber(familyPatterns.length)} patterns`}
-              subtitle={
-                selectedFamilyPattern
-                  ? `${selectedFamilyPattern.market ?? 'Market N/A'} / ${selectedFamilyPattern.harmonic_type ?? selectedFamily?.harmonic_type ?? 'Harmonic N/A'}`
-                  : 'Choose a setup to inspect'
-              }
-              title={selectedFamilyPattern?.pattern_id ?? selectedFamilyPattern?.pattern_group_id ?? null}
-              tone="pattern"
-            />
+              <SelectedSummaryRow
+                actionDisabled={isFamilyPatternsLoading}
+                actionLabel="Browse Patterns"
+                emptyText={familyPatternsError || (selectedFamily ? 'No family patterns loaded.' : 'Select a family before choosing a pattern.')}
+                index={2}
+                isLoading={isFamilyPatternsLoading}
+                label="Pattern"
+                loadingText="Loading family patterns..."
+                metrics={selectedPatternRowMetrics}
+                onAction={() => setBrowsePanel('patterns')}
+                status={familyPatternsError || `${formatNumber(familyPatterns.length)} patterns`}
+                subtitle={
+                  selectedFamilyPattern
+                    ? `${selectedFamilyPattern.market ?? 'Market N/A'} / ${selectedFamilyPattern.harmonic_type ?? selectedFamily?.harmonic_type ?? 'Harmonic N/A'}`
+                    : 'Choose a setup to inspect'
+                }
+                title={selectedFamilyPattern?.pattern_id ?? selectedFamilyPattern?.pattern_group_id ?? null}
+                tone="pattern"
+              />
 
-            <SelectedSummaryRow
-              actionDisabled={!phase1Results.length}
-              actionLabel="Browse Tests"
-              emptyText={phase1Error || 'No stored Entry / Exit results for this family.'}
-              index={3}
-              isLoading={isPhase1Loading}
-              label="Entry / Exit Test"
-              loadingText="Loading Phase 1 results..."
-              metrics={selectedRouteRowMetrics}
-              onAction={() => setBrowsePanel('routes')}
-              status={phase1Error || `${formatNumber(phase1Results.length)} tests`}
-              subtitle={selectedRoute?.route_id ?? 'Select a family to load tests'}
-              title={selectedRoute?.route_label ?? null}
-              tone="route"
-            />
+              <SelectedSummaryRow
+                actionDisabled={!phase1Results.length}
+                actionLabel="Browse Tests"
+                emptyText={phase1Error || 'No stored Entry / Exit results for this family.'}
+                index={3}
+                isLoading={isPhase1Loading}
+                label="Entry / Exit Test"
+                loadingText="Loading Phase 1 results..."
+                metrics={selectedRouteRowMetrics}
+                onAction={() => setBrowsePanel('routes')}
+                status={phase1Error || `${formatNumber(phase1Results.length)} tests`}
+                subtitle={selectedRoute?.route_id ?? 'Select a family to load tests'}
+                title={selectedRoute?.route_label ?? null}
+                tone="route"
+              />
 
-            <SelectedSummaryRow
-              actionDisabled={isRouteTradesLoading}
-              actionLabel="Browse Trades"
-              emptyText={patternRouteTradeError || (selectedRoute ? 'No trades loaded.' : 'Select a test to open its trades.')}
-              index={4}
-              isLoading={isPatternRouteTradeLoading && !selectedRouteTrade}
-              label="Trade"
-              loadingText="Replaying selected test on this pattern..."
-              metrics={selectedTradeRowMetrics}
-              onAction={() => setBrowsePanel('trades')}
-              status={routeTradesError || patternRouteTradeError || `${formatNumber(routeTrades.length)} trades`}
-              subtitle={
-                selectedRouteTrade
-                  ? `${formatTradeDirection(selectedRouteTrade)} / ${formatDate(selectedRouteTrade.entry_date)} to ${formatDate(selectedRouteTrade.target_date)}`
-                  : 'Choose a stored trade'
-              }
-              title={selectedRouteTrade?.trade_uid ?? (selectedRouteTrade?.trade_id ? `#${selectedRouteTrade.trade_id}` : null)}
-              tone={selectedTradeIsLoss ? 'loss' : selectedRouteTrade ? 'win' : 'trade'}
-            />
+              <SelectedSummaryRow
+                actionDisabled={isRouteTradesLoading}
+                actionLabel="Browse Trades"
+                emptyText={patternRouteTradeError || (selectedRoute ? 'No trades loaded.' : 'Select a test to open its trades.')}
+                index={4}
+                isLoading={isPatternRouteTradeLoading && !selectedRouteTrade}
+                label="Trade"
+                loadingText="Replaying selected test on this pattern..."
+                metrics={selectedTradeRowMetrics}
+                onAction={() => setBrowsePanel('trades')}
+                status={routeTradesError || patternRouteTradeError || `${formatNumber(routeTrades.length)} trades`}
+                subtitle={
+                  selectedRouteTrade
+                    ? `${formatTradeDirection(selectedRouteTrade)} / ${formatDate(selectedRouteTrade.entry_date)} to ${formatDate(selectedRouteTrade.target_date)}`
+                    : 'Choose a stored trade'
+                }
+                title={selectedRouteTrade?.trade_uid ?? (selectedRouteTrade?.trade_id ? `#${selectedRouteTrade.trade_id}` : null)}
+                tone={selectedTradeIsLoss ? 'loss' : selectedRouteTrade ? 'win' : 'trade'}
+              />
+            </div>
           </section>
 
           <section className="pattern-family-sim-panel">
@@ -2212,6 +2588,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                   <div className="pattern-family-test-overview-tabs" aria-label="Test overview sections">
                     {[
                       { id: 'overview', label: 'Overview' },
+                      { id: 'entryExit', label: 'Entry / Exit' },
                       { id: 'supply', label: 'Supply' },
                       { id: 'family', label: 'Family' },
                       { id: 'families', label: 'Families' },
@@ -2239,8 +2616,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                       'pattern-family-test-overview-loading',
                       testOverviewTab === 'families' && routeFamiliesError ? 'pattern-family-test-overview-loading--error' : '',
                       testOverviewTab === 'supply' && supplyError ? 'pattern-family-test-overview-loading--error' : '',
+                      testOverviewTab === 'entryExit' && entryExitError ? 'pattern-family-test-overview-loading--error' : '',
                       (testOverviewTab === 'families' && (isRouteFamiliesLoading || routeFamiliesError)) ||
-                      (testOverviewTab === 'supply' && (isSupplyLoading || supplyError))
+                      (testOverviewTab === 'supply' && (isSupplyLoading || supplyError)) ||
+                      (testOverviewTab === 'entryExit' && (isEntryExitLoading || entryExitError))
                         ? ''
                         : 'pattern-family-test-overview-loading--empty',
                     ].filter(Boolean).join(' ')}
@@ -2249,6 +2628,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                       ? supplyError
                       : testOverviewTab === 'supply' && isSupplyLoading
                         ? 'Loading supply data...'
+                        : testOverviewTab === 'entryExit' && entryExitError
+                      ? entryExitError
+                      : testOverviewTab === 'entryExit' && isEntryExitLoading
+                        ? 'Loading Entry / Exit templates...'
                         : testOverviewTab === 'families' && routeFamiliesError
                       ? routeFamiliesError
                       : testOverviewTab === 'families' && isRouteFamiliesLoading
@@ -2257,31 +2640,119 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                   </div>
                   <div className="pattern-family-test-overview-grid">
                     {activeTestOverviewSections.map((section) => (
-                      <section className="pattern-family-test-overview-section" key={section.title}>
+                      <section
+                        className={[
+                          'pattern-family-test-overview-section',
+                          section.wide ? 'pattern-family-test-overview-section--wide' : '',
+                          section.variant === 'templateTable' ? 'pattern-family-test-overview-section--table' : '',
+                        ].filter(Boolean).join(' ')}
+                        key={section.title}
+                      >
                         <header>
                           <span>{section.title}</span>
                         </header>
-                        <div className="pattern-family-test-overview-cells">
-                          {section.items.length ? (
-                            section.items.map((item) => (
-                              <div
-                                className={[
-                                  'pattern-family-test-overview-cell',
-                                  item.wide ? 'pattern-family-test-overview-cell--wide' : '',
-                                  item.tone ? `pattern-family-test-overview-cell--${item.tone}` : '',
-                                ].filter(Boolean).join(' ')}
-                                key={`${section.title}-${item.label}`}
-                              >
-                                <span>{item.label}</span>
-                                <strong title={item.value}>{item.value}</strong>
+                        {section.variant === 'templateTable' ? (
+                          <div className="pattern-family-template-table-wrap">
+                            {section.tableRows?.length ? (
+                              <table className="pattern-family-template-table">
+                                <thead>
+                                  <tr>
+                                    <th>Template</th>
+                                    <th>Rule</th>
+                                    <th>Total</th>
+                                    <th>WR</th>
+                                    <th>Avg R</th>
+                                    <th>Bull Tests</th>
+                                    <th>Bull WR</th>
+                                    <th>Bull R</th>
+                                    <th>Bear Tests</th>
+                                    <th>Bear WR</th>
+                                    <th>Bear R</th>
+                                    <th>Edge</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {section.tableRows.map((row) => (
+                                    <tr
+                                      className={row.isSelected ? 'pattern-family-template-table-row--selected' : ''}
+                                      key={row.template.template_uid}
+                                      onClick={() => setSelectedEntryExitTemplateUid(row.template.template_uid)}
+                                      title={`${row.template.template_uid} | ${row.template.template_name}`}
+                                    >
+                                      <td className="pattern-family-template-table-id">{row.label}</td>
+                                      <td>{row.rule}</td>
+                                      <td>{formatNumber(row.evalCount)}</td>
+                                      <td>{formatDecimal(row.passRate, 1)}%</td>
+                                      <td className={Number(row.template.avg_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                        {formatDecimal(row.template.avg_r, 3)}R
+                                      </td>
+                                      <td>{formatNumber(row.bullishEvalCount)}</td>
+                                      <td>{formatDecimal(row.bullishPassRate, 1)}%</td>
+                                      <td className={Number(row.template.bullish_avg_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                        {formatDecimal(row.template.bullish_avg_r, 3)}R
+                                      </td>
+                                      <td>{formatNumber(row.bearishEvalCount)}</td>
+                                      <td>{formatDecimal(row.bearishPassRate, 1)}%</td>
+                                      <td className={Number(row.template.bearish_avg_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                        {formatDecimal(row.template.bearish_avg_r, 3)}R
+                                      </td>
+                                      <td>
+                                        {row.template.market_edge_label || 'Flat'} / {formatDecimal(row.template.market_edge_score, 3)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : (
+                              <div className="pattern-family-test-overview-empty">
+                                No generated templates loaded yet.
                               </div>
-                            ))
+                            )}
+                          </div>
+                        ) : (
+                          <div className="pattern-family-test-overview-cells">
+                          {section.items.length ? (
+                            section.items.map((item) => {
+                              const cellClassName = [
+                                'pattern-family-test-overview-cell',
+                                item.wide ? 'pattern-family-test-overview-cell--wide' : '',
+                                item.compact ? 'pattern-family-test-overview-cell--compact' : '',
+                                item.onClick ? 'pattern-family-test-overview-cell--clickable' : '',
+                                item.selected ? 'pattern-family-test-overview-cell--selected' : '',
+                                item.tone ? `pattern-family-test-overview-cell--${item.tone}` : '',
+                              ].filter(Boolean).join(' ');
+                              const content = (
+                                <>
+                                  <span>{item.label}</span>
+                                  <strong title={item.title ?? item.value}>{item.value}</strong>
+                                </>
+                              );
+
+                              return item.onClick ? (
+                                <button
+                                  className={cellClassName}
+                                  key={`${section.title}-${item.label}`}
+                                  onClick={item.onClick}
+                                  type="button"
+                                >
+                                  {content}
+                                </button>
+                              ) : (
+                                <div
+                                  className={cellClassName}
+                                  key={`${section.title}-${item.label}`}
+                                >
+                                  {content}
+                                </div>
+                              );
+                            })
                           ) : (
                             <div className="pattern-family-test-overview-empty">
                               No trade breakdown data loaded yet.
                             </div>
                           )}
-                        </div>
+                          </div>
+                        )}
                       </section>
                     ))}
                   </div>
@@ -2297,7 +2768,31 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
           </section>
         </main>
 
-        <aside className="pattern-family-inspector">
+        <aside
+          className={[
+            'pattern-family-inspector',
+            isInspectorCollapsed ? 'pattern-family-inspector--collapsed' : '',
+          ].filter(Boolean).join(' ')}
+        >
+          <div className="pattern-family-inspector-collapse-rail">
+            <button
+              aria-label={isInspectorCollapsed ? 'Expand canvas section' : 'Collapse canvas section'}
+              onClick={() => setInspectorCollapsed((current) => !current)}
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className={[
+                  'pattern-family-selected-collapse-arrow',
+                  isInspectorCollapsed
+                    ? 'pattern-family-inspector-collapse-arrow--left'
+                    : 'pattern-family-inspector-collapse-arrow--right',
+                ].join(' ')}
+              />
+            </button>
+          </div>
+
+          <div className="pattern-family-inspector-content">
           <header className="pattern-family-inspector-head">
             <div className="pattern-family-inspector-title">
               <span>Trade Inspector</span>
@@ -2468,6 +2963,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                 </>
               )}
             </section>
+          </div>
           </div>
         </aside>
       </div>

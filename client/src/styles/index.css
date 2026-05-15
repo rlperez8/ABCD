@@ -15429,6 +15429,20 @@ button:focus-visible {
   align-items: stretch;
 }
 
+.pattern-family-terminal .pattern-family-workspace.pattern-family-one-page--inspector-collapsed {
+  grid-template-columns: minmax(700px, 0.92fr) minmax(620px, 1.08fr);
+}
+
+.pattern-family-terminal .pattern-family-workspace.pattern-family-one-page--inspector-collapsed > .pattern-family-table-stack {
+  grid-column: 1;
+  width: 100%;
+}
+
+.pattern-family-terminal .pattern-family-workspace.pattern-family-one-page--inspector-collapsed > .pattern-family-inspector {
+  grid-column: 2;
+  width: 100%;
+}
+
 .pattern-family-left-rail {
   display: grid;
   grid-template-rows: 126px 118px 156px;
@@ -15546,6 +15560,10 @@ button:focus-visible {
   grid-template-rows: 58px minmax(310px, 0.88fr) minmax(176px, 1fr);
 }
 
+.pattern-family-one-page .pattern-family-table-stack--selected-collapsed {
+  grid-template-rows: 58px 130px minmax(320px, 1fr);
+}
+
 .pattern-family-terminal .pattern-family-table-stack::before {
   display: none;
 }
@@ -15620,6 +15638,71 @@ button:focus-visible {
   overflow-y: hidden;
 }
 
+.pattern-family-selected-shell {
+  display: grid;
+  grid-template-rows: 18px minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pattern-family-selected-collapse-bar {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.pattern-family-selected-collapse-bar::before,
+.pattern-family-selected-collapse-bar::after {
+  content: '';
+  display: block;
+  height: 1px;
+  min-width: 0;
+  background: linear-gradient(90deg, transparent, rgba(94, 214, 255, 0.28));
+}
+
+.pattern-family-selected-collapse-bar::after {
+  background: linear-gradient(90deg, rgba(94, 214, 255, 0.28), transparent);
+}
+
+.pattern-family-selected-collapse-bar button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 18px;
+  border: 1px solid #333d40;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(94, 214, 255, 0.12), transparent),
+    #101414;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pattern-family-selected-collapse-bar button:hover {
+  border-color: rgba(94, 214, 255, 0.62);
+  background: #073747;
+}
+
+.pattern-family-selected-collapse-arrow {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #dceeee;
+  border-bottom: 2px solid #dceeee;
+}
+
+.pattern-family-selected-collapse-arrow--down {
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.pattern-family-selected-collapse-arrow--up {
+  transform: translateY(2px) rotate(225deg);
+}
+
 .pattern-family-selected-columns {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -15644,6 +15727,14 @@ button:focus-visible {
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     inset 0 0 0 1px rgba(94, 214, 255, 0.02);
   overflow: hidden;
+}
+
+.pattern-family-selected-shell--collapsed .pattern-family-selected-card {
+  grid-template-rows: 54px 42px;
+}
+
+.pattern-family-selected-shell--collapsed .pattern-family-selected-data {
+  display: none;
 }
 
 .pattern-family-selected-card--family {
@@ -15684,6 +15775,13 @@ button:focus-visible {
   border-bottom: 1px solid #252c2e;
   background:
     linear-gradient(180deg, #171c1c, #111414);
+}
+
+.pattern-family-selected-head-copy {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
 }
 
 .pattern-family-selected-card--family .pattern-family-selected-head {
@@ -15773,12 +15871,15 @@ button:focus-visible {
   color: #ffc4c8;
 }
 
-.pattern-family-selected-head strong {
+.pattern-family-selected-head-copy strong {
   color: #f2f7f7;
   font-size: 17px;
   font-weight: 850;
   line-height: 1.05;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pattern-family-selected-data {
@@ -16607,11 +16708,81 @@ button:focus-visible {
 
 .pattern-family-inspector {
   display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  transform: translateX(0);
+  transition: transform 220ms ease;
+  will-change: transform;
+}
+
+.pattern-family-inspector-content {
+  display: grid;
   grid-template-rows: 70px minmax(0, 1fr);
   gap: 4px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.pattern-family-inspector-collapse-rail {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #30383b;
+  border-right: 0;
+  background:
+    linear-gradient(180deg, rgba(94, 214, 255, 0.08), transparent 42%),
+    #0b0d0d;
+}
+
+.pattern-family-inspector-collapse-rail button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 58px;
+  padding: 0;
+  border: 1px solid #333d40;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(94, 214, 255, 0.12), transparent),
+    #101414;
+  cursor: pointer;
+}
+
+.pattern-family-inspector-collapse-rail button:hover {
+  border-color: rgba(94, 214, 255, 0.62);
+  background: #073747;
+}
+
+.pattern-family-inspector-collapse-arrow--right {
+  transform: translateX(-1px) rotate(-45deg);
+}
+
+.pattern-family-inspector-collapse-arrow--left {
+  transform: translateX(1px) rotate(135deg);
+}
+
+.pattern-family-inspector--collapsed {
+  grid-template-columns: 32px minmax(0, 1fr);
+  transform: translateX(calc(100% - 32px));
+}
+
+.pattern-family-inspector--collapsed .pattern-family-inspector-content {
+  pointer-events: none;
+}
+
+.pattern-family-inspector--collapsed .pattern-family-inspector-collapse-rail {
+  border-right: 1px solid #30383b;
+}
+
+.pattern-family-inspector--collapsed .pattern-family-inspector-collapse-rail button {
+  width: 20px;
+  height: 76px;
 }
 
 .pattern-family-inspector-head,
@@ -17358,7 +17529,7 @@ button:focus-visible {
 
 .pattern-family-test-overview-tabs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
   gap: 2px;
   min-width: 0;
   min-height: 0;
@@ -17429,6 +17600,14 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.pattern-family-test-overview-section--wide {
+  grid-column: 1 / -1;
+}
+
+.pattern-family-test-overview-section--table {
+  min-height: 430px;
+}
+
 .pattern-family-test-overview-section header {
   align-items: center;
   display: flex;
@@ -17467,6 +17646,9 @@ button:focus-visible {
   padding: 7px 9px;
   border: 1px solid #252d30;
   background: linear-gradient(180deg, #121616, #0d1010);
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .pattern-family-test-overview-empty {
@@ -17487,6 +17669,11 @@ button:focus-visible {
   grid-column: 1 / -1;
 }
 
+.pattern-family-test-overview-cell--compact {
+  min-height: 54px;
+  padding: 6px 8px;
+}
+
 .pattern-family-test-overview-cell span {
   color: #8e9a9d;
   font-size: 13px;
@@ -17501,6 +17688,21 @@ button:focus-visible {
   line-height: 1.18;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.pattern-family-test-overview-cell--compact span,
+.pattern-family-test-overview-cell--compact strong {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.pattern-family-test-overview-cell--compact span {
+  font-size: 12px;
+}
+
+.pattern-family-test-overview-cell--compact strong {
+  font-size: 14px;
 }
 
 .pattern-family-test-overview-cell--win {
@@ -17528,6 +17730,105 @@ button:focus-visible {
 
 .pattern-family-test-overview-cell--skipped strong {
   color: #d9b36c;
+}
+
+.pattern-family-test-overview-cell--clickable {
+  cursor: pointer;
+}
+
+.pattern-family-test-overview-cell--clickable:hover {
+  border-color: rgba(94, 214, 255, 0.58);
+  background:
+    linear-gradient(90deg, rgba(94, 214, 255, 0.12), transparent 72%),
+    linear-gradient(180deg, #131b1d, #0d1010);
+}
+
+.pattern-family-test-overview-cell--selected {
+  border-color: rgba(94, 214, 255, 0.86);
+  box-shadow:
+    inset 3px 0 0 rgba(94, 214, 255, 0.72),
+    inset 0 0 0 1px rgba(94, 214, 255, 0.18);
+}
+
+.pattern-family-test-overview-cell--selected span {
+  color: #d7f6ff;
+}
+
+.pattern-family-template-table-wrap {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #090b0b;
+}
+
+.pattern-family-template-table {
+  width: 100%;
+  min-width: 1740px;
+  border-collapse: collapse;
+  color: #dce5e5;
+  font-family: var(--mono-font);
+  font-size: 18px;
+}
+
+.pattern-family-template-table th,
+.pattern-family-template-table td {
+  min-width: 0;
+  padding: 18px 20px;
+  border-bottom: 1px solid #202729;
+  text-align: left;
+  line-height: 1.32;
+  white-space: nowrap;
+}
+
+.pattern-family-template-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #111616;
+  color: #8f9b9f;
+  font-size: 15px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pattern-family-template-table tbody tr {
+  cursor: pointer;
+  background: #0c0f0f;
+  min-height: 74px;
+}
+
+.pattern-family-template-table tbody tr:nth-child(even) {
+  background: #0f1212;
+}
+
+.pattern-family-template-table tbody tr:hover {
+  background:
+    linear-gradient(90deg, rgba(94, 214, 255, 0.12), transparent 74%),
+    #111818;
+}
+
+.pattern-family-template-table-row--selected,
+.pattern-family-template-table-row--selected:nth-child(even) {
+  background:
+    linear-gradient(90deg, rgba(94, 214, 255, 0.18), transparent 76%),
+    #10191b;
+  box-shadow: inset 3px 0 0 rgba(94, 214, 255, 0.72);
+}
+
+.pattern-family-template-table-id {
+  color: #d7f6ff;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.pattern-family-template-table-win {
+  color: var(--success);
+  font-weight: 900;
+}
+
+.pattern-family-template-table-loss {
+  color: var(--danger);
+  font-weight: 900;
 }
 
 .pattern-family-sim-controls {
@@ -17692,6 +17993,34 @@ button:focus-visible {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(680px, 1fr) minmax(540px, 0.9fr);
     overflow-y: auto;
+  }
+
+  .pattern-family-terminal .pattern-family-workspace.pattern-family-one-page--inspector-collapsed {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(680px, 1fr) 36px;
+  }
+
+  .pattern-family-terminal .pattern-family-workspace.pattern-family-one-page--inspector-collapsed > .pattern-family-table-stack {
+    width: 100%;
+  }
+
+  .pattern-family-terminal .pattern-family-workspace.pattern-family-one-page--inspector-collapsed > .pattern-family-inspector {
+    grid-column: 1;
+    width: 100%;
+    transform: none;
+  }
+
+  .pattern-family-inspector--collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .pattern-family-inspector--collapsed .pattern-family-inspector-content {
+    display: none;
+  }
+
+  .pattern-family-inspector--collapsed .pattern-family-inspector-collapse-rail {
+    min-height: 36px;
   }
 
   .pattern-family-right-stack {

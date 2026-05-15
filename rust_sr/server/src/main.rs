@@ -905,6 +905,98 @@ struct Phase1SupplyResponse {
     families: Vec<Phase1FamilySupplyRow>,
 }
 
+#[derive(Deserialize, Debug)]
+struct EntryExitTemplateParams {
+    run_id: Option<String>,
+    source_scope: Option<String>,
+    year: Option<i64>,
+    limit: Option<i64>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitTemplateCreatorRun {
+    run_id: String,
+    source_scope: String,
+    period_year: i64,
+    requested_limit: i64,
+    scanned_patterns: i64,
+    templates_created: i64,
+    existing_template_passes: i64,
+    failed_to_create: i64,
+    result_rows: i64,
+    elapsed_ms: i64,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitTemplateSnapshot {
+    template_uid: String,
+    origin_run_id: String,
+    template_name: String,
+    entry_kind: String,
+    direction_mode: String,
+    risk_basis: String,
+    risk_multiple: f64,
+    target_r: f64,
+    max_hold_multiple: i64,
+    rule_json: String,
+    created_from_setup_id: String,
+    created_from_pattern_id: Option<String>,
+    created_from_family_key: Option<String>,
+    created_from_symbol: String,
+    created_from_market: String,
+    created_from_d_confirm_date: NaiveDateTime,
+    first_result_r: Option<f64>,
+    eval_count: i64,
+    pass_count: i64,
+    fail_count: i64,
+    no_entry_count: i64,
+    avg_r: f64,
+    bullish_eval_count: i64,
+    bullish_pass_count: i64,
+    bullish_fail_count: i64,
+    bullish_no_entry_count: i64,
+    bullish_avg_r: f64,
+    bearish_eval_count: i64,
+    bearish_pass_count: i64,
+    bearish_fail_count: i64,
+    bearish_no_entry_count: i64,
+    bearish_avg_r: f64,
+    market_edge_label: String,
+    market_edge_score: f64,
+}
+
+#[derive(Serialize)]
+struct EntryExitTemplateResponse {
+    run: Option<EntryExitTemplateCreatorRun>,
+    templates: Vec<EntryExitTemplateSnapshot>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitTemplateBreakdownParams {
+    run_id: String,
+    template_uid: String,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitTemplateMarketBreakdown {
+    template_uid: String,
+    market: String,
+    eval_count: i64,
+    pass_count: i64,
+    fail_count: i64,
+    no_entry_count: i64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+}
+
+#[derive(Serialize)]
+struct EntryExitTemplateBreakdownResponse {
+    market: Vec<EntryExitTemplateMarketBreakdown>,
+}
+
 #[derive(sqlx::FromRow)]
 struct Phase1YearlyRouteContext {
     run_id: String,
@@ -5335,6 +5427,8 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_phase1_family_patterns)
             .service(fetch_phase1_leaderboard)
             .service(fetch_phase1_supply)
+            .service(fetch_entry_exit_templates)
+            .service(fetch_entry_exit_template_breakdown)
             .service(fetch_phase1_yearly_breakdown)
             .service(fetch_strategy_contract_weeks)
             .wrap(Logger::default()) // built-in Actix logs
@@ -7193,6 +7287,322 @@ async fn fetch_phase1_supply(
         symbols,
         families,
     })
+}
+
+#[route("/entry-exit/templates", method = "GET", method = "POST")]
+async fn fetch_entry_exit_templates(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitTemplateParams>,
+) -> impl Responder {
+    let has_runs = match table_exists(pool.get_ref(), "entry_exit_template_creator_runs").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Entry/Exit creator run table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let has_templates = match table_exists(pool.get_ref(), "entry_exit_templates").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Entry/Exit template table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let has_results = match table_exists(pool.get_ref(), "entry_exit_template_results").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit template results table lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_runs || !has_templates || !has_results {
+        return HttpResponse::Ok().json(EntryExitTemplateResponse {
+            run: None,
+            templates: Vec::new(),
+        });
+    }
+
+    let requested_run_id = params
+        .run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let source_scope = params
+        .source_scope
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let period_year = params
+        .year
+        .filter(|year| (1900..=2200).contains(year))
+        .unwrap_or(0);
+    let limit = params.limit.unwrap_or(250).clamp(1, 250);
+
+    let run = if let Some(run_id) = requested_run_id {
+        sqlx::query_as::<_, EntryExitTemplateCreatorRun>(
+            r#"
+            SELECT
+                run_id,
+                source_scope,
+                period_year,
+                requested_limit,
+                scanned_patterns,
+                templates_created,
+                existing_template_passes,
+                failed_to_create,
+                result_rows,
+                elapsed_ms,
+                created_at
+            FROM entry_exit_template_creator_runs
+            WHERE run_id = ?
+            LIMIT 1
+            "#,
+        )
+        .bind(run_id)
+        .fetch_optional(pool.get_ref())
+        .await
+    } else if period_year > 0 && source_scope.is_some() {
+        sqlx::query_as::<_, EntryExitTemplateCreatorRun>(
+            r#"
+            SELECT
+                run_id,
+                source_scope,
+                period_year,
+                requested_limit,
+                scanned_patterns,
+                templates_created,
+                existing_template_passes,
+                failed_to_create,
+                result_rows,
+                elapsed_ms,
+                created_at
+            FROM entry_exit_template_creator_runs
+            WHERE source_scope = ?
+              AND (period_year = ? OR period_year = 0)
+            ORDER BY CASE WHEN period_year = ? THEN 0 ELSE 1 END, created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(source_scope.unwrap_or_default())
+        .bind(period_year)
+        .bind(period_year)
+        .fetch_optional(pool.get_ref())
+        .await
+    } else if period_year > 0 {
+        sqlx::query_as::<_, EntryExitTemplateCreatorRun>(
+            r#"
+            SELECT
+                run_id,
+                source_scope,
+                period_year,
+                requested_limit,
+                scanned_patterns,
+                templates_created,
+                existing_template_passes,
+                failed_to_create,
+                result_rows,
+                elapsed_ms,
+                created_at
+            FROM entry_exit_template_creator_runs
+            WHERE period_year = ? OR period_year = 0
+            ORDER BY CASE WHEN period_year = ? THEN 0 ELSE 1 END, created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(period_year)
+        .bind(period_year)
+        .fetch_optional(pool.get_ref())
+        .await
+    } else if let Some(source_scope) = source_scope {
+        sqlx::query_as::<_, EntryExitTemplateCreatorRun>(
+            r#"
+            SELECT
+                run_id,
+                source_scope,
+                period_year,
+                requested_limit,
+                scanned_patterns,
+                templates_created,
+                existing_template_passes,
+                failed_to_create,
+                result_rows,
+                elapsed_ms,
+                created_at
+            FROM entry_exit_template_creator_runs
+            WHERE source_scope = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(source_scope)
+        .fetch_optional(pool.get_ref())
+        .await
+    } else {
+        sqlx::query_as::<_, EntryExitTemplateCreatorRun>(
+            r#"
+            SELECT
+                run_id,
+                source_scope,
+                period_year,
+                requested_limit,
+                scanned_patterns,
+                templates_created,
+                existing_template_passes,
+                failed_to_create,
+                result_rows,
+                elapsed_ms,
+                created_at
+            FROM entry_exit_template_creator_runs
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(pool.get_ref())
+        .await
+    };
+
+    let run = match run {
+        Ok(run) => run,
+        Err(error) if is_missing_table_error(&error) => None,
+        Err(error) => {
+            eprintln!("Entry/Exit creator run DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let Some(run) = run else {
+        return HttpResponse::Ok().json(EntryExitTemplateResponse {
+            run: None,
+            templates: Vec::new(),
+        });
+    };
+
+    let templates = match sqlx::query_as::<_, EntryExitTemplateSnapshot>(
+        r#"
+        SELECT
+            t.template_uid,
+            t.origin_run_id,
+            t.template_name,
+            t.entry_kind,
+            t.direction_mode,
+            t.risk_basis,
+            t.risk_multiple,
+            t.target_r,
+            CAST(t.max_hold_multiple AS SIGNED) AS max_hold_multiple,
+            CAST(t.rule_json AS CHAR) AS rule_json,
+            t.created_from_setup_id,
+            t.created_from_pattern_id,
+            t.created_from_family_key,
+            t.created_from_symbol,
+            t.created_from_market,
+            t.created_from_d_confirm_date,
+            t.first_result_r,
+            COALESCE(s.eval_count, 0) AS eval_count,
+            COALESCE(s.pass_count, 0) AS pass_count,
+            COALESCE(s.fail_count, 0) AS fail_count,
+            COALESCE(s.no_entry_count, 0) AS no_entry_count,
+            COALESCE(s.avg_r, 0) AS avg_r,
+            COALESCE(s.bullish_eval_count, 0) AS bullish_eval_count,
+            COALESCE(s.bullish_pass_count, 0) AS bullish_pass_count,
+            COALESCE(s.bullish_fail_count, 0) AS bullish_fail_count,
+            COALESCE(s.bullish_no_entry_count, 0) AS bullish_no_entry_count,
+            COALESCE(s.bullish_avg_r, 0) AS bullish_avg_r,
+            COALESCE(s.bearish_eval_count, 0) AS bearish_eval_count,
+            COALESCE(s.bearish_pass_count, 0) AS bearish_pass_count,
+            COALESCE(s.bearish_fail_count, 0) AS bearish_fail_count,
+            COALESCE(s.bearish_no_entry_count, 0) AS bearish_no_entry_count,
+            COALESCE(s.bearish_avg_r, 0) AS bearish_avg_r,
+            COALESCE(s.market_edge_label, 'Flat') AS market_edge_label,
+            COALESCE(s.market_edge_score, 0) AS market_edge_score
+        FROM entry_exit_templates t
+        LEFT JOIN entry_exit_template_ui_stats s
+          ON s.run_id = t.origin_run_id
+         AND s.template_uid = t.template_uid
+        WHERE t.origin_run_id = ?
+        ORDER BY pass_count DESC, avg_r DESC, eval_count DESC, t.created_at ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(&run.run_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit template DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitTemplateResponse {
+        run: Some(run),
+        templates,
+    })
+}
+
+#[route("/entry-exit/template-breakdown", method = "GET", method = "POST")]
+async fn fetch_entry_exit_template_breakdown(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitTemplateBreakdownParams>,
+) -> impl Responder {
+    let run_id = params.run_id.trim();
+    let template_uid = params.template_uid.trim();
+    if run_id.is_empty() || template_uid.is_empty() {
+        return HttpResponse::BadRequest().body("run_id and template_uid are required");
+    }
+
+    match table_exists(pool.get_ref(), "entry_exit_template_results").await {
+        Ok(true) => {}
+        Ok(false) => {
+            return HttpResponse::Ok().json(EntryExitTemplateBreakdownResponse {
+                market: Vec::new(),
+            });
+        }
+        Err(error) => {
+            eprintln!("Entry/Exit template result table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let market = match sqlx::query_as::<_, EntryExitTemplateMarketBreakdown>(
+        r#"
+        SELECT
+            template_uid,
+            COALESCE(NULLIF(market, ''), 'Unknown') AS market,
+            CAST(COUNT(*) AS SIGNED) AS eval_count,
+            CAST(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) AS SIGNED) AS pass_count,
+            CAST(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END) AS SIGNED) AS fail_count,
+            CAST(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END) AS SIGNED) AS no_entry_count,
+            COALESCE(AVG(result_r), 0) AS avg_r,
+            COALESCE(SUM(result_r), 0) AS sum_r,
+            COALESCE(MAX(result_r), 0) AS best_r,
+            COALESCE(MIN(result_r), 0) AS worst_r
+        FROM entry_exit_template_results
+        WHERE run_id = ?
+          AND template_uid = ?
+        GROUP BY template_uid, COALESCE(NULLIF(market, ''), 'Unknown')
+        ORDER BY avg_r DESC, pass_count DESC, eval_count DESC
+        "#,
+    )
+    .bind(run_id)
+    .bind(template_uid)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit template market breakdown DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitTemplateBreakdownResponse { market })
 }
 
 fn phase1_futures_candle_table(source_table: Option<&str>) -> &'static str {

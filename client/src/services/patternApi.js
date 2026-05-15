@@ -330,6 +330,58 @@ const parsePhase1SupplyFamilyRecord = (row = {}) => ({
   symbol_count: parseOptionalInt(row?.symbol_count) ?? 0,
 });
 
+const parseEntryExitTemplateRecord = (row = {}) => ({
+  ...row,
+  risk_multiple: parseOptionalFloat(row?.risk_multiple) ?? 0,
+  target_r: parseOptionalFloat(row?.target_r) ?? 0,
+  max_hold_multiple: parseOptionalInt(row?.max_hold_multiple) ?? 0,
+  first_result_r: parseOptionalFloat(row?.first_result_r),
+  eval_count: parseOptionalInt(row?.eval_count) ?? 0,
+  pass_count: parseOptionalInt(row?.pass_count) ?? 0,
+  fail_count: parseOptionalInt(row?.fail_count) ?? 0,
+  no_entry_count: parseOptionalInt(row?.no_entry_count) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  bullish_eval_count: parseOptionalInt(row?.bullish_eval_count) ?? 0,
+  bullish_pass_count: parseOptionalInt(row?.bullish_pass_count) ?? 0,
+  bullish_fail_count: parseOptionalInt(row?.bullish_fail_count) ?? 0,
+  bullish_no_entry_count: parseOptionalInt(row?.bullish_no_entry_count) ?? 0,
+  bullish_avg_r: parseOptionalFloat(row?.bullish_avg_r) ?? 0,
+  bearish_eval_count: parseOptionalInt(row?.bearish_eval_count) ?? 0,
+  bearish_pass_count: parseOptionalInt(row?.bearish_pass_count) ?? 0,
+  bearish_fail_count: parseOptionalInt(row?.bearish_fail_count) ?? 0,
+  bearish_no_entry_count: parseOptionalInt(row?.bearish_no_entry_count) ?? 0,
+  bearish_avg_r: parseOptionalFloat(row?.bearish_avg_r) ?? 0,
+  market_edge_label: row?.market_edge_label ?? 'Flat',
+  market_edge_score: parseOptionalFloat(row?.market_edge_score) ?? 0,
+});
+
+const parseEntryExitTemplateMarketBreakdown = (row = {}) => ({
+  ...row,
+  eval_count: parseOptionalInt(row?.eval_count) ?? 0,
+  pass_count: parseOptionalInt(row?.pass_count) ?? 0,
+  fail_count: parseOptionalInt(row?.fail_count) ?? 0,
+  no_entry_count: parseOptionalInt(row?.no_entry_count) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row?.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row?.worst_r) ?? 0,
+});
+
+const parseEntryExitTemplateRun = (run = null) =>
+  run
+    ? {
+        ...run,
+        period_year: parseOptionalInt(run?.period_year) ?? 0,
+        requested_limit: parseOptionalInt(run?.requested_limit) ?? 0,
+        scanned_patterns: parseOptionalInt(run?.scanned_patterns) ?? 0,
+        templates_created: parseOptionalInt(run?.templates_created) ?? 0,
+        existing_template_passes: parseOptionalInt(run?.existing_template_passes) ?? 0,
+        failed_to_create: parseOptionalInt(run?.failed_to_create) ?? 0,
+        result_rows: parseOptionalInt(run?.result_rows) ?? 0,
+        elapsed_ms: parseOptionalInt(run?.elapsed_ms) ?? 0,
+      }
+    : null;
+
 const parsePhase1YearlyBreakdown = (data = null) => {
   if (!data) {
     return null;
@@ -1412,6 +1464,57 @@ export const fetchPhase1Supply = async ({
   } catch (error) {
     console.error(error);
     return { source_scope: sourceScope, period_year: 0, symbols: [], families: [] };
+  }
+};
+
+export const fetchEntryExitTemplates = async ({
+  runId = null,
+  sourceScope = 'futures',
+  year = null,
+  limit = 250,
+} = {}) => {
+  try {
+    const data = await postJson('/entry-exit/templates', {
+      run_id: runId,
+      source_scope: sourceScope,
+      year: parseOptionalInt(year),
+      limit: parseOptionalInt(limit),
+    });
+
+    return {
+      run: parseEntryExitTemplateRun(data?.run ?? null),
+      templates: Array.isArray(data?.templates)
+        ? data.templates.map(parseEntryExitTemplateRecord)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { run: null, templates: [] };
+  }
+};
+
+export const fetchEntryExitTemplateBreakdown = async ({
+  runId = null,
+  templateUid = null,
+} = {}) => {
+  if (!runId || !templateUid) {
+    return { market: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/template-breakdown', {
+      run_id: runId,
+      template_uid: templateUid,
+    });
+
+    return {
+      market: Array.isArray(data?.market)
+        ? data.market.map(parseEntryExitTemplateMarketBreakdown)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { market: [] };
   }
 };
 

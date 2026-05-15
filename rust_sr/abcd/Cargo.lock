@@ -17,6 +17,7 @@ dependencies = [
  "mysql",
  "rust_decimal",
  "serde",
+ "serde_json",
  "sqlx",
  "tabled",
  "tokio",
