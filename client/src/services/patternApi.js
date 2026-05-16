@@ -19,6 +19,9 @@ const parseOptionalInt = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const parseBooleanFlag = (value) =>
+  value === true || value === 1 || value === '1' || value === 'true';
+
 const normalizeTradeResult = (value) => {
   if (value === 0 || value === '0' || value === 'Open') return 0;
   if (value === 1 || value === '1' || value === 'Won') return 1;
@@ -367,6 +370,31 @@ const parseEntryExitTemplateMarketBreakdown = (row = {}) => ({
   worst_r: parseOptionalFloat(row?.worst_r) ?? 0,
 });
 
+const parseEntryExitTemplateConditionBreakdown = (row = {}) => ({
+  ...parseEntryExitTemplateMarketBreakdown(row),
+  condition_type: row?.condition_type ?? 'unknown',
+  condition_value: row?.condition_value ?? 'Unknown',
+});
+
+const parseEntryExitTemplateComboBreakdown = (row = {}) => ({
+  ...parseEntryExitTemplateMarketBreakdown(row),
+  feature_a_type: row?.feature_a_type ?? 'unknown',
+  feature_a_value: row?.feature_a_value ?? 'Unknown',
+  feature_b_type: row?.feature_b_type ?? 'unknown',
+  feature_b_value: row?.feature_b_value ?? 'Unknown',
+});
+
+const parseEntryExitTemplateFamilyBreakdown = (row = {}) => ({
+  ...parseEntryExitTemplateMarketBreakdown(row),
+  family_key: row?.family_key ?? 'Unknown',
+  harmonic_type: row?.harmonic_type ?? 'Unknown',
+  market: row?.market ?? 'Unknown',
+  family_bin: row?.family_bin ?? 'Unknown',
+  family_size_bucket: row?.family_size_bucket ?? 'Unknown',
+  family_time_bin: row?.family_time_bin ?? 'Unknown',
+  family_x_strictness: row?.family_x_strictness ?? 'Unknown',
+});
+
 const parseEntryExitTemplateRun = (run = null) =>
   run
     ? {
@@ -381,6 +409,71 @@ const parseEntryExitTemplateRun = (run = null) =>
         elapsed_ms: parseOptionalInt(run?.elapsed_ms) ?? 0,
       }
     : null;
+
+const parseEntryExitRouterPropStats = (stats = {}) => ({
+  cycles: parseOptionalInt(stats?.cycles) ?? 0,
+  passed: parseOptionalInt(stats?.passed) ?? 0,
+  daily_fails: parseOptionalInt(stats?.daily_fails) ?? 0,
+  drawdown_fails: parseOptionalInt(stats?.drawdown_fails) ?? 0,
+  incomplete: parseOptionalInt(stats?.incomplete) ?? 0,
+  pass_rate: parseOptionalFloat(stats?.pass_rate) ?? 0,
+  closed_pass_rate: parseOptionalFloat(stats?.closed_pass_rate) ?? 0,
+  max_drawdown_r: parseOptionalFloat(stats?.max_drawdown_r) ?? 0,
+  max_loss_streak: parseOptionalInt(stats?.max_loss_streak) ?? 0,
+});
+
+const parseEntryExitRouterRunRecord = (run = null) =>
+  run
+    ? {
+        ...run,
+        test_year: parseOptionalInt(run?.test_year) ?? 0,
+        min_train_tests: parseOptionalInt(run?.min_train_tests) ?? 0,
+        sister_window_minutes: parseOptionalInt(run?.sister_window_minutes) ?? 0,
+        families_selected: parseOptionalInt(run?.families_selected) ?? 0,
+        patterns_scanned: parseOptionalInt(run?.patterns_scanned) ?? 0,
+        routed_patterns: parseOptionalInt(run?.routed_patterns) ?? 0,
+        no_route_patterns: parseOptionalInt(run?.no_route_patterns) ?? 0,
+        skipped_non_trade_patterns: parseOptionalInt(run?.skipped_non_trade_patterns) ?? 0,
+        skipped_symbol_patterns: parseOptionalInt(run?.skipped_symbol_patterns) ?? 0,
+        trade_choices: parseOptionalInt(run?.trade_choices) ?? 0,
+        watchlist_choices: parseOptionalInt(run?.watchlist_choices) ?? 0,
+        skip_choices: parseOptionalInt(run?.skip_choices) ?? 0,
+        symbol_filter_enabled: parseBooleanFlag(run?.symbol_filter_enabled),
+        symbol_trade_roots: parseOptionalInt(run?.symbol_trade_roots) ?? 0,
+        symbol_skip_roots: parseOptionalInt(run?.symbol_skip_roots) ?? 0,
+        symbol_min_tests: parseOptionalInt(run?.symbol_min_tests) ?? 0,
+        symbol_min_win_rate: parseOptionalFloat(run?.symbol_min_win_rate) ?? 0,
+        symbol_min_avg_r: parseOptionalFloat(run?.symbol_min_avg_r) ?? 0,
+        prop_filter_enabled: parseBooleanFlag(run?.prop_filter_enabled),
+        trade_min_tests: parseOptionalInt(run?.trade_min_tests) ?? 0,
+        trade_min_win_rate: parseOptionalFloat(run?.trade_min_win_rate) ?? 0,
+        trade_min_avg_r: parseOptionalFloat(run?.trade_min_avg_r) ?? 0,
+        watchlist_min_tests: parseOptionalInt(run?.watchlist_min_tests) ?? 0,
+        watchlist_min_win_rate: parseOptionalFloat(run?.watchlist_min_win_rate) ?? 0,
+        watchlist_min_avg_r: parseOptionalFloat(run?.watchlist_min_avg_r) ?? 0,
+        win_count: parseOptionalInt(run?.win_count) ?? 0,
+        loss_count: parseOptionalInt(run?.loss_count) ?? 0,
+        no_entry_count: parseOptionalInt(run?.no_entry_count) ?? 0,
+        avg_r: parseOptionalFloat(run?.avg_r) ?? 0,
+        sum_r: parseOptionalFloat(run?.sum_r) ?? 0,
+        best_r: parseOptionalFloat(run?.best_r) ?? 0,
+        worst_r: parseOptionalFloat(run?.worst_r) ?? 0,
+        elapsed_ms: parseOptionalInt(run?.elapsed_ms) ?? 0,
+        prop: parseEntryExitRouterPropStats(run?.prop ?? {}),
+      }
+    : null;
+
+const parseEntryExitRouterSymbolRecord = (row = {}) => ({
+  ...row,
+  train_eval_count: parseOptionalInt(row?.train_eval_count) ?? 0,
+  train_pass_count: parseOptionalInt(row?.train_pass_count) ?? 0,
+  train_fail_count: parseOptionalInt(row?.train_fail_count) ?? 0,
+  train_no_entry_count: parseOptionalInt(row?.train_no_entry_count) ?? 0,
+  train_win_rate: parseOptionalFloat(row?.train_win_rate) ?? 0,
+  train_fail_rate: parseOptionalFloat(row?.train_fail_rate) ?? 0,
+  train_avg_r: parseOptionalFloat(row?.train_avg_r) ?? 0,
+  train_sum_r: parseOptionalFloat(row?.train_sum_r) ?? 0,
+});
 
 const parsePhase1YearlyBreakdown = (data = null) => {
   if (!data) {
@@ -1493,12 +1586,37 @@ export const fetchEntryExitTemplates = async ({
   }
 };
 
+export const fetchEntryExitRouterRuns = async ({
+  trainRunId = null,
+  limit = 8,
+} = {}) => {
+  try {
+    const data = await postJson('/entry-exit/router-runs', {
+      train_run_id: trainRunId,
+      limit: parseOptionalInt(limit),
+    });
+
+    return {
+      current_run: parseEntryExitRouterRunRecord(data?.current_run ?? null),
+      runs: Array.isArray(data?.runs)
+        ? data.runs.map(parseEntryExitRouterRunRecord).filter(Boolean)
+        : [],
+      symbols: Array.isArray(data?.symbols)
+        ? data.symbols.map(parseEntryExitRouterSymbolRecord)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { current_run: null, runs: [], symbols: [] };
+  }
+};
+
 export const fetchEntryExitTemplateBreakdown = async ({
   runId = null,
   templateUid = null,
 } = {}) => {
   if (!runId || !templateUid) {
-    return { market: [] };
+    return { market: [], harmonic_type: [], conditions: [], family_results: [], combos: [] };
   }
 
   try {
@@ -1511,10 +1629,22 @@ export const fetchEntryExitTemplateBreakdown = async ({
       market: Array.isArray(data?.market)
         ? data.market.map(parseEntryExitTemplateMarketBreakdown)
         : [],
+      harmonic_type: Array.isArray(data?.harmonic_type)
+        ? data.harmonic_type.map(parseEntryExitTemplateMarketBreakdown)
+        : [],
+      conditions: Array.isArray(data?.conditions)
+        ? data.conditions.map(parseEntryExitTemplateConditionBreakdown)
+        : [],
+      family_results: Array.isArray(data?.family_results)
+        ? data.family_results.map(parseEntryExitTemplateFamilyBreakdown)
+        : [],
+      combos: Array.isArray(data?.combos)
+        ? data.combos.map(parseEntryExitTemplateComboBreakdown)
+        : [],
     };
   } catch (error) {
     console.error(error);
-    return { market: [] };
+    return { market: [], harmonic_type: [], conditions: [], family_results: [], combos: [] };
   }
 };
 

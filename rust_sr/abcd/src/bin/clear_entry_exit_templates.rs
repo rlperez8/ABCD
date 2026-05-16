@@ -5,7 +5,8 @@ use sqlx::mysql::{MySqlPool, MySqlPoolOptions};
 use sqlx::MySqlConnection;
 use tokio::time::sleep;
 
-const ENTRY_EXIT_TEMPLATE_TABLES: [&str; 4] = [
+const ENTRY_EXIT_TEMPLATE_TABLES: [&str; 5] = [
+    "entry_exit_template_condition_stats",
     "entry_exit_template_ui_stats",
     "entry_exit_template_results",
     "entry_exit_templates",

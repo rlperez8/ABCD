@@ -992,9 +992,160 @@ struct EntryExitTemplateMarketBreakdown {
     worst_r: f64,
 }
 
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitTemplateHarmonicBreakdown {
+    template_uid: String,
+    harmonic_type: String,
+    eval_count: i64,
+    pass_count: i64,
+    fail_count: i64,
+    no_entry_count: i64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitTemplateConditionBreakdown {
+    template_uid: String,
+    condition_type: String,
+    condition_value: String,
+    eval_count: i64,
+    pass_count: i64,
+    fail_count: i64,
+    no_entry_count: i64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitTemplateFamilyBreakdown {
+    template_uid: String,
+    family_key: String,
+    harmonic_type: String,
+    market: String,
+    family_bin: String,
+    family_size_bucket: String,
+    family_time_bin: String,
+    family_x_strictness: String,
+    eval_count: i64,
+    pass_count: i64,
+    fail_count: i64,
+    no_entry_count: i64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+}
+
 #[derive(Serialize)]
 struct EntryExitTemplateBreakdownResponse {
     market: Vec<EntryExitTemplateMarketBreakdown>,
+    harmonic_type: Vec<EntryExitTemplateHarmonicBreakdown>,
+    conditions: Vec<EntryExitTemplateConditionBreakdown>,
+    family_results: Vec<EntryExitTemplateFamilyBreakdown>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitRouterRunsParams {
+    train_run_id: Option<String>,
+    limit: Option<i64>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitRouterRunDb {
+    router_run_id: String,
+    train_run_id: String,
+    source_scope: String,
+    test_year: i64,
+    min_train_tests: i64,
+    sister_window_minutes: i64,
+    families_selected: i64,
+    patterns_scanned: i64,
+    routed_patterns: i64,
+    no_route_patterns: i64,
+    skipped_non_trade_patterns: i64,
+    skipped_symbol_patterns: i64,
+    trade_choices: i64,
+    watchlist_choices: i64,
+    skip_choices: i64,
+    symbol_filter_enabled: i64,
+    symbol_trade_roots: i64,
+    symbol_skip_roots: i64,
+    symbol_min_tests: i64,
+    symbol_min_win_rate: f64,
+    symbol_min_avg_r: f64,
+    prop_filter_enabled: i64,
+    trade_min_tests: i64,
+    trade_min_win_rate: f64,
+    trade_min_avg_r: f64,
+    watchlist_min_tests: i64,
+    watchlist_min_win_rate: f64,
+    watchlist_min_avg_r: f64,
+    win_count: i64,
+    loss_count: i64,
+    no_entry_count: i64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    elapsed_ms: i64,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Clone, Serialize)]
+struct EntryExitRouterRunSnapshot {
+    #[serde(flatten)]
+    run: EntryExitRouterRunDb,
+    prop: EntryExitRouterPropStats,
+}
+
+#[derive(Default, Clone, Serialize)]
+struct EntryExitRouterPropStats {
+    cycles: i64,
+    passed: i64,
+    daily_fails: i64,
+    drawdown_fails: i64,
+    incomplete: i64,
+    pass_rate: f64,
+    closed_pass_rate: f64,
+    max_drawdown_r: f64,
+    max_loss_streak: i64,
+}
+
+#[derive(sqlx::FromRow)]
+struct EntryExitRouterReplayTrade {
+    event_date: NaiveDateTime,
+    outcome: String,
+    result_r: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitRouterSymbolChoice {
+    router_run_id: String,
+    train_run_id: String,
+    root_symbol: String,
+    route_status: String,
+    status_reason: String,
+    train_eval_count: i64,
+    train_pass_count: i64,
+    train_fail_count: i64,
+    train_no_entry_count: i64,
+    train_win_rate: f64,
+    train_fail_rate: f64,
+    train_avg_r: f64,
+    train_sum_r: f64,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Serialize)]
+struct EntryExitRouterRunsResponse {
+    current_run: Option<EntryExitRouterRunSnapshot>,
+    runs: Vec<EntryExitRouterRunSnapshot>,
+    symbols: Vec<EntryExitRouterSymbolChoice>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -5429,6 +5580,7 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_phase1_supply)
             .service(fetch_entry_exit_templates)
             .service(fetch_entry_exit_template_breakdown)
+            .service(fetch_entry_exit_router_runs)
             .service(fetch_phase1_yearly_breakdown)
             .service(fetch_strategy_contract_weeks)
             .wrap(Logger::default()) // built-in Actix logs
@@ -7556,15 +7708,21 @@ async fn fetch_entry_exit_template_breakdown(
         return HttpResponse::BadRequest().body("run_id and template_uid are required");
     }
 
-    match table_exists(pool.get_ref(), "entry_exit_template_results").await {
+    match table_exists(pool.get_ref(), "entry_exit_template_condition_stats").await {
         Ok(true) => {}
         Ok(false) => {
             return HttpResponse::Ok().json(EntryExitTemplateBreakdownResponse {
                 market: Vec::new(),
+                harmonic_type: Vec::new(),
+                conditions: Vec::new(),
+                family_results: Vec::new(),
             });
         }
         Err(error) => {
-            eprintln!("Entry/Exit template result table lookup failed: {:?}", error);
+            eprintln!(
+                "Entry/Exit template condition table lookup failed: {:?}",
+                error
+            );
             return HttpResponse::InternalServerError().finish();
         }
     }
@@ -7573,19 +7731,19 @@ async fn fetch_entry_exit_template_breakdown(
         r#"
         SELECT
             template_uid,
-            COALESCE(NULLIF(market, ''), 'Unknown') AS market,
-            CAST(COUNT(*) AS SIGNED) AS eval_count,
-            CAST(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) AS SIGNED) AS pass_count,
-            CAST(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END) AS SIGNED) AS fail_count,
-            CAST(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END) AS SIGNED) AS no_entry_count,
-            COALESCE(AVG(result_r), 0) AS avg_r,
-            COALESCE(SUM(result_r), 0) AS sum_r,
-            COALESCE(MAX(result_r), 0) AS best_r,
-            COALESCE(MIN(result_r), 0) AS worst_r
-        FROM entry_exit_template_results
+            condition_value AS market,
+            eval_count,
+            pass_count,
+            fail_count,
+            no_entry_count,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r
+        FROM entry_exit_template_condition_stats
         WHERE run_id = ?
           AND template_uid = ?
-        GROUP BY template_uid, COALESCE(NULLIF(market, ''), 'Unknown')
+          AND condition_type = 'market'
         ORDER BY avg_r DESC, pass_count DESC, eval_count DESC
         "#,
     )
@@ -7602,7 +7760,470 @@ async fn fetch_entry_exit_template_breakdown(
         }
     };
 
-    HttpResponse::Ok().json(EntryExitTemplateBreakdownResponse { market })
+    let harmonic_type = match sqlx::query_as::<_, EntryExitTemplateHarmonicBreakdown>(
+        r#"
+        SELECT
+            template_uid,
+            condition_value AS harmonic_type,
+            eval_count,
+            pass_count,
+            fail_count,
+            no_entry_count,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r
+        FROM entry_exit_template_condition_stats
+        WHERE run_id = ?
+          AND template_uid = ?
+          AND condition_type = 'harmonic_type'
+        ORDER BY avg_r DESC, pass_count DESC, eval_count DESC
+        "#,
+    )
+    .bind(run_id)
+    .bind(template_uid)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit template harmonic breakdown DB error: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let conditions = match sqlx::query_as::<_, EntryExitTemplateConditionBreakdown>(
+        r#"
+        SELECT
+            template_uid,
+            condition_type,
+            condition_value,
+            eval_count,
+            pass_count,
+            fail_count,
+            no_entry_count,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r
+        FROM entry_exit_template_condition_stats
+        WHERE run_id = ?
+          AND template_uid = ?
+        ORDER BY condition_type ASC, pass_count DESC, avg_r DESC, eval_count DESC
+        "#,
+    )
+    .bind(run_id)
+    .bind(template_uid)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit template condition breakdown DB error: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let family_results = match sqlx::query_as::<_, EntryExitTemplateFamilyBreakdown>(
+        r#"
+        SELECT
+            r.template_uid,
+            COALESCE(NULLIF(r.pattern_family_key, ''), NULLIF(ps.pattern_family_key, ''), 'Unknown') AS family_key,
+            COALESCE(NULLIF(ps.pattern_family_harmonic_type, ''), NULLIF(ps.harmonic_type, ''), 'Unknown') AS harmonic_type,
+            COALESCE(NULLIF(ps.market, ''), NULLIF(r.market, ''), 'Unknown') AS market,
+            COALESCE(NULLIF(ps.pattern_family_bin, ''), 'Unknown') AS family_bin,
+            COALESCE(NULLIF(ps.pattern_family_size_bucket, ''), 'Unknown') AS family_size_bucket,
+            COALESCE(NULLIF(ps.pattern_family_time_bin, ''), 'Unknown') AS family_time_bin,
+            COALESCE(NULLIF(ps.pattern_family_x_strictness, ''), 'Unknown') AS family_x_strictness,
+            CAST(COUNT(*) AS SIGNED) AS eval_count,
+            CAST(SUM(CASE WHEN r.outcome = 'pass' THEN 1 ELSE 0 END) AS SIGNED) AS pass_count,
+            CAST(SUM(CASE WHEN r.outcome = 'fail' THEN 1 ELSE 0 END) AS SIGNED) AS fail_count,
+            CAST(SUM(CASE WHEN r.outcome = 'no_entry' THEN 1 ELSE 0 END) AS SIGNED) AS no_entry_count,
+            COALESCE(AVG(COALESCE(r.result_r, 0)), 0) AS avg_r,
+            COALESCE(SUM(COALESCE(r.result_r, 0)), 0) AS sum_r,
+            COALESCE(MAX(COALESCE(r.result_r, 0)), 0) AS best_r,
+            COALESCE(MIN(COALESCE(r.result_r, 0)), 0) AS worst_r
+        FROM entry_exit_template_results r
+        LEFT JOIN pattern_setups ps
+          ON ps.setup_id = r.setup_id
+        WHERE r.run_id = ?
+          AND r.template_uid = ?
+        GROUP BY
+            r.template_uid,
+            COALESCE(NULLIF(r.pattern_family_key, ''), NULLIF(ps.pattern_family_key, ''), 'Unknown'),
+            COALESCE(NULLIF(ps.pattern_family_harmonic_type, ''), NULLIF(ps.harmonic_type, ''), 'Unknown'),
+            COALESCE(NULLIF(ps.market, ''), NULLIF(r.market, ''), 'Unknown'),
+            COALESCE(NULLIF(ps.pattern_family_bin, ''), 'Unknown'),
+            COALESCE(NULLIF(ps.pattern_family_size_bucket, ''), 'Unknown'),
+            COALESCE(NULLIF(ps.pattern_family_time_bin, ''), 'Unknown'),
+            COALESCE(NULLIF(ps.pattern_family_x_strictness, ''), 'Unknown')
+        HAVING pass_count > 0
+        ORDER BY pass_count DESC, fail_count ASC, avg_r DESC, eval_count DESC
+        LIMIT 1000
+        "#,
+    )
+    .bind(run_id)
+    .bind(template_uid)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit template family breakdown DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitTemplateBreakdownResponse {
+        market,
+        harmonic_type,
+        conditions,
+        family_results,
+    })
+}
+
+struct EntryExitRouterOpenCycle {
+    current_date: NaiveDate,
+    equity_r: f64,
+    peak_r: f64,
+    daily_r: f64,
+    max_drawdown_r: f64,
+}
+
+impl EntryExitRouterOpenCycle {
+    fn new(date: NaiveDate) -> Self {
+        Self {
+            current_date: date,
+            equity_r: 0.0,
+            peak_r: 0.0,
+            daily_r: 0.0,
+            max_drawdown_r: 0.0,
+        }
+    }
+}
+
+fn close_entry_exit_router_prop_cycle(
+    stats: &mut EntryExitRouterPropStats,
+    cycle: &EntryExitRouterOpenCycle,
+    outcome: &str,
+) {
+    stats.cycles += 1;
+    stats.max_drawdown_r = stats.max_drawdown_r.max(cycle.max_drawdown_r);
+    match outcome {
+        "passed_profit_target" => stats.passed += 1,
+        "failed_daily_loss" => stats.daily_fails += 1,
+        "failed_drawdown" => stats.drawdown_fails += 1,
+        _ => stats.incomplete += 1,
+    }
+}
+
+async fn compute_entry_exit_router_prop_stats(
+    pool: &MySqlPool,
+    router_run_id: &str,
+) -> Result<EntryExitRouterPropStats, sqlx::Error> {
+    const PROFIT_TARGET_R: f64 = 30.0;
+    const MAX_DRAWDOWN_R: f64 = 20.0;
+    const DAILY_LOSS_R: f64 = 10.0;
+
+    let trades = sqlx::query_as::<_, EntryExitRouterReplayTrade>(
+        r#"
+        SELECT
+            COALESCE(entry_date, d_confirm_date, d_date) AS event_date,
+            outcome,
+            COALESCE(result_r, 0) AS result_r
+        FROM entry_exit_template_family_router_results
+        WHERE router_run_id = ?
+        ORDER BY COALESCE(entry_date, d_confirm_date, d_date) ASC, id ASC
+        "#,
+    )
+    .bind(router_run_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut stats = EntryExitRouterPropStats::default();
+    let mut cycle: Option<EntryExitRouterOpenCycle> = None;
+    let mut current_loss_streak = 0_i64;
+
+    for trade in trades {
+        let date = trade.event_date.date();
+        let active_cycle = cycle.get_or_insert_with(|| EntryExitRouterOpenCycle::new(date));
+        if active_cycle.current_date != date {
+            active_cycle.current_date = date;
+            active_cycle.daily_r = 0.0;
+        }
+
+        active_cycle.equity_r += trade.result_r;
+        active_cycle.daily_r += trade.result_r;
+        active_cycle.peak_r = active_cycle.peak_r.max(active_cycle.equity_r);
+        active_cycle.max_drawdown_r = active_cycle
+            .max_drawdown_r
+            .max(active_cycle.peak_r - active_cycle.equity_r);
+
+        if trade.outcome == "pass" {
+            current_loss_streak = 0;
+        } else if trade.outcome == "fail" {
+            current_loss_streak += 1;
+            stats.max_loss_streak = stats.max_loss_streak.max(current_loss_streak);
+        }
+
+        let close_cycle_as = if active_cycle.daily_r <= -DAILY_LOSS_R {
+            Some("failed_daily_loss")
+        } else if active_cycle.max_drawdown_r >= MAX_DRAWDOWN_R {
+            Some("failed_drawdown")
+        } else if active_cycle.equity_r >= PROFIT_TARGET_R {
+            Some("passed_profit_target")
+        } else {
+            None
+        };
+
+        if let Some(outcome) = close_cycle_as {
+            if let Some(finished_cycle) = cycle.take() {
+                close_entry_exit_router_prop_cycle(&mut stats, &finished_cycle, outcome);
+            }
+        }
+    }
+
+    if let Some(finished_cycle) = cycle.take() {
+        close_entry_exit_router_prop_cycle(&mut stats, &finished_cycle, "open_incomplete");
+    }
+
+    let closed_cycles = stats.passed + stats.daily_fails + stats.drawdown_fails;
+    stats.pass_rate = if stats.cycles > 0 {
+        stats.passed as f64 / stats.cycles as f64 * 100.0
+    } else {
+        0.0
+    };
+    stats.closed_pass_rate = if closed_cycles > 0 {
+        stats.passed as f64 / closed_cycles as f64 * 100.0
+    } else {
+        0.0
+    };
+
+    Ok(stats)
+}
+
+#[route("/entry-exit/router-runs", method = "GET", method = "POST")]
+async fn fetch_entry_exit_router_runs(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitRouterRunsParams>,
+) -> impl Responder {
+    let has_runs =
+        match table_exists(pool.get_ref(), "entry_exit_template_family_router_runs").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit router run table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_runs {
+        return HttpResponse::Ok().json(EntryExitRouterRunsResponse {
+            current_run: None,
+            runs: Vec::new(),
+            symbols: Vec::new(),
+        });
+    }
+
+    let has_results =
+        match table_exists(pool.get_ref(), "entry_exit_template_family_router_results").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit router result table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    let has_symbols = match table_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_symbol_choices",
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Entry/Exit router symbol table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let requested_train_run_id = params
+        .train_run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let limit = params.limit.unwrap_or(8).clamp(1, 12);
+    let run_columns = r#"
+        router_run_id,
+        train_run_id,
+        source_scope,
+        test_year,
+        min_train_tests,
+        sister_window_minutes,
+        families_selected,
+        patterns_scanned,
+        routed_patterns,
+        no_route_patterns,
+        skipped_non_trade_patterns,
+        skipped_symbol_patterns,
+        trade_choices,
+        watchlist_choices,
+        skip_choices,
+        CAST(symbol_filter_enabled AS SIGNED) AS symbol_filter_enabled,
+        symbol_trade_roots,
+        symbol_skip_roots,
+        symbol_min_tests,
+        symbol_min_win_rate,
+        symbol_min_avg_r,
+        CAST(prop_filter_enabled AS SIGNED) AS prop_filter_enabled,
+        trade_min_tests,
+        trade_min_win_rate,
+        trade_min_avg_r,
+        watchlist_min_tests,
+        watchlist_min_win_rate,
+        watchlist_min_avg_r,
+        win_count,
+        loss_count,
+        no_entry_count,
+        avg_r,
+        sum_r,
+        best_r,
+        worst_r,
+        elapsed_ms,
+        created_at
+    "#;
+
+    let current_sql = if requested_train_run_id.is_some() {
+        format!(
+            "SELECT {run_columns} FROM entry_exit_template_family_router_runs WHERE train_run_id = ? ORDER BY test_year DESC, created_at DESC LIMIT 1"
+        )
+    } else {
+        format!(
+            "SELECT {run_columns} FROM entry_exit_template_family_router_runs ORDER BY test_year DESC, created_at DESC LIMIT 1"
+        )
+    };
+
+    let current_run = if let Some(train_run_id) = requested_train_run_id {
+        sqlx::query_as::<_, EntryExitRouterRunDb>(&current_sql)
+            .bind(train_run_id)
+            .fetch_optional(pool.get_ref())
+            .await
+    } else {
+        sqlx::query_as::<_, EntryExitRouterRunDb>(&current_sql)
+            .fetch_optional(pool.get_ref())
+            .await
+    };
+
+    let current_run = match current_run {
+        Ok(run) => run,
+        Err(error) if is_missing_table_error(&error) => None,
+        Err(error) => {
+            eprintln!("Entry/Exit current router run DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let Some(current_run) = current_run else {
+        return HttpResponse::Ok().json(EntryExitRouterRunsResponse {
+            current_run: None,
+            runs: Vec::new(),
+            symbols: Vec::new(),
+        });
+    };
+
+    let runs_sql = format!(
+        "SELECT {run_columns} FROM entry_exit_template_family_router_runs WHERE train_run_id = ? ORDER BY test_year DESC, created_at DESC LIMIT ?"
+    );
+    let runs = match sqlx::query_as::<_, EntryExitRouterRunDb>(&runs_sql)
+        .bind(&current_run.train_run_id)
+        .bind(limit)
+        .fetch_all(pool.get_ref())
+        .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit router runs DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let current_run_id = current_run.router_run_id.clone();
+    let mut snapshots = Vec::with_capacity(runs.len());
+    for run in runs {
+        let prop = if has_results {
+            match compute_entry_exit_router_prop_stats(pool.get_ref(), &run.router_run_id).await {
+                Ok(stats) => stats,
+                Err(error) if is_missing_table_error(&error) => EntryExitRouterPropStats::default(),
+                Err(error) => {
+                    eprintln!("Entry/Exit router prop replay DB error: {:?}", error);
+                    return HttpResponse::InternalServerError().finish();
+                }
+            }
+        } else {
+            EntryExitRouterPropStats::default()
+        };
+        snapshots.push(EntryExitRouterRunSnapshot { run, prop });
+    }
+
+    let current_snapshot = snapshots
+        .iter()
+        .find(|run| run.run.router_run_id == current_run_id)
+        .cloned();
+
+    let symbols = if has_symbols {
+        match sqlx::query_as::<_, EntryExitRouterSymbolChoice>(
+            r#"
+            SELECT
+                router_run_id,
+                train_run_id,
+                root_symbol,
+                route_status,
+                status_reason,
+                train_eval_count,
+                train_pass_count,
+                train_fail_count,
+                train_no_entry_count,
+                train_win_rate,
+                train_fail_rate,
+                train_avg_r,
+                train_sum_r,
+                created_at
+            FROM entry_exit_template_family_router_symbol_choices
+            WHERE router_run_id = ?
+            ORDER BY
+                CASE route_status WHEN 'SKIP' THEN 0 WHEN 'WATCHLIST' THEN 1 ELSE 2 END,
+                train_avg_r ASC,
+                train_eval_count DESC
+            LIMIT 100
+            "#,
+        )
+        .bind(&current_run_id)
+        .fetch_all(pool.get_ref())
+        .await
+        {
+            Ok(rows) => rows,
+            Err(error) if is_missing_table_error(&error) => Vec::new(),
+            Err(error) => {
+                eprintln!("Entry/Exit router symbol choices DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    HttpResponse::Ok().json(EntryExitRouterRunsResponse {
+        current_run: current_snapshot,
+        runs: snapshots,
+        symbols,
+    })
 }
 
 fn phase1_futures_candle_table(source_table: Option<&str>) -> &'static str {

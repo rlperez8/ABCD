@@ -759,7 +759,7 @@ const parseStrategyMaxDaysOpen = (value) => {
 };
 
 const App = () => {
-  const [activeAppView, setActiveAppView] = useState(APP_VIEW_SIMULATOR);
+  const [activeAppView, setActiveAppView] = useState(APP_VIEW_FAMILY_UNIVERSE);
   const [currentSetups, setCurrentSetups] = useState([]);
   const [isLoadingCurrentSetups, setLoadingCurrentSetups] = useState(false);
   const strategyMode = STRATEGY_MODE_PROP;

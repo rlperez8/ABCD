@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import CandleChartPanel from '../candle-chart/CandleChartPanel';
 import {
   fetchEntryExitTemplateBreakdown,
+  fetchEntryExitRouterRuns,
   fetchEntryExitTemplates,
   fetchPatternDetail,
   fetchPatternFamilies,
@@ -82,6 +83,68 @@ const formatEntryExitTemplateRule = (template = {}) => {
   const risk = `${formatDecimal(template.risk_multiple, 3)}CD`;
   const target = `${formatDecimal(template.target_r, 2).replace('.00', '')}R`;
   return `${direction} ${entry} ${risk} ${target}`;
+};
+
+const ENTRY_EXIT_CONDITION_LABELS = {
+  market: 'Pattern Market',
+  symbol: 'Symbol',
+  root_symbol: 'Root Symbol',
+  source_timeframe: 'Timeframe',
+  harmonic_type: 'Harmonic Type',
+  family_bin: 'Family Bin',
+  family_size_bucket: 'Family Size',
+  family_time_bin: 'Family Time',
+  family_x_strictness: 'Family X',
+  trend_3m: '3M Trend',
+  trend_6m: '6M Trend',
+  trend_12m: '12M Trend',
+  trade_direction: 'Trade Direction',
+  exit_reason: 'Exit Reason',
+  confirm_year: 'Year',
+  confirm_quarter: 'Quarter',
+  confirm_session: 'Session',
+  pattern_length_bucket: 'Pattern Length',
+};
+
+const ENTRY_EXIT_CONDITION_ORDER = [
+  'harmonic_type',
+  'family_bin',
+  'family_size_bucket',
+  'family_time_bin',
+  'family_x_strictness',
+  'trend_3m',
+  'trend_6m',
+  'trend_12m',
+  'symbol',
+  'root_symbol',
+  'source_timeframe',
+  'market',
+  'trade_direction',
+  'exit_reason',
+  'confirm_year',
+  'confirm_quarter',
+  'confirm_session',
+  'pattern_length_bucket',
+];
+
+const ENTRY_EXIT_EDGE_FEATURE_ORDER = [
+  'harmonic_type',
+  'root_symbol',
+  'market',
+  'family_size_bucket',
+  'family_time_bin',
+  'family_bin',
+  'confirm_session',
+  'pattern_length_bucket',
+  'trade_direction',
+];
+
+const classifyEntryExitEdge = ({ evalCount, avgRLift, wrLift }) => {
+  if (evalCount < 100) return 'Thin Sample';
+  if (avgRLift <= 0) return 'Avoid';
+  if (wrLift >= 2) return 'Strong';
+  if (wrLift <= 0) return 'Payoff Edge';
+  return 'Modest Edge';
 };
 
 const ROUTE_ENTRY_COPY = {
@@ -598,7 +661,16 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const [entryExitData, setEntryExitData] = useState({ run: null, templates: [] });
   const [isEntryExitLoading, setEntryExitLoading] = useState(false);
   const [entryExitError, setEntryExitError] = useState('');
-  const [entryExitTemplateBreakdown, setEntryExitTemplateBreakdown] = useState({ market: [] });
+  const [entryExitRouterData, setEntryExitRouterData] = useState({ current_run: null, runs: [], symbols: [] });
+  const [isEntryExitRouterLoading, setEntryExitRouterLoading] = useState(false);
+  const [entryExitRouterError, setEntryExitRouterError] = useState('');
+  const [entryExitTemplateBreakdown, setEntryExitTemplateBreakdown] = useState({
+    market: [],
+    harmonic_type: [],
+    conditions: [],
+    family_results: [],
+    combos: [],
+  });
   const [isEntryExitTemplateBreakdownLoading, setEntryExitTemplateBreakdownLoading] = useState(false);
   const [entryExitTemplateBreakdownError, setEntryExitTemplateBreakdownError] = useState('');
   const [selectedRouteTradeKey, setSelectedRouteTradeKey] = useState(null);
@@ -620,9 +692,18 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const simOneTradeAtATime = false;
   const [browsePanel, setBrowsePanel] = useState(null);
   const [testOverviewTab, setTestOverviewTab] = useState('overview');
-  const [isSelectedDataCollapsed, setSelectedDataCollapsed] = useState(false);
+  const [selectedDataCollapseLevel, setSelectedDataCollapseLevel] = useState(0);
   const [isInspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [selectedEntryExitTemplateUid, setSelectedEntryExitTemplateUid] = useState(null);
+  const [entryExitProfileTab, setEntryExitProfileTab] = useState('all');
+  const isSelectedDataCollapsed = selectedDataCollapseLevel >= 1;
+  const isSelectedDataFullyCollapsed = selectedDataCollapseLevel >= 2;
+  const selectionDeckToggleLabel =
+    selectedDataCollapseLevel === 0
+      ? 'Show compact Selection Deck'
+      : selectedDataCollapseLevel === 1
+        ? 'Show Selection Deck header only'
+        : 'Expand Selection Deck';
 
   useEffect(() => {
     let isCancelled = false;
@@ -1209,6 +1290,92 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       resultMix,
     };
   }, [routeTrades]);
+  const selectedRouteWinProfile = useMemo(() => {
+    const isWinningTrade = (trade) => {
+      const resultR = Number(trade.result_r);
+      const pnl = Number(trade.pnl);
+      return (
+        !trade.skipped_for_overlap &&
+        (Number(trade.trade_result) === 1 ||
+          (Number.isFinite(resultR) && resultR > 0) ||
+          (Number.isFinite(pnl) && pnl > 0))
+      );
+    };
+    const createWinGroup = (key) => ({
+      key,
+      wins: 0,
+      totalR: 0,
+      bestR: Number.NEGATIVE_INFINITY,
+    });
+    const addWin = (map, key, trade) => {
+      const group = map.get(key) ?? createWinGroup(key);
+      const resultR = Number(trade.result_r);
+      group.wins += 1;
+      if (Number.isFinite(resultR)) {
+        group.totalR += resultR;
+        group.bestR = Math.max(group.bestR, resultR);
+      }
+      map.set(key, group);
+    };
+    const finishGroup = (group) => ({
+      ...group,
+      avgR: group.wins ? group.totalR / group.wins : 0,
+      bestR: Number.isFinite(group.bestR) ? group.bestR : 0,
+    });
+    const wins = routeTrades.filter(isWinningTrade);
+    const symbolMap = new Map();
+    const directionMap = new Map();
+    const exitMap = new Map();
+
+    wins.forEach((trade) => {
+      addWin(symbolMap, trade.symbol || 'N/A', trade);
+      addWin(directionMap, getTradeSide(trade) ?? formatRouteMode(trade.trade_direction || 'Unknown'), trade);
+      addWin(exitMap, trade.exit_reason ? formatRouteMode(trade.exit_reason) : 'Unknown', trade);
+    });
+
+    const totalWinR = wins.reduce((sum, trade) => {
+      const resultR = Number(trade.result_r);
+      return Number.isFinite(resultR) ? sum + resultR : sum;
+    }, 0);
+    const familyWins = routeFamilyRows
+      .map((row) => {
+        const tradeCount = Number(row.trade_count || 0);
+        const directWins = Number(row.win_count);
+        const inferredWins = Number.isFinite(directWins)
+          ? directWins
+          : Math.round((tradeCount * Number(row.win_rate || 0)) / 100);
+        return {
+          ...row,
+          inferredWins,
+        };
+      })
+      .filter((row) => row.inferredWins > 0)
+      .sort((left, right) =>
+        Number(right.avg_r || 0) - Number(left.avg_r || 0) ||
+        right.inferredWins - left.inferredWins ||
+        Number(right.score || 0) - Number(left.score || 0)
+      );
+
+    return {
+      wins,
+      winCount: wins.length,
+      avgWinR: wins.length ? totalWinR / wins.length : 0,
+      bestWinR: wins.reduce((best, trade) => {
+        const resultR = Number(trade.result_r);
+        return Number.isFinite(resultR) ? Math.max(best, resultR) : best;
+      }, 0),
+      symbols: Array.from(symbolMap.values())
+        .map(finishGroup)
+        .sort((left, right) => right.wins - left.wins || right.avgR - left.avgR),
+      directions: Array.from(directionMap.values())
+        .map(finishGroup)
+        .sort((left, right) => right.wins - left.wins || right.avgR - left.avgR),
+      exits: Array.from(exitMap.values())
+        .map(finishGroup)
+        .sort((left, right) => right.wins - left.wins || right.avgR - left.avgR),
+      families: familyWins,
+    };
+  }, [routeFamilyRows, routeTrades]);
   const worstAvgSymbol =
     testTradeAnalytics.symbolsByAvgR[testTradeAnalytics.symbolsByAvgR.length - 1] ?? null;
   const bestPnlSymbol =
@@ -1652,6 +1819,193 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     : 0;
   const selectedEntryExitEntryOffset = getTemplateEntryOffset(selectedEntryExitTemplate ?? {});
   const selectedEntryExitMarketBreakdown = entryExitTemplateBreakdown.market ?? [];
+  const selectedEntryExitHarmonicBreakdown = entryExitTemplateBreakdown.harmonic_type ?? [];
+  const selectedEntryExitConditionBreakdown = entryExitTemplateBreakdown.conditions ?? [];
+  const selectedEntryExitFamilyResults = entryExitTemplateBreakdown.family_results ?? [];
+  const selectedEntryExitComboBreakdown = entryExitTemplateBreakdown.combos ?? [];
+  const selectedEntryExitBullishPassCount = Number(selectedEntryExitTemplate?.bullish_pass_count || 0);
+  const selectedEntryExitBearishPassCount = Number(selectedEntryExitTemplate?.bearish_pass_count || 0);
+  const selectedEntryExitBullishFailCount = Number(selectedEntryExitTemplate?.bullish_fail_count || 0);
+  const selectedEntryExitBearishFailCount = Number(selectedEntryExitTemplate?.bearish_fail_count || 0);
+  const selectedEntryExitTopWinMarket =
+    [...selectedEntryExitMarketBreakdown].sort((left, right) =>
+      Number(right.pass_count || 0) - Number(left.pass_count || 0) ||
+      Number(right.avg_r || 0) - Number(left.avg_r || 0)
+    )[0] ?? null;
+  const selectedEntryExitTopLossMarket =
+    [...selectedEntryExitMarketBreakdown].sort((left, right) =>
+      Number(right.fail_count || 0) - Number(left.fail_count || 0) ||
+      Number(left.avg_r || 0) - Number(right.avg_r || 0)
+    )[0] ?? null;
+  const selectedEntryExitTopWinHarmonic =
+    [...selectedEntryExitHarmonicBreakdown].sort((left, right) =>
+      Number(right.pass_count || 0) - Number(left.pass_count || 0) ||
+      Number(right.avg_r || 0) - Number(left.avg_r || 0)
+    )[0] ?? null;
+  const selectedEntryExitTopLossHarmonic =
+    [...selectedEntryExitHarmonicBreakdown].sort((left, right) =>
+      Number(right.fail_count || 0) - Number(left.fail_count || 0) ||
+      Number(left.avg_r || 0) - Number(right.avg_r || 0)
+    )[0] ?? null;
+  const selectedEntryExitSingleEdgeRows = selectedEntryExitConditionBreakdown
+    .filter((row) => ENTRY_EXIT_EDGE_FEATURE_ORDER.includes(row.condition_type))
+    .filter((row) => Number(row.eval_count || 0) >= 50)
+    .map((row) => {
+      const evalCount = Number(row.eval_count || 0);
+      const passCount = Number(row.pass_count || 0);
+      const passRate = evalCount ? (passCount / evalCount) * 100 : 0;
+      const avgR = Number(row.avg_r || 0);
+      const avgRLift = avgR - Number(selectedEntryExitTemplate?.avg_r || 0);
+      const wrLift = passRate - selectedEntryExitPassRate;
+      return {
+        ...row,
+        evalCount,
+        passCount,
+        passRate,
+        avgR,
+        wrLift,
+        avgRLift,
+        edgeClass: classifyEntryExitEdge({ evalCount, avgRLift, wrLift }),
+      };
+    });
+  const selectedEntryExitSingleEdgeMap = new Map(
+    selectedEntryExitSingleEdgeRows.map((row) => [`${row.condition_type}::${row.condition_value}`, row])
+  );
+  const selectedEntryExitTopSingleEdges = [...selectedEntryExitSingleEdgeRows]
+    .filter((row) => row.avgRLift > 0)
+    .sort((left, right) =>
+      right.avgRLift - left.avgRLift ||
+      right.wrLift - left.wrLift ||
+      right.evalCount - left.evalCount
+    )
+    .slice(0, 10);
+  const selectedEntryExitComboEdgeRows = selectedEntryExitComboBreakdown
+    .filter((row) => Number(row.eval_count || 0) >= 50)
+    .map((row) => {
+      const evalCount = Number(row.eval_count || 0);
+      const passCount = Number(row.pass_count || 0);
+      const passRate = evalCount ? (passCount / evalCount) * 100 : 0;
+      const avgR = Number(row.avg_r || 0);
+      const parentA = selectedEntryExitSingleEdgeMap.get(`${row.feature_a_type}::${row.feature_a_value}`);
+      const parentB = selectedEntryExitSingleEdgeMap.get(`${row.feature_b_type}::${row.feature_b_value}`);
+      const parentBestAvgR = Math.max(
+        Number(parentA?.avgR ?? Number.NEGATIVE_INFINITY),
+        Number(parentB?.avgR ?? Number.NEGATIVE_INFINITY)
+      );
+      const parentBestPassRate = Math.max(
+        Number(parentA?.passRate ?? Number.NEGATIVE_INFINITY),
+        Number(parentB?.passRate ?? Number.NEGATIVE_INFINITY)
+      );
+      const avgRLift = avgR - Number(selectedEntryExitTemplate?.avg_r || 0);
+      const wrLift = passRate - selectedEntryExitPassRate;
+      const avgRLiftVsParents = Number.isFinite(parentBestAvgR) ? avgR - parentBestAvgR : avgRLift;
+      const wrLiftVsParents = Number.isFinite(parentBestPassRate) ? passRate - parentBestPassRate : wrLift;
+      return {
+        ...row,
+        evalCount,
+        passCount,
+        passRate,
+        avgR,
+        parentA,
+        parentB,
+        avgRLift,
+        wrLift,
+        avgRLiftVsParents,
+        wrLiftVsParents,
+        edgeClass: classifyEntryExitEdge({ evalCount, avgRLift, wrLift }),
+      };
+    });
+  const selectedEntryExitTrueComboEdges = [...selectedEntryExitComboEdgeRows]
+    .filter((row) => row.avgRLift > 0 && row.avgRLiftVsParents > 0)
+    .sort((left, right) =>
+      right.avgRLiftVsParents - left.avgRLiftVsParents ||
+      right.avgRLift - left.avgRLift ||
+      right.evalCount - left.evalCount
+    )
+    .slice(0, 10);
+  const selectedEntryExitBaselineOnlyCombos = [...selectedEntryExitComboEdgeRows]
+    .filter((row) => row.avgRLift > 0 && row.avgRLiftVsParents <= 0)
+    .sort((left, right) =>
+      right.avgRLift - left.avgRLift ||
+      right.evalCount - left.evalCount
+    )
+    .slice(0, 6);
+  const selectedEntryExitAvoidCombos = [...selectedEntryExitComboEdgeRows]
+    .filter((row) => row.avgRLift < 0)
+    .sort((left, right) =>
+      left.avgRLift - right.avgRLift ||
+      left.avgR - right.avgR
+    )
+    .slice(0, 6);
+  const formatEntryExitFeatureLabel = (featureType, featureValue) =>
+    `${ENTRY_EXIT_CONDITION_LABELS[featureType] ?? formatRouteMode(featureType)}: ${featureValue || 'Unknown'}`;
+  const selectedEntryExitWinningFamilyRows = [...selectedEntryExitFamilyResults]
+    .filter((row) => Number(row.pass_count || 0) > 0)
+    .sort((left, right) =>
+      Number(right.pass_count || 0) - Number(left.pass_count || 0) ||
+      Number(left.fail_count || 0) - Number(right.fail_count || 0) ||
+      Number(right.avg_r || 0) - Number(left.avg_r || 0)
+    );
+  const selectedEntryExitFamilyTotals = selectedEntryExitWinningFamilyRows.reduce(
+    (totals, row) => ({
+      wins: totals.wins + Number(row.pass_count || 0),
+      losses: totals.losses + Number(row.fail_count || 0),
+      noEntries: totals.noEntries + Number(row.no_entry_count || 0),
+      tests: totals.tests + Number(row.eval_count || 0),
+    }),
+    { wins: 0, losses: 0, noEntries: 0, tests: 0 }
+  );
+  const entryExitConditionSectionsForMode = (mode) =>
+    ENTRY_EXIT_CONDITION_ORDER
+      .filter((conditionType) => !['market', 'harmonic_type'].includes(conditionType))
+      .map((conditionType) => {
+        const rows = selectedEntryExitConditionBreakdown
+          .filter((row) => row.condition_type === conditionType)
+          .filter((row) => {
+            if (mode === 'wins') return Number(row.pass_count || 0) > 0;
+            if (mode === 'losses') return Number(row.fail_count || 0) > 0;
+            return Number(row.eval_count || 0) > 0;
+          })
+          .sort((left, right) => {
+            if (mode === 'wins') {
+              return Number(right.pass_count || 0) - Number(left.pass_count || 0) ||
+                Number(right.avg_r || 0) - Number(left.avg_r || 0);
+            }
+            if (mode === 'losses') {
+              return Number(right.fail_count || 0) - Number(left.fail_count || 0) ||
+                Number(left.avg_r || 0) - Number(right.avg_r || 0);
+            }
+            return Number(right.avg_r || 0) - Number(left.avg_r || 0) ||
+              Number(right.pass_count || 0) - Number(left.pass_count || 0);
+          })
+          .slice(0, 8);
+
+        return {
+          title: `${ENTRY_EXIT_CONDITION_LABELS[conditionType] ?? formatRouteMode(conditionType)} ${
+            mode === 'wins' ? 'Wins' : mode === 'losses' ? 'Losses' : 'Split'
+          }`,
+          items: rows.map((row) => {
+            const evalCount = Number(row.eval_count || 0);
+            const passCount = Number(row.pass_count || 0);
+            const failCount = Number(row.fail_count || 0);
+            const passRate = evalCount ? (passCount / evalCount) * 100 : 0;
+            const failRate = evalCount ? (failCount / evalCount) * 100 : 0;
+            const value = mode === 'wins'
+              ? `${formatNumber(passCount)} wins / ${formatDecimal(passRate, 1)}% of tests / ${formatDecimal(row.avg_r, 3)}R`
+              : mode === 'losses'
+                ? `${formatNumber(failCount)} losses / ${formatDecimal(failRate, 1)}% of tests / ${formatDecimal(row.worst_r, 2)}R worst`
+                : `${formatDecimal(passRate, 1)}% WR / ${formatDecimal(row.avg_r, 3)}R / ${formatNumber(evalCount)} tests`;
+            return {
+              label: row.condition_value || 'Unknown',
+              value,
+              title: `Pass ${formatNumber(passCount)} / Fail ${formatNumber(failCount)} / No Entry ${formatNumber(row.no_entry_count)} / Best ${formatDecimal(row.best_r, 2)}R / Worst ${formatDecimal(row.worst_r, 2)}R`,
+              tone: mode === 'losses' || Number(row.avg_r) < 0 ? 'loss' : 'win',
+              wide: true,
+            };
+          }),
+        };
+      })
+      .filter((section) => section.items.length);
   const generatedEntryExitTemplateRows = displayedEntryExitTemplates.map((template, index) => {
     const evalCount = Number(template.eval_count || 0);
     const passRate = evalCount ? (Number(template.pass_count || 0) / evalCount) * 100 : 0;
@@ -1679,6 +2033,125 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       isSelected,
     };
   });
+  const entryExitRouterCurrentRun = entryExitRouterData.current_run;
+  const entryExitRouterRuns = entryExitRouterData.runs ?? [];
+  const entryExitRouterSymbols = entryExitRouterData.symbols ?? [];
+  const getEntryExitRouterTradeCount = (run = {}) =>
+    Number(run.win_count || 0) + Number(run.loss_count || 0) + Number(run.no_entry_count || 0);
+  const getEntryExitRouterWinRate = (run = {}) => {
+    const tradeCount = getEntryExitRouterTradeCount(run);
+    return tradeCount ? (Number(run.win_count || 0) / tradeCount) * 100 : 0;
+  };
+  const generatedEntryExitRouterRunRows = entryExitRouterRuns.map((run) => ({
+    run,
+    tradeCount: getEntryExitRouterTradeCount(run),
+    winRate: getEntryExitRouterWinRate(run),
+    propClosedPassRate: Number(run.prop?.closed_pass_rate || 0),
+    isSelected: run.router_run_id === entryExitRouterCurrentRun?.router_run_id,
+  }));
+  const entryExitRouterSkippedSymbols = entryExitRouterSymbols.filter(
+    (symbol) => symbol.route_status === 'SKIP'
+  );
+  const entryExitRouterTradeSymbols = entryExitRouterSymbols.filter(
+    (symbol) => symbol.route_status === 'TRADE'
+  );
+  const entryExitRouterSymbolGateRows = [
+    ...entryExitRouterSkippedSymbols.slice(0, 10),
+    ...entryExitRouterTradeSymbols.slice(0, 5),
+  ];
+  const entryExitRouterSections = [
+    {
+      title: 'Current Prop Router Setup',
+      items: entryExitRouterCurrentRun
+        ? [
+            {
+              label: 'Router Run',
+              value: compactText(entryExitRouterCurrentRun.router_run_id, 28),
+              title: entryExitRouterCurrentRun.router_run_id,
+              compact: true,
+              wide: true,
+            },
+            {
+              label: 'Template Run',
+              value: compactText(entryExitRouterCurrentRun.train_run_id, 28),
+              title: entryExitRouterCurrentRun.train_run_id,
+              compact: true,
+              wide: true,
+            },
+            { label: 'Test Year', value: entryExitRouterCurrentRun.test_year || 'N/A' },
+            {
+              label: 'Trades',
+              value: formatNumber(getEntryExitRouterTradeCount(entryExitRouterCurrentRun)),
+            },
+            {
+              label: 'Trade WR',
+              value: `${formatDecimal(getEntryExitRouterWinRate(entryExitRouterCurrentRun), 2)}%`,
+              tone: Number(entryExitRouterCurrentRun.avg_r) >= 0 ? 'win' : 'loss',
+            },
+            {
+              label: 'Avg R',
+              value: `${formatDecimal(entryExitRouterCurrentRun.avg_r, 4)}R`,
+              tone: Number(entryExitRouterCurrentRun.avg_r) >= 0 ? 'win' : 'loss',
+            },
+            {
+              label: 'Prop Pass WR',
+              value: `${formatDecimal(entryExitRouterCurrentRun.prop?.closed_pass_rate || 0, 2)}%`,
+              tone: Number(entryExitRouterCurrentRun.prop?.closed_pass_rate || 0) >= 80 ? 'win' : 'skipped',
+            },
+            {
+              label: 'Prop Cycles',
+              value: `${formatNumber(entryExitRouterCurrentRun.prop?.passed || 0)} passed / ${formatNumber(entryExitRouterCurrentRun.prop?.daily_fails || 0)} daily / ${formatNumber(entryExitRouterCurrentRun.prop?.drawdown_fails || 0)} DD`,
+              wide: true,
+            },
+            {
+              label: 'Family Gate',
+              value: `${formatNumber(entryExitRouterCurrentRun.trade_choices)} trade / ${formatNumber(entryExitRouterCurrentRun.watchlist_choices)} watch / ${formatNumber(entryExitRouterCurrentRun.skip_choices)} skip`,
+              wide: true,
+            },
+            {
+              label: 'Symbol Gate',
+              value: entryExitRouterCurrentRun.symbol_filter_enabled
+                ? `${formatNumber(entryExitRouterCurrentRun.symbol_trade_roots)} trade / ${formatNumber(entryExitRouterCurrentRun.symbol_skip_roots)} skip`
+                : 'Off',
+              tone: entryExitRouterCurrentRun.symbol_filter_enabled ? 'win' : 'skipped',
+              wide: true,
+            },
+            {
+              label: 'Skipped Patterns',
+              value: `${formatNumber(entryExitRouterCurrentRun.skipped_symbol_patterns)} symbol / ${formatNumber(entryExitRouterCurrentRun.skipped_non_trade_patterns)} family`,
+              tone: 'skipped',
+              wide: true,
+            },
+            {
+              label: 'Rules',
+              value: `Family >= ${formatNumber(entryExitRouterCurrentRun.trade_min_tests)} tests, ${formatDecimal(entryExitRouterCurrentRun.trade_min_win_rate, 1)}% WR, ${formatDecimal(entryExitRouterCurrentRun.trade_min_avg_r, 3)}R / Symbol >= ${formatNumber(entryExitRouterCurrentRun.symbol_min_tests)} tests, ${formatDecimal(entryExitRouterCurrentRun.symbol_min_win_rate, 1)}% WR, ${formatDecimal(entryExitRouterCurrentRun.symbol_min_avg_r, 3)}R`,
+              wide: true,
+            },
+          ]
+        : isEntryExitRouterLoading
+        ? [{ label: 'Loading', value: 'Loading current prop router setup...', wide: true }]
+        : entryExitRouterError
+          ? [{ label: 'Error', value: entryExitRouterError, tone: 'loss', wide: true }]
+          : [{ label: 'No Router Run', value: 'Run the family-template router to populate this setup.', wide: true }],
+    },
+    {
+      title: 'Router Year Tests',
+      items: [],
+      tableRows: generatedEntryExitRouterRunRows,
+      variant: 'routerRunTable',
+      wide: true,
+    },
+    {
+      title: 'Symbol Gate Preview',
+      items: entryExitRouterSymbolGateRows.map((symbol) => ({
+        label: `${symbol.root_symbol} / ${symbol.route_status}`,
+        value: `${formatNumber(symbol.train_eval_count)} tests / ${formatDecimal(symbol.train_win_rate, 1)}% WR / ${formatDecimal(symbol.train_avg_r, 3)}R`,
+        title: symbol.status_reason,
+        tone: symbol.route_status === 'SKIP' ? 'loss' : 'win',
+        wide: true,
+      })),
+    },
+  ];
   const entryExitTemplateSections = [
     {
       title: 'Template Creator Run',
@@ -1808,6 +2281,37 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
           }),
     },
     {
+      title: 'Harmonic Type Split',
+      items: isEntryExitTemplateBreakdownLoading
+        ? [
+            {
+              label: 'Loading',
+              value: 'Fetching harmonic type split...',
+              wide: true,
+            },
+          ]
+        : entryExitTemplateBreakdownError
+        ? [
+            {
+              label: 'Error',
+              value: entryExitTemplateBreakdownError,
+              tone: 'loss',
+              wide: true,
+            },
+          ]
+        : selectedEntryExitHarmonicBreakdown.map((row) => {
+            const evalCount = Number(row.eval_count || 0);
+            const passRate = evalCount ? (Number(row.pass_count || 0) / evalCount) * 100 : 0;
+            return {
+              label: `${row.harmonic_type || 'Unknown'} | ${formatNumber(evalCount)} tests`,
+              value: `${formatDecimal(passRate, 1)}% WR / ${formatDecimal(row.avg_r, 3)}R`,
+              title: `Pass ${formatNumber(row.pass_count)} / Fail ${formatNumber(row.fail_count)} / No Entry ${formatNumber(row.no_entry_count)} | Best ${formatDecimal(row.best_r, 2)}R | Worst ${formatDecimal(row.worst_r, 2)}R`,
+              tone: Number(row.avg_r) < 0 ? 'loss' : 'win',
+              wide: true,
+            };
+          }),
+    },
+    {
       title: `Generated Templates (${formatNumber(displayedEntryExitTemplates.length)})`,
       items: [],
       tableRows: generatedEntryExitTemplateRows,
@@ -1815,11 +2319,317 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       wide: true,
     },
   ];
+  const entryExitTemplateWinSections = [
+    {
+      title: `Selected Template Wins ${selectedEntryExitTemplateLabel}`,
+      items: selectedEntryExitTemplate
+        ? [
+            { label: 'Passes', value: formatNumber(selectedEntryExitTemplate.pass_count), tone: 'win' },
+            { label: 'Pass Rate', value: `${formatDecimal(selectedEntryExitPassRate, 1)}%`, tone: 'win' },
+            { label: 'Bull Wins', value: formatNumber(selectedEntryExitBullishPassCount), tone: 'win' },
+            { label: 'Bear Wins', value: formatNumber(selectedEntryExitBearishPassCount), tone: 'win' },
+            {
+              label: 'Top Win Market',
+              value: selectedEntryExitTopWinMarket
+                ? `${selectedEntryExitTopWinMarket.market || 'Unknown'} / ${formatNumber(selectedEntryExitTopWinMarket.pass_count)} wins`
+                : 'N/A',
+              tone: 'win',
+              wide: true,
+            },
+            {
+              label: 'Top Harmonic Type',
+              value: selectedEntryExitTopWinHarmonic
+                ? `${selectedEntryExitTopWinHarmonic.harmonic_type || 'Unknown'} / ${formatNumber(selectedEntryExitTopWinHarmonic.pass_count)} wins`
+                : 'N/A',
+              tone: 'win',
+              wide: true,
+            },
+            {
+              label: 'Rule',
+              value: formatEntryExitTemplateRule(selectedEntryExitTemplate),
+              wide: true,
+            },
+            { label: 'Target', value: `${formatDecimal(selectedEntryExitTemplate.target_r, 2)}R`, tone: 'win' },
+            { label: 'Risk', value: `${formatDecimal(selectedEntryExitTemplate.risk_multiple, 3)} CD` },
+          ]
+        : [],
+    },
+    {
+      title: 'Win Market Split',
+      items: isEntryExitTemplateBreakdownLoading
+        ? [{ label: 'Loading', value: 'Fetching win split...', wide: true }]
+        : selectedEntryExitMarketBreakdown.map((row) => {
+            const evalCount = Number(row.eval_count || 0);
+            const passCount = Number(row.pass_count || 0);
+            const passRate = evalCount ? (passCount / evalCount) * 100 : 0;
+            return {
+              label: `${row.market || 'Unknown'} Wins`,
+              value: `${formatNumber(passCount)} / ${formatDecimal(passRate, 1)}% WR / ${formatDecimal(row.avg_r, 3)}R`,
+              title: `Evaluated ${formatNumber(evalCount)} / Best ${formatDecimal(row.best_r, 2)}R`,
+              tone: 'win',
+              wide: true,
+            };
+          }),
+    },
+    {
+      title: 'Harmonic Type Wins',
+      items: isEntryExitTemplateBreakdownLoading
+        ? [{ label: 'Loading', value: 'Fetching harmonic wins...', wide: true }]
+        : entryExitTemplateBreakdownError
+        ? [{ label: 'Error', value: entryExitTemplateBreakdownError, tone: 'loss', wide: true }]
+        : [...selectedEntryExitHarmonicBreakdown]
+          .filter((row) => Number(row.pass_count || 0) > 0)
+          .sort((left, right) =>
+            Number(right.pass_count || 0) - Number(left.pass_count || 0) ||
+            Number(right.avg_r || 0) - Number(left.avg_r || 0)
+          )
+          .map((row) => {
+            const evalCount = Number(row.eval_count || 0);
+            const passCount = Number(row.pass_count || 0);
+            const passRate = evalCount ? (passCount / evalCount) * 100 : 0;
+            return {
+              label: row.harmonic_type || 'Unknown',
+              value: `${formatNumber(passCount)} wins / ${formatDecimal(passRate, 1)}% of tests / ${formatDecimal(row.avg_r, 3)}R`,
+              title: `Evaluated ${formatNumber(evalCount)} / Fail ${formatNumber(row.fail_count)} / No Entry ${formatNumber(row.no_entry_count)} / Best ${formatDecimal(row.best_r, 2)}R / Worst ${formatDecimal(row.worst_r, 2)}R`,
+              tone: 'win',
+              wide: true,
+            };
+          }),
+    },
+  ];
+  const entryExitTemplateLossSections = [
+    {
+      title: `Selected Template Losses ${selectedEntryExitTemplateLabel}`,
+      items: selectedEntryExitTemplate
+        ? [
+            { label: 'Fails', value: formatNumber(selectedEntryExitTemplate.fail_count), tone: 'loss' },
+            { label: 'Fail Rate', value: `${formatDecimal(selectedEntryExitFailRate, 1)}%`, tone: 'loss' },
+            { label: 'Bull Fails', value: formatNumber(selectedEntryExitBullishFailCount), tone: 'loss' },
+            { label: 'Bear Fails', value: formatNumber(selectedEntryExitBearishFailCount), tone: 'loss' },
+            { label: 'No Entry', value: formatNumber(selectedEntryExitTemplate.no_entry_count), tone: 'skipped' },
+            { label: 'No Entry Rate', value: `${formatDecimal(selectedEntryExitNoEntryRate, 1)}%`, tone: 'skipped' },
+            {
+              label: 'Top Loss Market',
+              value: selectedEntryExitTopLossMarket
+                ? `${selectedEntryExitTopLossMarket.market || 'Unknown'} / ${formatNumber(selectedEntryExitTopLossMarket.fail_count)} fails`
+                : 'N/A',
+              tone: 'loss',
+              wide: true,
+            },
+            {
+              label: 'Top Loss Harmonic',
+              value: selectedEntryExitTopLossHarmonic
+                ? `${selectedEntryExitTopLossHarmonic.harmonic_type || 'Unknown'} / ${formatNumber(selectedEntryExitTopLossHarmonic.fail_count)} fails`
+                : 'N/A',
+              tone: 'loss',
+              wide: true,
+            },
+            {
+              label: 'Worst Market R',
+              value: selectedEntryExitTopLossMarket
+                ? `${formatDecimal(selectedEntryExitTopLossMarket.avg_r, 3)}R avg`
+                : 'N/A',
+              tone: 'loss',
+            },
+          ]
+        : [],
+    },
+    {
+      title: 'Loss Market Split',
+      items: isEntryExitTemplateBreakdownLoading
+        ? [{ label: 'Loading', value: 'Fetching loss split...', wide: true }]
+        : selectedEntryExitMarketBreakdown.map((row) => {
+            const evalCount = Number(row.eval_count || 0);
+            const failCount = Number(row.fail_count || 0);
+            const failRate = evalCount ? (failCount / evalCount) * 100 : 0;
+            return {
+              label: `${row.market || 'Unknown'} Losses`,
+              value: `${formatNumber(failCount)} / ${formatDecimal(failRate, 1)}% fail / ${formatDecimal(row.worst_r, 2)}R worst`,
+              title: `Pass ${formatNumber(row.pass_count)} / No Entry ${formatNumber(row.no_entry_count)} / Avg ${formatDecimal(row.avg_r, 3)}R`,
+              tone: 'loss',
+              wide: true,
+            };
+          }),
+    },
+    {
+      title: 'Loss Harmonic Split',
+      items: isEntryExitTemplateBreakdownLoading
+        ? [{ label: 'Loading', value: 'Fetching harmonic losses...', wide: true }]
+        : selectedEntryExitHarmonicBreakdown.map((row) => {
+            const evalCount = Number(row.eval_count || 0);
+            const failCount = Number(row.fail_count || 0);
+            const failRate = evalCount ? (failCount / evalCount) * 100 : 0;
+            return {
+              label: `${row.harmonic_type || 'Unknown'} Losses`,
+              value: `${formatNumber(failCount)} / ${formatDecimal(failRate, 1)}% fail / ${formatDecimal(row.worst_r, 2)}R worst`,
+              title: `Pass ${formatNumber(row.pass_count)} / No Entry ${formatNumber(row.no_entry_count)} / Avg ${formatDecimal(row.avg_r, 3)}R`,
+              tone: 'loss',
+              wide: true,
+            };
+      }),
+    },
+  ];
+  const entryExitTemplateFamilySections = [
+    {
+      title: `Winning Families ${selectedEntryExitTemplateLabel}`,
+      items: selectedEntryExitTemplate
+        ? [
+            {
+              label: 'Families Won',
+              value: formatNumber(selectedEntryExitWinningFamilyRows.length),
+              tone: 'win',
+            },
+            {
+              label: 'Family Wins',
+              value: formatNumber(selectedEntryExitFamilyTotals.wins),
+              tone: 'win',
+            },
+            {
+              label: 'Family Losses',
+              value: formatNumber(selectedEntryExitFamilyTotals.losses),
+              tone: 'loss',
+            },
+            {
+              label: 'No Entry',
+              value: formatNumber(selectedEntryExitFamilyTotals.noEntries),
+              tone: 'skipped',
+            },
+            {
+              label: 'Rows',
+              value: `${formatNumber(selectedEntryExitFamilyTotals.tests)} tests`,
+              wide: true,
+            },
+          ]
+        : [],
+    },
+    {
+      title: 'Family Win / Loss Counts',
+      items: isEntryExitTemplateBreakdownLoading
+        ? [{ label: 'Loading', value: 'Fetching winning family counts...', wide: true }]
+        : entryExitTemplateBreakdownError
+        ? [{ label: 'Error', value: entryExitTemplateBreakdownError, tone: 'loss', wide: true }]
+        : selectedEntryExitWinningFamilyRows.map((row) => {
+            const evalCount = Number(row.eval_count || 0);
+            const passCount = Number(row.pass_count || 0);
+            const failCount = Number(row.fail_count || 0);
+            const noEntryCount = Number(row.no_entry_count || 0);
+            const passRate = evalCount ? (passCount / evalCount) * 100 : 0;
+            const familyLabel = [
+              row.harmonic_type || 'Unknown',
+              row.market || 'Market N/A',
+              row.family_bin || 'Bin N/A',
+              row.family_size_bucket || 'Size N/A',
+              row.family_time_bin || 'Time N/A',
+              compactText(row.family_key || 'N/A', 10),
+            ]
+              .filter(Boolean)
+              .join(' / ');
+
+            return {
+              label: familyLabel,
+              value: `${formatNumber(passCount)}W / ${formatNumber(failCount)}L / ${formatNumber(noEntryCount)}NE / ${formatNumber(evalCount)} tests / ${formatDecimal(passRate, 1)}% WR / ${formatDecimal(row.avg_r, 3)}R`,
+              title: `${row.family_key} | Bin ${row.family_bin || 'N/A'} | X ${row.family_x_strictness || 'N/A'} | Best ${formatDecimal(row.best_r, 2)}R | Worst ${formatDecimal(row.worst_r, 2)}R`,
+              tone: Number(row.avg_r) < 0 ? 'loss' : 'win',
+              wide: true,
+            };
+          }),
+    },
+  ];
+  const entryExitTemplateEdgeSections = [
+    {
+      title: `Edge Baseline ${selectedEntryExitTemplateLabel}`,
+      items: selectedEntryExitTemplate
+        ? [
+            { label: 'Template WR', value: `${formatDecimal(selectedEntryExitPassRate, 1)}%` },
+            {
+              label: 'Template Avg R',
+              value: `${formatDecimal(selectedEntryExitTemplate.avg_r, 3)}R`,
+              tone: Number(selectedEntryExitTemplate.avg_r) < 0 ? 'loss' : 'win',
+            },
+            { label: 'Min Sample', value: '50 tests' },
+            { label: 'Rule', value: formatEntryExitTemplateRule(selectedEntryExitTemplate), wide: true },
+            {
+              label: 'Combo Test',
+              value: 'Beats template baseline and both single-feature parents',
+              wide: true,
+            },
+          ]
+        : [],
+    },
+    {
+      title: 'Single Feature Edge',
+      items: isEntryExitTemplateBreakdownLoading
+        ? [{ label: 'Loading', value: 'Finding single-feature lifts...', wide: true }]
+        : entryExitTemplateBreakdownError
+        ? [{ label: 'Error', value: entryExitTemplateBreakdownError, tone: 'loss', wide: true }]
+        : selectedEntryExitTopSingleEdges.map((row) => ({
+            label: formatEntryExitFeatureLabel(row.condition_type, row.condition_value),
+            value: `${formatNumber(row.evalCount)} tests / ${formatDecimal(row.passRate, 1)}% WR / ${formatDecimal(row.avgR, 3)}R / ${formatDecimal(row.avgRLift, 3)}R lift / ${formatDecimal(row.wrLift, 1)}% WR lift / ${row.edgeClass}`,
+            title: `${formatNumber(row.passCount)} wins / ${formatNumber(row.fail_count)} losses / Best ${formatDecimal(row.best_r, 2)}R / Worst ${formatDecimal(row.worst_r, 2)}R`,
+            tone: row.edgeClass === 'Thin Sample' ? 'skipped' : row.avgRLift > 0 ? 'win' : 'loss',
+            wide: true,
+          })),
+    },
+    {
+      title: 'Two Feature Combo Edge',
+      items: isEntryExitTemplateBreakdownLoading
+        ? [{ label: 'Loading', value: 'Building combo result families...', wide: true }]
+        : entryExitTemplateBreakdownError
+        ? [{ label: 'Error', value: entryExitTemplateBreakdownError, tone: 'loss', wide: true }]
+        : selectedEntryExitTrueComboEdges.map((row) => ({
+            label: `${formatEntryExitFeatureLabel(row.feature_a_type, row.feature_a_value)} + ${formatEntryExitFeatureLabel(row.feature_b_type, row.feature_b_value)}`,
+            value: `${formatNumber(row.evalCount)} tests / ${formatDecimal(row.passRate, 1)}% WR / ${formatDecimal(row.avgR, 3)}R / ${formatDecimal(row.avgRLift, 3)}R vs base / ${formatDecimal(row.avgRLiftVsParents, 3)}R vs singles / ${row.edgeClass}`,
+            title: `${formatNumber(row.passCount)} wins / ${formatNumber(row.fail_count)} losses / ${formatDecimal(row.wrLift, 1)}% WR lift / ${formatDecimal(row.wrLiftVsParents, 1)}% WR vs singles`,
+            tone: row.edgeClass === 'Thin Sample' ? 'skipped' : 'win',
+            wide: true,
+          })),
+    },
+    {
+      title: 'Baseline Edge Only',
+      items: selectedEntryExitBaselineOnlyCombos.map((row) => ({
+        label: `${formatEntryExitFeatureLabel(row.feature_a_type, row.feature_a_value)} + ${formatEntryExitFeatureLabel(row.feature_b_type, row.feature_b_value)}`,
+        value: `${formatNumber(row.evalCount)} tests / ${formatDecimal(row.passRate, 1)}% WR / ${formatDecimal(row.avgR, 3)}R beats base / ${formatDecimal(row.avgRLiftVsParents, 3)}R vs singles / ${row.edgeClass}`,
+        title: `${formatNumber(row.passCount)} wins / this combo is not stronger than its best parent feature`,
+        tone: 'skipped',
+        wide: true,
+      })),
+    },
+    {
+      title: 'Combo Avoids',
+      items: selectedEntryExitAvoidCombos.map((row) => ({
+        label: `${formatEntryExitFeatureLabel(row.feature_a_type, row.feature_a_value)} + ${formatEntryExitFeatureLabel(row.feature_b_type, row.feature_b_value)}`,
+        value: `${formatDecimal(row.avgR, 3)}R / ${formatDecimal(row.avgRLift, 3)}R below base / ${formatNumber(row.evalCount)} tests`,
+        title: `${formatNumber(row.fail_count)} fails / ${formatDecimal(row.passRate, 1)}% WR / Worst ${formatDecimal(row.worst_r, 2)}R`,
+        tone: 'loss',
+        wide: true,
+      })),
+    },
+  ].filter((section) => section.items.length);
+  const entryExitTemplateDetailSections = entryExitTemplateSections.filter(
+    (section) => section.title !== 'Template Creator Run' && section.variant !== 'templateTable'
+  );
+  const entryExitTemplateTableSections = entryExitTemplateSections.filter(
+    (section) => section.title === 'Template Creator Run' || section.variant === 'templateTable'
+  );
+  const entryExitWorkspaceTableSections = [
+    ...entryExitRouterSections,
+    ...entryExitTemplateTableSections,
+  ];
+  const entryExitTemplateProfileSections =
+    entryExitProfileTab === 'families'
+      ? entryExitTemplateFamilySections
+      : entryExitProfileTab === 'edge'
+      ? entryExitTemplateEdgeSections
+      : entryExitProfileTab === 'wins'
+      ? [...entryExitTemplateWinSections, ...entryExitConditionSectionsForMode('wins')]
+      : entryExitProfileTab === 'losses'
+        ? [...entryExitTemplateLossSections, ...entryExitConditionSectionsForMode('losses')]
+        : [...entryExitTemplateDetailSections, ...entryExitConditionSectionsForMode('all')];
   const activeTestOverviewSections =
     testOverviewTab === 'supply'
       ? supplyOverviewSections
       : testOverviewTab === 'entryExit'
-      ? entryExitTemplateSections
+      ? entryExitWorkspaceTableSections
       : testOverviewTab === 'families'
       ? selectedRouteFamiliesSections
       : testOverviewTab === 'family'
@@ -2040,9 +2850,51 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   useEffect(() => {
     let isCancelled = false;
 
+    const loadEntryExitRouterRuns = async () => {
+      if (!entryExitData.run?.run_id) {
+        setEntryExitRouterData({ current_run: null, runs: [], symbols: [] });
+        setEntryExitRouterError('');
+        setEntryExitRouterLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitRouterLoading(true);
+        setEntryExitRouterError('');
+        const data = await fetchEntryExitRouterRuns({
+          trainRunId: entryExitData.run.run_id,
+          limit: 8,
+        });
+
+        if (!isCancelled) {
+          setEntryExitRouterData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitRouterError('Could not load current prop router setup.');
+          setEntryExitRouterData({ current_run: null, runs: [], symbols: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitRouterLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitRouterRuns();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [entryExitData.run?.run_id]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
     const loadEntryExitTemplateBreakdown = async () => {
       if (!selectedEntryExitTemplate?.template_uid || !selectedEntryExitTemplate?.origin_run_id) {
-        setEntryExitTemplateBreakdown({ market: [] });
+        setEntryExitTemplateBreakdown({ market: [], harmonic_type: [], conditions: [], family_results: [], combos: [] });
         setEntryExitTemplateBreakdownError('');
         setEntryExitTemplateBreakdownLoading(false);
         return;
@@ -2063,7 +2915,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
         console.error(loadError);
         if (!isCancelled) {
           setEntryExitTemplateBreakdownError('Could not load pattern market split.');
-          setEntryExitTemplateBreakdown({ market: [] });
+          setEntryExitTemplateBreakdown({ market: [], harmonic_type: [], conditions: [], family_results: [], combos: [] });
         }
       } finally {
         if (!isCancelled) {
@@ -2420,7 +3272,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
         <main
           className={[
             'pattern-family-table-stack',
-            isSelectedDataCollapsed ? 'pattern-family-table-stack--selected-collapsed' : '',
+            isSelectedDataFullyCollapsed
+              ? 'pattern-family-table-stack--selected-minimized'
+              : isSelectedDataCollapsed
+                ? 'pattern-family-table-stack--selected-collapsed'
+                : '',
           ].filter(Boolean).join(' ')}
         >
           <section className="pattern-family-controls">
@@ -2479,17 +3335,21 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
             className={[
               'pattern-family-selected-shell',
               isSelectedDataCollapsed ? 'pattern-family-selected-shell--collapsed' : '',
+              isSelectedDataFullyCollapsed ? 'pattern-family-selected-shell--minimized' : '',
             ].filter(Boolean).join(' ')}
           >
-            <div className="pattern-family-selected-collapse-bar">
+            <div className="pattern-family-section-bar pattern-family-selected-collapse-bar">
+              <span className="pattern-family-section-bar-title">Selection Deck</span>
+              <span className="pattern-family-section-bar-line" aria-hidden="true" />
               <button
-                aria-label={isSelectedDataCollapsed ? 'Expand selected data' : 'Collapse selected data'}
+                aria-label={selectionDeckToggleLabel}
+                title={selectionDeckToggleLabel}
                 type="button"
-                onClick={() => setSelectedDataCollapsed((current) => !current)}
+                onClick={() => setSelectedDataCollapseLevel((current) => (current + 1) % 3)}
               >
                 <span
                   className={
-                    isSelectedDataCollapsed
+                    isSelectedDataFullyCollapsed
                       ? 'pattern-family-selected-collapse-arrow pattern-family-selected-collapse-arrow--down'
                       : 'pattern-family-selected-collapse-arrow pattern-family-selected-collapse-arrow--up'
                   }
@@ -2571,16 +3431,15 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
           </section>
 
           <section className="pattern-family-sim-panel">
-            <div className="pattern-family-sim-header">
-              <div>
-                <span>Data Center</span>
-                <strong>
-                  {selectedRoute ? 'Test Overview' : 'No test selected'}
-                </strong>
-              </div>
-              <small>
-                {selectedRoute ? selectedRoute.route_label : 'Select an Entry / Exit Test'}
-              </small>
+            <div className="pattern-family-section-bar pattern-family-data-center-bar">
+              <span className="pattern-family-section-bar-title">Data Center</span>
+              <span className="pattern-family-section-bar-line" aria-hidden="true" />
+              <strong
+                className="pattern-family-section-bar-context"
+                title={selectedRoute ? selectedRoute.route_label : 'Select an Entry / Exit Test'}
+              >
+                {selectedRoute ? 'Test Overview' : 'No test selected'}
+              </strong>
             </div>
             <div className="pattern-family-sim-body">
               {selectedRoute ? (
@@ -2604,7 +3463,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                         }
                         disabled={tab.disabled}
                         key={tab.id}
-                        onClick={() => setTestOverviewTab(tab.id)}
+                        onClick={() => {
+                          setTestOverviewTab(tab.id);
+                          if (tab.id === 'entryExit') {
+                            setSelectedDataCollapseLevel(2);
+                            setInspectorCollapsed(true);
+                            setEntryExitProfileTab('all');
+                          }
+                        }}
                         type="button"
                       >
                         {tab.label}
@@ -2616,10 +3482,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                       'pattern-family-test-overview-loading',
                       testOverviewTab === 'families' && routeFamiliesError ? 'pattern-family-test-overview-loading--error' : '',
                       testOverviewTab === 'supply' && supplyError ? 'pattern-family-test-overview-loading--error' : '',
-                      testOverviewTab === 'entryExit' && entryExitError ? 'pattern-family-test-overview-loading--error' : '',
+                      testOverviewTab === 'entryExit' && (entryExitError || entryExitRouterError) ? 'pattern-family-test-overview-loading--error' : '',
                       (testOverviewTab === 'families' && (isRouteFamiliesLoading || routeFamiliesError)) ||
                       (testOverviewTab === 'supply' && (isSupplyLoading || supplyError)) ||
-                      (testOverviewTab === 'entryExit' && (isEntryExitLoading || entryExitError))
+                      (testOverviewTab === 'entryExit' && (isEntryExitLoading || isEntryExitRouterLoading || entryExitError || entryExitRouterError))
                         ? ''
                         : 'pattern-family-test-overview-loading--empty',
                     ].filter(Boolean).join(' ')}
@@ -2628,10 +3494,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                       ? supplyError
                       : testOverviewTab === 'supply' && isSupplyLoading
                         ? 'Loading supply data...'
-                        : testOverviewTab === 'entryExit' && entryExitError
+                      : testOverviewTab === 'entryExit' && entryExitError
                       ? entryExitError
+                      : testOverviewTab === 'entryExit' && entryExitRouterError
+                        ? entryExitRouterError
                       : testOverviewTab === 'entryExit' && isEntryExitLoading
                         ? 'Loading Entry / Exit templates...'
+                        : testOverviewTab === 'entryExit' && isEntryExitRouterLoading
+                          ? 'Loading current prop router setup...'
                         : testOverviewTab === 'families' && routeFamiliesError
                       ? routeFamiliesError
                       : testOverviewTab === 'families' && isRouteFamiliesLoading
@@ -2644,7 +3514,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                         className={[
                           'pattern-family-test-overview-section',
                           section.wide ? 'pattern-family-test-overview-section--wide' : '',
-                          section.variant === 'templateTable' ? 'pattern-family-test-overview-section--table' : '',
+                          ['templateTable', 'routerRunTable'].includes(section.variant) ? 'pattern-family-test-overview-section--table' : '',
                         ].filter(Boolean).join(' ')}
                         key={section.title}
                       >
@@ -2709,6 +3579,63 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                               </div>
                             )}
                           </div>
+                        ) : section.variant === 'routerRunTable' ? (
+                          <div className="pattern-family-template-table-wrap">
+                            {section.tableRows?.length ? (
+                              <table className="pattern-family-template-table pattern-family-template-table--router">
+                                <thead>
+                                  <tr>
+                                    <th>Run</th>
+                                    <th>Year</th>
+                                    <th>Patterns</th>
+                                    <th>Trades</th>
+                                    <th>Trade WR</th>
+                                    <th>Avg R</th>
+                                    <th>Total R</th>
+                                    <th>Prop WR</th>
+                                    <th>Passed</th>
+                                    <th>Daily Fails</th>
+                                    <th>DD Fails</th>
+                                    <th>Families</th>
+                                    <th>Symbols</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {section.tableRows.map((row) => (
+                                    <tr
+                                      className={row.isSelected ? 'pattern-family-template-table-row--selected' : ''}
+                                      key={row.run.router_run_id}
+                                      title={row.run.router_run_id}
+                                    >
+                                      <td className="pattern-family-template-table-id">{compactText(row.run.router_run_id, 16)}</td>
+                                      <td>{row.run.test_year || 'All'}</td>
+                                      <td>{formatNumber(row.run.patterns_scanned)}</td>
+                                      <td>{formatNumber(row.tradeCount)}</td>
+                                      <td>{formatDecimal(row.winRate, 2)}%</td>
+                                      <td className={Number(row.run.avg_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                        {formatDecimal(row.run.avg_r, 4)}R
+                                      </td>
+                                      <td className={Number(row.run.sum_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                        {formatDecimal(row.run.sum_r, 2)}R
+                                      </td>
+                                      <td className={Number(row.propClosedPassRate) >= 80 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-skipped'}>
+                                        {formatDecimal(row.propClosedPassRate, 2)}%
+                                      </td>
+                                      <td>{formatNumber(row.run.prop?.passed || 0)}</td>
+                                      <td className="pattern-family-template-table-skipped">{formatNumber(row.run.prop?.daily_fails || 0)}</td>
+                                      <td className="pattern-family-template-table-loss">{formatNumber(row.run.prop?.drawdown_fails || 0)}</td>
+                                      <td>{formatNumber(row.run.trade_choices)}T / {formatNumber(row.run.watchlist_choices)}W / {formatNumber(row.run.skip_choices)}S</td>
+                                      <td>{formatNumber(row.run.symbol_trade_roots)}T / {formatNumber(row.run.symbol_skip_roots)}S</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : (
+                              <div className="pattern-family-test-overview-empty">
+                                No router test runs loaded yet.
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <div className="pattern-family-test-overview-cells">
                           {section.items.length ? (
@@ -2767,6 +3694,162 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
             </div>
           </section>
         </main>
+
+        <section className="pattern-family-canvas-collapse-workspace" aria-hidden={!isInspectorCollapsed}>
+          {testOverviewTab === 'entryExit' ? (
+            <section className="pattern-family-side-data-profile">
+              <header>
+                <div>
+                  <span>Entry / Exit Profile</span>
+                  <strong title={selectedEntryExitTemplate?.template_name ?? ''}>
+                    {selectedEntryExitTemplate
+                      ? `${selectedEntryExitTemplateLabel} / ${formatEntryExitTemplateRule(selectedEntryExitTemplate)}`
+                      : 'No template selected'}
+                  </strong>
+                </div>
+                <small>
+                  {isEntryExitLoading
+                    ? 'Loading templates...'
+                    : selectedEntryExitTemplate
+                      ? `${formatNumber(selectedEntryExitTemplate.eval_count)} tests`
+                      : 'Select a template'}
+                </small>
+              </header>
+
+              <div className="pattern-family-side-data-tabs" role="tablist" aria-label="Entry / Exit profile data">
+                {[
+                  { id: 'all', label: 'All Data' },
+                  { id: 'families', label: 'Families' },
+                  { id: 'wins', label: 'Wins Only' },
+                  { id: 'losses', label: 'Losses Only' },
+                ].map((tab) => (
+                  <button
+                    className={
+                      entryExitProfileTab === tab.id
+                        ? 'pattern-family-side-data-tab pattern-family-side-data-tab--active'
+                        : 'pattern-family-side-data-tab'
+                    }
+                    key={tab.id}
+                    onClick={() => setEntryExitProfileTab(tab.id)}
+                    type="button"
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="pattern-family-side-data-sections">
+                {entryExitTemplateProfileSections.map((section) => (
+                  <section className="pattern-family-side-data-section" key={section.title}>
+                    <header>
+                      <span>{section.title}</span>
+                    </header>
+                    <div className="pattern-family-side-data-cells">
+                      {section.items.length ? (
+                        section.items.map((item) => (
+                          <div
+                            className={[
+                              'pattern-family-side-data-cell',
+                              item.wide ? 'pattern-family-side-data-cell--wide' : '',
+                              item.compact ? 'pattern-family-side-data-cell--compact' : '',
+                              item.tone ? `pattern-family-side-data-cell--${item.tone}` : '',
+                            ].filter(Boolean).join(' ')}
+                            key={`${section.title}-${item.label}`}
+                          >
+                            <span>{item.label}</span>
+                            <strong title={item.title ?? item.value}>{item.value}</strong>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="pattern-family-side-data-empty">No Entry / Exit profile data loaded yet.</div>
+                      )}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </section>
+          ) : (
+          <section className="pattern-family-route-win-profile pattern-family-route-win-profile--workspace">
+            <header>
+              <div>
+                <span>Route Win Profile</span>
+                <strong title={selectedRoute?.route_label ?? ''}>
+                  {selectedRoute ? selectedRoute.route_label : 'No route selected'}
+                </strong>
+              </div>
+              <small>
+                {isRouteTradesLoading
+                  ? 'Loading wins...'
+                  : selectedRoute
+                    ? `${formatNumber(selectedRouteWinProfile.winCount)} loaded wins`
+                    : 'Select a route'}
+              </small>
+            </header>
+
+            {selectedRoute ? (
+              <div className="pattern-family-route-win-grid">
+                <div className="pattern-family-route-win-stat">
+                  <span>Global Wins</span>
+                  <strong>{formatNumber(selectedRoute.win_count)}</strong>
+                </div>
+                <div className="pattern-family-route-win-stat">
+                  <span>Loaded Wins</span>
+                  <strong>{formatNumber(selectedRouteWinProfile.winCount)}</strong>
+                </div>
+                <div className="pattern-family-route-win-stat">
+                  <span>Avg Win</span>
+                  <strong>{formatDecimal(selectedRouteWinProfile.avgWinR, 2)}R</strong>
+                </div>
+                <div className="pattern-family-route-win-stat">
+                  <span>Best Win</span>
+                  <strong>{formatDecimal(selectedRouteWinProfile.bestWinR, 2)}R</strong>
+                </div>
+
+                <div className="pattern-family-route-win-list">
+                  <span>Winning Symbols</span>
+                  {selectedRouteWinProfile.symbols.length ? (
+                    selectedRouteWinProfile.symbols.slice(0, 4).map((item) => (
+                      <strong key={item.key}>
+                        {item.key} / {formatNumber(item.wins)} wins / {formatDecimal(item.avgR, 2)}R
+                      </strong>
+                    ))
+                  ) : (
+                    <strong>No loaded wins yet</strong>
+                  )}
+                </div>
+                <div className="pattern-family-route-win-list">
+                  <span>Winning Families</span>
+                  {selectedRouteWinProfile.families.length ? (
+                    selectedRouteWinProfile.families.slice(0, 4).map((item) => (
+                      <strong key={item.family_key}>
+                        {(item.harmonic_type || item.family_key)} / {formatNumber(item.inferredWins)} wins / {formatDecimal(item.avg_r, 2)}R
+                      </strong>
+                    ))
+                  ) : (
+                    <strong>No family win rows loaded</strong>
+                  )}
+                </div>
+                <div className="pattern-family-route-win-list">
+                  <span>Winning Direction</span>
+                  {selectedRouteWinProfile.directions.length ? (
+                    selectedRouteWinProfile.directions.slice(0, 3).map((item) => (
+                      <strong key={item.key}>
+                        {item.key} / {formatNumber(item.wins)} wins / {formatDecimal(item.avgR, 2)}R
+                      </strong>
+                    ))
+                  ) : (
+                    <strong>No direction wins yet</strong>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="pattern-family-route-win-empty">
+                Collapse the canvas after selecting an Entry / Exit Test to see route wins here.
+              </div>
+            )}
+          </section>
+          )}
+        </section>
 
         <aside
           className={[
@@ -2934,34 +4017,36 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
             </section>
 
             <section className="pattern-family-chart-bay">
-              {isCanvasLoading ? (
-                <div className="pattern-family-inspector-empty">Loading family canvas...</div>
-              ) : (
-                <>
-                  {canvasError ? <div className="pattern-family-inspector-error">{canvasError}</div> : null}
-                  {canvasChartData.candles.length && canvasChartData.rust_patterns ? (
-                    <div className="pattern-family-full-chart pattern-family-inspector-chart">
-                      <CandleChartPanel
-                        chartData={canvasChartData}
-                        isSectionsExpanded={isCanvasExpanded}
-                        setSectionsExpanded={setCanvasExpanded}
-                        focusMode="prop"
-                        market={canvasChartData.rust_patterns.market ?? selectedFamily?.market ?? 'Bullish'}
-                        overlayTopOffset={0}
-                        showCandles={showCanvasCandles}
-                        presentationMode="graph"
-                        routeLogicHover={routeLogicHover}
-                      />
-                    </div>
-                  ) : canvasPattern ? (
-                    <div className="pattern-family-inspector-empty">
-                      Canvas is waiting for candle data so the XABCD lines can use the chart scale.
-                    </div>
-                  ) : (
-                    <div className="pattern-family-inspector-empty">Select a family to preview its canvas.</div>
-                  )}
-                </>
-              )}
+              <div className="pattern-family-chart-stage">
+                {isCanvasLoading ? (
+                  <div className="pattern-family-inspector-empty">Loading family canvas...</div>
+                ) : (
+                  <>
+                    {canvasError ? <div className="pattern-family-inspector-error">{canvasError}</div> : null}
+                    {canvasChartData.candles.length && canvasChartData.rust_patterns ? (
+                      <div className="pattern-family-full-chart pattern-family-inspector-chart">
+                        <CandleChartPanel
+                          chartData={canvasChartData}
+                          isSectionsExpanded={isCanvasExpanded}
+                          setSectionsExpanded={setCanvasExpanded}
+                          focusMode="prop"
+                          market={canvasChartData.rust_patterns.market ?? selectedFamily?.market ?? 'Bullish'}
+                          overlayTopOffset={0}
+                          showCandles={showCanvasCandles}
+                          presentationMode="graph"
+                          routeLogicHover={routeLogicHover}
+                        />
+                      </div>
+                    ) : canvasPattern ? (
+                      <div className="pattern-family-inspector-empty">
+                        Canvas is waiting for candle data so the XABCD lines can use the chart scale.
+                      </div>
+                    ) : (
+                      <div className="pattern-family-inspector-empty">Select a family to preview its canvas.</div>
+                    )}
+                  </>
+                )}
+              </div>
             </section>
           </div>
           </div>
