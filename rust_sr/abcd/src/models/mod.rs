@@ -4,6 +4,7 @@ pub mod database;
 pub mod forward_observation;
 pub mod harmonic_types;
 pub mod market;
+pub mod market_trend;
 pub mod pattern_a;
 pub mod pattern_ab;
 pub mod pattern_abc;

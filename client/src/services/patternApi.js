@@ -572,6 +572,24 @@ const parseEntryExitRouterFamilyRouteRecord = (row = {}) => ({
   test_worst_r: parseOptionalFloat(row?.test_worst_r) ?? 0,
 });
 
+const parseEntryExitSimTemplatePerformanceRecord = (row = {}) => ({
+  ...row,
+  eval_count: parseOptionalInt(row?.eval_count) ?? 0,
+  pass_count: parseOptionalInt(row?.pass_count) ?? 0,
+  fail_count: parseOptionalInt(row?.fail_count) ?? 0,
+  no_entry_count: parseOptionalInt(row?.no_entry_count) ?? 0,
+  win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row?.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row?.worst_r) ?? 0,
+  daily_loss_day_trades: parseOptionalInt(row?.daily_loss_day_trades) ?? 0,
+  daily_loss_day_count: parseOptionalInt(row?.daily_loss_day_count) ?? 0,
+  family_count: parseOptionalInt(row?.family_count) ?? 0,
+  symbol_count: parseOptionalInt(row?.symbol_count) ?? 0,
+  contract_count: parseOptionalInt(row?.contract_count) ?? 0,
+});
+
 const parseEntryExitSimEquityPoint = (row = {}) => ({
   ...row,
   point_index: parseOptionalInt(row?.point_index) ?? 0,
@@ -592,6 +610,8 @@ const parseEntryExitSimDailyRRow = (row = {}) => ({
   worst_trade_r: parseOptionalFloat(row?.worst_trade_r) ?? 0,
   worst_intraday_r: parseOptionalFloat(row?.worst_intraday_r) ?? 0,
   hit_daily_loss: Boolean(parseOptionalInt(row?.hit_daily_loss) ?? row?.hit_daily_loss),
+  tp_progress_pct: parseOptionalFloat(row?.tp_progress_pct) ?? 0,
+  drawdown_progress_pct: parseOptionalFloat(row?.drawdown_progress_pct) ?? 0,
 });
 
 const parseEntryExitSimDailyTradeRow = (row = {}) => ({
@@ -606,6 +626,17 @@ const parseEntryExitSimDailyTradeRow = (row = {}) => ({
   outcome: row?.outcome ?? '',
   exit_reason: row?.exit_reason ?? '',
   trade_direction: row?.trade_direction ?? null,
+  cycle_number: parseOptionalInt(row?.cycle_number),
+  cycle_equity_r_before: parseOptionalFloat(row?.cycle_equity_r_before),
+  cycle_equity_r_after: parseOptionalFloat(row?.cycle_equity_r_after),
+  cycle_drawdown_r_before: parseOptionalFloat(row?.cycle_drawdown_r_before),
+  cycle_drawdown_r_after: parseOptionalFloat(row?.cycle_drawdown_r_after),
+  tp_progress_pct_before: parseOptionalFloat(row?.tp_progress_pct_before),
+  tp_progress_pct_after: parseOptionalFloat(row?.tp_progress_pct_after),
+  tp_progress_pct_delta: parseOptionalFloat(row?.tp_progress_pct_delta),
+  drawdown_progress_pct_before: parseOptionalFloat(row?.drawdown_progress_pct_before),
+  drawdown_progress_pct_after: parseOptionalFloat(row?.drawdown_progress_pct_after),
+  drawdown_progress_pct_delta: parseOptionalFloat(row?.drawdown_progress_pct_delta),
 });
 
 const parseEntryExitSimHourlyRow = (row = {}) => ({
@@ -632,15 +663,25 @@ const parseEntryExitSimTradeCadence = (row = null) => {
   return {
     ...row,
     trades: parseOptionalInt(row?.trades) ?? 0,
+    active_hours: parseOptionalInt(row?.active_hours) ?? 0,
     trade_days: parseOptionalInt(row?.trade_days) ?? 0,
+    active_weeks: parseOptionalInt(row?.active_weeks) ?? 0,
+    active_months: parseOptionalInt(row?.active_months) ?? 0,
     gap_count: parseOptionalInt(row?.gap_count) ?? 0,
     avg_gap_minutes: parseOptionalFloat(row?.avg_gap_minutes) ?? 0,
     median_gap_minutes: parseOptionalFloat(row?.median_gap_minutes) ?? 0,
     min_gap_minutes: parseOptionalFloat(row?.min_gap_minutes) ?? 0,
     max_gap_minutes: parseOptionalFloat(row?.max_gap_minutes) ?? 0,
+    avg_trades_per_hour: parseOptionalFloat(row?.avg_trades_per_hour) ?? 0,
     avg_trades_per_day: parseOptionalFloat(row?.avg_trades_per_day) ?? 0,
+    avg_trades_per_week: parseOptionalFloat(row?.avg_trades_per_week) ?? 0,
+    avg_trades_per_month: parseOptionalFloat(row?.avg_trades_per_month) ?? 0,
     max_trades_per_day: parseOptionalInt(row?.max_trades_per_day) ?? 0,
     max_trades_per_hour: parseOptionalInt(row?.max_trades_per_hour) ?? 0,
+    max_trades_per_week: parseOptionalInt(row?.max_trades_per_week) ?? 0,
+    max_trades_per_month: parseOptionalInt(row?.max_trades_per_month) ?? 0,
+    hours_over_5_trades: parseOptionalInt(row?.hours_over_5_trades) ?? 0,
+    days_over_20_trades: parseOptionalInt(row?.days_over_20_trades) ?? 0,
     max_trades_5m_window: parseOptionalInt(row?.max_trades_5m_window) ?? 0,
     max_trades_15m_window: parseOptionalInt(row?.max_trades_15m_window) ?? 0,
     gap_0_1m: parseOptionalInt(row?.gap_0_1m) ?? 0,
@@ -651,6 +692,93 @@ const parseEntryExitSimTradeCadence = (row = null) => {
     gap_over_60m: parseOptionalInt(row?.gap_over_60m) ?? 0,
   };
 };
+
+const parseEntryExitSimTradeGapRow = (row = {}) => ({
+  ...row,
+  sequence_number: parseOptionalInt(row?.sequence_number) ?? 0,
+  gap_minutes: parseOptionalFloat(row?.gap_minutes) ?? 0,
+  bucket_key: row?.bucket_key ?? '',
+  bucket_label: row?.bucket_label ?? '',
+  previous_cycle_number: parseOptionalInt(row?.previous_cycle_number) ?? 0,
+  cycle_number: parseOptionalInt(row?.cycle_number) ?? 0,
+  starts_new_cycle: Boolean(parseOptionalInt(row?.starts_new_cycle) ?? row?.starts_new_cycle),
+});
+
+const parseEntryExitSimTradeWorkload = (row = null) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    trades: parseOptionalInt(row?.trades) ?? 0,
+    active_hours: parseOptionalInt(row?.active_hours) ?? 0,
+    active_days: parseOptionalInt(row?.active_days) ?? 0,
+    active_weeks: parseOptionalInt(row?.active_weeks) ?? 0,
+    active_months: parseOptionalInt(row?.active_months) ?? 0,
+    avg_trades_per_hour: parseOptionalFloat(row?.avg_trades_per_hour) ?? 0,
+    avg_trades_per_day: parseOptionalFloat(row?.avg_trades_per_day) ?? 0,
+    avg_trades_per_week: parseOptionalFloat(row?.avg_trades_per_week) ?? 0,
+    avg_trades_per_month: parseOptionalFloat(row?.avg_trades_per_month) ?? 0,
+    min_trades_per_day: parseOptionalInt(row?.min_trades_per_day) ?? 0,
+    max_trades_per_hour: parseOptionalInt(row?.max_trades_per_hour) ?? 0,
+    max_trades_per_day: parseOptionalInt(row?.max_trades_per_day) ?? 0,
+    max_trades_per_week: parseOptionalInt(row?.max_trades_per_week) ?? 0,
+    max_trades_per_month: parseOptionalInt(row?.max_trades_per_month) ?? 0,
+    hours_over_5_trades: parseOptionalInt(row?.hours_over_5_trades) ?? 0,
+    days_over_20_trades: parseOptionalInt(row?.days_over_20_trades) ?? 0,
+  };
+};
+
+const parseEntryExitSimMarketTrendPerformanceRow = (row = {}) => ({
+  ...row,
+  timeframe: row?.timeframe ?? '',
+  trend_label: row?.trend_label ?? '',
+  trades: parseOptionalInt(row?.trades) ?? 0,
+  wins: parseOptionalInt(row?.wins) ?? 0,
+  losses: parseOptionalInt(row?.losses) ?? 0,
+  no_entries: parseOptionalInt(row?.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row?.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row?.worst_r) ?? 0,
+  symbol_count: parseOptionalInt(row?.symbol_count) ?? 0,
+  avg_strength_pct: parseOptionalFloat(row?.avg_strength_pct) ?? 0,
+});
+
+const parseEntryExitSimMarketTrendAlignmentRow = (row = {}) => ({
+  ...row,
+  trend_5m: row?.trend_5m ?? '',
+  trend_15m: row?.trend_15m ?? '',
+  trend_1h: row?.trend_1h ?? '',
+  trades: parseOptionalInt(row?.trades) ?? 0,
+  wins: parseOptionalInt(row?.wins) ?? 0,
+  losses: parseOptionalInt(row?.losses) ?? 0,
+  no_entries: parseOptionalInt(row?.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row?.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row?.worst_r) ?? 0,
+});
+
+const parseEntryExitSimMarketTrendDirectionRow = (row = {}) => ({
+  ...row,
+  timeframe: row?.timeframe ?? '',
+  trade_direction: row?.trade_direction ?? '',
+  trend_label: row?.trend_label ?? '',
+  trend_alignment: row?.trend_alignment ?? '',
+  trades: parseOptionalInt(row?.trades) ?? 0,
+  wins: parseOptionalInt(row?.wins) ?? 0,
+  losses: parseOptionalInt(row?.losses) ?? 0,
+  no_entries: parseOptionalInt(row?.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row?.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row?.worst_r) ?? 0,
+});
 
 const parseEntryExitSimSymbolContributionRow = (row = {}) => ({
   ...row,
@@ -1962,6 +2090,9 @@ export const fetchEntryExitRouterRuns = async ({
       family_routes: Array.isArray(data?.family_routes)
         ? data.family_routes.map(parseEntryExitRouterFamilyRouteRecord)
         : [],
+      template_performance: Array.isArray(data?.template_performance)
+        ? data.template_performance.map(parseEntryExitSimTemplatePerformanceRecord)
+        : [],
       manual_family_bans: Array.isArray(data?.manual_family_bans)
         ? data.manual_family_bans.map(parseEntryExitManualFamilyBanRecord)
         : [],
@@ -1976,6 +2107,7 @@ export const fetchEntryExitRouterRuns = async ({
       runs: [],
       symbols: [],
       family_routes: [],
+      template_performance: [],
       manual_family_bans: [],
       manual_symbol_bans: [],
     };
@@ -2102,6 +2234,84 @@ export const fetchEntryExitSimTradeCadence = async ({
   } catch (error) {
     console.error(error);
     return { sim_run_id: simRunId, cadence: null };
+  }
+};
+
+export const fetchEntryExitSimTradeGaps = async ({
+  simRunId = null,
+  limit = 5000,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', gaps: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-trade-gaps', {
+      sim_run_id: simRunId,
+      limit,
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      gaps: Array.isArray(data?.gaps)
+        ? data.gaps.map(parseEntryExitSimTradeGapRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, gaps: [] };
+  }
+};
+
+export const fetchEntryExitSimTradeWorkload = async ({
+  simRunId = null,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', workload: null };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-trade-workload', {
+      sim_run_id: simRunId,
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      workload: parseEntryExitSimTradeWorkload(data?.workload ?? null),
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, workload: null };
+  }
+};
+
+export const fetchEntryExitSimMarketTrends = async ({
+  simRunId = null,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', performance: [], alignment: [], direction_alignment: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-market-trends', {
+      sim_run_id: simRunId,
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      performance: Array.isArray(data?.performance)
+        ? data.performance.map(parseEntryExitSimMarketTrendPerformanceRow)
+        : [],
+      alignment: Array.isArray(data?.alignment)
+        ? data.alignment.map(parseEntryExitSimMarketTrendAlignmentRow)
+        : [],
+      direction_alignment: Array.isArray(data?.direction_alignment)
+        ? data.direction_alignment.map(parseEntryExitSimMarketTrendDirectionRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, performance: [], alignment: [], direction_alignment: [] };
   }
 };
 

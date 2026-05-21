@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use chrono::{Duration, NaiveDate, NaiveDateTime, Timelike};
+use abcd::models::market_trend::{last_closed_candle_start_at_or_before, MarketTrendTimeframe};
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike};
 use serde_json::Value;
 use sqlx::{mysql::MySqlPool, Row};
 
@@ -157,13 +158,51 @@ struct TemplateEvaluation {
 
 #[derive(Clone)]
 struct PropReplayTrade {
+    result_id: i64,
+    setup_id: String,
     event_date: NaiveDateTime,
     symbol: String,
     root_symbol: String,
     family_key: String,
     template_uid: String,
+    template_label: String,
+    template_name: String,
     outcome: String,
     result_r: f64,
+}
+
+struct SimTradeTrendRow {
+    result_id: i64,
+    setup_id: String,
+    event_date: NaiveDateTime,
+    symbol: String,
+    root_symbol: String,
+    timeframe: &'static str,
+    requested_candle_ts_utc: NaiveDateTime,
+    trend_candle_ts_utc: Option<NaiveDateTime>,
+    trend_label: Option<String>,
+    ema_21: Option<f64>,
+    ema_21_slope: Option<f64>,
+    close_to_ema_pct: Option<f64>,
+    ema_slope_pct: Option<f64>,
+    strength_pct: Option<f64>,
+}
+
+struct TradeProgressRow {
+    result_id: i64,
+    setup_id: String,
+    event_date: NaiveDateTime,
+    cycle_number: i64,
+    cycle_equity_r_before: f64,
+    cycle_equity_r_after: f64,
+    cycle_drawdown_r_before: f64,
+    cycle_drawdown_r_after: f64,
+    tp_progress_pct_before: f64,
+    tp_progress_pct_after: f64,
+    tp_progress_pct_delta: f64,
+    drawdown_progress_pct_before: f64,
+    drawdown_progress_pct_after: f64,
+    drawdown_progress_pct_delta: f64,
 }
 
 #[derive(Default)]
@@ -215,6 +254,8 @@ struct DailyRRow {
     worst_trade_r: f64,
     worst_intraday_r: f64,
     hit_daily_loss: bool,
+    tp_progress_pct: f64,
+    drawdown_progress_pct: f64,
 }
 
 #[derive(Default)]
@@ -222,15 +263,26 @@ struct TradeCadenceRow {
     first_trade_at: Option<NaiveDateTime>,
     last_trade_at: Option<NaiveDateTime>,
     trades: i64,
+    active_hours: i64,
     trade_days: i64,
+    active_weeks: i64,
+    active_months: i64,
     gap_count: i64,
     avg_gap_minutes: f64,
     median_gap_minutes: f64,
     min_gap_minutes: f64,
     max_gap_minutes: f64,
+    avg_trades_per_hour: f64,
     avg_trades_per_day: f64,
+    avg_trades_per_week: f64,
+    avg_trades_per_month: f64,
+    min_trades_per_day: i64,
     max_trades_per_day: i64,
     max_trades_per_hour: i64,
+    max_trades_per_week: i64,
+    max_trades_per_month: i64,
+    hours_over_5_trades: i64,
+    days_over_20_trades: i64,
     max_trades_5m_window: i64,
     max_trades_15m_window: i64,
     gap_0_1m: i64,
@@ -239,6 +291,18 @@ struct TradeCadenceRow {
     gap_15_30m: i64,
     gap_30_60m: i64,
     gap_over_60m: i64,
+}
+
+struct TradeGapRow {
+    sequence_number: i64,
+    previous_event_at: NaiveDateTime,
+    event_at: NaiveDateTime,
+    gap_minutes: f64,
+    bucket_key: String,
+    bucket_label: String,
+    previous_cycle_number: i64,
+    cycle_number: i64,
+    starts_new_cycle: bool,
 }
 
 #[derive(Default)]
@@ -329,6 +393,25 @@ struct ContributionRow {
     contract_symbols: HashSet<String>,
     family_keys: HashSet<String>,
     template_uids: HashSet<String>,
+}
+
+#[derive(Default)]
+struct TemplatePerformanceRow {
+    template_uid: String,
+    template_label: String,
+    template_name: String,
+    eval_count: i64,
+    pass_count: i64,
+    fail_count: i64,
+    no_entry_count: i64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    daily_loss_day_trades: i64,
+    daily_loss_days: HashSet<NaiveDate>,
+    family_keys: HashSet<String>,
+    root_symbols: HashSet<String>,
+    contract_symbols: HashSet<String>,
 }
 
 struct StreakRow {
@@ -1457,6 +1540,69 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
 
     sqlx::query(
         r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_trade_progress (
+            sim_run_id VARCHAR(64) NOT NULL,
+            result_id BIGINT NOT NULL,
+            setup_id VARCHAR(64) NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            event_date DATETIME NOT NULL,
+            cycle_number BIGINT NOT NULL DEFAULT 0,
+            cycle_equity_r_before DOUBLE NOT NULL DEFAULT 0,
+            cycle_equity_r_after DOUBLE NOT NULL DEFAULT 0,
+            cycle_drawdown_r_before DOUBLE NOT NULL DEFAULT 0,
+            cycle_drawdown_r_after DOUBLE NOT NULL DEFAULT 0,
+            tp_progress_pct_before DOUBLE NOT NULL DEFAULT 0,
+            tp_progress_pct_after DOUBLE NOT NULL DEFAULT 0,
+            tp_progress_pct_delta DOUBLE NOT NULL DEFAULT 0,
+            drawdown_progress_pct_before DOUBLE NOT NULL DEFAULT 0,
+            drawdown_progress_pct_after DOUBLE NOT NULL DEFAULT 0,
+            drawdown_progress_pct_delta DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, result_id),
+            INDEX idx_entry_exit_sim_trade_progress_playbook (playbook_id, event_date),
+            INDEX idx_entry_exit_sim_trade_progress_setup (sim_run_id, setup_id)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_trade_trends (
+            sim_run_id VARCHAR(64) NOT NULL,
+            result_id BIGINT NOT NULL,
+            setup_id VARCHAR(64) NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            event_date DATETIME NOT NULL,
+            symbol VARCHAR(32) NOT NULL,
+            root_symbol VARCHAR(16) NOT NULL,
+            timeframe VARCHAR(16) NOT NULL,
+            requested_candle_ts_utc DATETIME NOT NULL,
+            trend_candle_ts_utc DATETIME NULL,
+            trend_label VARCHAR(16) NULL,
+            ema_21 DOUBLE NULL,
+            ema_21_slope DOUBLE NULL,
+            close_to_ema_pct DOUBLE NULL,
+            ema_slope_pct DOUBLE NULL,
+            strength_pct DOUBLE NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, result_id, timeframe),
+            INDEX idx_entry_exit_sim_trade_trends_playbook (playbook_id, event_date),
+            INDEX idx_entry_exit_sim_trade_trends_symbol (sim_run_id, root_symbol, timeframe, trend_label),
+            INDEX idx_entry_exit_sim_trade_trends_result (result_id)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
         CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_daily_r (
             sim_run_id VARCHAR(64) NOT NULL,
             trade_date DATE NOT NULL,
@@ -1471,6 +1617,8 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
             worst_trade_r DOUBLE NOT NULL DEFAULT 0,
             worst_intraday_r DOUBLE NOT NULL DEFAULT 0,
             hit_daily_loss TINYINT(1) NOT NULL DEFAULT 0,
+            tp_progress_pct DOUBLE NOT NULL DEFAULT 0,
+            drawdown_progress_pct DOUBLE NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (sim_run_id, trade_date),
@@ -1481,6 +1629,21 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
         "#,
     )
     .execute(pool)
+    .await?;
+
+    ensure_column(
+        pool,
+        "entry_exit_playbook_sim_daily_r",
+        "tp_progress_pct",
+        "DOUBLE NOT NULL DEFAULT 0 AFTER hit_daily_loss",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "entry_exit_playbook_sim_daily_r",
+        "drawdown_progress_pct",
+        "DOUBLE NOT NULL DEFAULT 0 AFTER tp_progress_pct",
+    )
     .await?;
 
     sqlx::query(
@@ -1522,15 +1685,25 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
             first_trade_at DATETIME NULL,
             last_trade_at DATETIME NULL,
             trades BIGINT NOT NULL DEFAULT 0,
+            active_hours BIGINT NOT NULL DEFAULT 0,
             trade_days BIGINT NOT NULL DEFAULT 0,
+            active_weeks BIGINT NOT NULL DEFAULT 0,
+            active_months BIGINT NOT NULL DEFAULT 0,
             gap_count BIGINT NOT NULL DEFAULT 0,
             avg_gap_minutes DOUBLE NOT NULL DEFAULT 0,
             median_gap_minutes DOUBLE NOT NULL DEFAULT 0,
             min_gap_minutes DOUBLE NOT NULL DEFAULT 0,
             max_gap_minutes DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_hour DOUBLE NOT NULL DEFAULT 0,
             avg_trades_per_day DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_week DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_month DOUBLE NOT NULL DEFAULT 0,
             max_trades_per_day BIGINT NOT NULL DEFAULT 0,
             max_trades_per_hour BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_week BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_month BIGINT NOT NULL DEFAULT 0,
+            hours_over_5_trades BIGINT NOT NULL DEFAULT 0,
+            days_over_20_trades BIGINT NOT NULL DEFAULT 0,
             max_trades_5m_window BIGINT NOT NULL DEFAULT 0,
             max_trades_15m_window BIGINT NOT NULL DEFAULT 0,
             gap_0_1m BIGINT NOT NULL DEFAULT 0,
@@ -1548,6 +1721,51 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    for (column, definition) in [
+        ("active_hours", "BIGINT NOT NULL DEFAULT 0 AFTER trades"),
+        ("active_weeks", "BIGINT NOT NULL DEFAULT 0 AFTER trade_days"),
+        (
+            "active_months",
+            "BIGINT NOT NULL DEFAULT 0 AFTER active_weeks",
+        ),
+        (
+            "avg_trades_per_hour",
+            "DOUBLE NOT NULL DEFAULT 0 AFTER max_gap_minutes",
+        ),
+        (
+            "avg_trades_per_week",
+            "DOUBLE NOT NULL DEFAULT 0 AFTER avg_trades_per_day",
+        ),
+        (
+            "avg_trades_per_month",
+            "DOUBLE NOT NULL DEFAULT 0 AFTER avg_trades_per_week",
+        ),
+        (
+            "max_trades_per_week",
+            "BIGINT NOT NULL DEFAULT 0 AFTER max_trades_per_hour",
+        ),
+        (
+            "max_trades_per_month",
+            "BIGINT NOT NULL DEFAULT 0 AFTER max_trades_per_week",
+        ),
+        (
+            "hours_over_5_trades",
+            "BIGINT NOT NULL DEFAULT 0 AFTER max_trades_per_month",
+        ),
+        (
+            "days_over_20_trades",
+            "BIGINT NOT NULL DEFAULT 0 AFTER hours_over_5_trades",
+        ),
+    ] {
+        ensure_column(
+            pool,
+            "entry_exit_playbook_sim_trade_cadence",
+            column,
+            definition,
+        )
+        .await?;
+    }
 
     sqlx::query(
         r#"
@@ -1583,6 +1801,97 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_trade_workload (
+            sim_run_id VARCHAR(64) NOT NULL PRIMARY KEY,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            first_trade_at DATETIME NULL,
+            last_trade_at DATETIME NULL,
+            trades BIGINT NOT NULL DEFAULT 0,
+            active_hours BIGINT NOT NULL DEFAULT 0,
+            active_days BIGINT NOT NULL DEFAULT 0,
+            active_weeks BIGINT NOT NULL DEFAULT 0,
+            active_months BIGINT NOT NULL DEFAULT 0,
+            avg_trades_per_hour DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_day DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_week DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_month DOUBLE NOT NULL DEFAULT 0,
+            min_trades_per_day BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_hour BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_day BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_week BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_month BIGINT NOT NULL DEFAULT 0,
+            hours_over_5_trades BIGINT NOT NULL DEFAULT 0,
+            days_over_20_trades BIGINT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_entry_exit_sim_trade_workload_playbook (playbook_id, avg_trades_per_day),
+            INDEX idx_entry_exit_sim_trade_workload_build (build_id, avg_trades_per_day)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    ensure_column(
+        pool,
+        "entry_exit_playbook_sim_trade_workload",
+        "min_trades_per_day",
+        "BIGINT NOT NULL DEFAULT 0 AFTER avg_trades_per_month",
+    )
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_trade_gaps (
+            sim_run_id VARCHAR(64) NOT NULL,
+            sequence_number BIGINT NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            previous_event_at DATETIME NOT NULL,
+            event_at DATETIME NOT NULL,
+            gap_minutes DOUBLE NOT NULL DEFAULT 0,
+            bucket_key VARCHAR(32) NOT NULL,
+            bucket_label VARCHAR(32) NOT NULL,
+            previous_cycle_number BIGINT NOT NULL DEFAULT 0,
+            cycle_number BIGINT NOT NULL DEFAULT 0,
+            starts_new_cycle BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, sequence_number),
+            INDEX idx_entry_exit_sim_trade_gaps_playbook (playbook_id, event_at),
+            INDEX idx_entry_exit_sim_trade_gaps_gap (sim_run_id, gap_minutes)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    for (column, definition) in [
+        (
+            "previous_cycle_number",
+            "BIGINT NOT NULL DEFAULT 0 AFTER bucket_label",
+        ),
+        (
+            "cycle_number",
+            "BIGINT NOT NULL DEFAULT 0 AFTER previous_cycle_number",
+        ),
+        (
+            "starts_new_cycle",
+            "BOOLEAN NOT NULL DEFAULT FALSE AFTER cycle_number",
+        ),
+    ] {
+        ensure_column(
+            pool,
+            "entry_exit_playbook_sim_trade_gaps",
+            column,
+            definition,
+        )
+        .await?;
+    }
 
     sqlx::query(
         r#"
@@ -1692,6 +2001,40 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
             PRIMARY KEY (sim_run_id, family_key),
             INDEX idx_entry_exit_sim_family_contribution_playbook (playbook_id, sum_r),
             INDEX idx_entry_exit_sim_family_contribution_build (build_id, sum_r)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_template_performance (
+            sim_run_id VARCHAR(64) NOT NULL,
+            template_uid VARCHAR(128) NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            template_label VARCHAR(128) NOT NULL DEFAULT '',
+            template_name VARCHAR(255) NOT NULL DEFAULT '',
+            eval_count BIGINT NOT NULL DEFAULT 0,
+            pass_count BIGINT NOT NULL DEFAULT 0,
+            fail_count BIGINT NOT NULL DEFAULT 0,
+            no_entry_count BIGINT NOT NULL DEFAULT 0,
+            win_rate DOUBLE NOT NULL DEFAULT 0,
+            avg_r DOUBLE NOT NULL DEFAULT 0,
+            sum_r DOUBLE NOT NULL DEFAULT 0,
+            best_r DOUBLE NOT NULL DEFAULT 0,
+            worst_r DOUBLE NOT NULL DEFAULT 0,
+            daily_loss_day_trades BIGINT NOT NULL DEFAULT 0,
+            daily_loss_day_count BIGINT NOT NULL DEFAULT 0,
+            family_count BIGINT NOT NULL DEFAULT 0,
+            symbol_count BIGINT NOT NULL DEFAULT 0,
+            contract_count BIGINT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, template_uid),
+            INDEX idx_entry_exit_sim_template_performance_playbook (playbook_id, sum_r),
+            INDEX idx_entry_exit_sim_template_performance_build (build_id, sum_r)
         )
         "#,
     )
@@ -3117,6 +3460,13 @@ async fn insert_sim_run_summary(
     summary: &RouterSummary,
     elapsed_ms: i64,
 ) -> Result<(), sqlx::Error> {
+    let closed_trade_count = summary.win_count + summary.loss_count;
+    let trade_win_rate = if closed_trade_count > 0 {
+        Some(summary.win_count as f64 / closed_trade_count as f64 * 100.0)
+    } else {
+        None
+    };
+
     sqlx::query(
         r#"
         INSERT INTO entry_exit_playbook_sim_runs SET
@@ -3167,6 +3517,7 @@ async fn insert_sim_run_summary(
             win_count = ?,
             loss_count = ?,
             no_entry_count = ?,
+            trade_win_rate = ?,
             avg_r = ?,
             sum_r = ?,
             best_r = ?,
@@ -3219,6 +3570,7 @@ async fn insert_sim_run_summary(
             win_count = VALUES(win_count),
             loss_count = VALUES(loss_count),
             no_entry_count = VALUES(no_entry_count),
+            trade_win_rate = VALUES(trade_win_rate),
             avg_r = VALUES(avg_r),
             sum_r = VALUES(sum_r),
             best_r = VALUES(best_r),
@@ -3273,6 +3625,7 @@ async fn insert_sim_run_summary(
     .bind(summary.win_count)
     .bind(summary.loss_count)
     .bind(summary.no_entry_count)
+    .bind(trade_win_rate)
     .bind(summary.avg_r())
     .bind(summary.sum_r)
     .bind(summary.best_r)
@@ -3291,15 +3644,25 @@ async fn load_prop_replay_trades(
     let rows = sqlx::query(
         r#"
         SELECT
-            COALESCE(entry_date, d_confirm_date, d_date) AS event_date,
-            symbol,
-            family_key,
-            template_uid,
-            outcome,
-            COALESCE(result_r, 0) AS result_r
-        FROM entry_exit_template_family_router_results
-        WHERE router_run_id = ?
-        ORDER BY COALESCE(entry_date, d_confirm_date, d_date) ASC, id ASC
+            r.id AS result_id,
+            r.setup_id,
+            COALESCE(r.entry_date, r.d_confirm_date, r.d_date) AS event_date,
+            r.symbol,
+            r.family_key,
+            r.template_uid,
+            r.template_label,
+            COALESCE(c.template_name, '') AS template_name,
+            r.outcome,
+            COALESCE(r.result_r, 0) AS result_r
+        FROM entry_exit_template_family_router_results r
+        LEFT JOIN entry_exit_playbook_sim_runs s
+          ON s.sim_run_id = r.router_run_id
+        LEFT JOIN entry_exit_template_family_router_choices c
+          ON c.router_run_id = s.playbook_id
+         AND c.family_key = r.family_key
+         AND c.template_uid = r.template_uid
+        WHERE r.router_run_id = ?
+        ORDER BY COALESCE(r.entry_date, r.d_confirm_date, r.d_date) ASC, r.id ASC
         "#,
     )
     .bind(sim_run_id)
@@ -3310,16 +3673,105 @@ async fn load_prop_replay_trades(
         .map(|row| {
             let symbol: String = row.try_get("symbol")?;
             Ok(PropReplayTrade {
+                result_id: row.try_get("result_id")?,
+                setup_id: row.try_get("setup_id")?,
                 event_date: row.try_get("event_date")?,
                 root_symbol: normalize_root_symbol(&root_symbol_from_contract(&symbol)),
                 symbol,
                 family_key: row.try_get("family_key")?,
                 template_uid: row.try_get("template_uid")?,
+                template_label: row.try_get("template_label")?,
+                template_name: row.try_get("template_name")?,
                 outcome: row.try_get("outcome")?,
                 result_r: row.try_get("result_r")?,
             })
         })
         .collect()
+}
+
+fn market_trend_timeframes() -> [(MarketTrendTimeframe, &'static str); 3] {
+    [
+        (MarketTrendTimeframe::FiveMinute, "5m"),
+        (MarketTrendTimeframe::FifteenMinute, "15m"),
+        (MarketTrendTimeframe::OneHour, "1h"),
+    ]
+}
+
+async fn load_trade_trend_snapshot(
+    pool: &MySqlPool,
+    trade: &PropReplayTrade,
+    timeframe: MarketTrendTimeframe,
+    timeframe_label: &'static str,
+) -> Result<SimTradeTrendRow, sqlx::Error> {
+    let requested_candle_ts_utc =
+        last_closed_candle_start_at_or_before(trade.event_date, timeframe);
+    let trend = sqlx::query(
+        r#"
+        SELECT
+            candle_ts_utc,
+            trend_label,
+            ema_21,
+            ema_21_slope,
+            close_to_ema_pct,
+            ema_slope_pct,
+            strength_pct
+        FROM entry_exit_market_candle_trends
+        WHERE symbol = ?
+          AND timeframe = ?
+          AND candle_ts_utc <= ?
+        ORDER BY candle_ts_utc DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&trade.symbol)
+    .bind(timeframe_label)
+    .bind(requested_candle_ts_utc)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(SimTradeTrendRow {
+        result_id: trade.result_id,
+        setup_id: trade.setup_id.clone(),
+        event_date: trade.event_date,
+        symbol: trade.symbol.clone(),
+        root_symbol: trade.root_symbol.clone(),
+        timeframe: timeframe_label,
+        requested_candle_ts_utc,
+        trend_candle_ts_utc: trend
+            .as_ref()
+            .and_then(|row| row.try_get("candle_ts_utc").ok()),
+        trend_label: trend
+            .as_ref()
+            .and_then(|row| row.try_get("trend_label").ok()),
+        ema_21: trend.as_ref().and_then(|row| row.try_get("ema_21").ok()),
+        ema_21_slope: trend
+            .as_ref()
+            .and_then(|row| row.try_get("ema_21_slope").ok()),
+        close_to_ema_pct: trend
+            .as_ref()
+            .and_then(|row| row.try_get("close_to_ema_pct").ok()),
+        ema_slope_pct: trend
+            .as_ref()
+            .and_then(|row| row.try_get("ema_slope_pct").ok()),
+        strength_pct: trend
+            .as_ref()
+            .and_then(|row| row.try_get("strength_pct").ok()),
+    })
+}
+
+async fn compute_trade_trend_rows(
+    pool: &MySqlPool,
+    trades: &[PropReplayTrade],
+) -> Result<Vec<SimTradeTrendRow>, sqlx::Error> {
+    let mut rows = Vec::with_capacity(trades.len() * market_trend_timeframes().len());
+
+    for trade in trades {
+        for (timeframe, timeframe_label) in market_trend_timeframes() {
+            rows.push(load_trade_trend_snapshot(pool, trade, timeframe, timeframe_label).await?);
+        }
+    }
+
+    Ok(rows)
 }
 
 fn close_prop_cycle(
@@ -3461,6 +3913,74 @@ fn compute_equity_points_from_trades(
     points
 }
 
+fn progress_pct(value: f64, limit: f64) -> f64 {
+    if limit > 0.0 {
+        (value.max(0.0) / limit * 100.0).clamp(0.0, 100.0)
+    } else {
+        0.0
+    }
+}
+
+fn compute_trade_progress_from_trades(
+    trades: &[PropReplayTrade],
+    daily_loss_lockout: bool,
+) -> Vec<TradeProgressRow> {
+    const PROFIT_TARGET_R: f64 = 30.0;
+    const MAX_DRAWDOWN_R: f64 = 20.0;
+    const DAILY_LOSS_R: f64 = 10.0;
+
+    let mut rows = Vec::with_capacity(trades.len());
+    let mut active_cycle: Option<OpenPropCycle> = None;
+    let mut next_cycle_number = 1_i64;
+
+    for trade in trades {
+        let date = trade.event_date.date();
+        let cycle = active_cycle.get_or_insert_with(|| {
+            let cycle = OpenPropCycle::new(next_cycle_number, date);
+            next_cycle_number += 1;
+            cycle
+        });
+
+        let equity_before = cycle.equity_r;
+        let drawdown_before = cycle.peak_r - cycle.equity_r;
+        let tp_before = progress_pct(equity_before, PROFIT_TARGET_R);
+        let dd_before = progress_pct(drawdown_before, MAX_DRAWDOWN_R);
+
+        cycle.apply_trade(trade);
+
+        let equity_after = cycle.equity_r;
+        let drawdown_after = cycle.peak_r - cycle.equity_r;
+        let tp_after = progress_pct(equity_after, PROFIT_TARGET_R);
+        let dd_after = progress_pct(drawdown_after, MAX_DRAWDOWN_R);
+
+        rows.push(TradeProgressRow {
+            result_id: trade.result_id,
+            setup_id: trade.setup_id.clone(),
+            event_date: trade.event_date,
+            cycle_number: cycle.cycle_number,
+            cycle_equity_r_before: equity_before,
+            cycle_equity_r_after: equity_after,
+            cycle_drawdown_r_before: drawdown_before,
+            cycle_drawdown_r_after: drawdown_after,
+            tp_progress_pct_before: tp_before,
+            tp_progress_pct_after: tp_after,
+            tp_progress_pct_delta: tp_after - tp_before,
+            drawdown_progress_pct_before: dd_before,
+            drawdown_progress_pct_after: dd_after,
+            drawdown_progress_pct_delta: dd_after - dd_before,
+        });
+
+        let should_close_cycle = (!daily_loss_lockout && cycle.daily_r <= -DAILY_LOSS_R)
+            || cycle.max_drawdown_r >= MAX_DRAWDOWN_R
+            || cycle.equity_r >= PROFIT_TARGET_R;
+        if should_close_cycle {
+            active_cycle.take();
+        }
+    }
+
+    rows
+}
+
 fn finish_daily_r_row(
     rows: &mut Vec<DailyRRow>,
     trade_date: Option<NaiveDate>,
@@ -3476,6 +3996,18 @@ fn finish_daily_r_row(
     let Some(trade_date) = trade_date else {
         return;
     };
+    const PROFIT_TARGET_R: f64 = 30.0;
+    const DAILY_LOSS_R: f64 = 10.0;
+    let tp_progress_pct = if PROFIT_TARGET_R > 0.0 {
+        (total_r.max(0.0) / PROFIT_TARGET_R * 100.0).clamp(0.0, 100.0)
+    } else {
+        0.0
+    };
+    let drawdown_progress_pct = if DAILY_LOSS_R > 0.0 {
+        ((-worst_intraday_r).max(0.0) / DAILY_LOSS_R * 100.0).clamp(0.0, 100.0)
+    } else {
+        0.0
+    };
 
     rows.push(DailyRRow {
         trade_date,
@@ -3488,6 +4020,8 @@ fn finish_daily_r_row(
         worst_trade_r: worst_trade_r.unwrap_or(0.0),
         worst_intraday_r,
         hit_daily_loss: worst_intraday_r <= -10.0,
+        tp_progress_pct,
+        drawdown_progress_pct,
     });
 }
 
@@ -3696,20 +4230,54 @@ fn compute_trade_cadence_from_trades(trades: &[PropReplayTrade]) -> TradeCadence
 
     let mut trades_by_day: HashMap<NaiveDate, i64> = HashMap::new();
     let mut trades_by_hour: HashMap<(NaiveDate, u32), i64> = HashMap::new();
+    let mut trades_by_week: HashMap<(i32, u32), i64> = HashMap::new();
+    let mut trades_by_month: HashMap<(i32, u32), i64> = HashMap::new();
     for trade_time in &times {
         *trades_by_day.entry(trade_time.date()).or_default() += 1;
         *trades_by_hour
             .entry((trade_time.date(), trade_time.hour()))
             .or_default() += 1;
+        let iso_week = trade_time.iso_week();
+        *trades_by_week
+            .entry((iso_week.year(), iso_week.week()))
+            .or_default() += 1;
+        *trades_by_month
+            .entry((trade_time.year(), trade_time.month()))
+            .or_default() += 1;
     }
+    cadence.active_hours = trades_by_hour.len() as i64;
     cadence.trade_days = trades_by_day.len() as i64;
+    cadence.active_weeks = trades_by_week.len() as i64;
+    cadence.active_months = trades_by_month.len() as i64;
+    cadence.avg_trades_per_hour = if cadence.active_hours > 0 {
+        cadence.trades as f64 / cadence.active_hours as f64
+    } else {
+        0.0
+    };
     cadence.avg_trades_per_day = if cadence.trade_days > 0 {
         cadence.trades as f64 / cadence.trade_days as f64
     } else {
         0.0
     };
+    cadence.avg_trades_per_week = if cadence.active_weeks > 0 {
+        cadence.trades as f64 / cadence.active_weeks as f64
+    } else {
+        0.0
+    };
+    cadence.avg_trades_per_month = if cadence.active_months > 0 {
+        cadence.trades as f64 / cadence.active_months as f64
+    } else {
+        0.0
+    };
+    cadence.min_trades_per_day = trades_by_day.values().copied().min().unwrap_or(0);
     cadence.max_trades_per_day = trades_by_day.values().copied().max().unwrap_or(0);
     cadence.max_trades_per_hour = trades_by_hour.values().copied().max().unwrap_or(0);
+    cadence.max_trades_per_week = trades_by_week.values().copied().max().unwrap_or(0);
+    cadence.max_trades_per_month = trades_by_month.values().copied().max().unwrap_or(0);
+    cadence.hours_over_5_trades =
+        trades_by_hour.values().filter(|count| **count > 5).count() as i64;
+    cadence.days_over_20_trades =
+        trades_by_day.values().filter(|count| **count > 20).count() as i64;
     cadence.max_trades_5m_window = max_trades_in_window(&times, 5);
     cadence.max_trades_15m_window = max_trades_in_window(&times, 15);
 
@@ -3752,7 +4320,78 @@ fn compute_trade_cadence_from_trades(trades: &[PropReplayTrade]) -> TradeCadence
     cadence
 }
 
-fn loss_gap_bucket(previous: NaiveDateTime, current: NaiveDateTime, gap_minutes: f64) -> (&'static str, &'static str, i64) {
+fn trade_gap_bucket(gap_minutes: f64) -> (&'static str, &'static str) {
+    if gap_minutes <= 1.0 {
+        ("0_1m", "0-1m")
+    } else if gap_minutes <= 5.0 {
+        ("1_5m", "1-5m")
+    } else if gap_minutes <= 15.0 {
+        ("5_15m", "5-15m")
+    } else if gap_minutes <= 30.0 {
+        ("15_30m", "15-30m")
+    } else if gap_minutes <= 60.0 {
+        ("30_60m", "30-60m")
+    } else {
+        ("over_60m", "60m+")
+    }
+}
+
+fn compute_trade_gap_rows_from_trades(
+    trades: &[PropReplayTrade],
+    progress_rows: &[TradeProgressRow],
+) -> Vec<TradeGapRow> {
+    let cycle_by_result_id = progress_rows
+        .iter()
+        .map(|row| (row.result_id, row.cycle_number))
+        .collect::<HashMap<_, _>>();
+    let mut times = trades
+        .iter()
+        .filter(|trade| matches!(trade.outcome.as_str(), "pass" | "fail"))
+        .map(|trade| {
+            (
+                trade.event_date,
+                *cycle_by_result_id.get(&trade.result_id).unwrap_or(&0),
+            )
+        })
+        .collect::<Vec<_>>();
+    times.sort_by_key(|(event_date, _cycle_number)| *event_date);
+
+    times
+        .windows(2)
+        .enumerate()
+        .map(|(index, window)| {
+            let previous_event_at = window[0].0;
+            let event_at = window[1].0;
+            let previous_cycle_number = window[0].1;
+            let cycle_number = window[1].1;
+            let gap_minutes = event_at
+                .signed_duration_since(previous_event_at)
+                .num_seconds()
+                .max(0) as f64
+                / 60.0;
+            let (bucket_key, bucket_label) = trade_gap_bucket(gap_minutes);
+            TradeGapRow {
+                sequence_number: index as i64 + 1,
+                previous_event_at,
+                event_at,
+                gap_minutes,
+                bucket_key: bucket_key.to_string(),
+                bucket_label: bucket_label.to_string(),
+                previous_cycle_number,
+                cycle_number,
+                starts_new_cycle: cycle_number > 0
+                    && previous_cycle_number > 0
+                    && cycle_number != previous_cycle_number,
+            }
+        })
+        .collect()
+}
+
+fn loss_gap_bucket(
+    previous: NaiveDateTime,
+    current: NaiveDateTime,
+    gap_minutes: f64,
+) -> (&'static str, &'static str, i64) {
     if previous.date() != current.date() {
         ("next_day_plus", "Next day+", 7)
     } else if gap_minutes <= 5.0 {
@@ -3788,7 +4427,11 @@ fn most_common_key(counts: &HashMap<String, i64>) -> String {
 fn compute_loss_clustering_from_trades(
     trades: &[PropReplayTrade],
     streaks: &[StreakRow],
-) -> (LossClusterSummaryRow, Vec<LossGapBucketRow>, Vec<LossWindowRow>) {
+) -> (
+    LossClusterSummaryRow,
+    Vec<LossGapBucketRow>,
+    Vec<LossWindowRow>,
+) {
     let loss_trades = trades
         .iter()
         .filter(|trade| trade.outcome == "fail")
@@ -3820,11 +4463,8 @@ fn compute_loss_clustering_from_trades(
     for window in loss_trades.windows(2) {
         let previous = window[0].event_date;
         let current = window[1].event_date;
-        let gap_minutes = current
-            .signed_duration_since(previous)
-            .num_seconds()
-            .max(0) as f64
-            / 60.0;
+        let gap_minutes =
+            current.signed_duration_since(previous).num_seconds().max(0) as f64 / 60.0;
         gaps.push(gap_minutes);
         if gap_minutes <= 60.0 {
             summary.clustered_60m_loss_pairs += 1;
@@ -3860,20 +4500,21 @@ fn compute_loss_clustering_from_trades(
             *day_losses.entry(trade_date).or_default() += 1;
         }
 
-        let window = windows
-            .entry((trade_date, entry_hour))
-            .or_insert_with(|| LossWindowAccumulator {
-                trade_date,
-                entry_hour,
-                trades: 0,
-                wins: 0,
-                losses: 0,
-                no_entries: 0,
-                total_r: 0.0,
-                root_counts: HashMap::new(),
-                family_counts: HashMap::new(),
-                template_counts: HashMap::new(),
-            });
+        let window =
+            windows
+                .entry((trade_date, entry_hour))
+                .or_insert_with(|| LossWindowAccumulator {
+                    trade_date,
+                    entry_hour,
+                    trades: 0,
+                    wins: 0,
+                    losses: 0,
+                    no_entries: 0,
+                    total_r: 0.0,
+                    root_counts: HashMap::new(),
+                    family_counts: HashMap::new(),
+                    template_counts: HashMap::new(),
+                });
 
         match trade.outcome.as_str() {
             "pass" => {
@@ -3899,16 +4540,14 @@ fn compute_loss_clustering_from_trades(
     summary.loss_days = day_losses.len() as i64;
     summary.loss_days_5_plus = day_losses.values().filter(|losses| **losses >= 5).count() as i64;
     if let Some((day, losses)) = day_losses.iter().max_by(|left, right| {
-        left.1
-            .cmp(right.1)
-            .then_with(|| {
-                day_r
-                    .get(right.0)
-                    .copied()
-                    .unwrap_or(0.0)
-                    .partial_cmp(&day_r.get(left.0).copied().unwrap_or(0.0))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        left.1.cmp(right.1).then_with(|| {
+            day_r
+                .get(right.0)
+                .copied()
+                .unwrap_or(0.0)
+                .partial_cmp(&day_r.get(left.0).copied().unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     }) {
         summary.worst_loss_day = Some(*day);
         summary.worst_loss_day_losses = *losses;
@@ -4055,6 +4694,87 @@ fn compute_contribution_rows_from_trades(
             .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| right.trades.cmp(&left.trades))
             .then_with(|| left.key.cmp(&right.key))
+    });
+    rows
+}
+
+fn compute_template_performance_rows_from_trades(
+    trades: &[PropReplayTrade],
+    daily_rows: &[DailyRRow],
+) -> Vec<TemplatePerformanceRow> {
+    let daily_loss_dates: HashSet<NaiveDate> = daily_rows
+        .iter()
+        .filter(|row| row.hit_daily_loss)
+        .map(|row| row.trade_date)
+        .collect();
+    let mut by_template: HashMap<String, TemplatePerformanceRow> = HashMap::new();
+
+    for trade in trades {
+        if trade.template_uid.trim().is_empty() {
+            continue;
+        }
+        let row = by_template
+            .entry(trade.template_uid.clone())
+            .or_insert_with(|| TemplatePerformanceRow {
+                template_uid: trade.template_uid.clone(),
+                template_label: trade.template_label.clone(),
+                template_name: trade.template_name.clone(),
+                ..TemplatePerformanceRow::default()
+            });
+
+        if row.template_label.is_empty() && !trade.template_label.is_empty() {
+            row.template_label = trade.template_label.clone();
+        }
+        if row.template_name.is_empty() && !trade.template_name.is_empty() {
+            row.template_name = trade.template_name.clone();
+        }
+
+        row.eval_count += 1;
+        row.family_keys.insert(trade.family_key.clone());
+        row.root_symbols.insert(trade.root_symbol.clone());
+        row.contract_symbols.insert(trade.symbol.clone());
+
+        match trade.outcome.as_str() {
+            "pass" => {
+                row.pass_count += 1;
+                row.sum_r += trade.result_r;
+            }
+            "fail" => {
+                row.fail_count += 1;
+                row.sum_r += trade.result_r;
+            }
+            "no_entry" => {
+                row.no_entry_count += 1;
+            }
+            _ => {}
+        }
+
+        if matches!(trade.outcome.as_str(), "pass" | "fail") {
+            let closed_count = row.pass_count + row.fail_count;
+            if closed_count == 1 {
+                row.best_r = trade.result_r;
+                row.worst_r = trade.result_r;
+            } else {
+                row.best_r = row.best_r.max(trade.result_r);
+                row.worst_r = row.worst_r.min(trade.result_r);
+            }
+
+            let trade_date = trade.event_date.date();
+            if daily_loss_dates.contains(&trade_date) {
+                row.daily_loss_day_trades += 1;
+                row.daily_loss_days.insert(trade_date);
+            }
+        }
+    }
+
+    let mut rows = by_template.into_values().collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        right
+            .sum_r
+            .partial_cmp(&left.sum_r)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| right.eval_count.cmp(&left.eval_count))
+            .then_with(|| left.template_label.cmp(&right.template_label))
     });
     rows
 }
@@ -4311,6 +5031,128 @@ async fn store_equity_points(
     Ok(())
 }
 
+async fn store_trade_progress_rows(
+    pool: &MySqlPool,
+    sim_run_id: &str,
+    playbook_id: Option<&str>,
+    build_id: &str,
+    rows: &[TradeProgressRow],
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM entry_exit_playbook_sim_trade_progress WHERE sim_run_id = ?")
+        .bind(sim_run_id)
+        .execute(pool)
+        .await?;
+
+    for row in rows {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_playbook_sim_trade_progress (
+                sim_run_id,
+                result_id,
+                setup_id,
+                playbook_id,
+                build_id,
+                event_date,
+                cycle_number,
+                cycle_equity_r_before,
+                cycle_equity_r_after,
+                cycle_drawdown_r_before,
+                cycle_drawdown_r_after,
+                tp_progress_pct_before,
+                tp_progress_pct_after,
+                tp_progress_pct_delta,
+                drawdown_progress_pct_before,
+                drawdown_progress_pct_after,
+                drawdown_progress_pct_delta
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(row.result_id)
+        .bind(&row.setup_id)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(row.event_date)
+        .bind(row.cycle_number)
+        .bind(row.cycle_equity_r_before)
+        .bind(row.cycle_equity_r_after)
+        .bind(row.cycle_drawdown_r_before)
+        .bind(row.cycle_drawdown_r_after)
+        .bind(row.tp_progress_pct_before)
+        .bind(row.tp_progress_pct_after)
+        .bind(row.tp_progress_pct_delta)
+        .bind(row.drawdown_progress_pct_before)
+        .bind(row.drawdown_progress_pct_after)
+        .bind(row.drawdown_progress_pct_delta)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn store_trade_trend_rows(
+    pool: &MySqlPool,
+    sim_run_id: &str,
+    playbook_id: Option<&str>,
+    build_id: &str,
+    rows: &[SimTradeTrendRow],
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM entry_exit_playbook_sim_trade_trends WHERE sim_run_id = ?")
+        .bind(sim_run_id)
+        .execute(pool)
+        .await?;
+
+    for row in rows {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_playbook_sim_trade_trends (
+                sim_run_id,
+                result_id,
+                setup_id,
+                playbook_id,
+                build_id,
+                event_date,
+                symbol,
+                root_symbol,
+                timeframe,
+                requested_candle_ts_utc,
+                trend_candle_ts_utc,
+                trend_label,
+                ema_21,
+                ema_21_slope,
+                close_to_ema_pct,
+                ema_slope_pct,
+                strength_pct
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(row.result_id)
+        .bind(&row.setup_id)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(row.event_date)
+        .bind(&row.symbol)
+        .bind(&row.root_symbol)
+        .bind(row.timeframe)
+        .bind(row.requested_candle_ts_utc)
+        .bind(row.trend_candle_ts_utc)
+        .bind(&row.trend_label)
+        .bind(row.ema_21)
+        .bind(row.ema_21_slope)
+        .bind(row.close_to_ema_pct)
+        .bind(row.ema_slope_pct)
+        .bind(row.strength_pct)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
 async fn store_daily_r_rows(
     pool: &MySqlPool,
     sim_run_id: &str,
@@ -4339,9 +5181,11 @@ async fn store_daily_r_rows(
                 best_trade_r,
                 worst_trade_r,
                 worst_intraday_r,
-                hit_daily_loss
+                hit_daily_loss,
+                tp_progress_pct,
+                drawdown_progress_pct
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(sim_run_id)
@@ -4357,6 +5201,8 @@ async fn store_daily_r_rows(
         .bind(row.worst_trade_r)
         .bind(row.worst_intraday_r)
         .bind(row.hit_daily_loss)
+        .bind(row.tp_progress_pct)
+        .bind(row.drawdown_progress_pct)
         .execute(pool)
         .await?;
     }
@@ -4448,15 +5294,25 @@ async fn store_trade_cadence(
             first_trade_at,
             last_trade_at,
             trades,
+            active_hours,
             trade_days,
+            active_weeks,
+            active_months,
             gap_count,
             avg_gap_minutes,
             median_gap_minutes,
             min_gap_minutes,
             max_gap_minutes,
+            avg_trades_per_hour,
             avg_trades_per_day,
+            avg_trades_per_week,
+            avg_trades_per_month,
             max_trades_per_day,
             max_trades_per_hour,
+            max_trades_per_week,
+            max_trades_per_month,
+            hours_over_5_trades,
+            days_over_20_trades,
             max_trades_5m_window,
             max_trades_15m_window,
             gap_0_1m,
@@ -4466,22 +5322,32 @@ async fn store_trade_cadence(
             gap_30_60m,
             gap_over_60m
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             playbook_id = VALUES(playbook_id),
             build_id = VALUES(build_id),
             first_trade_at = VALUES(first_trade_at),
             last_trade_at = VALUES(last_trade_at),
             trades = VALUES(trades),
+            active_hours = VALUES(active_hours),
             trade_days = VALUES(trade_days),
+            active_weeks = VALUES(active_weeks),
+            active_months = VALUES(active_months),
             gap_count = VALUES(gap_count),
             avg_gap_minutes = VALUES(avg_gap_minutes),
             median_gap_minutes = VALUES(median_gap_minutes),
             min_gap_minutes = VALUES(min_gap_minutes),
             max_gap_minutes = VALUES(max_gap_minutes),
+            avg_trades_per_hour = VALUES(avg_trades_per_hour),
             avg_trades_per_day = VALUES(avg_trades_per_day),
+            avg_trades_per_week = VALUES(avg_trades_per_week),
+            avg_trades_per_month = VALUES(avg_trades_per_month),
             max_trades_per_day = VALUES(max_trades_per_day),
             max_trades_per_hour = VALUES(max_trades_per_hour),
+            max_trades_per_week = VALUES(max_trades_per_week),
+            max_trades_per_month = VALUES(max_trades_per_month),
+            hours_over_5_trades = VALUES(hours_over_5_trades),
+            days_over_20_trades = VALUES(days_over_20_trades),
             max_trades_5m_window = VALUES(max_trades_5m_window),
             max_trades_15m_window = VALUES(max_trades_15m_window),
             gap_0_1m = VALUES(gap_0_1m),
@@ -4498,15 +5364,25 @@ async fn store_trade_cadence(
     .bind(cadence.first_trade_at)
     .bind(cadence.last_trade_at)
     .bind(cadence.trades)
+    .bind(cadence.active_hours)
     .bind(cadence.trade_days)
+    .bind(cadence.active_weeks)
+    .bind(cadence.active_months)
     .bind(cadence.gap_count)
     .bind(cadence.avg_gap_minutes)
     .bind(cadence.median_gap_minutes)
     .bind(cadence.min_gap_minutes)
     .bind(cadence.max_gap_minutes)
+    .bind(cadence.avg_trades_per_hour)
     .bind(cadence.avg_trades_per_day)
+    .bind(cadence.avg_trades_per_week)
+    .bind(cadence.avg_trades_per_month)
     .bind(cadence.max_trades_per_day)
     .bind(cadence.max_trades_per_hour)
+    .bind(cadence.max_trades_per_week)
+    .bind(cadence.max_trades_per_month)
+    .bind(cadence.hours_over_5_trades)
+    .bind(cadence.days_over_20_trades)
     .bind(cadence.max_trades_5m_window)
     .bind(cadence.max_trades_15m_window)
     .bind(cadence.gap_0_1m)
@@ -4517,6 +5393,140 @@ async fn store_trade_cadence(
     .bind(cadence.gap_over_60m)
     .execute(pool)
     .await?;
+
+    Ok(())
+}
+
+async fn store_trade_workload(
+    pool: &MySqlPool,
+    sim_run_id: &str,
+    playbook_id: Option<&str>,
+    build_id: &str,
+    cadence: &TradeCadenceRow,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO entry_exit_playbook_sim_trade_workload (
+            sim_run_id,
+            playbook_id,
+            build_id,
+            first_trade_at,
+            last_trade_at,
+            trades,
+            active_hours,
+            active_days,
+            active_weeks,
+            active_months,
+            avg_trades_per_hour,
+            avg_trades_per_day,
+            avg_trades_per_week,
+            avg_trades_per_month,
+            min_trades_per_day,
+            max_trades_per_hour,
+            max_trades_per_day,
+            max_trades_per_week,
+            max_trades_per_month,
+            hours_over_5_trades,
+            days_over_20_trades
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            playbook_id = VALUES(playbook_id),
+            build_id = VALUES(build_id),
+            first_trade_at = VALUES(first_trade_at),
+            last_trade_at = VALUES(last_trade_at),
+            trades = VALUES(trades),
+            active_hours = VALUES(active_hours),
+            active_days = VALUES(active_days),
+            active_weeks = VALUES(active_weeks),
+            active_months = VALUES(active_months),
+            avg_trades_per_hour = VALUES(avg_trades_per_hour),
+            avg_trades_per_day = VALUES(avg_trades_per_day),
+            avg_trades_per_week = VALUES(avg_trades_per_week),
+            avg_trades_per_month = VALUES(avg_trades_per_month),
+            min_trades_per_day = VALUES(min_trades_per_day),
+            max_trades_per_hour = VALUES(max_trades_per_hour),
+            max_trades_per_day = VALUES(max_trades_per_day),
+            max_trades_per_week = VALUES(max_trades_per_week),
+            max_trades_per_month = VALUES(max_trades_per_month),
+            hours_over_5_trades = VALUES(hours_over_5_trades),
+            days_over_20_trades = VALUES(days_over_20_trades)
+        "#,
+    )
+    .bind(sim_run_id)
+    .bind(playbook_id)
+    .bind(build_id)
+    .bind(cadence.first_trade_at)
+    .bind(cadence.last_trade_at)
+    .bind(cadence.trades)
+    .bind(cadence.active_hours)
+    .bind(cadence.trade_days)
+    .bind(cadence.active_weeks)
+    .bind(cadence.active_months)
+    .bind(cadence.avg_trades_per_hour)
+    .bind(cadence.avg_trades_per_day)
+    .bind(cadence.avg_trades_per_week)
+    .bind(cadence.avg_trades_per_month)
+    .bind(cadence.min_trades_per_day)
+    .bind(cadence.max_trades_per_hour)
+    .bind(cadence.max_trades_per_day)
+    .bind(cadence.max_trades_per_week)
+    .bind(cadence.max_trades_per_month)
+    .bind(cadence.hours_over_5_trades)
+    .bind(cadence.days_over_20_trades)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn store_trade_gap_rows(
+    pool: &MySqlPool,
+    sim_run_id: &str,
+    playbook_id: Option<&str>,
+    build_id: &str,
+    rows: &[TradeGapRow],
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM entry_exit_playbook_sim_trade_gaps WHERE sim_run_id = ?")
+        .bind(sim_run_id)
+        .execute(pool)
+        .await?;
+
+    for row in rows {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_playbook_sim_trade_gaps (
+                sim_run_id,
+                sequence_number,
+                playbook_id,
+                build_id,
+                previous_event_at,
+                event_at,
+                gap_minutes,
+                bucket_key,
+                bucket_label,
+                previous_cycle_number,
+                cycle_number,
+                starts_new_cycle
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(row.sequence_number)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(row.previous_event_at)
+        .bind(row.event_at)
+        .bind(row.gap_minutes)
+        .bind(&row.bucket_key)
+        .bind(&row.bucket_label)
+        .bind(row.previous_cycle_number)
+        .bind(row.cycle_number)
+        .bind(row.starts_new_cycle)
+        .execute(pool)
+        .await?;
+    }
 
     Ok(())
 }
@@ -4826,6 +5836,84 @@ async fn store_family_contribution_rows(
         .bind(row.daily_loss_days.len() as i64)
         .bind(row.root_symbols.len() as i64)
         .bind(row.template_uids.len() as i64)
+        .bind(row.contract_symbols.len() as i64)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn store_template_performance_rows(
+    pool: &MySqlPool,
+    sim_run_id: &str,
+    playbook_id: Option<&str>,
+    build_id: &str,
+    rows: &[TemplatePerformanceRow],
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM entry_exit_playbook_sim_template_performance WHERE sim_run_id = ?")
+        .bind(sim_run_id)
+        .execute(pool)
+        .await?;
+
+    for row in rows {
+        let win_rate = if row.eval_count > 0 {
+            row.pass_count as f64 / row.eval_count as f64 * 100.0
+        } else {
+            0.0
+        };
+        let avg_r = if row.eval_count > 0 {
+            row.sum_r / row.eval_count as f64
+        } else {
+            0.0
+        };
+
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_playbook_sim_template_performance (
+                sim_run_id,
+                template_uid,
+                playbook_id,
+                build_id,
+                template_label,
+                template_name,
+                eval_count,
+                pass_count,
+                fail_count,
+                no_entry_count,
+                win_rate,
+                avg_r,
+                sum_r,
+                best_r,
+                worst_r,
+                daily_loss_day_trades,
+                daily_loss_day_count,
+                family_count,
+                symbol_count,
+                contract_count
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(&row.template_uid)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(&row.template_label)
+        .bind(&row.template_name)
+        .bind(row.eval_count)
+        .bind(row.pass_count)
+        .bind(row.fail_count)
+        .bind(row.no_entry_count)
+        .bind(win_rate)
+        .bind(avg_r)
+        .bind(row.sum_r)
+        .bind(row.best_r)
+        .bind(row.worst_r)
+        .bind(row.daily_loss_day_trades)
+        .bind(row.daily_loss_days.len() as i64)
+        .bind(row.family_keys.len() as i64)
+        .bind(row.root_symbols.len() as i64)
         .bind(row.contract_symbols.len() as i64)
         .execute(pool)
         .await?;
@@ -5373,12 +6461,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("loading replay trades...");
     let prop_trades = load_prop_replay_trades(&pool, &router_run_id).await?;
+    let trade_trend_rows = compute_trade_trend_rows(&pool, &prop_trades).await?;
     let (prop_summary, prop_cycles) =
         compute_prop_summary_from_trades(&prop_trades, args.daily_loss_lockout);
     let equity_points = compute_equity_points_from_trades(&prop_trades, args.daily_loss_lockout);
+    let trade_progress_rows =
+        compute_trade_progress_from_trades(&prop_trades, args.daily_loss_lockout);
     let daily_r_rows = compute_daily_r_from_trades(&prop_trades);
     let hourly_rows = compute_hourly_performance_from_trades(&prop_trades, &daily_r_rows);
     let trade_cadence = compute_trade_cadence_from_trades(&prop_trades);
+    let trade_gap_rows = compute_trade_gap_rows_from_trades(&prop_trades, &trade_progress_rows);
     let symbol_contribution_rows =
         compute_contribution_rows_from_trades(&prop_trades, &daily_r_rows, |trade| {
             trade.root_symbol.clone()
@@ -5387,6 +6479,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         compute_contribution_rows_from_trades(&prop_trades, &daily_r_rows, |trade| {
             trade.family_key.clone()
         });
+    let template_performance_rows =
+        compute_template_performance_rows_from_trades(&prop_trades, &daily_r_rows);
     let streaks = compute_streaks_from_trades(&prop_trades);
     let (loss_summary, loss_gap_buckets, loss_windows) =
         compute_loss_clustering_from_trades(&prop_trades, &streaks);
@@ -5407,6 +6501,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.reuse_router_run_id.as_deref(),
         &train_run_id,
         &equity_points,
+    )
+    .await?;
+    println!("storing trade progress...");
+    store_trade_progress_rows(
+        &pool,
+        &router_run_id,
+        args.reuse_router_run_id.as_deref(),
+        &train_run_id,
+        &trade_progress_rows,
+    )
+    .await?;
+    println!("storing trade trend snapshots...");
+    store_trade_trend_rows(
+        &pool,
+        &router_run_id,
+        args.reuse_router_run_id.as_deref(),
+        &train_run_id,
+        &trade_trend_rows,
     )
     .await?;
     println!("storing daily R...");
@@ -5436,6 +6548,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &trade_cadence,
     )
     .await?;
+    println!("storing trade workload...");
+    store_trade_workload(
+        &pool,
+        &router_run_id,
+        args.reuse_router_run_id.as_deref(),
+        &train_run_id,
+        &trade_cadence,
+    )
+    .await?;
+    println!("storing trade gap sequence...");
+    store_trade_gap_rows(
+        &pool,
+        &router_run_id,
+        args.reuse_router_run_id.as_deref(),
+        &train_run_id,
+        &trade_gap_rows,
+    )
+    .await?;
     println!("storing loss clustering...");
     store_loss_clustering(
         &pool,
@@ -5463,6 +6593,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.reuse_router_run_id.as_deref(),
         &train_run_id,
         &family_contribution_rows,
+    )
+    .await?;
+    println!("storing template performance...");
+    store_template_performance_rows(
+        &pool,
+        &router_run_id,
+        args.reuse_router_run_id.as_deref(),
+        &train_run_id,
+        &template_performance_rows,
     )
     .await?;
     println!("storing streaks...");

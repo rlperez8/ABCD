@@ -12,9 +12,12 @@ import {
   fetchEntryExitSimFamilyContribution,
   fetchEntryExitSimHourly,
   fetchEntryExitSimLossClustering,
+  fetchEntryExitSimMarketTrends,
   fetchEntryExitSimStreaks,
   fetchEntryExitSimSymbolContribution,
   fetchEntryExitSimTradeCadence,
+  fetchEntryExitSimTradeGaps,
+  fetchEntryExitSimTradeWorkload,
   fetchEntryExitTemplates,
   fetchPatternDetail,
   fetchPatternFamilies,
@@ -46,6 +49,16 @@ const formatTime = (value) => {
   const text = String(value);
   const timePart = text.includes('T') ? text.split('T')[1] : text.split(' ')[1];
   return timePart ? timePart.slice(0, 5) : text.slice(11, 16) || 'N/A';
+};
+
+const formatShortDateTime = (value) => {
+  if (!value) return 'N/A';
+  return `${formatDate(value).slice(5)} ${formatTime(value)}`;
+};
+
+const formatTimelineTick = (value) => {
+  if (!value) return 'N/A';
+  return `${formatDate(value).slice(5)} ${formatTime(value)}`;
 };
 
 const formatHourLabel = (value) => `${String(Number(value || 0)).padStart(2, '0')}:00`;
@@ -90,6 +103,35 @@ const optionalNumber = (value) => {
 
 const formatDecimal = (value, digits = 2) =>
   Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '0.00';
+
+const formatSignedPercent = (value, digits = 1) => {
+  if (!Number.isFinite(Number(value))) return '';
+  const parsed = Number(value);
+  return `${parsed > 0 ? '+' : ''}${parsed.toFixed(digits)}%`;
+};
+
+const formatGapDuration = (minutes) => {
+  const parsed = Number(minutes);
+  if (!Number.isFinite(parsed)) return '0.0m';
+  if (Math.abs(parsed) >= 120) {
+    return `${formatDecimal(parsed / 60, 1)}h`;
+  }
+  return `${formatDecimal(parsed, 1)}m`;
+};
+
+const formatTrendLabel = (value = '') =>
+  String(value || 'Unlabeled')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+
+const formatTrendAlignmentLabel = (value = '') => {
+  if (value === 'with_trend') return 'With Trend';
+  if (value === 'against_trend') return 'Fighting Trend';
+  if (value === 'neutral') return 'Neutral';
+  return formatTrendLabel(value || 'Unknown');
+};
 
 const formatRatePercent = (value, digits = 1) =>
   Number.isFinite(Number(value)) ? (Number(value) * 100).toFixed(digits) : '0.0';
@@ -1189,9 +1231,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     runs: [],
     symbols: [],
     family_routes: [],
+    template_performance: [],
     manual_family_bans: [],
     manual_symbol_bans: [],
   });
+  const [entryExitRouterRefreshKey, setEntryExitRouterRefreshKey] = useState(0);
   const [isEntryExitRouterLoading, setEntryExitRouterLoading] = useState(false);
   const [entryExitRouterError, setEntryExitRouterError] = useState('');
   const [entryExitSimEquityCurve, setEntryExitSimEquityCurve] = useState({ sim_run_id: '', points: [] });
@@ -1217,6 +1261,26 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   });
   const [isEntryExitSimTradeCadenceLoading, setEntryExitSimTradeCadenceLoading] = useState(false);
   const [entryExitSimTradeCadenceError, setEntryExitSimTradeCadenceError] = useState('');
+  const [entryExitSimTradeGapData, setEntryExitSimTradeGapData] = useState({
+    sim_run_id: '',
+    gaps: [],
+  });
+  const [isEntryExitSimTradeGapLoading, setEntryExitSimTradeGapLoading] = useState(false);
+  const [entryExitSimTradeGapError, setEntryExitSimTradeGapError] = useState('');
+  const [entryExitSimTradeWorkloadData, setEntryExitSimTradeWorkloadData] = useState({
+    sim_run_id: '',
+    workload: null,
+  });
+  const [isEntryExitSimTradeWorkloadLoading, setEntryExitSimTradeWorkloadLoading] = useState(false);
+  const [entryExitSimTradeWorkloadError, setEntryExitSimTradeWorkloadError] = useState('');
+  const [entryExitSimMarketTrendData, setEntryExitSimMarketTrendData] = useState({
+    sim_run_id: '',
+    performance: [],
+    alignment: [],
+    direction_alignment: [],
+  });
+  const [isEntryExitSimMarketTrendLoading, setEntryExitSimMarketTrendLoading] = useState(false);
+  const [entryExitSimMarketTrendError, setEntryExitSimMarketTrendError] = useState('');
   const [entryExitSimSymbolContributionData, setEntryExitSimSymbolContributionData] = useState({
     sim_run_id: '',
     symbols: [],
@@ -3258,6 +3322,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   const entryExitRouterRuns = useMemo(() => entryExitRouterData.runs ?? [], [entryExitRouterData.runs]);
   const entryExitRouterSymbols = entryExitRouterData.symbols ?? [];
   const entryExitRouterFamilyRoutes = entryExitRouterData.family_routes ?? [];
+  const entryExitTemplatePerformanceRows = entryExitRouterData.template_performance ?? [];
   const entryExitManualFamilyBans = entryExitRouterData.manual_family_bans ?? [];
   const entryExitManualSymbolBans = entryExitRouterData.manual_symbol_bans ?? [];
   const selectedEntryExitRouterRun =
@@ -3329,11 +3394,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     generatedEntryExitRouterRunRows[0] ??
     null;
   const hasSelectedEntryExitRouterRun = Boolean(selectedEntryExitRouterRunRow);
-  const selectedPlaybookTestRows = generatedEntryExitRouterRunRows.filter(
-    (row) =>
-      row.playbookName === selectedEntryExitRouterRunRow?.playbookName &&
-      isEntryExitSimulationRun(row.run)
-  );
+  const selectedPlaybookTestRows = generatedEntryExitRouterRunRows
+    .filter(
+      (row) =>
+        row.playbookName === selectedEntryExitRouterRunRow?.playbookName &&
+        isEntryExitSimulationRun(row.run)
+    )
+    .sort((left, right) => Date.parse(right.run.created_at || 0) - Date.parse(left.run.created_at || 0));
   const selectedEntryExitPlaybookName = selectedEntryExitRouterRunRow?.playbookName ?? '';
   const selectedEntryExitSimulationRunRow =
     selectedPlaybookTestRows.find(
@@ -3469,13 +3536,28 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       winRate: row.evalCount ? (row.passCount / row.evalCount) * 100 : 0,
     }))
     .sort((left, right) => right.evalCount - left.evalCount || left.label.localeCompare(right.label));
-  const selectedSimulationTemplatePerformanceRows = [...selectedSimulationUsedPlayRows].sort(
-    (left, right) =>
-      Number(right.sumR || 0) - Number(left.sumR || 0) ||
-      Number(right.avgR || 0) - Number(left.avgR || 0) ||
-      Number(right.evalCount || 0) - Number(left.evalCount || 0) ||
-      left.label.localeCompare(right.label)
-  );
+  const selectedSimulationTemplatePerformanceRows = entryExitTemplatePerformanceRows
+    .filter((row) => row.sim_run_id === selectedEntryExitSimulationTestId)
+    .map((row) => ({
+      avgR: Number(row.avg_r || 0),
+      evalCount: Number(row.eval_count || 0),
+      failCount: Number(row.fail_count || 0),
+      familyCount: Number(row.family_count || 0),
+      label: row.template_label || compactText(row.template_uid || '', 10),
+      name: row.template_name || 'Entry / exit test',
+      noEntryCount: Number(row.no_entry_count || 0),
+      passCount: Number(row.pass_count || 0),
+      sumR: Number(row.sum_r || 0),
+      templateUid: row.template_uid || '',
+      winRate: Number(row.win_rate || 0),
+    }))
+    .sort(
+      (left, right) =>
+        Number(right.sumR || 0) - Number(left.sumR || 0) ||
+        Number(right.avgR || 0) - Number(left.avgR || 0) ||
+        Number(right.evalCount || 0) - Number(left.evalCount || 0) ||
+        left.label.localeCompare(right.label)
+    );
   const generatedEntryExitFamilyRouterRows = selectedEntryExitFamilyRoutes.map((route, index) => {
     const testEvalCount = Number(route.test_eval_count || 0);
     const testPassRate = testEvalCount
@@ -3570,14 +3652,47 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         {
           title: 'Run',
           items: [
-            { label: 'Sim ID', value: selectedEntryExitSimulationRunRow.run.router_run_id || 'N/A', wide: true },
-            { label: 'Playbook', value: selectedEntryExitSimulationRunRow.run.playbook_id || 'N/A', wide: true },
-            { label: 'Build', value: selectedEntryExitSimulationRunRow.run.train_run_id || 'N/A', wide: true },
+            {
+              label: 'Sim ID',
+              value: compactText(selectedEntryExitSimulationRunRow.run.router_run_id || 'N/A', 18),
+              title: selectedEntryExitSimulationRunRow.run.router_run_id || 'N/A',
+            },
+            {
+              label: 'Playbook',
+              value: compactText(selectedEntryExitSimulationRunRow.run.playbook_id || 'N/A', 18),
+              title: selectedEntryExitSimulationRunRow.run.playbook_id || 'N/A',
+            },
+            {
+              label: 'Build',
+              value: compactText(selectedEntryExitSimulationRunRow.run.train_run_id || 'N/A', 18),
+              title: selectedEntryExitSimulationRunRow.run.train_run_id || 'N/A',
+            },
             { label: 'Source', value: selectedEntryExitSimulationRunRow.run.source_scope || 'N/A' },
             { label: 'TF', value: selectedEntryExitSimulationRunRow.run.source_timeframe || 'N/A' },
             { label: 'Year', value: formatNumber(selectedEntryExitSimulationRunRow.run.test_year) },
-            { label: 'Created', value: String(selectedEntryExitSimulationRunRow.run.created_at || 'N/A'), wide: true },
+            {
+              label: 'Created',
+              value: formatShortDateTime(selectedEntryExitSimulationRunRow.run.created_at),
+              title: String(selectedEntryExitSimulationRunRow.run.created_at || 'N/A'),
+            },
             { label: 'Elapsed', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.elapsed_ms)} ms` },
+          ],
+        },
+        {
+          title: 'Execution',
+          items: [
+            { label: 'Sister Window', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.sister_window_minutes)}m` },
+            { label: 'One Account', value: selectedEntryExitSimulationRunRow.run.one_trade_at_a_time ? 'On' : 'Off' },
+            { label: 'One Root', value: selectedEntryExitSimulationRunRow.run.one_trade_per_root_symbol ? 'On' : 'Off' },
+            { label: 'One Minute', value: selectedEntryExitSimulationRunRow.run.one_trade_per_minute ? 'On' : 'Off' },
+            { label: 'Cooldown', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.trade_cooldown_minutes)}m` },
+            { label: 'Daily Lockout', value: selectedEntryExitSimulationRunRow.run.daily_loss_lockout ? 'On' : 'Off' },
+            { label: 'Near Pass', value: selectedEntryExitSimulationRunRow.run.near_pass_protection ? 'On' : 'Off' },
+            { label: 'Near Within', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.near_pass_within_r, 2)}R` },
+            { label: 'Near Daily', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.near_pass_daily_loss_r, 2)}R` },
+            { label: 'Loss Cluster', value: selectedEntryExitSimulationRunRow.run.loss_cluster_day_lockout ? 'On' : 'Off' },
+            { label: 'Cluster Count', value: formatNumber(selectedEntryExitSimulationRunRow.run.loss_cluster_loss_count) },
+            { label: 'Cluster Window', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.loss_cluster_window_minutes)}m` },
           ],
         },
         {
@@ -3604,40 +3719,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           ],
         },
         {
-          title: 'Gates',
-          items: [
-            { label: 'Min Train Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.min_train_tests) },
-            { label: 'Prop Filter', value: selectedEntryExitSimulationRunRow.run.prop_filter_enabled ? 'On' : 'Off' },
-            { label: 'Trade Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.trade_min_tests) },
-            { label: 'Trade WR', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.trade_min_win_rate, 2)}%` },
-            { label: 'Trade Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.trade_min_avg_r, 3)}R` },
-            { label: 'Watch Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.watchlist_min_tests) },
-            { label: 'Watch WR', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.watchlist_min_win_rate, 2)}%` },
-            { label: 'Watch Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.watchlist_min_avg_r, 3)}R` },
-            { label: 'Symbol Filter', value: selectedEntryExitSimulationRunRow.run.symbol_filter_enabled ? 'On' : 'Off' },
-            { label: 'Symbol Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.symbol_min_tests) },
-            { label: 'Symbol WR', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.symbol_min_win_rate, 2)}%` },
-            { label: 'Symbol Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.symbol_min_avg_r, 3)}R` },
-          ],
-        },
-        {
-          title: 'Execution',
-          items: [
-            { label: 'Sister Window', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.sister_window_minutes)}m` },
-            { label: 'One Account', value: selectedEntryExitSimulationRunRow.run.one_trade_at_a_time ? 'On' : 'Off' },
-            { label: 'One Root', value: selectedEntryExitSimulationRunRow.run.one_trade_per_root_symbol ? 'On' : 'Off' },
-            { label: 'One Minute', value: selectedEntryExitSimulationRunRow.run.one_trade_per_minute ? 'On' : 'Off' },
-            { label: 'Cooldown', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.trade_cooldown_minutes)}m` },
-            { label: 'Daily Lockout', value: selectedEntryExitSimulationRunRow.run.daily_loss_lockout ? 'On' : 'Off' },
-            { label: 'Near Pass', value: selectedEntryExitSimulationRunRow.run.near_pass_protection ? 'On' : 'Off' },
-            { label: 'Near Within', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.near_pass_within_r, 2)}R` },
-            { label: 'Near Daily', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.near_pass_daily_loss_r, 2)}R` },
-            { label: 'Loss Cluster', value: selectedEntryExitSimulationRunRow.run.loss_cluster_day_lockout ? 'On' : 'Off' },
-            { label: 'Cluster Count', value: formatNumber(selectedEntryExitSimulationRunRow.run.loss_cluster_loss_count) },
-            { label: 'Cluster Window', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.loss_cluster_window_minutes)}m` },
-          ],
-        },
-        {
           title: 'Result',
           items: [
             { label: 'Wins', value: formatNumber(selectedEntryExitSimulationRunRow.run.win_count), tone: 'win' },
@@ -3655,6 +3736,23 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
             { label: 'Worst R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.worst_r, 2)}R`, tone: 'loss' },
           ],
         },
+        {
+          title: 'Gates',
+          items: [
+            { label: 'Min Train Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.min_train_tests) },
+            { label: 'Prop Filter', value: selectedEntryExitSimulationRunRow.run.prop_filter_enabled ? 'On' : 'Off' },
+            { label: 'Trade Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.trade_min_tests) },
+            { label: 'Trade WR', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.trade_min_win_rate, 2)}%` },
+            { label: 'Trade Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.trade_min_avg_r, 3)}R` },
+            { label: 'Watch Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.watchlist_min_tests) },
+            { label: 'Watch WR', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.watchlist_min_win_rate, 2)}%` },
+            { label: 'Watch Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.watchlist_min_avg_r, 3)}R` },
+            { label: 'Symbol Filter', value: selectedEntryExitSimulationRunRow.run.symbol_filter_enabled ? 'On' : 'Off' },
+            { label: 'Symbol Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.symbol_min_tests) },
+            { label: 'Symbol WR', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.symbol_min_win_rate, 2)}%` },
+            { label: 'Symbol Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.symbol_min_avg_r, 3)}R` },
+          ],
+        },
       ]
     : [];
   const selectedPropSimulationSummary = selectedEntryExitSimulationRunRow?.run?.prop ?? {};
@@ -3666,16 +3764,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
             { label: 'Profit Target', value: `${formatDecimal(selectedPropSimulationSummary.profit_target_r, 0)}R`, tone: 'win' },
             { label: 'Max Drawdown', value: `${formatDecimal(selectedPropSimulationSummary.max_drawdown_r_limit, 0)}R`, tone: 'loss' },
             { label: 'Daily Loss', value: `${formatDecimal(selectedPropSimulationSummary.daily_loss_r_limit, 0)}R`, tone: 'skipped' },
-          ],
-        },
-        {
-          title: 'Cycles',
-          items: [
-            { label: 'Cycles', value: formatNumber(selectedPropSimulationSummary.cycles) },
-            { label: 'Passed', value: formatNumber(selectedPropSimulationSummary.passed), tone: 'win' },
-            { label: 'Daily Fails', value: formatNumber(selectedPropSimulationSummary.daily_fails), tone: 'skipped' },
-            { label: 'Drawdown Fails', value: formatNumber(selectedPropSimulationSummary.drawdown_fails), tone: 'loss' },
-            { label: 'Incomplete', value: formatNumber(selectedPropSimulationSummary.incomplete) },
           ],
         },
         {
@@ -3692,16 +3780,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
             { label: 'Max Drawdown', value: `${formatDecimal(selectedPropSimulationSummary.max_drawdown_r, 2)}R`, tone: 'loss' },
             { label: 'Max Loss Streak', value: formatNumber(selectedPropSimulationSummary.max_loss_streak), tone: 'loss' },
           ],
-        },
-      ]
-    : [];
-  const selectedSimulationOverviewCards = selectedEntryExitSimulationRunRow
-    ? [
-        {
-          label: 'Sim Plays',
-          value: formatNumber(selectedSimulationUsedPlayRows.length),
-          detail: 'templates used',
-          tone: 'win',
         },
       ]
     : [];
@@ -3780,62 +3858,29 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     selectedSimulationEquityLast?.event_date?.slice?.(0, 10) ?? '';
   const selectedSimulationDrawdownLimit = ENTRY_EXIT_PROP_RULES.maxDrawdownR;
   const selectedSimulationDrawdownCurrent = Number(selectedSimulationEquityLast?.drawdown_r || 0);
-  const selectedSimulationDailyDrawdownValues = selectedSimulationEquityPoints.map((point) =>
-    Math.max(0, -Number(point.daily_r || 0))
-  );
-  const selectedSimulationWorstDailyDrawdown = selectedSimulationDailyDrawdownValues.length
-    ? Math.max(...selectedSimulationDailyDrawdownValues)
-    : 0;
-  const selectedSimulationDailyDrawdownLimit = ENTRY_EXIT_PROP_RULES.dailyLossR;
-  const selectedSimulationDrawdownMax = Math.max(
-    selectedSimulationDrawdownLimit,
-    selectedSimulationDailyDrawdownLimit,
-    selectedSimulationEquityWorstDrawdown,
-    selectedSimulationWorstDailyDrawdown,
-    1
-  );
-  const selectedSimulationDrawdownChartMax = selectedSimulationDrawdownMax * 1.12;
-  const getSelectedSimulationDrawdownY = (value) =>
-    selectedSimulationEquityPadding.top +
-    (Number(value || 0) / selectedSimulationDrawdownChartMax) * selectedSimulationEquityPlotHeight;
-  const selectedSimulationDrawdownBars = selectedSimulationEquityPoints
-    .map((point, index) => {
-      const drawdown = Number(point.drawdown_r || 0);
-      const dailyDrawdown = Math.max(0, -Number(point.daily_r || 0));
-      const tone =
-        drawdown >= selectedSimulationDrawdownLimit
-          ? 'max-drawdown'
-          : dailyDrawdown >= selectedSimulationDailyDrawdownLimit
-            ? 'daily-loss'
-            : 'drawdown';
-      return {
-        drawdown,
-        index,
-        point,
-        tone,
-        x: getSelectedSimulationEquityX(index),
-        y: getSelectedSimulationDrawdownY(drawdown),
-      };
-    })
-    .filter((bar) => bar.drawdown > 0);
-  const selectedSimulationDrawdownBreachPoints = selectedSimulationEquityPoints
-    .map((point, index) => ({ point, index }))
-    .filter(({ point }) => Number(point.drawdown_r || 0) >= selectedSimulationDrawdownLimit);
-  const selectedSimulationFirstDrawdownBreach = selectedSimulationDrawdownBreachPoints[0] ?? null;
-  const selectedSimulationDrawdownLimitY = getSelectedSimulationDrawdownY(selectedSimulationDrawdownLimit);
-  const selectedSimulationDailyDrawdownLimitY = getSelectedSimulationDrawdownY(selectedSimulationDailyDrawdownLimit);
   const selectedSimulationDailyRows =
     entryExitSimDailyRData.sim_run_id === selectedEntryExitSimulationTestId
       ? entryExitSimDailyRData.days ?? []
       : [];
   const selectedSimulationDailyLossLimit = ENTRY_EXIT_PROP_RULES.dailyLossR;
   const selectedSimulationDailyValues = selectedSimulationDailyRows.map((row) => Number(row.total_r || 0));
+  const selectedSimulationDailyDrawdownBarValues = selectedSimulationDailyRows.map((row) =>
+    Math.max(0, -Number(row.worst_intraday_r || 0))
+  );
   const selectedSimulationBestDay = selectedSimulationDailyRows.reduce(
     (best, row) => (Number(row.total_r || 0) > Number(best?.total_r ?? Number.NEGATIVE_INFINITY) ? row : best),
     null
   );
   const selectedSimulationWorstDay = selectedSimulationDailyRows.reduce(
     (worst, row) => (Number(row.total_r || 0) < Number(worst?.total_r ?? Number.POSITIVE_INFINITY) ? row : worst),
+    null
+  );
+  const selectedSimulationWorstDrawdownDay = selectedSimulationDailyRows.reduce(
+    (worst, row) =>
+      Math.max(0, -Number(row.worst_intraday_r || 0)) >
+      Math.max(0, -Number(worst?.worst_intraday_r ?? 0))
+        ? row
+        : worst,
     null
   );
   const selectedSimulationDailyLossHitRows = selectedSimulationDailyRows.filter(
@@ -3865,6 +3910,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     Math.max(0, (selectedSimulationDailySlotWidth - selectedSimulationDailyBarWidth) / 2);
   const selectedSimulationDailyZeroY = getSelectedSimulationDailyY(0);
   const selectedSimulationDailyLossLimitY = getSelectedSimulationDailyY(-selectedSimulationDailyLossLimit);
+  const selectedSimulationDailyDrawdownChartMax =
+    Math.max(selectedSimulationDailyLossLimit, ...selectedSimulationDailyDrawdownBarValues, 1) * 1.12;
+  const getSelectedSimulationDailyDrawdownY = (value) =>
+    selectedSimulationEquityPadding.top +
+    (Number(value || 0) / selectedSimulationDailyDrawdownChartMax) * selectedSimulationEquityPlotHeight;
+  const selectedSimulationDailyDrawdownZeroY = getSelectedSimulationDailyDrawdownY(0);
+  const selectedSimulationDailyDrawdownBarLimitY =
+    getSelectedSimulationDailyDrawdownY(selectedSimulationDailyLossLimit);
   const selectedSimulationDailyStartLabel =
     selectedSimulationDailyRows[0]?.trade_date?.slice?.(0, 10) ?? '';
   const selectedSimulationDailyEndLabel =
@@ -3902,6 +3955,104 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     entryExitSimTradeCadenceData.sim_run_id === selectedEntryExitSimulationTestId
       ? entryExitSimTradeCadenceData.cadence
       : null;
+  const selectedSimulationTradeGapRows =
+    entryExitSimTradeGapData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimTradeGapData.gaps ?? []
+      : [];
+  const selectedSimulationTradeTimelinePoints = selectedSimulationTradeGapRows.length
+    ? [
+        {
+          event_at: selectedSimulationTradeGapRows[0].previous_event_at,
+          gap_minutes: null,
+          label: 'First trade',
+          cycle_number: selectedSimulationTradeGapRows[0].previous_cycle_number,
+          previous_cycle_number: 0,
+          starts_new_cycle: false,
+          sequence_number: 0,
+        },
+        ...selectedSimulationTradeGapRows.map((gap) => ({
+          event_at: gap.event_at,
+          gap_minutes: Number(gap.gap_minutes || 0),
+          label: gap.bucket_label || '',
+          cycle_number: gap.cycle_number,
+          previous_cycle_number: gap.previous_cycle_number,
+          starts_new_cycle: Boolean(gap.starts_new_cycle),
+          sequence_number: gap.sequence_number,
+        })),
+      ]
+    : [];
+  const selectedSimulationTradeGapChart = selectedSimulationTradeGapRows.length
+    ? {
+        width: 920,
+        height: 150,
+        padding: { top: 12, right: 10, bottom: 22, left: 34 },
+        minTime: Math.min(
+          ...selectedSimulationTradeTimelinePoints.map((point) => Date.parse(point.event_at)).filter(Number.isFinite)
+        ),
+        maxTime: Math.max(
+          ...selectedSimulationTradeTimelinePoints.map((point) => Date.parse(point.event_at)).filter(Number.isFinite)
+        ),
+        ticks: [],
+      }
+    : null;
+  if (selectedSimulationTradeGapChart) {
+    const tickCount = 5;
+    const timeRange = Math.max(
+      selectedSimulationTradeGapChart.maxTime - selectedSimulationTradeGapChart.minTime,
+      1
+    );
+    selectedSimulationTradeGapChart.ticks = Array.from({ length: tickCount }, (_, index) => {
+      const ratio = tickCount === 1 ? 0 : index / (tickCount - 1);
+      return {
+        label: formatTimelineTick(new Date(selectedSimulationTradeGapChart.minTime + timeRange * ratio).toISOString()),
+        ratio,
+      };
+    });
+  }
+  const selectedSimulationTradeWorkload =
+    entryExitSimTradeWorkloadData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimTradeWorkloadData.workload
+      : null;
+  const selectedSimulationMarketTrendData =
+    entryExitSimMarketTrendData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimMarketTrendData
+      : { performance: [], alignment: [], direction_alignment: [] };
+  const selectedSimulationMarketTrendPerformanceRows =
+    selectedSimulationMarketTrendData.performance ?? [];
+  const selectedSimulationMarketTrendAlignmentRows =
+    selectedSimulationMarketTrendData.alignment ?? [];
+  const selectedSimulationMarketTrendDirectionRows =
+    selectedSimulationMarketTrendData.direction_alignment ?? [];
+  const selectedSimulationMarketTrendDirectionSummaryRows = ['with_trend', 'against_trend', 'neutral', 'unknown']
+    .map((alignmentKey) => {
+      const rows = selectedSimulationMarketTrendDirectionRows.filter(
+        (row) => row.trend_alignment === alignmentKey
+      );
+      const trades = rows.reduce((total, row) => total + Number(row.trades || 0), 0);
+      const wins = rows.reduce((total, row) => total + Number(row.wins || 0), 0);
+      const losses = rows.reduce((total, row) => total + Number(row.losses || 0), 0);
+      const noEntries = rows.reduce((total, row) => total + Number(row.no_entries || 0), 0);
+      const sumR = rows.reduce((total, row) => total + Number(row.sum_r || 0), 0);
+      return {
+        trend_alignment: alignmentKey,
+        trades,
+        wins,
+        losses,
+        no_entries: noEntries,
+        win_rate: trades ? (wins / trades) * 100 : 0,
+        avg_r: trades ? sumR / trades : 0,
+        sum_r: sumR,
+      };
+    })
+    .filter((row) => row.trades > 0);
+  const selectedSimulationBestMarketTrend = selectedSimulationMarketTrendPerformanceRows.reduce(
+    (best, row) => (Number(row.sum_r || 0) > Number(best?.sum_r ?? Number.NEGATIVE_INFINITY) ? row : best),
+    null
+  );
+  const selectedSimulationBestMarketTrendAlignment = selectedSimulationMarketTrendAlignmentRows.reduce(
+    (best, row) => (Number(row.sum_r || 0) > Number(best?.sum_r ?? Number.NEGATIVE_INFINITY) ? row : best),
+    null
+  );
   const selectedSimulationTradeCadenceGapCount = Number(
     selectedSimulationTradeCadence?.gap_count ?? 0
   );
@@ -5199,6 +5350,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           runs: [],
           symbols: [],
           family_routes: [],
+          template_performance: [],
           manual_family_bans: [],
           manual_symbol_bans: [],
         });
@@ -5215,6 +5367,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           runs: [],
           symbols: [],
           family_routes: [],
+          template_performance: [],
           manual_family_bans: [],
           manual_symbol_bans: [],
         });
@@ -5269,6 +5422,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           runs: [],
           symbols: [],
           family_routes: [],
+          template_performance: [],
           manual_family_bans: [],
           manual_symbol_bans: [],
         });
@@ -5307,6 +5461,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
             runs: [],
             symbols: [],
             family_routes: [],
+            template_performance: [],
             manual_family_bans: [],
             manual_symbol_bans: [],
           });
@@ -5323,7 +5478,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     return () => {
       isCancelled = true;
     };
-  }, [entryExitData.run?.run_id]);
+  }, [entryExitData.run?.run_id, entryExitRouterRefreshKey]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -5365,7 +5520,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     return () => {
       isCancelled = true;
     };
-  }, [selectedEntryExitSimulationTestId]);
+  }, [selectedEntryExitSimulationTestId, entryExitRouterRefreshKey]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -5422,7 +5577,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     return () => {
       isCancelled = true;
     };
-  }, [selectedEntryExitSimulationTestId]);
+  }, [selectedEntryExitSimulationTestId, entryExitRouterRefreshKey]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -5599,6 +5754,135 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       isCancelled = true;
     };
   }, [selectedEntryExitSimulationTestId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimTradeGaps = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimTradeGapData({ sim_run_id: '', gaps: [] });
+        setEntryExitSimTradeGapError('');
+        setEntryExitSimTradeGapLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimTradeGapLoading(true);
+        setEntryExitSimTradeGapError('');
+        const data = await fetchEntryExitSimTradeGaps({
+          simRunId: selectedEntryExitSimulationTestId,
+          limit: 5000,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimTradeGapData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimTradeGapError('Could not load trade gap timeline.');
+          setEntryExitSimTradeGapData({ sim_run_id: selectedEntryExitSimulationTestId, gaps: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimTradeGapLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimTradeGaps();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId, entryExitRouterRefreshKey]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimTradeWorkload = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimTradeWorkloadData({ sim_run_id: '', workload: null });
+        setEntryExitSimTradeWorkloadError('');
+        setEntryExitSimTradeWorkloadLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimTradeWorkloadLoading(true);
+        setEntryExitSimTradeWorkloadError('');
+        const data = await fetchEntryExitSimTradeWorkload({
+          simRunId: selectedEntryExitSimulationTestId,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimTradeWorkloadData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimTradeWorkloadError('Could not load trade workload.');
+          setEntryExitSimTradeWorkloadData({ sim_run_id: selectedEntryExitSimulationTestId, workload: null });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimTradeWorkloadLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimTradeWorkload();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId, entryExitRouterRefreshKey]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimMarketTrends = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimMarketTrendData({ sim_run_id: '', performance: [], alignment: [], direction_alignment: [] });
+        setEntryExitSimMarketTrendError('');
+        setEntryExitSimMarketTrendLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimMarketTrendLoading(true);
+        setEntryExitSimMarketTrendError('');
+        const data = await fetchEntryExitSimMarketTrends({
+          simRunId: selectedEntryExitSimulationTestId,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimMarketTrendData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimMarketTrendError('Could not load market trend snapshot.');
+          setEntryExitSimMarketTrendData({
+            sim_run_id: selectedEntryExitSimulationTestId,
+            performance: [],
+            alignment: [],
+            direction_alignment: [],
+          });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimMarketTrendLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimMarketTrends();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId, entryExitRouterRefreshKey]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -6110,24 +6394,39 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           ? selectedFamilyDetailStats
           : selectedRouteLogicStats;
   const showRouteLogicPanel = inspectorDetailMode === 'logic' && Boolean(selectedRoute);
+  const CanvasCollapseWrapper = isEntryExitStandalone ? React.Fragment : 'section';
+  const canvasCollapseWrapperProps = isEntryExitStandalone
+    ? {}
+    : {
+        className: 'pattern-family-canvas-collapse-workspace',
+        'aria-hidden': !isInspectorCollapsed,
+      };
 
   return (
-    <div className="pattern-family-page pattern-family-terminal">
-      <header className="pattern-family-terminal-bar">
-        <div className="pattern-family-connection-strip">
-          <span className="pattern-family-led pattern-family-led--online" />
-          <strong>Connected</strong>
-          <span>Realtime data</span>
-        </div>
-        <div className="pattern-family-terminal-title">
-          <span>Monitor</span>
-          <strong>{isEntryExitStandalone ? 'Entry / Exit' : 'Family Universe'}</strong>
-        </div>
-        <div className="pattern-family-terminal-clock">
-          <span>{selectedSourceLabel} / {selectedTimeframeLabel}</span>
-          <strong>{yearFilter === 'All' ? 'ALL YEARS' : yearFilter}</strong>
-        </div>
-      </header>
+    <div
+      className={[
+        'pattern-family-page',
+        'pattern-family-terminal',
+        isEntryExitStandalone ? 'pattern-family-page--flat' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      {!isEntryExitStandalone ? (
+        <header className="pattern-family-terminal-bar">
+          <div className="pattern-family-connection-strip">
+            <span className="pattern-family-led pattern-family-led--online" />
+            <strong>Connected</strong>
+            <span>Realtime data</span>
+          </div>
+          <div className="pattern-family-terminal-title">
+            <span>Monitor</span>
+            <strong>Family Universe</strong>
+          </div>
+          <div className="pattern-family-terminal-clock">
+            <span>{selectedSourceLabel} / {selectedTimeframeLabel}</span>
+            <strong>{yearFilter === 'All' ? 'ALL YEARS' : yearFilter}</strong>
+          </div>
+        </header>
+      ) : null}
 
       {error ? <div className="pattern-family-error">{error}</div> : null}
 
@@ -6743,11 +7042,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           </section>
         </main>
 
-        <section className="pattern-family-canvas-collapse-workspace" aria-hidden={!isInspectorCollapsed}>
+        <CanvasCollapseWrapper {...canvasCollapseWrapperProps}>
           {testOverviewTab === 'entryExit' ? (
             <section className="pattern-family-side-data-profile pattern-family-side-data-profile--blank">
-              <div className="pattern-family-side-data-blank pattern-family-entry-dashboard-page" aria-label="Data dashboard">
-                <section className="pattern-family-entry-dashboard-stage">
+              <section className="pattern-family-entry-dashboard-page pattern-family-entry-dashboard-stage" aria-label="Data dashboard">
                   {(isEntryExitLoading || isEntryExitRouterLoading) && !selectedBuildRunIsLoaded ? (
                     <div className="pattern-family-entry-dashboard-loading">
                       <span>Loading Dashboard</span>
@@ -7302,7 +7600,12 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                           )}
                         </aside>
 
-                        <aside className="pattern-family-selected-playbook-panel pattern-family-selected-simulation-panel">
+                        <aside
+                          className={[
+                            'pattern-family-selected-playbook-panel',
+                            'pattern-family-selected-simulation-panel',
+                          ].filter(Boolean).join(' ')}
+                        >
                           <header className="pattern-family-selected-playbook-head">
                             <span>Simulation Testing</span>
                             <div className="pattern-family-selected-simulation-head-actions">
@@ -7325,6 +7628,15 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                   </button>
                                 ))}
                               </div>
+                              <button
+                                className="pattern-family-selected-simulation-refresh"
+                                disabled={isEntryExitRouterLoading}
+                                onClick={() => setEntryExitRouterRefreshKey((value) => value + 1)}
+                                title="Refresh simulation runs"
+                                type="button"
+                              >
+                                {isEntryExitRouterLoading ? 'Loading' : 'Refresh'}
+                              </button>
                               <select
                                 className="pattern-family-entry-dashboard-header-select"
                                 disabled={!selectedPlaybookTestRows.length}
@@ -7340,7 +7652,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     <option key={row.run.router_run_id} value={row.run.router_run_id}>
                                       {row.run.test_year || 'All'} |{' '}
                                       {row.run.source_timeframe ?? row.run.test_timeframe ?? ''} |{' '}
-                                      {formatDecimal(row.propClosedPassRate, 1)}% prop
+                                      {formatDecimal(row.propClosedPassRate, 1)}% prop |{' '}
+                                      {formatShortDateTime(row.run.created_at)} |{' '}
+                                      {String(row.run.router_run_id || '').slice(-6)}
                                     </option>
                                   ))
                                 ) : (
@@ -7352,15 +7666,21 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                           <div className={`pattern-family-selected-simulation-body pattern-family-selected-simulation-body--${entryExitSimulationTab}`}>
                             {entryExitSimulationTab === 'overview' ? (
                               <>
-                                <section className="pattern-family-selected-playbook-logic pattern-family-selected-simulation-overview">
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-overview">
                                   <header>
                                     <span>Playbook Test Overview</span>
                                     <small>{selectedEntryExitSimulationTestId || 'No simulation test selected'}</small>
                                   </header>
                                   {selectedSimulationRunOverviewSections.length ? (
-                                    <div className="pattern-family-selected-simulation-run-overview">
+                                    <div className="pattern-family-selected-simulation-run-overview pattern-family-selected-simulation-run-overview--playbook">
                                       {selectedSimulationRunOverviewSections.map((section) => (
-                                        <section className="pattern-family-selected-simulation-run-section" key={section.title}>
+                                        <section
+                                          className={[
+                                            'pattern-family-selected-simulation-run-section',
+                                            section.layout ? `pattern-family-selected-simulation-run-section--${section.layout}` : '',
+                                          ].filter(Boolean).join(' ')}
+                                          key={section.title}
+                                        >
                                           <header>
                                             <span>{section.title}</span>
                                           </header>
@@ -7375,7 +7695,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                                 key={`${section.title}-${item.label}`}
                                               >
                                                 <span>{item.label}</span>
-                                                <strong title={item.value}>{item.value}</strong>
+                                                <strong title={item.title || item.value}>{item.value}</strong>
                                               </div>
                                             ))}
                                           </div>
@@ -7386,7 +7706,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     <div className="pattern-family-selected-playbook-empty">No simulation run row loaded.</div>
                                   )}
                                 </section>
-                                <section className="pattern-family-selected-playbook-logic pattern-family-selected-simulation-overview">
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-overview">
                                   <header>
                                     <span>Prop Simulation Overview</span>
                                     <small>{selectedEntryExitSimulationTestId || 'No simulation test selected'}</small>
@@ -7414,78 +7734,53 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                           </div>
                                         </section>
                                       ))}
+                                      <section className="pattern-family-selected-simulation-run-section pattern-family-selected-simulation-run-section--outcomes">
+                                        <header>
+                                          <span>Prop Cycle Outcomes</span>
+                                        </header>
+                                        {selectedSimulationOutcomeSegments.length ? (
+                                          <>
+                                            <div
+                                              className="pattern-family-selected-simulation-outcome-bar"
+                                              aria-label="Prop cycle outcome distribution"
+                                            >
+                                              {selectedSimulationOutcomeSegments.map((segment) => (
+                                                <div
+                                                  className={`pattern-family-selected-simulation-outcome-segment pattern-family-selected-simulation-outcome-segment--${segment.tone}`}
+                                                  key={segment.label}
+                                                  style={{ width: `${Math.max(segment.percent, segment.value ? 3 : 0)}%` }}
+                                                  title={`${segment.label}: ${formatNumber(segment.value)} (${formatDecimal(segment.percent, 1)}%)`}
+                                                />
+                                              ))}
+                                            </div>
+                                            <div className="pattern-family-selected-simulation-outcome-grid">
+                                              <div className="pattern-family-selected-simulation-outcome-card">
+                                                <span>Total Cycles</span>
+                                                <strong>{formatNumber(selectedSimulationOutcomeTotal)}</strong>
+                                                <small>100.0%</small>
+                                              </div>
+                                              {selectedSimulationOutcomeSegments.map((segment) => (
+                                                <div
+                                                  className={`pattern-family-selected-simulation-outcome-card pattern-family-selected-simulation-outcome-card--${segment.tone}`}
+                                                  key={segment.label}
+                                                >
+                                                  <span>{segment.label}</span>
+                                                  <strong>{formatNumber(segment.value)}</strong>
+                                                  <small>{formatDecimal(segment.percent, 1)}%</small>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </>
+                                        ) : (
+                                          <div className="pattern-family-selected-playbook-empty">No prop cycle outcome data loaded.</div>
+                                        )}
+                                      </section>
                                     </div>
                                   ) : (
                                     <div className="pattern-family-selected-playbook-empty">No prop simulation summary loaded.</div>
                                   )}
                                 </section>
-                                <section className="pattern-family-selected-playbook-logic pattern-family-selected-simulation-overview">
-                                  <header>
-                                    <span>Test Overview</span>
-                                    <small>{selectedEntryExitSimulationTestId || 'No simulation test selected'}</small>
-                                  </header>
-                                  <div className="pattern-family-selected-playbook-logic-grid pattern-family-selected-simulation-overview-grid">
-                                    {selectedSimulationOverviewCards.length ? (
-                                      selectedSimulationOverviewCards.map((item) => (
-                                        <div
-                                          className={[
-                                            'pattern-family-selected-playbook-logic-card',
-                                            'pattern-family-selected-simulation-overview-card',
-                                            item.tone ? `pattern-family-selected-playbook-logic-card--${item.tone}` : '',
-                                          ].filter(Boolean).join(' ')}
-                                          key={item.label}
-                                        >
-                                          <span>{item.label}</span>
-                                          <strong title={item.value}>{item.value}</strong>
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <div className="pattern-family-selected-playbook-empty">No simulation overview loaded.</div>
-                                    )}
-                                  </div>
-                                </section>
-                                <section className="pattern-family-selected-simulation-chart">
-                                  <header>
-                                    <span>Prop Cycle Outcomes</span>
-                                    <small>
-                                      {selectedEntryExitSimulationRunRow
-                                        ? `${formatNumber(selectedSimulationOutcomeTotal)} total cycles`
-                                        : 'No cycles loaded'}
-                                    </small>
-                                  </header>
-                                  {selectedSimulationOutcomeSegments.length ? (
-                                    <>
-                                      <div
-                                        className="pattern-family-selected-simulation-outcome-bar"
-                                        aria-label="Prop cycle outcome distribution"
-                                      >
-                                        {selectedSimulationOutcomeSegments.map((segment) => (
-                                          <div
-                                            className={`pattern-family-selected-simulation-outcome-segment pattern-family-selected-simulation-outcome-segment--${segment.tone}`}
-                                            key={segment.label}
-                                            style={{ width: `${Math.max(segment.percent, segment.value ? 3 : 0)}%` }}
-                                            title={`${segment.label}: ${formatNumber(segment.value)} (${formatDecimal(segment.percent, 1)}%)`}
-                                          />
-                                        ))}
-                                      </div>
-                                      <div className="pattern-family-selected-simulation-outcome-grid">
-                                        {selectedSimulationOutcomeSegments.map((segment) => (
-                                          <div
-                                            className={`pattern-family-selected-simulation-outcome-card pattern-family-selected-simulation-outcome-card--${segment.tone}`}
-                                            key={segment.label}
-                                          >
-                                            <span>{segment.label}</span>
-                                            <strong>{formatNumber(segment.value)}</strong>
-                                            <small>{formatDecimal(segment.percent, 1)}%</small>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <div className="pattern-family-selected-playbook-empty">No prop cycle outcome data loaded.</div>
-                                  )}
-                                </section>
-                                <section className="pattern-family-selected-playbook-used pattern-family-selected-simulation-templates">
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-templates">
                                   <header>
                                     <span>Template Performance</span>
                                     <small>
@@ -7644,160 +7939,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     </div>
                                   )}
                                 </section>
-                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-drawdown">
-                                  <header>
-                                    <span>Drawdown Curve</span>
-                                    <small>
-                                      {selectedSimulationEquityPoints.length
-                                        ? `${formatDecimal(selectedSimulationEquityWorstDrawdown, 1)}R account | ${formatDecimal(
-                                            selectedSimulationWorstDailyDrawdown,
-                                            1
-                                          )}R daily`
-                                        : entryExitSimEquityError || 'No drawdown loaded'}
-                                    </small>
-                                  </header>
-                                  {selectedSimulationEquityPoints.length ? (
-                                    <>
-                                      <div className="pattern-family-selected-simulation-equity-stats">
-                                        {[
-                                          {
-                                            label: 'Current DD',
-                                            value: `${formatDecimal(selectedSimulationDrawdownCurrent, 1)}R`,
-                                            tone: selectedSimulationDrawdownCurrent >= selectedSimulationDrawdownLimit ? 'loss' : 'skipped',
-                                          },
-                                          {
-                                            label: 'Worst DD',
-                                            value: `${formatDecimal(selectedSimulationEquityWorstDrawdown, 1)}R`,
-                                            tone: selectedSimulationEquityWorstDrawdown >= selectedSimulationDrawdownLimit ? 'loss' : 'skipped',
-                                          },
-                                          {
-                                            label: 'Worst Daily',
-                                            value: `${formatDecimal(selectedSimulationWorstDailyDrawdown, 1)}R`,
-                                            tone:
-                                              selectedSimulationWorstDailyDrawdown >= selectedSimulationDailyDrawdownLimit
-                                                ? 'loss'
-                                                : 'skipped',
-                                          },
-                                          {
-                                            label: 'DD Breach',
-                                            value: formatNumber(selectedSimulationDrawdownBreachPoints.length),
-                                            tone: selectedSimulationFirstDrawdownBreach ? 'loss' : 'skipped',
-                                          },
-                                        ].map((item) => (
-                                          <div
-                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
-                                            key={item.label}
-                                          >
-                                            <span>{item.label}</span>
-                                            <strong>{item.value}</strong>
-                                          </div>
-                                        ))}
-                                      </div>
-                                      <svg
-                                        className="pattern-family-selected-simulation-equity-svg pattern-family-selected-simulation-drawdown-svg"
-                                        viewBox={`0 0 ${selectedSimulationEquityWidth} ${selectedSimulationEquityHeight}`}
-                                        role="img"
-                                        aria-label="Running drawdown in R"
-                                        preserveAspectRatio="none"
-                                      >
-                                        <g className="pattern-family-selected-simulation-drawdown-bars">
-                                          {selectedSimulationDrawdownBars.map((bar) => (
-                                            <line
-                                              className={`pattern-family-selected-simulation-drawdown-bar pattern-family-selected-simulation-drawdown-bar--${bar.tone}`}
-                                              key={`${bar.point.event_date}-${bar.index}`}
-                                              vectorEffect="non-scaling-stroke"
-                                              x1={bar.x}
-                                              x2={bar.x}
-                                              y1={getSelectedSimulationDrawdownY(0)}
-                                              y2={bar.y}
-                                            />
-                                          ))}
-                                        </g>
-                                        <line
-                                          className="pattern-family-selected-simulation-drawdown-limit"
-                                          x1={selectedSimulationEquityPadding.left}
-                                          x2={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
-                                          y1={selectedSimulationDrawdownLimitY}
-                                          y2={selectedSimulationDrawdownLimitY}
-                                        />
-                                        <line
-                                          className="pattern-family-selected-simulation-drawdown-daily-limit"
-                                          x1={selectedSimulationEquityPadding.left}
-                                          x2={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
-                                          y1={selectedSimulationDailyDrawdownLimitY}
-                                          y2={selectedSimulationDailyDrawdownLimitY}
-                                        />
-                                        <text
-                                          className="pattern-family-selected-simulation-equity-axis"
-                                          x={selectedSimulationEquityPadding.left - 14}
-                                          y={selectedSimulationEquityPadding.top + 4}
-                                          textAnchor="end"
-                                        >
-                                          0R
-                                        </text>
-                                        <text
-                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-drawdown-limit-label"
-                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
-                                          y={selectedSimulationDrawdownLimitY - 8}
-                                          textAnchor="end"
-                                        >
-                                          20R max drawdown
-                                        </text>
-                                        <text
-                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-drawdown-daily-limit-label"
-                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
-                                          y={selectedSimulationDailyDrawdownLimitY - 8}
-                                          textAnchor="end"
-                                        >
-                                          10R daily loss
-                                        </text>
-                                        <text
-                                          className="pattern-family-selected-simulation-equity-axis"
-                                          x={selectedSimulationEquityPadding.left - 14}
-                                          y={selectedSimulationEquityHeight - selectedSimulationEquityPadding.bottom + 4}
-                                          textAnchor="end"
-                                        >
-                                          {formatDecimal(selectedSimulationDrawdownChartMax, 0)}R
-                                        </text>
-                                        <text
-                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
-                                          x={selectedSimulationEquityPadding.left}
-                                          y={selectedSimulationEquityHeight - 8}
-                                        >
-                                          {selectedSimulationEquityStartLabel}
-                                        </text>
-                                        <text
-                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
-                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
-                                          y={selectedSimulationEquityHeight - 8}
-                                          textAnchor="end"
-                                        >
-                                          {selectedSimulationEquityEndLabel}
-                                        </text>
-                                      </svg>
-                                      <div className="pattern-family-selected-simulation-drawdown-legend">
-                                        <span>
-                                          <i className="pattern-family-selected-simulation-drawdown-legend-dot pattern-family-selected-simulation-drawdown-legend-dot--drawdown" />
-                                          Drawdown
-                                        </span>
-                                        <span>
-                                          <i className="pattern-family-selected-simulation-drawdown-legend-dot pattern-family-selected-simulation-drawdown-legend-dot--daily" />
-                                          Daily Loss
-                                        </span>
-                                        <span>
-                                          <i className="pattern-family-selected-simulation-drawdown-legend-dot pattern-family-selected-simulation-drawdown-legend-dot--max" />
-                                          Max DD
-                                        </span>
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <div className="pattern-family-selected-playbook-empty">
-                                      {isEntryExitSimEquityLoading
-                                        ? 'Loading drawdown curve...'
-                                        : entryExitSimEquityError || 'No drawdown curve data loaded.'}
-                                    </div>
-                                  )}
-                                </section>
                                 <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-daily-r">
                                   <header>
                                     <span>Daily R Bars</span>
@@ -7909,7 +8050,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                                   )} | Best ${formatDecimal(day.best_trade_r, 2)}R | Worst ${formatDecimal(
                                                     day.worst_trade_r,
                                                     2
-                                                  )}R | Intraday low ${formatDecimal(day.worst_intraday_r, 2)}R`}
+                                                  )}R | Intraday low ${formatDecimal(day.worst_intraday_r, 2)}R | TP level ${formatDecimal(
+                                                    day.tp_progress_pct,
+                                                    1
+                                                  )}%`}
                                                 </title>
                                               </rect>
                                               {hitDailyLoss ? (
@@ -7963,6 +8107,185 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                           {selectedSimulationDailyEndLabel}
                                         </text>
                                       </svg>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimDailyRLoading
+                                        ? 'Loading daily R bars...'
+                                        : entryExitSimDailyRError || 'No daily R data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-drawdown">
+                                  <header>
+                                    <span>Daily Drawdown Bars</span>
+                                    <small>
+                                      {isEntryExitSimDailyRLoading
+                                        ? 'Loading drawdown bars'
+                                        : selectedSimulationDailyRows.length
+                                          ? `${formatNumber(selectedSimulationDailyRows.length)} days | ${formatDecimal(
+                                              selectedSimulationDailyLossLimit,
+                                              0
+                                            )}R daily limit`
+                                          : entryExitSimDailyRError || 'No drawdown loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationDailyRows.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Current DD',
+                                            value: `${formatDecimal(selectedSimulationDrawdownCurrent, 1)}R`,
+                                            tone: selectedSimulationDrawdownCurrent >= selectedSimulationDrawdownLimit ? 'loss' : 'skipped',
+                                          },
+                                          {
+                                            label: 'Worst Day DD',
+                                            value: `${formatDecimal(
+                                              Math.max(0, -Number(selectedSimulationWorstDrawdownDay?.worst_intraday_r || 0)),
+                                              1
+                                            )}R`,
+                                            tone:
+                                              Math.max(0, -Number(selectedSimulationWorstDrawdownDay?.worst_intraday_r || 0)) >=
+                                              selectedSimulationDailyLossLimit
+                                                ? 'loss'
+                                                : 'skipped',
+                                          },
+                                          {
+                                            label: 'Daily Hits',
+                                            value: formatNumber(selectedSimulationDailyLossHitRows.length),
+                                            tone: selectedSimulationDailyLossHitRows.length ? 'loss' : 'win',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <svg
+                                        className="pattern-family-selected-simulation-equity-svg pattern-family-selected-simulation-daily-r-svg pattern-family-selected-simulation-drawdown-svg"
+                                        viewBox={`0 0 ${selectedSimulationEquityWidth} ${selectedSimulationEquityHeight}`}
+                                        role="img"
+                                        aria-label="Daily drawdown bars in R"
+                                        preserveAspectRatio="none"
+                                      >
+                                        <line
+                                          className="pattern-family-selected-simulation-equity-zero"
+                                          x1={selectedSimulationEquityPadding.left}
+                                          x2={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y1={selectedSimulationDailyDrawdownZeroY}
+                                          y2={selectedSimulationDailyDrawdownZeroY}
+                                        />
+                                        <line
+                                          className="pattern-family-selected-simulation-daily-r-limit"
+                                          x1={selectedSimulationEquityPadding.left}
+                                          x2={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y1={selectedSimulationDailyDrawdownBarLimitY}
+                                          y2={selectedSimulationDailyDrawdownBarLimitY}
+                                        />
+                                        {selectedSimulationDailyRows.map((day, index) => {
+                                          const drawdownR = Math.max(0, -Number(day.worst_intraday_r || 0));
+                                          const barValueY = getSelectedSimulationDailyDrawdownY(drawdownR);
+                                          const barHeight = Math.max(1, Math.abs(selectedSimulationDailyDrawdownZeroY - barValueY));
+                                          const hitDailyLoss = day.hit_daily_loss || drawdownR >= selectedSimulationDailyLossLimit;
+                                          const tradeDate = String(day.trade_date || '').slice(0, 10);
+                                          const isSelectedDay = tradeDate === selectedSimulationDailyDate;
+
+                                          return (
+                                            <g key={`${tradeDate}-drawdown-${index}`}>
+                                              <rect
+                                                className={[
+                                                  'pattern-family-selected-simulation-daily-r-bar',
+                                                  'pattern-family-selected-simulation-daily-r-bar--loss',
+                                                  hitDailyLoss ? 'pattern-family-selected-simulation-daily-r-bar--hit' : '',
+                                                  isSelectedDay ? 'pattern-family-selected-simulation-daily-r-bar--selected' : '',
+                                                ].filter(Boolean).join(' ')}
+                                                x={getSelectedSimulationDailyX(index)}
+                                                y={selectedSimulationDailyDrawdownZeroY}
+                                                width={selectedSimulationDailyBarWidth}
+                                                height={barHeight}
+                                                role="button"
+                                                tabIndex="0"
+                                                onClick={() => setSelectedSimulationDailyDate(tradeDate)}
+                                                onKeyDown={(event) => {
+                                                  if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    setSelectedSimulationDailyDate(tradeDate);
+                                                  }
+                                                }}
+                                              >
+                                                <title>
+                                                  {`${tradeDate} | worst drawdown ${formatDecimal(drawdownR, 2)}R | net ${formatDecimal(
+                                                    day.total_r,
+                                                    2
+                                                  )}R | DD level ${formatDecimal(day.drawdown_progress_pct, 1)}%`}
+                                                </title>
+                                              </rect>
+                                              {hitDailyLoss ? (
+                                                <circle
+                                                  className="pattern-family-selected-simulation-daily-r-hit-dot"
+                                                  cx={getSelectedSimulationDailyX(index) + selectedSimulationDailyBarWidth / 2}
+                                                  cy={selectedSimulationDailyDrawdownBarLimitY}
+                                                  r="3"
+                                                />
+                                              ) : null}
+                                            </g>
+                                          );
+                                        })}
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis"
+                                          x={selectedSimulationEquityPadding.left - 14}
+                                          y={selectedSimulationEquityPadding.top + 4}
+                                          textAnchor="end"
+                                        >
+                                          0R
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-daily-r-limit-label"
+                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y={selectedSimulationDailyDrawdownBarLimitY - 8}
+                                          textAnchor="end"
+                                        >
+                                          10R daily loss
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis"
+                                          x={selectedSimulationEquityPadding.left - 14}
+                                          y={selectedSimulationEquityHeight - selectedSimulationEquityPadding.bottom + 4}
+                                          textAnchor="end"
+                                        >
+                                          {formatDecimal(selectedSimulationDailyDrawdownChartMax, 0)}R
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
+                                          x={selectedSimulationEquityPadding.left}
+                                          y={selectedSimulationEquityHeight - 8}
+                                        >
+                                          {selectedSimulationDailyStartLabel}
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
+                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y={selectedSimulationEquityHeight - 8}
+                                          textAnchor="end"
+                                        >
+                                          {selectedSimulationDailyEndLabel}
+                                        </text>
+                                      </svg>
+                                      <div className="pattern-family-selected-simulation-drawdown-legend">
+                                        <span>
+                                          <i className="pattern-family-selected-simulation-drawdown-legend-dot pattern-family-selected-simulation-drawdown-legend-dot--drawdown" />
+                                          Worst Intraday
+                                        </span>
+                                        <span>
+                                          <i className="pattern-family-selected-simulation-drawdown-legend-dot pattern-family-selected-simulation-drawdown-legend-dot--daily" />
+                                          Daily Loss
+                                        </span>
+                                      </div>
                                       <div className="pattern-family-selected-simulation-daily-trades">
                                         <header>
                                           <span>
@@ -7991,6 +8314,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                                     <th>Template</th>
                                                     <th>Dir</th>
                                                     <th>Result</th>
+                                                    <th>TP After</th>
+                                                    <th>TP Chg</th>
+                                                    <th>DD After</th>
+                                                    <th>DD Chg</th>
                                                     <th>Exit</th>
                                                   </tr>
                                                 </thead>
@@ -8011,6 +8338,27 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                                         </td>
                                                         <td>{direction || 'N/A'}</td>
                                                         <td>{formatDecimal(resultR, 2)}R</td>
+                                                        <td title={`${formatDecimal(trade.cycle_equity_r_before ?? 0, 2)}R -> ${formatDecimal(trade.cycle_equity_r_after ?? 0, 2)}R`}>
+                                                          {trade.tp_progress_pct_after === null || trade.tp_progress_pct_after === undefined
+                                                            ? ''
+                                                            : `${formatDecimal(trade.tp_progress_pct_after, 1)}%`}
+                                                        </td>
+                                                        <td>
+                                                          {trade.tp_progress_pct_delta === null || trade.tp_progress_pct_delta === undefined
+                                                            ? ''
+                                                            : formatSignedPercent(trade.tp_progress_pct_delta)}
+                                                        </td>
+                                                        <td title={`${formatDecimal(trade.cycle_drawdown_r_before ?? 0, 2)}R -> ${formatDecimal(trade.cycle_drawdown_r_after ?? 0, 2)}R`}>
+                                                          {trade.drawdown_progress_pct_after === null || trade.drawdown_progress_pct_after === undefined
+                                                            ? ''
+                                                            : `${formatDecimal(trade.drawdown_progress_pct_after, 1)}%`}
+                                                        </td>
+                                                        <td>
+                                                          {trade.drawdown_progress_pct_delta === null ||
+                                                          trade.drawdown_progress_pct_delta === undefined
+                                                            ? ''
+                                                            : formatSignedPercent(trade.drawdown_progress_pct_delta)}
+                                                        </td>
                                                         <td>{formatRouteMode(trade.exit_reason || trade.outcome || 'N/A')}</td>
                                                       </tr>
                                                     );
@@ -8033,8 +8381,8 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                   ) : (
                                     <div className="pattern-family-selected-playbook-empty">
                                       {isEntryExitSimDailyRLoading
-                                        ? 'Loading daily R bars...'
-                                        : entryExitSimDailyRError || 'No daily R data loaded.'}
+                                        ? 'Loading drawdown bars...'
+                                        : entryExitSimDailyRError || 'No drawdown bar data loaded.'}
                                     </div>
                                   )}
                                 </section>
@@ -8147,108 +8495,340 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                   </header>
                                   {selectedSimulationTradeCadence ? (
                                     <>
-                                      <div className="pattern-family-selected-simulation-equity-stats">
-                                        {[
-                                          {
-                                            label: 'Median Gap',
-                                            value: `${formatDecimal(
-                                              selectedSimulationTradeCadence.median_gap_minutes,
-                                              1
-                                            )}m`,
-                                            tone:
-                                              Number(selectedSimulationTradeCadence.median_gap_minutes || 0) < 5
-                                                ? 'loss'
-                                                : 'win',
-                                          },
-                                          {
-                                            label: 'Trades / Day',
-                                            value: formatDecimal(selectedSimulationTradeCadence.avg_trades_per_day, 1),
-                                            tone: 'skipped',
-                                          },
-                                          {
-                                            label: 'Max 5m Burst',
-                                            value: formatNumber(selectedSimulationTradeCadence.max_trades_5m_window),
-                                            tone:
-                                              Number(selectedSimulationTradeCadence.max_trades_5m_window || 0) > 2
-                                                ? 'loss'
-                                                : 'win',
-                                          },
-                                        ].map((item) => (
-                                          <div
-                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
-                                            key={item.label}
-                                          >
-                                            <span>{item.label}</span>
-                                            <strong>{item.value}</strong>
-                                          </div>
-                                        ))}
-                                      </div>
-                                      <div className="pattern-family-selected-simulation-cadence-grid">
-                                        {[
-                                          {
-                                            label: 'First Trade',
-                                            value: `${formatDate(selectedSimulationTradeCadence.first_trade_at)} ${formatTime(
-                                              selectedSimulationTradeCadence.first_trade_at
-                                            )}`,
-                                          },
-                                          {
-                                            label: 'Last Trade',
-                                            value: `${formatDate(selectedSimulationTradeCadence.last_trade_at)} ${formatTime(
-                                              selectedSimulationTradeCadence.last_trade_at
-                                            )}`,
-                                          },
-                                          {
-                                            label: 'Trading Days',
-                                            value: formatNumber(selectedSimulationTradeCadence.trade_days),
-                                          },
-                                          {
-                                            label: 'Gap Samples',
-                                            value: formatNumber(selectedSimulationTradeCadence.gap_count),
-                                          },
-                                          {
-                                            label: 'Avg Gap',
-                                            value: `${formatDecimal(selectedSimulationTradeCadence.avg_gap_minutes, 1)}m`,
-                                          },
-                                          {
-                                            label: 'Fastest Gap',
-                                            value: `${formatDecimal(selectedSimulationTradeCadence.min_gap_minutes, 1)}m`,
-                                          },
-                                          {
-                                            label: 'Longest Gap',
-                                            value: `${formatDecimal(selectedSimulationTradeCadence.max_gap_minutes, 1)}m`,
-                                          },
-                                          {
-                                            label: 'Max / Day',
-                                            value: formatNumber(selectedSimulationTradeCadence.max_trades_per_day),
-                                          },
-                                          {
-                                            label: 'Max / Hour',
-                                            value: formatNumber(selectedSimulationTradeCadence.max_trades_per_hour),
-                                          },
-                                          {
-                                            label: 'Max / 15m',
-                                            value: formatNumber(selectedSimulationTradeCadence.max_trades_15m_window),
-                                          },
-                                        ].map((item) => (
-                                          <div className="pattern-family-selected-simulation-cadence-row" key={item.label}>
-                                            <span>{item.label}</span>
-                                            <strong>{item.value}</strong>
-                                          </div>
-                                        ))}
-                                      </div>
-                                      <div className="pattern-family-selected-simulation-cadence-buckets">
-                                        {selectedSimulationTradeCadenceBuckets.map((bucket) => (
-                                          <div className="pattern-family-selected-simulation-cadence-bucket" key={bucket.label}>
-                                            <span>{bucket.label}</span>
-                                            <div>
-                                              <i style={{ width: `${bucket.count ? Math.max(3, bucket.percent) : 0}%` }} />
+                                      <section className="pattern-family-selected-simulation-cadence-section">
+                                        <header>
+                                          <span>Gap Pressure</span>
+                                        </header>
+                                        <div className="pattern-family-selected-simulation-pressure-summary">
+                                          <section>
+                                            <header>
+                                              <span>Spacing Between Trades</span>
+                                              <small>
+                                                {formatNumber(selectedSimulationTradeCadence.gap_count)} gaps from{' '}
+                                                {formatDate(selectedSimulationTradeCadence.first_trade_at)} to{' '}
+                                                {formatDate(selectedSimulationTradeCadence.last_trade_at)}
+                                              </small>
+                                            </header>
+                                            <div className="pattern-family-selected-simulation-pressure-metrics">
+                                              {[
+                                                {
+                                                  label: 'Shortest gap',
+                                                  value: formatGapDuration(selectedSimulationTradeCadence.min_gap_minutes),
+                                                },
+                                                {
+                                                  label: 'Median gap',
+                                                  value: formatGapDuration(selectedSimulationTradeCadence.median_gap_minutes),
+                                                },
+                                                {
+                                                  label: 'Average gap',
+                                                  value: formatGapDuration(selectedSimulationTradeCadence.avg_gap_minutes),
+                                                },
+                                                {
+                                                  label: 'Longest gap',
+                                                  value: formatGapDuration(selectedSimulationTradeCadence.max_gap_minutes),
+                                                },
+                                              ].map((item) => (
+                                                <div className="pattern-family-selected-simulation-pressure-metric" key={item.label}>
+                                                  <span>{item.label}</span>
+                                                  <strong>{item.value}</strong>
+                                                </div>
+                                              ))}
                                             </div>
-                                            <strong>
-                                              {formatNumber(bucket.count)} / {formatDecimal(bucket.percent, 1)}%
-                                            </strong>
+                                          </section>
+                                          <section>
+                                            <header>
+                                              <span>Close-Trade Bursts</span>
+                                              <small>largest clusters in short windows</small>
+                                            </header>
+                                            <div className="pattern-family-selected-simulation-pressure-metrics">
+                                              {[
+                                                {
+                                                  label: 'Most trades in 5m',
+                                                  value: formatNumber(selectedSimulationTradeCadence.max_trades_5m_window),
+                                                },
+                                                {
+                                                  label: 'Most trades in 15m',
+                                                  value: formatNumber(selectedSimulationTradeCadence.max_trades_15m_window),
+                                                },
+                                              ].map((item) => (
+                                                <div className="pattern-family-selected-simulation-pressure-metric" key={item.label}>
+                                                  <span>{item.label}</span>
+                                                  <strong>{item.value}</strong>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </section>
+                                        </div>
+                                        {selectedSimulationTradeGapRows.length ? (
+                                          <div className="pattern-family-selected-simulation-gap-timeline">
+                                            <header>
+                                              <span>Vertical Trade Timeline</span>
+                                              <small>Linear time scale. Empty vertical space represents minutes with no trades.</small>
+                                            </header>
+                                            <div className="pattern-family-selected-simulation-gap-vertical">
+                                              {selectedSimulationTradeTimelinePoints.slice(0, 600).map((point, index, points) => {
+                                                const gapMinutes = Number(point.gap_minutes || 0);
+                                                const spacerHeight =
+                                                  index === 0 ? 0 : Math.max(2, Math.round(gapMinutes * 0.6));
+                                                const tradeDate = formatDate(point.event_at);
+                                                const previousDate = index > 0 ? formatDate(points[index - 1]?.event_at) : '';
+                                                const showDayDivider = index === 0 || tradeDate !== previousDate;
+                                                const showCycleDivider = index > 0 && point.starts_new_cycle;
+                                                return (
+                                                  <React.Fragment key={`${point.sequence_number}-${point.event_at}`}>
+                                                    {showDayDivider ? (
+                                                      <div
+                                                        className="pattern-family-selected-simulation-gap-vertical-day"
+                                                        style={{ marginTop: index === 0 ? 0 : spacerHeight }}
+                                                      >
+                                                        <span>{tradeDate}</span>
+                                                      </div>
+                                                    ) : null}
+                                                    {showCycleDivider ? (
+                                                      <div
+                                                        className="pattern-family-selected-simulation-gap-vertical-cycle"
+                                                        style={{ marginTop: showDayDivider ? 0 : spacerHeight }}
+                                                      >
+                                                        <span>
+                                                          End test {formatNumber(point.previous_cycle_number)} / Start test{' '}
+                                                          {formatNumber(point.cycle_number)}
+                                                        </span>
+                                                      </div>
+                                                    ) : null}
+                                                    <div
+                                                      className="pattern-family-selected-simulation-gap-vertical-item"
+                                                      style={{ marginTop: showDayDivider || showCycleDivider ? 0 : spacerHeight }}
+                                                    >
+                                                      <span className="pattern-family-selected-simulation-gap-vertical-time">
+                                                        {formatTime(point.event_at)}
+                                                      </span>
+                                                      <span className="pattern-family-selected-simulation-gap-vertical-dot" />
+                                                      <span className="pattern-family-selected-simulation-gap-vertical-gap">
+                                                        {point.gap_minutes === null
+                                                          ? 'first trade'
+                                                          : `${formatGapDuration(gapMinutes)} since previous`}
+                                                      </span>
+                                                    </div>
+                                                  </React.Fragment>
+                                                );
+                                              })}
+                                            </div>
+                                            <div className="pattern-family-selected-simulation-gap-timeline-legend">
+                                              <span><i /> trade</span>
+                                              <span>scale: 1 minute = 0.6px</span>
+                                              {selectedSimulationTradeTimelinePoints.length > 600 ? (
+                                                <span>showing first 600 of {formatNumber(selectedSimulationTradeTimelinePoints.length)}</span>
+                                              ) : null}
+                                            </div>
                                           </div>
-                                        ))}
-                                      </div>
+                                        ) : (
+                                          <div className="pattern-family-selected-playbook-empty">
+                                            {isEntryExitSimTradeGapLoading
+                                              ? 'Loading trade gap timeline...'
+                                              : entryExitSimTradeGapError || 'No trade gap timeline data loaded.'}
+                                          </div>
+                                        )}
+                                        <div className="pattern-family-selected-simulation-pressure-table">
+                                          <header>
+                                            <span>Gap Buckets</span>
+                                          </header>
+                                          <table>
+                                            <thead>
+                                              <tr>
+                                                <th>Gap Range</th>
+                                                <th>Times Seen</th>
+                                                <th>Share</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {selectedSimulationTradeCadenceBuckets.map((bucket) => (
+                                                <tr key={bucket.label}>
+                                                  <td>{bucket.label}</td>
+                                                  <td>{formatNumber(bucket.count)}</td>
+                                                  <td>{formatDecimal(bucket.percent, 1)}%</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </section>
+                                      <section className="pattern-family-selected-simulation-cadence-section">
+                                        <header>
+                                          <span>Trade Workload</span>
+                                        </header>
+                                        {selectedSimulationTradeWorkload ? (
+                                          <div className="pattern-family-selected-simulation-workload-grid">
+                                            <div className="pattern-family-selected-simulation-workload-card pattern-family-selected-simulation-workload-card--primary">
+                                              <header>
+                                                <span>Daily</span>
+                                                <small>Average per trading day</small>
+                                              </header>
+                                              <div className="pattern-family-selected-simulation-workload-bars">
+                                                {[
+                                                  {
+                                                    label: 'Min',
+                                                    value: selectedSimulationTradeWorkload.min_trades_per_day,
+                                                    tone: 'low',
+                                                  },
+                                                  {
+                                                    label: 'Avg',
+                                                    value: selectedSimulationTradeWorkload.avg_trades_per_day,
+                                                    tone: 'avg',
+                                                  },
+                                                  {
+                                                    label: 'Max',
+                                                    value: selectedSimulationTradeWorkload.max_trades_per_day,
+                                                    tone: 'high',
+                                                  },
+                                                ].map((bar) => {
+                                                  const maxValue = Math.max(Number(selectedSimulationTradeWorkload.max_trades_per_day || 0), 1);
+                                                  const width = Math.min(100, Math.max(3, (Number(bar.value || 0) / maxValue) * 100));
+                                                  return (
+                                                    <div className="pattern-family-selected-simulation-workload-bar" key={bar.label}>
+                                                      <span>{bar.label}</span>
+                                                      <div>
+                                                        <i
+                                                          className={`pattern-family-selected-simulation-workload-fill pattern-family-selected-simulation-workload-fill--${bar.tone}`}
+                                                          style={{ width: `${width}%` }}
+                                                        />
+                                                      </div>
+                                                      <strong>
+                                                        {bar.label === 'Avg'
+                                                          ? formatDecimal(bar.value, 1)
+                                                          : formatNumber(bar.value)}
+                                                      </strong>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                              <footer>
+                                                <span>{formatNumber(selectedSimulationTradeWorkload.active_days)} trading days</span>
+                                                <span>{formatNumber(selectedSimulationTradeWorkload.days_over_20_trades)} days &gt; 20 trades</span>
+                                              </footer>
+                                            </div>
+                                            <div className="pattern-family-selected-simulation-workload-card">
+                                              <header>
+                                                <span>Hourly</span>
+                                                <small>Average per active hour</small>
+                                              </header>
+                                              <div className="pattern-family-selected-simulation-workload-bars">
+                                                <div className="pattern-family-selected-simulation-workload-bar">
+                                                  <span>Avg</span>
+                                                  <div>
+                                                    <i
+                                                      className="pattern-family-selected-simulation-workload-fill pattern-family-selected-simulation-workload-fill--avg"
+                                                      style={{
+                                                        width: `${Math.min(
+                                                          100,
+                                                          Math.max(
+                                                            3,
+                                                            (Number(selectedSimulationTradeWorkload.avg_trades_per_hour || 0) /
+                                                              Math.max(Number(selectedSimulationTradeWorkload.max_trades_per_hour || 0), 1)) *
+                                                              100
+                                                          )
+                                                        )}%`,
+                                                      }}
+                                                    />
+                                                  </div>
+                                                  <strong>{formatDecimal(selectedSimulationTradeWorkload.avg_trades_per_hour, 1)}</strong>
+                                                </div>
+                                                <div className="pattern-family-selected-simulation-workload-bar">
+                                                  <span>Max</span>
+                                                  <div>
+                                                    <i className="pattern-family-selected-simulation-workload-fill pattern-family-selected-simulation-workload-fill--high" />
+                                                  </div>
+                                                  <strong>{formatNumber(selectedSimulationTradeWorkload.max_trades_per_hour)}</strong>
+                                                </div>
+                                              </div>
+                                              <footer>
+                                                <span>{formatNumber(selectedSimulationTradeWorkload.hours_over_5_trades)} hours &gt; 5 trades</span>
+                                              </footer>
+                                            </div>
+                                            <div className="pattern-family-selected-simulation-workload-card">
+                                              <header>
+                                                <span>Weekly</span>
+                                                <small>Average per active week</small>
+                                              </header>
+                                              <div className="pattern-family-selected-simulation-workload-bars">
+                                                <div className="pattern-family-selected-simulation-workload-bar">
+                                                  <span>Avg</span>
+                                                  <div>
+                                                    <i
+                                                      className="pattern-family-selected-simulation-workload-fill pattern-family-selected-simulation-workload-fill--avg"
+                                                      style={{
+                                                        width: `${Math.min(
+                                                          100,
+                                                          Math.max(
+                                                            3,
+                                                            (Number(selectedSimulationTradeWorkload.avg_trades_per_week || 0) /
+                                                              Math.max(Number(selectedSimulationTradeWorkload.max_trades_per_week || 0), 1)) *
+                                                              100
+                                                          )
+                                                        )}%`,
+                                                      }}
+                                                    />
+                                                  </div>
+                                                  <strong>{formatDecimal(selectedSimulationTradeWorkload.avg_trades_per_week, 1)}</strong>
+                                                </div>
+                                                <div className="pattern-family-selected-simulation-workload-bar">
+                                                  <span>Max</span>
+                                                  <div>
+                                                    <i className="pattern-family-selected-simulation-workload-fill pattern-family-selected-simulation-workload-fill--high" />
+                                                  </div>
+                                                  <strong>{formatNumber(selectedSimulationTradeWorkload.max_trades_per_week)}</strong>
+                                                </div>
+                                              </div>
+                                              <footer>
+                                                <span>{formatNumber(selectedSimulationTradeWorkload.active_weeks)} active weeks</span>
+                                              </footer>
+                                            </div>
+                                            <div className="pattern-family-selected-simulation-workload-card">
+                                              <header>
+                                                <span>Monthly</span>
+                                                <small>Average per active month</small>
+                                              </header>
+                                              <div className="pattern-family-selected-simulation-workload-bars">
+                                                <div className="pattern-family-selected-simulation-workload-bar">
+                                                  <span>Avg</span>
+                                                  <div>
+                                                    <i
+                                                      className="pattern-family-selected-simulation-workload-fill pattern-family-selected-simulation-workload-fill--avg"
+                                                      style={{
+                                                        width: `${Math.min(
+                                                          100,
+                                                          Math.max(
+                                                            3,
+                                                            (Number(selectedSimulationTradeWorkload.avg_trades_per_month || 0) /
+                                                              Math.max(Number(selectedSimulationTradeWorkload.max_trades_per_month || 0), 1)) *
+                                                              100
+                                                          )
+                                                        )}%`,
+                                                      }}
+                                                    />
+                                                  </div>
+                                                  <strong>{formatDecimal(selectedSimulationTradeWorkload.avg_trades_per_month, 1)}</strong>
+                                                </div>
+                                                <div className="pattern-family-selected-simulation-workload-bar">
+                                                  <span>Max</span>
+                                                  <div>
+                                                    <i className="pattern-family-selected-simulation-workload-fill pattern-family-selected-simulation-workload-fill--high" />
+                                                  </div>
+                                                  <strong>{formatNumber(selectedSimulationTradeWorkload.max_trades_per_month)}</strong>
+                                                </div>
+                                              </div>
+                                              <footer>
+                                                <span>{formatNumber(selectedSimulationTradeWorkload.active_months)} active months</span>
+                                              </footer>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div className="pattern-family-selected-playbook-empty">
+                                            {isEntryExitSimTradeWorkloadLoading
+                                              ? 'Loading trade workload...'
+                                              : entryExitSimTradeWorkloadError || 'No trade workload data loaded.'}
+                                          </div>
+                                        )}
+                                      </section>
                                     </>
                                   ) : (
                                     <div className="pattern-family-selected-playbook-empty">
@@ -8708,6 +9288,243 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     </div>
                                   )}
                                 </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-market-trends">
+                                  <header>
+                                    <span>Market Trend Snapshot</span>
+                                    <small>
+                                      {isEntryExitSimMarketTrendLoading
+                                        ? 'Loading market trends'
+                                        : selectedSimulationMarketTrendPerformanceRows.length
+                                          ? `${formatNumber(selectedSimulationMarketTrendPerformanceRows.length)} trend buckets | ${formatNumber(
+                                              selectedSimulationMarketTrendAlignmentRows.length
+                                            )} alignments`
+                                          : entryExitSimMarketTrendError || 'No trend snapshot loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationMarketTrendPerformanceRows.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Best Trend',
+                                            value: selectedSimulationBestMarketTrend
+                                              ? `${selectedSimulationBestMarketTrend.timeframe} ${formatTrendLabel(
+                                                  selectedSimulationBestMarketTrend.trend_label
+                                                )}`
+                                              : 'N/A',
+                                            detail: selectedSimulationBestMarketTrend
+                                              ? `${formatDecimal(selectedSimulationBestMarketTrend.sum_r, 1)}R net`
+                                              : '',
+                                            tone: 'win',
+                                          },
+                                          {
+                                            label: 'Best Alignment',
+                                            value: selectedSimulationBestMarketTrendAlignment
+                                              ? `${formatTrendLabel(
+                                                  selectedSimulationBestMarketTrendAlignment.trend_5m
+                                                )} / ${formatTrendLabel(
+                                                  selectedSimulationBestMarketTrendAlignment.trend_15m
+                                                )} / ${formatTrendLabel(
+                                                  selectedSimulationBestMarketTrendAlignment.trend_1h
+                                                )}`
+                                              : 'N/A',
+                                            detail: selectedSimulationBestMarketTrendAlignment
+                                              ? `${formatDecimal(selectedSimulationBestMarketTrendAlignment.sum_r, 1)}R net`
+                                              : '',
+                                            tone: 'win',
+                                          },
+                                          {
+                                            label: 'Trend Samples',
+                                            value: formatNumber(
+                                              selectedSimulationMarketTrendPerformanceRows.reduce(
+                                                (total, row) => total + Number(row.trades || 0),
+                                                0
+                                              )
+                                            ),
+                                            detail: '3 timeframes per trade',
+                                            tone: 'skipped',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                            title={item.detail}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                            {item.detail ? <small>{item.detail}</small> : null}
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-market-trend-grid">
+                                        <div className="pattern-family-selected-simulation-contribution-table pattern-family-selected-simulation-market-trend-table">
+                                          <table>
+                                            <thead>
+                                              <tr>
+                                                <th>Timeframe</th>
+                                                <th>Trend</th>
+                                                <th>Trades</th>
+                                                <th>WR</th>
+                                                <th>Avg R</th>
+                                                <th>Net R</th>
+                                                <th>Strength</th>
+                                                <th>Symbols</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {selectedSimulationMarketTrendPerformanceRows.map((row) => {
+                                                const netR = Number(row.sum_r || 0);
+                                                return (
+                                                  <tr
+                                                    className={netR >= 0 ? 'is-win' : 'is-loss'}
+                                                    key={`${row.timeframe}-${row.trend_label}`}
+                                                  >
+                                                    <td>{row.timeframe}</td>
+                                                    <td>{formatTrendLabel(row.trend_label)}</td>
+                                                    <td>{formatNumber(row.trades)}</td>
+                                                    <td>{formatDecimal(row.win_rate, 1)}%</td>
+                                                    <td>{formatDecimal(row.avg_r, 3)}R</td>
+                                                    <td>{formatDecimal(netR, 1)}R</td>
+                                                    <td>{formatDecimal(row.avg_strength_pct, 1)}%</td>
+                                                    <td>{formatNumber(row.symbol_count)}</td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                        <div className="pattern-family-selected-simulation-contribution-table pattern-family-selected-simulation-market-trend-table">
+                                          <table>
+                                            <thead>
+                                              <tr>
+                                                <th>5m</th>
+                                                <th>15m</th>
+                                                <th>1h</th>
+                                                <th>Trades</th>
+                                                <th>WR</th>
+                                                <th>Avg R</th>
+                                                <th>Net R</th>
+                                                <th>Best</th>
+                                                <th>Worst</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {selectedSimulationMarketTrendAlignmentRows.map((row) => {
+                                                const netR = Number(row.sum_r || 0);
+                                                return (
+                                                  <tr
+                                                    className={netR >= 0 ? 'is-win' : 'is-loss'}
+                                                    key={`${row.trend_5m}-${row.trend_15m}-${row.trend_1h}`}
+                                                  >
+                                                    <td>{formatTrendLabel(row.trend_5m)}</td>
+                                                    <td>{formatTrendLabel(row.trend_15m)}</td>
+                                                    <td>{formatTrendLabel(row.trend_1h)}</td>
+                                                    <td>{formatNumber(row.trades)}</td>
+                                                    <td>{formatDecimal(row.win_rate, 1)}%</td>
+                                                    <td>{formatDecimal(row.avg_r, 3)}R</td>
+                                                    <td>{formatDecimal(netR, 1)}R</td>
+                                                    <td>{formatDecimal(row.best_r, 1)}R</td>
+                                                    <td>{formatDecimal(row.worst_r, 1)}R</td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimMarketTrendLoading
+                                        ? 'Loading market trend snapshot...'
+                                        : entryExitSimMarketTrendError || 'No market trend data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-direction-trends">
+                                  <header>
+                                    <span>Trade Direction vs HTF Trend</span>
+                                    <small>
+                                      {isEntryExitSimMarketTrendLoading
+                                        ? 'Loading direction trend data'
+                                        : selectedSimulationMarketTrendDirectionRows.length
+                                          ? `${formatNumber(selectedSimulationMarketTrendDirectionRows.length)} direction buckets`
+                                          : entryExitSimMarketTrendError || 'No direction trend data loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationMarketTrendDirectionRows.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {selectedSimulationMarketTrendDirectionSummaryRows.map((row) => {
+                                          const tone =
+                                            row.trend_alignment === 'against_trend'
+                                              ? 'loss'
+                                              : row.trend_alignment === 'with_trend'
+                                                ? 'win'
+                                                : 'skipped';
+                                          return (
+                                            <div
+                                              className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${tone}`}
+                                              key={row.trend_alignment}
+                                            >
+                                              <span>{formatTrendAlignmentLabel(row.trend_alignment)}</span>
+                                              <strong>{formatDecimal(row.avg_r, 3)}R</strong>
+                                              <small>
+                                                {formatDecimal(row.win_rate, 1)}% WR | {formatDecimal(row.sum_r, 1)}R
+                                              </small>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-contribution-table pattern-family-selected-simulation-direction-trend-table">
+                                        <table>
+                                          <thead>
+                                            <tr>
+                                              <th>Timeframe</th>
+                                              <th>Side</th>
+                                              <th>Trend</th>
+                                              <th>Alignment</th>
+                                              <th>Trades</th>
+                                              <th>Pass</th>
+                                              <th>Fail</th>
+                                              <th>WR</th>
+                                              <th>Avg R</th>
+                                              <th>Net R</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {selectedSimulationMarketTrendDirectionRows.map((row) => {
+                                              const netR = Number(row.sum_r || 0);
+                                              return (
+                                                <tr
+                                                  className={netR >= 0 ? 'is-win' : 'is-loss'}
+                                                  key={`${row.timeframe}-${row.trade_direction}-${row.trend_label}-${row.trend_alignment}`}
+                                                >
+                                                  <td>{row.timeframe}</td>
+                                                  <td>{row.trade_direction}</td>
+                                                  <td>{formatTrendLabel(row.trend_label)}</td>
+                                                  <td>{formatTrendAlignmentLabel(row.trend_alignment)}</td>
+                                                  <td>{formatNumber(row.trades)}</td>
+                                                  <td>{formatNumber(row.wins)}</td>
+                                                  <td>{formatNumber(row.losses)}</td>
+                                                  <td>{formatDecimal(row.win_rate, 1)}%</td>
+                                                  <td>{formatDecimal(row.avg_r, 3)}R</td>
+                                                  <td>{formatDecimal(netR, 1)}R</td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimMarketTrendLoading
+                                        ? 'Loading direction trend data...'
+                                        : entryExitSimMarketTrendError || 'No direction trend data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
                               </>
                             ) : (
                               <section className="pattern-family-selected-playbook-used pattern-family-selected-simulation-plays">
@@ -8748,8 +9565,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                       </div>
                     </section>
                   ) : null}
-                </section>
-              </div>
+              </section>
             </section>
           ) : testOverviewTab === 'patterns' ? (
             <section className="pattern-family-side-data-profile pattern-family-pattern-catalog-frame">
@@ -8996,7 +9812,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
               </div>
             </section>
           ) : null}
-        </section>
+        </CanvasCollapseWrapper>
 
         <aside
           className={[

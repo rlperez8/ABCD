@@ -1168,6 +1168,8 @@ struct EntryExitSimDailyRRow {
     worst_trade_r: f64,
     worst_intraday_r: f64,
     hit_daily_loss: i64,
+    tp_progress_pct: f64,
+    drawdown_progress_pct: f64,
 }
 
 #[derive(Serialize)]
@@ -1195,6 +1197,17 @@ struct EntryExitSimDailyTradeRow {
     outcome: String,
     exit_reason: String,
     result_r: f64,
+    cycle_number: Option<i64>,
+    cycle_equity_r_before: Option<f64>,
+    cycle_equity_r_after: Option<f64>,
+    cycle_drawdown_r_before: Option<f64>,
+    cycle_drawdown_r_after: Option<f64>,
+    tp_progress_pct_before: Option<f64>,
+    tp_progress_pct_after: Option<f64>,
+    tp_progress_pct_delta: Option<f64>,
+    drawdown_progress_pct_before: Option<f64>,
+    drawdown_progress_pct_after: Option<f64>,
+    drawdown_progress_pct_delta: Option<f64>,
     entry_date: Option<NaiveDateTime>,
     exit_date: Option<NaiveDateTime>,
     d_confirm_date: NaiveDateTime,
@@ -1245,15 +1258,25 @@ struct EntryExitSimTradeCadenceRow {
     first_trade_at: Option<NaiveDateTime>,
     last_trade_at: Option<NaiveDateTime>,
     trades: i64,
+    active_hours: i64,
     trade_days: i64,
+    active_weeks: i64,
+    active_months: i64,
     gap_count: i64,
     avg_gap_minutes: f64,
     median_gap_minutes: f64,
     min_gap_minutes: f64,
     max_gap_minutes: f64,
+    avg_trades_per_hour: f64,
     avg_trades_per_day: f64,
+    avg_trades_per_week: f64,
+    avg_trades_per_month: f64,
     max_trades_per_day: i64,
     max_trades_per_hour: i64,
+    max_trades_per_week: i64,
+    max_trades_per_month: i64,
+    hours_over_5_trades: i64,
+    days_over_20_trades: i64,
     max_trades_5m_window: i64,
     max_trades_15m_window: i64,
     gap_0_1m: i64,
@@ -1268,6 +1291,127 @@ struct EntryExitSimTradeCadenceRow {
 struct EntryExitSimTradeCadenceResponse {
     sim_run_id: String,
     cadence: Option<EntryExitSimTradeCadenceRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimTradeGapParams {
+    sim_run_id: String,
+    limit: Option<i64>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimTradeGapRow {
+    sequence_number: i64,
+    previous_event_at: NaiveDateTime,
+    event_at: NaiveDateTime,
+    gap_minutes: f64,
+    bucket_key: String,
+    bucket_label: String,
+    previous_cycle_number: i64,
+    cycle_number: i64,
+    starts_new_cycle: i64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimTradeGapResponse {
+    sim_run_id: String,
+    gaps: Vec<EntryExitSimTradeGapRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimTradeWorkloadParams {
+    sim_run_id: String,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimTradeWorkloadRow {
+    first_trade_at: Option<NaiveDateTime>,
+    last_trade_at: Option<NaiveDateTime>,
+    trades: i64,
+    active_hours: i64,
+    active_days: i64,
+    active_weeks: i64,
+    active_months: i64,
+    avg_trades_per_hour: f64,
+    avg_trades_per_day: f64,
+    avg_trades_per_week: f64,
+    avg_trades_per_month: f64,
+    min_trades_per_day: i64,
+    max_trades_per_hour: i64,
+    max_trades_per_day: i64,
+    max_trades_per_week: i64,
+    max_trades_per_month: i64,
+    hours_over_5_trades: i64,
+    days_over_20_trades: i64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimTradeWorkloadResponse {
+    sim_run_id: String,
+    workload: Option<EntryExitSimTradeWorkloadRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimMarketTrendParams {
+    sim_run_id: String,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimMarketTrendPerformanceRow {
+    timeframe: String,
+    trend_label: String,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    symbol_count: i64,
+    avg_strength_pct: Option<f64>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimMarketTrendAlignmentRow {
+    trend_5m: String,
+    trend_15m: String,
+    trend_1h: String,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimMarketTrendDirectionRow {
+    timeframe: String,
+    trade_direction: String,
+    trend_label: String,
+    trend_alignment: String,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimMarketTrendResponse {
+    sim_run_id: String,
+    performance: Vec<EntryExitSimMarketTrendPerformanceRow>,
+    alignment: Vec<EntryExitSimMarketTrendAlignmentRow>,
+    direction_alignment: Vec<EntryExitSimMarketTrendDirectionRow>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -1547,6 +1691,31 @@ struct EntryExitRouterFamilyChoice {
 }
 
 #[derive(sqlx::FromRow, Serialize)]
+struct EntryExitSimTemplatePerformance {
+    sim_run_id: String,
+    template_uid: String,
+    playbook_id: Option<String>,
+    build_id: String,
+    template_label: String,
+    template_name: String,
+    eval_count: i64,
+    pass_count: i64,
+    fail_count: i64,
+    no_entry_count: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    daily_loss_day_trades: i64,
+    daily_loss_day_count: i64,
+    family_count: i64,
+    symbol_count: i64,
+    contract_count: i64,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
 struct EntryExitManualFamilyBan {
     family_key: String,
     reason: String,
@@ -1568,6 +1737,7 @@ struct EntryExitRouterRunsResponse {
     runs: Vec<EntryExitRouterRunSnapshot>,
     symbols: Vec<EntryExitRouterSymbolChoice>,
     family_routes: Vec<EntryExitRouterFamilyChoice>,
+    template_performance: Vec<EntryExitSimTemplatePerformance>,
     manual_family_bans: Vec<EntryExitManualFamilyBan>,
     manual_symbol_bans: Vec<EntryExitManualSymbolBan>,
 }
@@ -6174,6 +6344,9 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_entry_exit_sim_daily_trades)
             .service(fetch_entry_exit_sim_hourly)
             .service(fetch_entry_exit_sim_trade_cadence)
+            .service(fetch_entry_exit_sim_trade_gaps)
+            .service(fetch_entry_exit_sim_trade_workload)
+            .service(fetch_entry_exit_sim_market_trends)
             .service(fetch_entry_exit_sim_symbol_contribution)
             .service(fetch_entry_exit_sim_family_contribution)
             .service(fetch_entry_exit_sim_streaks)
@@ -9542,6 +9715,7 @@ async fn fetch_entry_exit_router_runs(
             runs: Vec::new(),
             symbols: Vec::new(),
             family_routes: Vec::new(),
+            template_performance: Vec::new(),
             manual_family_bans: Vec::new(),
             manual_symbol_bans: Vec::new(),
         });
@@ -9582,6 +9756,17 @@ async fn fetch_entry_exit_router_runs(
             Ok(value) => value,
             Err(error) => {
                 eprintln!("Entry/Exit router choice table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    let has_template_performance =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_template_performance").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim template performance table lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         };
@@ -10068,6 +10253,7 @@ async fn fetch_entry_exit_router_runs(
             runs: Vec::new(),
             symbols: Vec::new(),
             family_routes: Vec::new(),
+            template_performance: Vec::new(),
             manual_family_bans: Vec::new(),
             manual_symbol_bans: Vec::new(),
         });
@@ -10349,6 +10535,63 @@ async fn fetch_entry_exit_router_runs(
         Vec::new()
     };
 
+    let template_performance = if has_template_performance && !run_ids.is_empty() {
+        let run_id_placeholders = std::iter::repeat("?")
+            .take(run_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let template_performance_sql = format!(
+            r#"
+            SELECT
+                sim_run_id,
+                template_uid,
+                playbook_id,
+                build_id,
+                template_label,
+                template_name,
+                eval_count,
+                pass_count,
+                fail_count,
+                no_entry_count,
+                win_rate,
+                avg_r,
+                sum_r,
+                best_r,
+                worst_r,
+                daily_loss_day_trades,
+                daily_loss_day_count,
+                family_count,
+                symbol_count,
+                contract_count,
+                created_at
+            FROM entry_exit_playbook_sim_template_performance
+            WHERE sim_run_id IN ({run_id_placeholders})
+            ORDER BY sim_run_id DESC, sum_r DESC, avg_r DESC, eval_count DESC, template_label ASC
+            LIMIT 1200
+            "#,
+            run_id_placeholders = run_id_placeholders,
+        );
+        let mut query =
+            sqlx::query_as::<_, EntryExitSimTemplatePerformance>(&template_performance_sql);
+        for run_id in &run_ids {
+            query = query.bind(run_id);
+        }
+
+        match query.fetch_all(pool.get_ref()).await {
+            Ok(rows) => rows,
+            Err(error) if is_missing_table_error(&error) => Vec::new(),
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim template performance DB error: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
     let manual_family_bans = match table_exists(
         pool.get_ref(),
         "entry_exit_template_family_router_manual_family_skips",
@@ -10420,6 +10663,7 @@ async fn fetch_entry_exit_router_runs(
         runs: snapshots,
         symbols,
         family_routes,
+        template_performance,
         manual_family_bans,
         manual_symbol_bans,
     })
@@ -10527,7 +10771,42 @@ async fn fetch_entry_exit_sim_daily_r(
         });
     }
 
-    let days = match sqlx::query_as::<_, EntryExitSimDailyRRow>(
+    let daily_tp_progress_pct_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_playbook_sim_daily_r",
+        "tp_progress_pct",
+    )
+    .await
+    {
+        Ok(true) => "tp_progress_pct",
+        Ok(false) => "LEAST(100, GREATEST(total_r, 0) / 30 * 100)",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit daily R TP progress column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let daily_drawdown_progress_pct_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_playbook_sim_daily_r",
+        "drawdown_progress_pct",
+    )
+    .await
+    {
+        Ok(true) => "drawdown_progress_pct",
+        Ok(false) => "LEAST(100, GREATEST(-worst_intraday_r, 0) / 10 * 100)",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit daily R drawdown progress column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let daily_r_sql = format!(
         r#"
         SELECT
             trade_date,
@@ -10539,12 +10818,16 @@ async fn fetch_entry_exit_sim_daily_r(
             best_trade_r,
             worst_trade_r,
             worst_intraday_r,
-            CAST(hit_daily_loss AS SIGNED) AS hit_daily_loss
+            CAST(hit_daily_loss AS SIGNED) AS hit_daily_loss,
+            {daily_tp_progress_pct_column} AS tp_progress_pct,
+            {daily_drawdown_progress_pct_column} AS drawdown_progress_pct
         FROM entry_exit_playbook_sim_daily_r
         WHERE sim_run_id = ?
         ORDER BY trade_date ASC
         "#,
-    )
+    );
+
+    let days = match sqlx::query_as::<_, EntryExitSimDailyRRow>(&daily_r_sql)
     .bind(sim_run_id)
     .fetch_all(pool.get_ref())
     .await
@@ -10597,30 +10880,80 @@ async fn fetch_entry_exit_sim_daily_trades(
         });
     }
 
-    let trades = match sqlx::query_as::<_, EntryExitSimDailyTradeRow>(
+    let has_trade_progress =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_trade_progress").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim trade progress table lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    let progress_join = if has_trade_progress {
+        "LEFT JOIN entry_exit_playbook_sim_trade_progress p ON p.sim_run_id = r.router_run_id AND p.result_id = r.id"
+    } else {
+        ""
+    };
+    let progress_columns = if has_trade_progress {
+        r#"
+            p.cycle_number,
+            p.cycle_equity_r_before,
+            p.cycle_equity_r_after,
+            p.cycle_drawdown_r_before,
+            p.cycle_drawdown_r_after,
+            p.tp_progress_pct_before,
+            p.tp_progress_pct_after,
+            p.tp_progress_pct_delta,
+            p.drawdown_progress_pct_before,
+            p.drawdown_progress_pct_after,
+            p.drawdown_progress_pct_delta,
+        "#
+    } else {
+        r#"
+            CAST(NULL AS SIGNED) AS cycle_number,
+            CAST(NULL AS DOUBLE) AS cycle_equity_r_before,
+            CAST(NULL AS DOUBLE) AS cycle_equity_r_after,
+            CAST(NULL AS DOUBLE) AS cycle_drawdown_r_before,
+            CAST(NULL AS DOUBLE) AS cycle_drawdown_r_after,
+            CAST(NULL AS DOUBLE) AS tp_progress_pct_before,
+            CAST(NULL AS DOUBLE) AS tp_progress_pct_after,
+            CAST(NULL AS DOUBLE) AS tp_progress_pct_delta,
+            CAST(NULL AS DOUBLE) AS drawdown_progress_pct_before,
+            CAST(NULL AS DOUBLE) AS drawdown_progress_pct_after,
+            CAST(NULL AS DOUBLE) AS drawdown_progress_pct_delta,
+        "#
+    };
+
+    let daily_trades_sql = format!(
         r#"
         SELECT
-            id,
-            setup_id,
-            pattern_id,
-            family_key,
-            template_uid,
-            template_label,
-            symbol,
-            market,
-            outcome,
-            exit_reason,
-            COALESCE(result_r, 0) AS result_r,
-            entry_date,
-            exit_date,
-            d_confirm_date,
-            trade_direction
-        FROM entry_exit_template_family_router_results
-        WHERE router_run_id = ?
-          AND DATE(COALESCE(entry_date, d_confirm_date, d_date)) = ?
-        ORDER BY COALESCE(entry_date, d_confirm_date, d_date) ASC, id ASC
+            r.id,
+            r.setup_id,
+            r.pattern_id,
+            r.family_key,
+            r.template_uid,
+            r.template_label,
+            r.symbol,
+            r.market,
+            r.outcome,
+            r.exit_reason,
+            COALESCE(r.result_r, 0) AS result_r,
+            {progress_columns}
+            r.entry_date,
+            r.exit_date,
+            r.d_confirm_date,
+            r.trade_direction
+        FROM entry_exit_template_family_router_results r
+        {progress_join}
+        WHERE r.router_run_id = ?
+          AND DATE(COALESCE(r.entry_date, r.d_confirm_date, r.d_date)) = ?
+        ORDER BY COALESCE(r.entry_date, r.d_confirm_date, r.d_date) ASC, r.id ASC
         "#,
-    )
+    );
+
+    let trades = match sqlx::query_as::<_, EntryExitSimDailyTradeRow>(&daily_trades_sql)
     .bind(sim_run_id)
     .bind(trade_date)
     .fetch_all(pool.get_ref())
@@ -10737,15 +11070,25 @@ async fn fetch_entry_exit_sim_trade_cadence(
             first_trade_at,
             last_trade_at,
             trades,
+            active_hours,
             trade_days,
+            active_weeks,
+            active_months,
             gap_count,
             avg_gap_minutes,
             median_gap_minutes,
             min_gap_minutes,
             max_gap_minutes,
+            avg_trades_per_hour,
             avg_trades_per_day,
+            avg_trades_per_week,
+            avg_trades_per_month,
             max_trades_per_day,
             max_trades_per_hour,
+            max_trades_per_week,
+            max_trades_per_month,
+            hours_over_5_trades,
+            days_over_20_trades,
             max_trades_5m_window,
             max_trades_15m_window,
             gap_0_1m,
@@ -10774,6 +11117,361 @@ async fn fetch_entry_exit_sim_trade_cadence(
     HttpResponse::Ok().json(EntryExitSimTradeCadenceResponse {
         sim_run_id: sim_run_id.to_string(),
         cadence,
+    })
+}
+
+#[route("/entry-exit/sim-trade-gaps", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_trade_gaps(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimTradeGapParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_gaps = match table_exists(pool.get_ref(), "entry_exit_playbook_sim_trade_gaps").await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Entry/Exit sim trade gaps table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_gaps {
+        return HttpResponse::Ok().json(EntryExitSimTradeGapResponse {
+            sim_run_id: sim_run_id.to_string(),
+            gaps: Vec::new(),
+        });
+    }
+
+    let limit = params.limit.unwrap_or(5000).clamp(1, 10000);
+    let gaps = match sqlx::query_as::<_, EntryExitSimTradeGapRow>(
+        r#"
+        SELECT
+            sequence_number,
+            previous_event_at,
+            event_at,
+            gap_minutes,
+            bucket_key,
+            bucket_label,
+            previous_cycle_number,
+            cycle_number,
+            CAST(starts_new_cycle AS SIGNED) AS starts_new_cycle
+        FROM entry_exit_playbook_sim_trade_gaps
+        WHERE sim_run_id = ?
+        ORDER BY sequence_number ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(sim_run_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim trade gaps DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimTradeGapResponse {
+        sim_run_id: sim_run_id.to_string(),
+        gaps,
+    })
+}
+
+#[route("/entry-exit/sim-trade-workload", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_trade_workload(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimTradeWorkloadParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_workload =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_trade_workload").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim trade workload table lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_workload {
+        return HttpResponse::Ok().json(EntryExitSimTradeWorkloadResponse {
+            sim_run_id: sim_run_id.to_string(),
+            workload: None,
+        });
+    }
+
+    let workload = match sqlx::query_as::<_, EntryExitSimTradeWorkloadRow>(
+        r#"
+        SELECT
+            first_trade_at,
+            last_trade_at,
+            trades,
+            active_hours,
+            active_days,
+            active_weeks,
+            active_months,
+            avg_trades_per_hour,
+            avg_trades_per_day,
+            avg_trades_per_week,
+            avg_trades_per_month,
+            min_trades_per_day,
+            max_trades_per_hour,
+            max_trades_per_day,
+            max_trades_per_week,
+            max_trades_per_month,
+            hours_over_5_trades,
+            days_over_20_trades
+        FROM entry_exit_playbook_sim_trade_workload
+        WHERE sim_run_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(row) => row,
+        Err(error) if is_missing_table_error(&error) => None,
+        Err(error) => {
+            eprintln!("Entry/Exit sim trade workload DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimTradeWorkloadResponse {
+        sim_run_id: sim_run_id.to_string(),
+        workload,
+    })
+}
+
+#[route("/entry-exit/sim-market-trends", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_market_trends(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimMarketTrendParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_trends =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_trade_trends").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim market trend table lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_trends {
+        return HttpResponse::Ok().json(EntryExitSimMarketTrendResponse {
+            sim_run_id: sim_run_id.to_string(),
+            performance: Vec::new(),
+            alignment: Vec::new(),
+            direction_alignment: Vec::new(),
+        });
+    }
+
+    let performance = match sqlx::query_as::<_, EntryExitSimMarketTrendPerformanceRow>(
+        r#"
+        SELECT
+            trend_rows.*
+        FROM (
+            SELECT
+                t.timeframe,
+                COALESCE(t.trend_label, 'unlabeled') AS trend_label,
+                CAST(COUNT(*) AS SIGNED) AS trades,
+                CAST(SUM(CASE WHEN r.outcome = 'pass' THEN 1 ELSE 0 END) AS SIGNED) AS wins,
+                CAST(SUM(CASE WHEN r.outcome = 'fail' THEN 1 ELSE 0 END) AS SIGNED) AS losses,
+                CAST(SUM(CASE WHEN r.outcome = 'no_entry' THEN 1 ELSE 0 END) AS SIGNED) AS no_entries,
+                CAST(COALESCE(
+                    SUM(CASE WHEN r.outcome = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100,
+                    0
+                ) AS DOUBLE) AS win_rate,
+                CAST(COALESCE(AVG(COALESCE(r.result_r, 0)), 0) AS DOUBLE) AS avg_r,
+                CAST(COALESCE(SUM(COALESCE(r.result_r, 0)), 0) AS DOUBLE) AS sum_r,
+                CAST(COALESCE(MAX(COALESCE(r.result_r, 0)), 0) AS DOUBLE) AS best_r,
+                CAST(COALESCE(MIN(COALESCE(r.result_r, 0)), 0) AS DOUBLE) AS worst_r,
+                CAST(COUNT(DISTINCT COALESCE(t.root_symbol, t.symbol)) AS SIGNED) AS symbol_count,
+                CAST(AVG(t.strength_pct) AS DOUBLE) AS avg_strength_pct
+            FROM entry_exit_playbook_sim_trade_trends t
+            INNER JOIN entry_exit_template_family_router_results r
+                ON r.router_run_id = t.sim_run_id
+               AND r.id = t.result_id
+            WHERE t.sim_run_id = ?
+            GROUP BY t.timeframe, COALESCE(t.trend_label, 'unlabeled')
+        ) trend_rows
+        ORDER BY
+            CASE trend_rows.timeframe
+                WHEN '5m' THEN 1
+                WHEN '15m' THEN 2
+                WHEN '1h' THEN 3
+                ELSE 9
+            END,
+            FIELD(trend_rows.trend_label, 'bullish', 'bearish', 'neutral', 'unlabeled'),
+            trend_rows.trend_label ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim market trend performance DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let alignment = match sqlx::query_as::<_, EntryExitSimMarketTrendAlignmentRow>(
+        r#"
+        SELECT
+            aligned.trend_5m,
+            aligned.trend_15m,
+            aligned.trend_1h,
+            CAST(COUNT(*) AS SIGNED) AS trades,
+            CAST(SUM(CASE WHEN r.outcome = 'pass' THEN 1 ELSE 0 END) AS SIGNED) AS wins,
+            CAST(SUM(CASE WHEN r.outcome = 'fail' THEN 1 ELSE 0 END) AS SIGNED) AS losses,
+            CAST(SUM(CASE WHEN r.outcome = 'no_entry' THEN 1 ELSE 0 END) AS SIGNED) AS no_entries,
+            CAST(COALESCE(
+                SUM(CASE WHEN r.outcome = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100,
+                0
+            ) AS DOUBLE) AS win_rate,
+            CAST(COALESCE(AVG(COALESCE(r.result_r, 0)), 0) AS DOUBLE) AS avg_r,
+            CAST(COALESCE(SUM(COALESCE(r.result_r, 0)), 0) AS DOUBLE) AS sum_r,
+            CAST(COALESCE(MAX(COALESCE(r.result_r, 0)), 0) AS DOUBLE) AS best_r,
+            CAST(COALESCE(MIN(COALESCE(r.result_r, 0)), 0) AS DOUBLE) AS worst_r
+        FROM (
+            SELECT
+                sim_run_id,
+                result_id,
+                COALESCE(MAX(CASE WHEN timeframe = '5m' THEN trend_label END), 'unlabeled') AS trend_5m,
+                COALESCE(MAX(CASE WHEN timeframe = '15m' THEN trend_label END), 'unlabeled') AS trend_15m,
+                COALESCE(MAX(CASE WHEN timeframe = '1h' THEN trend_label END), 'unlabeled') AS trend_1h
+            FROM entry_exit_playbook_sim_trade_trends
+            WHERE sim_run_id = ?
+            GROUP BY sim_run_id, result_id
+        ) aligned
+        INNER JOIN entry_exit_template_family_router_results r
+            ON r.router_run_id = aligned.sim_run_id
+           AND r.id = aligned.result_id
+        GROUP BY aligned.trend_5m, aligned.trend_15m, aligned.trend_1h
+        ORDER BY sum_r DESC, trades DESC, trend_5m ASC, trend_15m ASC, trend_1h ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim market trend alignment DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let direction_alignment = match sqlx::query_as::<_, EntryExitSimMarketTrendDirectionRow>(
+        r#"
+        SELECT
+            direction_rows.timeframe,
+            direction_rows.trade_direction,
+            direction_rows.trend_label,
+            direction_rows.trend_alignment,
+            CAST(COUNT(*) AS SIGNED) AS trades,
+            CAST(SUM(CASE WHEN direction_rows.outcome = 'pass' THEN 1 ELSE 0 END) AS SIGNED) AS wins,
+            CAST(SUM(CASE WHEN direction_rows.outcome = 'fail' THEN 1 ELSE 0 END) AS SIGNED) AS losses,
+            CAST(SUM(CASE WHEN direction_rows.outcome = 'no_entry' THEN 1 ELSE 0 END) AS SIGNED) AS no_entries,
+            CAST(COALESCE(
+                SUM(CASE WHEN direction_rows.outcome = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100,
+                0
+            ) AS DOUBLE) AS win_rate,
+            CAST(COALESCE(AVG(COALESCE(direction_rows.result_r, 0)), 0) AS DOUBLE) AS avg_r,
+            CAST(COALESCE(SUM(COALESCE(direction_rows.result_r, 0)), 0) AS DOUBLE) AS sum_r,
+            CAST(COALESCE(MAX(COALESCE(direction_rows.result_r, 0)), 0) AS DOUBLE) AS best_r,
+            CAST(COALESCE(MIN(COALESCE(direction_rows.result_r, 0)), 0) AS DOUBLE) AS worst_r
+        FROM (
+            SELECT
+                t.timeframe,
+                UPPER(COALESCE(r.trade_direction, 'unknown')) AS trade_direction,
+                COALESCE(t.trend_label, 'unlabeled') AS trend_label,
+                CASE
+                    WHEN LOWER(COALESCE(r.trade_direction, '')) = 'long'
+                         AND COALESCE(t.trend_label, 'unlabeled') = 'bullish'
+                        THEN 'with_trend'
+                    WHEN LOWER(COALESCE(r.trade_direction, '')) = 'short'
+                         AND COALESCE(t.trend_label, 'unlabeled') = 'bearish'
+                        THEN 'with_trend'
+                    WHEN LOWER(COALESCE(r.trade_direction, '')) = 'long'
+                         AND COALESCE(t.trend_label, 'unlabeled') = 'bearish'
+                        THEN 'against_trend'
+                    WHEN LOWER(COALESCE(r.trade_direction, '')) = 'short'
+                         AND COALESCE(t.trend_label, 'unlabeled') = 'bullish'
+                        THEN 'against_trend'
+                    WHEN COALESCE(t.trend_label, 'unlabeled') IN ('neutral', 'unlabeled')
+                        THEN 'neutral'
+                    ELSE 'unknown'
+                END AS trend_alignment,
+                r.outcome,
+                r.result_r
+            FROM entry_exit_playbook_sim_trade_trends t
+            INNER JOIN entry_exit_template_family_router_results r
+                ON r.router_run_id = t.sim_run_id
+               AND r.id = t.result_id
+            WHERE t.sim_run_id = ?
+        ) direction_rows
+        GROUP BY
+            direction_rows.timeframe,
+            direction_rows.trade_direction,
+            direction_rows.trend_label,
+            direction_rows.trend_alignment
+        ORDER BY
+            CASE direction_rows.timeframe
+                WHEN '5m' THEN 1
+                WHEN '15m' THEN 2
+                WHEN '1h' THEN 3
+                ELSE 9
+            END,
+            FIELD(direction_rows.trend_alignment, 'with_trend', 'against_trend', 'neutral', 'unknown'),
+            direction_rows.trade_direction ASC,
+            FIELD(direction_rows.trend_label, 'bullish', 'bearish', 'neutral', 'unlabeled'),
+            direction_rows.trend_label ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit sim market trend direction alignment DB error: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimMarketTrendResponse {
+        sim_run_id: sim_run_id.to_string(),
+        performance,
+        alignment,
+        direction_alignment,
     })
 }
 
