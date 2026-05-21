@@ -1,0 +1,15 @@
+   Compiling server v0.1.0 (C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\server)
+warning: field `max_forward_bars` is never read
+    --> src\main.rs:1288:5
+     |
+1264 | struct Phase1YearlyRouteContext {
+     |        ------------------------ field in this struct
+...
+1288 |     max_forward_bars: i64,
+     |     ^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `server` (bin "server") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.04s
+     Running `target\debug\server.exe`

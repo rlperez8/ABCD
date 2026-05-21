@@ -1,0 +1,286 @@
+Entry/Exit template creator run eetc-1779244829286-184032: 90020 raw patterns -> 59032 Twin/Event decisions, source=futures, timeframe=1m, year=2024-2025, event_result_policy=first, result_storage=summary-only
+Build test result rows: summary-only (raw rows are not stored)
+Pattern loop: raw twins may create templates; stored template stats are one selected result per Twin/Event.
+Created tpl-1779244829286-184032-0001 from event 1/59032 candidate 1/1: RTYH4 Bearish 2024-01-01 23:03:00 family=4c3447bac640128c result=4.00R
+Created tpl-1779244829286-184032-0002 from event 3/59032 candidate 1/2: CLG4 Bullish 2024-01-01 23:36:00 family=d5f4200a54a82d93 result=4.00R
+Created tpl-1779244829286-184032-0003 from event 4/59032 candidate 1/4: NQH4 Bullish 2024-01-01 23:39:00 family=aaa1af1c3c23a947 result=4.00R
+Created tpl-1779244829286-184032-0004 from event 5/59032 candidate 1/1: YMH4 Bullish 2024-01-02 00:22:00 family=72d00d73212d3d00 result=4.00R
+Created tpl-1779244829286-184032-0005 from event 6/59032 candidate 1/2: YMH4 Bullish 2024-01-02 00:28:00 family=69f89a8f9fe0fd66 result=4.00R
+Created tpl-1779244829286-184032-0006 from event 10/59032 candidate 1/4: YMH4 Bearish 2024-01-02 02:40:00 family=d1a18985ab363ef4 result=4.00R
+Created tpl-1779244829286-184032-0007 from event 13/59032 candidate 1/1: QGG4 Bullish 2024-01-02 03:38:00 family=59bf5ed93cb97e10 result=4.00R
+Created tpl-1779244829286-184032-0008 from event 19/59032 candidate 1/1: NQH4 Bullish 2024-01-02 07:46:00 family=85eaad3f505dd5ad result=4.00R
+Processed 25/59032 Twin/Event decisions, generated templates=8, existing template passes=36
+Created tpl-1779244829286-184032-0009 from event 30/59032 candidate 1/2: CLG4 Bearish 2024-01-02 11:49:00 family=ddc57462ef8f36b3 result=4.00R
+Created tpl-1779244829286-184032-0010 from event 34/59032 candidate 1/2: CLG4 Bearish 2024-01-02 12:10:00 family=9d0f322087085790 result=4.00R
+Created tpl-1779244829286-184032-0011 from event 46/59032 candidate 1/1: QMG4 Bearish 2024-01-02 14:53:00 family=38207b8373bd3e69 result=4.00R
+Created tpl-1779244829286-184032-0012 from event 48/59032 candidate 2/3: RTYH4 Bullish 2024-01-02 15:15:00 family=081c197a86292b5f result=4.00R
+Processed 50/59032 Twin/Event decisions, generated templates=12, existing template passes=105
+Created tpl-1779244829286-184032-0013 from event 51/59032 candidate 1/1: ESH4 Bullish 2024-01-02 15:16:00 family=6988eeb3aaebf1c3 result=4.00R
+Processed 75/59032 Twin/Event decisions, generated templates=13, existing template passes=195
+Processed 100/59032 Twin/Event decisions, generated templates=13, existing template passes=288
+Created tpl-1779244829286-184032-0014 from event 101/59032 candidate 1/2: CLG4 Bullish 2024-01-02 21:01:00 family=cd35a122be900dfe result=4.00R
+Processed 125/59032 Twin/Event decisions, generated templates=14, existing template passes=402
+Processed 150/59032 Twin/Event decisions, generated templates=14, existing template passes=520
+Created tpl-1779244829286-184032-0015 from event 151/59032 candidate 1/1: ESH4 Bearish 2024-01-03 16:03:00 family=234f42ee35bc83e8 result=4.00R
+Processed 175/59032 Twin/Event decisions, generated templates=15, existing template passes=632
+Created tpl-1779244829286-184032-0016 from event 180/59032 candidate 1/2: YMH4 Bullish 2024-01-03 18:56:00 family=266d0c8ea6cf2f95 result=4.00R
+Created tpl-1779244829286-184032-0017 from event 180/59032 candidate 2/2: YMH4 Bullish 2024-01-03 18:59:00 family=253950759423ed21 result=4.00R
+Processed 200/59032 Twin/Event decisions, generated templates=17, existing template passes=759
+Created tpl-1779244829286-184032-0018 from event 201/59032 candidate 1/3: NQH4 Bullish 2024-01-04 01:29:00 family=bfa84f49e3e2c1db result=4.00R
+Processed 225/59032 Twin/Event decisions, generated templates=18, existing template passes=862
+Created tpl-1779244829286-184032-0019 from event 242/59032 candidate 1/1: RTYH4 Bullish 2024-01-04 10:49:00 family=402c0a38f03d567c result=4.00R
+Processed 250/59032 Twin/Event decisions, generated templates=19, existing template passes=960
+Created tpl-1779244829286-184032-0020 from event 263/59032 candidate 3/6: YMH4 Bullish 2024-01-04 13:34:00 family=1c7858f6d8c19e7e result=4.00R
+Created tpl-1779244829286-184032-0021 from event 263/59032 candidate 5/6: YMH4 Bullish 2024-01-04 13:37:00 family=253950759423ed21 result=4.00R
+Created tpl-1779244829286-184032-0022 from event 274/59032 candidate 1/1: RTYH4 Bullish 2024-01-04 15:17:00 family=f016dadf9fcb6584 result=4.00R
+Processed 275/59032 Twin/Event decisions, generated templates=22, existing template passes=1085
+Processed 300/59032 Twin/Event decisions, generated templates=22, existing template passes=1216
+Processed 325/59032 Twin/Event decisions, generated templates=22, existing template passes=1356
+Processed 350/59032 Twin/Event decisions, generated templates=22, existing template passes=1537
+Processed 375/59032 Twin/Event decisions, generated templates=22, existing template passes=1707
+Created tpl-1779244829286-184032-0023 from event 386/59032 candidate 1/3: ESH4 Bearish 2024-01-05 15:35:00 family=a82f8725673f9aca result=4.00R
+Processed 400/59032 Twin/Event decisions, generated templates=23, existing template passes=1850
+Created tpl-1779244829286-184032-0024 from event 411/59032 candidate 1/7: CLG4 Bullish 2024-01-05 17:35:00 family=e1c5c0d1b1aee890 result=4.00R
+Processed 425/59032 Twin/Event decisions, generated templates=24, existing template passes=1989
+Created tpl-1779244829286-184032-0025 from event 431/59032 candidate 1/3: EMDH4 Bearish 2024-01-05 21:07:00 family=e1c5c0d1b1aee890 result=4.00R
+Created tpl-1779244829286-184032-0026 from event 438/59032 candidate 1/1: NQH4 Bullish 2024-01-07 23:33:00 family=aaa1af1c3c23a947 result=4.00R
+Processed 450/59032 Twin/Event decisions, generated templates=26, existing template passes=2181
+Created tpl-1779244829286-184032-0027 from event 453/59032 candidate 1/4: ESH4 Bearish 2024-01-08 05:06:00 family=e1c5c0d1b1aee890 result=4.00R
+Created tpl-1779244829286-184032-0028 from event 466/59032 candidate 1/2: RTYH4 Bearish 2024-01-08 10:11:00 family=a9f8f48f9737b335 result=4.00R
+Processed 475/59032 Twin/Event decisions, generated templates=28, existing template passes=2356
+Processed 500/59032 Twin/Event decisions, generated templates=28, existing template passes=2540
+Created tpl-1779244829286-184032-0029 from event 511/59032 candidate 1/1: CLG4 Bullish 2024-01-08 16:31:00 family=936e61ec81172609 result=4.00R
+Created tpl-1779244829286-184032-0030 from event 525/59032 candidate 1/1: YMH4 Bullish 2024-01-08 18:21:00 family=a5ef98ab1b0854d4 result=4.00R
+Processed 525/59032 Twin/Event decisions, generated templates=30, existing template passes=2727
+Created tpl-1779244829286-184032-0031 from event 537/59032 candidate 1/1: CLG4 Bearish 2024-01-08 20:39:00 family=aaa1af1c3c23a947 result=4.00R
+Created tpl-1779244829286-184032-0032 from event 540/59032 candidate 1/1: NQH4 Bearish 2024-01-09 00:25:00 family=bae410006c031703 result=4.00R
+Processed 550/59032 Twin/Event decisions, generated templates=32, existing template passes=2901
+Created tpl-1779244829286-184032-0033 from event 551/59032 candidate 1/1: YMH4 Bullish 2024-01-09 05:31:00 family=4893f40becccf99a result=4.00R
+Processed 575/59032 Twin/Event decisions, generated templates=33, existing template passes=3086
+Processed 600/59032 Twin/Event decisions, generated templates=33, existing template passes=3312
+Processed 625/59032 Twin/Event decisions, generated templates=33, existing template passes=3555
+Processed 650/59032 Twin/Event decisions, generated templates=33, existing template passes=3767
+Created tpl-1779244829286-184032-0034 from event 665/59032 candidate 1/1: NGG4 Bearish 2024-01-10 13:53:00 family=361a00c9f15441b3 result=4.00R
+Processed 675/59032 Twin/Event decisions, generated templates=34, existing template passes=3964
+Processed 700/59032 Twin/Event decisions, generated templates=34, existing template passes=4183
+Processed 725/59032 Twin/Event decisions, generated templates=34, existing template passes=4461
+Processed 750/59032 Twin/Event decisions, generated templates=34, existing template passes=4678
+Processed 775/59032 Twin/Event decisions, generated templates=34, existing template passes=4901
+Processed 800/59032 Twin/Event decisions, generated templates=34, existing template passes=5110
+Processed 825/59032 Twin/Event decisions, generated templates=34, existing template passes=5325
+Processed 850/59032 Twin/Event decisions, generated templates=34, existing template passes=5579
+Processed 875/59032 Twin/Event decisions, generated templates=34, existing template passes=5778
+Created tpl-1779244829286-184032-0035 from event 889/59032 candidate 1/1: ESH4 Bullish 2024-01-12 19:47:00 family=3ee7f252240bafa1 result=4.00R
+Processed 900/59032 Twin/Event decisions, generated templates=35, existing template passes=5976
+Processed 925/59032 Twin/Event decisions, generated templates=35, existing template passes=6176
+Processed 950/59032 Twin/Event decisions, generated templates=35, existing template passes=6448
+Processed 975/59032 Twin/Event decisions, generated templates=35, existing template passes=6668
+Processed 1000/59032 Twin/Event decisions, generated templates=35, existing template passes=6941
+Processed 1025/59032 Twin/Event decisions, generated templates=35, existing template passes=7139
+Processed 1050/59032 Twin/Event decisions, generated templates=35, existing template passes=7373
+Processed 1075/59032 Twin/Event decisions, generated templates=35, existing template passes=7576
+Processed 1100/59032 Twin/Event decisions, generated templates=35, existing template passes=7799
+Processed 1125/59032 Twin/Event decisions, generated templates=35, existing template passes=8085
+Processed 1150/59032 Twin/Event decisions, generated templates=35, existing template passes=8338
+Created tpl-1779244829286-184032-0036 from event 1170/59032 candidate 1/1: YMH4 Bullish 2024-01-17 13:31:00 family=253950759423ed21 result=4.00R
+Processed 1175/59032 Twin/Event decisions, generated templates=36, existing template passes=8549
+Processed 1200/59032 Twin/Event decisions, generated templates=36, existing template passes=8768
+Processed 1225/59032 Twin/Event decisions, generated templates=36, existing template passes=9027
+Processed 1250/59032 Twin/Event decisions, generated templates=36, existing template passes=9292
+Processed 1275/59032 Twin/Event decisions, generated templates=36, existing template passes=9557
+Created tpl-1779244829286-184032-0037 from event 1297/59032 candidate 1/1: NQH4 Bearish 2024-01-18 13:24:00 family=402c0a38f03d567c result=4.00R
+Processed 1300/59032 Twin/Event decisions, generated templates=37, existing template passes=9808
+Processed 1325/59032 Twin/Event decisions, generated templates=37, existing template passes=10081
+Processed 1350/59032 Twin/Event decisions, generated templates=37, existing template passes=10272
+Processed 1375/59032 Twin/Event decisions, generated templates=37, existing template passes=10564
+Processed 1400/59032 Twin/Event decisions, generated templates=37, existing template passes=10877
+Processed 1425/59032 Twin/Event decisions, generated templates=37, existing template passes=11174
+Processed 1450/59032 Twin/Event decisions, generated templates=37, existing template passes=11400
+Processed 1475/59032 Twin/Event decisions, generated templates=37, existing template passes=11690
+Processed 1500/59032 Twin/Event decisions, generated templates=37, existing template passes=11956
+Processed 1525/59032 Twin/Event decisions, generated templates=37, existing template passes=12230
+Created tpl-1779244829286-184032-0038 from event 1550/59032 candidate 1/1: EMDH4 Bullish 2024-01-22 16:45:00 family=f9c8a7726a5cbf4e result=4.00R
+Processed 1550/59032 Twin/Event decisions, generated templates=38, existing template passes=12438
+Processed 1575/59032 Twin/Event decisions, generated templates=38, existing template passes=12684
+Processed 1600/59032 Twin/Event decisions, generated templates=38, existing template passes=12934
+Created tpl-1779244829286-184032-0039 from event 1614/59032 candidate 1/4: NQH4 Bearish 2024-01-23 09:18:00 family=e1c5c0d1b1aee890 result=4.00R
+Processed 1625/59032 Twin/Event decisions, generated templates=39, existing template passes=13207
+Processed 1650/59032 Twin/Event decisions, generated templates=39, existing template passes=13488
+Processed 1675/59032 Twin/Event decisions, generated templates=39, existing template passes=13746
+Processed 1700/59032 Twin/Event decisions, generated templates=39, existing template passes=14032
+Processed 1725/59032 Twin/Event decisions, generated templates=39, existing template passes=14298
+Processed 1750/59032 Twin/Event decisions, generated templates=39, existing template passes=14569
+Processed 1775/59032 Twin/Event decisions, generated templates=39, existing template passes=14833
+Processed 1800/59032 Twin/Event decisions, generated templates=39, existing template passes=15110
+Processed 1825/59032 Twin/Event decisions, generated templates=39, existing template passes=15379
+Processed 1850/59032 Twin/Event decisions, generated templates=39, existing template passes=15658
+Processed 1875/59032 Twin/Event decisions, generated templates=39, existing template passes=15917
+Processed 1900/59032 Twin/Event decisions, generated templates=39, existing template passes=16247
+Created tpl-1779244829286-184032-0040 from event 1902/59032 candidate 1/2: YMH4 Bearish 2024-01-26 07:04:00 family=c5ecbf4550219fa5 result=4.00R
+Processed 1925/59032 Twin/Event decisions, generated templates=40, existing template passes=16512
+Processed 1950/59032 Twin/Event decisions, generated templates=40, existing template passes=16736
+Processed 1975/59032 Twin/Event decisions, generated templates=40, existing template passes=17007
+Processed 2000/59032 Twin/Event decisions, generated templates=40, existing template passes=17280
+Processed 2025/59032 Twin/Event decisions, generated templates=40, existing template passes=17626
+Processed 2050/59032 Twin/Event decisions, generated templates=40, existing template passes=17865
+Created tpl-1779244829286-184032-0041 from event 2074/59032 candidate 1/1: YMH4 Bearish 2024-01-29 16:32:00 family=ac2d0acb552ead95 result=4.00R
+Created tpl-1779244829286-184032-0042 from event 2075/59032 candidate 1/1: YMH4 Bearish 2024-01-29 16:32:00 family=558788be9b9e9756 result=4.00R
+Processed 2075/59032 Twin/Event decisions, generated templates=42, existing template passes=18074
+Processed 2100/59032 Twin/Event decisions, generated templates=42, existing template passes=18340
+Processed 2125/59032 Twin/Event decisions, generated templates=42, existing template passes=18635
+Processed 2150/59032 Twin/Event decisions, generated templates=42, existing template passes=18933
+Processed 2175/59032 Twin/Event decisions, generated templates=42, existing template passes=19216
+Processed 2200/59032 Twin/Event decisions, generated templates=42, existing template passes=19485
+Created tpl-1779244829286-184032-0043 from event 2213/59032 candidate 1/1: YMH4 Bullish 2024-01-30 20:58:00 family=6988eeb3aaebf1c3 result=4.00R
+Created tpl-1779244829286-184032-0044 from event 2214/59032 candidate 1/1: YMH4 Bullish 2024-01-30 21:44:00 family=462d07faeade582d result=4.00R
+Processed 2225/59032 Twin/Event decisions, generated templates=44, existing template passes=19679
+Processed 2250/59032 Twin/Event decisions, generated templates=44, existing template passes=19987
+Created tpl-1779244829286-184032-0045 from event 2264/59032 candidate 1/1: NQH4 Bearish 2024-01-31 13:11:00 family=5905a429d5e7664f result=4.00R
+Processed 2275/59032 Twin/Event decisions, generated templates=45, existing template passes=20262
+Processed 2300/59032 Twin/Event decisions, generated templates=45, existing template passes=20596
+Processed 2325/59032 Twin/Event decisions, generated templates=45, existing template passes=20844
+Processed 2350/59032 Twin/Event decisions, generated templates=45, existing template passes=21202
+Processed 2375/59032 Twin/Event decisions, generated templates=45, existing template passes=21440
+Processed 2400/59032 Twin/Event decisions, generated templates=45, existing template passes=21712
+Created tpl-1779244829286-184032-0046 from event 2406/59032 candidate 2/6: ZMH4 Bullish 2024-02-01 16:28:00 family=df1db948fbdc0e1f result=4.00R
+Processed 2425/59032 Twin/Event decisions, generated templates=46, existing template passes=22042
+Processed 2450/59032 Twin/Event decisions, generated templates=46, existing template passes=22342
+Processed 2475/59032 Twin/Event decisions, generated templates=46, existing template passes=22625
+Processed 2500/59032 Twin/Event decisions, generated templates=46, existing template passes=22943
+Processed 2525/59032 Twin/Event decisions, generated templates=46, existing template passes=23189
+Processed 2550/59032 Twin/Event decisions, generated templates=46, existing template passes=23439
+Processed 2575/59032 Twin/Event decisions, generated templates=46, existing template passes=23724
+Processed 2600/59032 Twin/Event decisions, generated templates=46, existing template passes=24023
+Processed 2625/59032 Twin/Event decisions, generated templates=46, existing template passes=24325
+Processed 2650/59032 Twin/Event decisions, generated templates=46, existing template passes=24566
+Processed 2675/59032 Twin/Event decisions, generated templates=46, existing template passes=24868
+Processed 2700/59032 Twin/Event decisions, generated templates=46, existing template passes=25196
+Processed 2725/59032 Twin/Event decisions, generated templates=46, existing template passes=25547
+Processed 2750/59032 Twin/Event decisions, generated templates=46, existing template passes=25856
+Processed 2775/59032 Twin/Event decisions, generated templates=46, existing template passes=26131
+Processed 2800/59032 Twin/Event decisions, generated templates=46, existing template passes=26435
+Processed 2825/59032 Twin/Event decisions, generated templates=46, existing template passes=26745
+Processed 2850/59032 Twin/Event decisions, generated templates=46, existing template passes=27025
+Processed 2875/59032 Twin/Event decisions, generated templates=46, existing template passes=27357
+Processed 2900/59032 Twin/Event decisions, generated templates=46, existing template passes=27674
+Processed 2925/59032 Twin/Event decisions, generated templates=46, existing template passes=27992
+Processed 2950/59032 Twin/Event decisions, generated templates=46, existing template passes=28267
+Processed 2975/59032 Twin/Event decisions, generated templates=46, existing template passes=28541
+Processed 3000/59032 Twin/Event decisions, generated templates=46, existing template passes=28869
+Processed 3025/59032 Twin/Event decisions, generated templates=46, existing template passes=29192
+Processed 3050/59032 Twin/Event decisions, generated templates=46, existing template passes=29497
+Processed 3075/59032 Twin/Event decisions, generated templates=46, existing template passes=29807
+Processed 3100/59032 Twin/Event decisions, generated templates=46, existing template passes=30130
+Processed 3125/59032 Twin/Event decisions, generated templates=46, existing template passes=30390
+Processed 3150/59032 Twin/Event decisions, generated templates=46, existing template passes=30762
+Processed 3175/59032 Twin/Event decisions, generated templates=46, existing template passes=31061
+Processed 3200/59032 Twin/Event decisions, generated templates=46, existing template passes=31389
+Processed 3225/59032 Twin/Event decisions, generated templates=46, existing template passes=31678
+Processed 3250/59032 Twin/Event decisions, generated templates=46, existing template passes=32042
+Processed 3275/59032 Twin/Event decisions, generated templates=46, existing template passes=32374
+Created tpl-1779244829286-184032-0047 from event 3290/59032 candidate 2/2: GFH4 Bearish 2024-02-13 16:01:00 family=558788be9b9e9756 result=4.00R
+Processed 3300/59032 Twin/Event decisions, generated templates=47, existing template passes=32662
+Processed 3325/59032 Twin/Event decisions, generated templates=47, existing template passes=32932
+Processed 3350/59032 Twin/Event decisions, generated templates=47, existing template passes=33267
+Processed 3375/59032 Twin/Event decisions, generated templates=47, existing template passes=33581
+Created tpl-1779244829286-184032-0048 from event 3381/59032 candidate 2/3: NQH4 Bullish 2024-02-14 13:56:00 family=827374a7b36f4555 result=4.00R
+Processed 3400/59032 Twin/Event decisions, generated templates=48, existing template passes=33897
+Processed 3425/59032 Twin/Event decisions, generated templates=48, existing template passes=34195
+Processed 3450/59032 Twin/Event decisions, generated templates=48, existing template passes=34514
+Processed 3475/59032 Twin/Event decisions, generated templates=48, existing template passes=34883
+Processed 3500/59032 Twin/Event decisions, generated templates=48, existing template passes=35193
+Processed 3525/59032 Twin/Event decisions, generated templates=48, existing template passes=35483
+Created tpl-1779244829286-184032-0049 from event 3537/59032 candidate 1/1: NQH4 Bearish 2024-02-15 15:47:00 family=fe5963bc415e76f1 result=4.00R
+Processed 3550/59032 Twin/Event decisions, generated templates=49, existing template passes=35800
+Processed 3575/59032 Twin/Event decisions, generated templates=49, existing template passes=36093
+Processed 3600/59032 Twin/Event decisions, generated templates=49, existing template passes=36375
+Processed 3625/59032 Twin/Event decisions, generated templates=49, existing template passes=36744
+Processed 3650/59032 Twin/Event decisions, generated templates=49, existing template passes=37061
+Processed 3675/59032 Twin/Event decisions, generated templates=49, existing template passes=37397
+Created tpl-1779244829286-184032-0050 from event 3687/59032 candidate 1/2: NQH4 Bullish 2024-02-16 17:12:00 family=fe5963bc415e76f1 result=4.00R
+Processed 3700/59032 Twin/Event decisions, generated templates=50, existing template passes=37735
+Processed 3725/59032 Twin/Event decisions, generated templates=50, existing template passes=38133
+Processed 3750/59032 Twin/Event decisions, generated templates=50, existing template passes=38512
+Processed 3775/59032 Twin/Event decisions, generated templates=50, existing template passes=38786
+Processed 3800/59032 Twin/Event decisions, generated templates=50, existing template passes=39179
+Processed 3825/59032 Twin/Event decisions, generated templates=50, existing template passes=39570
+Processed 3850/59032 Twin/Event decisions, generated templates=50, existing template passes=39870
+Processed 3875/59032 Twin/Event decisions, generated templates=50, existing template passes=40187
+Processed 3900/59032 Twin/Event decisions, generated templates=50, existing template passes=40479
+Processed 3925/59032 Twin/Event decisions, generated templates=50, existing template passes=40834
+Processed 3950/59032 Twin/Event decisions, generated templates=50, existing template passes=41118
+Created tpl-1779244829286-184032-0051 from event 3964/59032 candidate 1/1: YMH4 Bearish 2024-02-21 14:09:00 family=6988eeb3aaebf1c3 result=4.00R
+Processed 3975/59032 Twin/Event decisions, generated templates=51, existing template passes=41408
+Processed 4000/59032 Twin/Event decisions, generated templates=51, existing template passes=41661
+Processed 4025/59032 Twin/Event decisions, generated templates=51, existing template passes=41960
+Processed 4050/59032 Twin/Event decisions, generated templates=51, existing template passes=42372
+Processed 4075/59032 Twin/Event decisions, generated templates=51, existing template passes=42709
+Processed 4100/59032 Twin/Event decisions, generated templates=51, existing template passes=43030
+Processed 4125/59032 Twin/Event decisions, generated templates=51, existing template passes=43385
+Processed 4150/59032 Twin/Event decisions, generated templates=51, existing template passes=43766
+Processed 4175/59032 Twin/Event decisions, generated templates=51, existing template passes=44116
+Processed 4200/59032 Twin/Event decisions, generated templates=51, existing template passes=44485
+Processed 4225/59032 Twin/Event decisions, generated templates=51, existing template passes=44887
+Processed 4250/59032 Twin/Event decisions, generated templates=51, existing template passes=45202
+Processed 4275/59032 Twin/Event decisions, generated templates=51, existing template passes=45579
+Processed 4300/59032 Twin/Event decisions, generated templates=51, existing template passes=45924
+Processed 4325/59032 Twin/Event decisions, generated templates=51, existing template passes=46244
+Processed 4350/59032 Twin/Event decisions, generated templates=51, existing template passes=46550
+Processed 4375/59032 Twin/Event decisions, generated templates=51, existing template passes=46880
+Processed 4400/59032 Twin/Event decisions, generated templates=51, existing template passes=47263
+Processed 4425/59032 Twin/Event decisions, generated templates=51, existing template passes=47638
+Processed 4450/59032 Twin/Event decisions, generated templates=51, existing template passes=47922
+Processed 4475/59032 Twin/Event decisions, generated templates=51, existing template passes=48241
+Processed 4500/59032 Twin/Event decisions, generated templates=51, existing template passes=48596
+Processed 4525/59032 Twin/Event decisions, generated templates=51, existing template passes=48909
+Processed 4550/59032 Twin/Event decisions, generated templates=51, existing template passes=49242
+Processed 4575/59032 Twin/Event decisions, generated templates=51, existing template passes=49677
+Processed 4600/59032 Twin/Event decisions, generated templates=51, existing template passes=50113
+Processed 4625/59032 Twin/Event decisions, generated templates=51, existing template passes=50462
+Processed 4650/59032 Twin/Event decisions, generated templates=51, existing template passes=50810
+Processed 4675/59032 Twin/Event decisions, generated templates=51, existing template passes=51124
+Processed 4700/59032 Twin/Event decisions, generated templates=51, existing template passes=51470
+Processed 4725/59032 Twin/Event decisions, generated templates=51, existing template passes=51846
+Processed 4750/59032 Twin/Event decisions, generated templates=51, existing template passes=52219
+Processed 4775/59032 Twin/Event decisions, generated templates=51, existing template passes=52528
+Processed 4800/59032 Twin/Event decisions, generated templates=51, existing template passes=52822
+Processed 4825/59032 Twin/Event decisions, generated templates=51, existing template passes=53232
+Processed 4850/59032 Twin/Event decisions, generated templates=51, existing template passes=53515
+Processed 4875/59032 Twin/Event decisions, generated templates=51, existing template passes=53809
+Processed 4900/59032 Twin/Event decisions, generated templates=51, existing template passes=54131
+Processed 4925/59032 Twin/Event decisions, generated templates=51, existing template passes=54494
+Processed 4950/59032 Twin/Event decisions, generated templates=51, existing template passes=54863
+Processed 4975/59032 Twin/Event decisions, generated templates=51, existing template passes=55160
+Processed 5000/59032 Twin/Event decisions, generated templates=51, existing template passes=55551
+Processed 5025/59032 Twin/Event decisions, generated templates=51, existing template passes=55882
+Processed 5050/59032 Twin/Event decisions, generated templates=51, existing template passes=56212
+Processed 5075/59032 Twin/Event decisions, generated templates=51, existing template passes=56569
+Processed 5100/59032 Twin/Event decisions, generated templates=51, existing template passes=56909
+Processed 5125/59032 Twin/Event decisions, generated templates=51, existing template passes=57229
+Processed 5150/59032 Twin/Event decisions, generated templates=51, existing template passes=57520
+Processed 5175/59032 Twin/Event decisions, generated templates=51, existing template passes=57815
+Processed 5200/59032 Twin/Event decisions, generated templates=51, existing template passes=58126
+Created tpl-1779244829286-184032-0052 from event 5203/59032 candidate 1/1: NQH4 Bearish 2024-03-08 12:26:00 family=035df883216ad9fb result=4.00R
+Created tpl-1779244829286-184032-0053 from event 5210/59032 candidate 2/3: NQH4 Bullish 2024-03-08 14:32:00 family=3a3992f37cf349ba result=4.00R
+Processed 5225/59032 Twin/Event decisions, generated templates=53, existing template passes=58408
+Created tpl-1779244829286-184032-0054 from event 5248/59032 candidate 1/1: NQH4 Bullish 2024-03-08 18:26:00 family=85eaad3f505dd5ad result=4.00R
+Processed 5250/59032 Twin/Event decisions, generated templates=54, existing template passes=58685
+Processed 5275/59032 Twin/Event decisions, generated templates=54, existing template passes=59033
+Processed 5300/59032 Twin/Event decisions, generated templates=54, existing template passes=59414
+Processed 5325/59032 Twin/Event decisions, generated templates=54, existing template passes=59797
+Processed 5350/59032 Twin/Event decisions, generated templates=54, existing template passes=60107
+Processed 5375/59032 Twin/Event decisions, generated templates=54, existing template passes=60440
+Processed 5400/59032 Twin/Event decisions, generated templates=54, existing template passes=60827
+Processed 5425/59032 Twin/Event decisions, generated templates=54, existing template passes=61254
+Processed 5450/59032 Twin/Event decisions, generated templates=54, existing template passes=61556
+Processed 5475/59032 Twin/Event decisions, generated templates=54, existing template passes=61900
+Processed 5500/59032 Twin/Event decisions, generated templates=54, existing template passes=62266
+Processed 5525/59032 Twin/Event decisions, generated templates=54, existing template passes=62611
+Processed 5550/59032 Twin/Event decisions, generated templates=54, existing template passes=62996
+Processed 5575/59032 Twin/Event decisions, generated templates=54, existing template passes=63379
+Processed 5600/59032 Twin/Event decisions, generated templates=54, existing template passes=63762
+Processed 5625/59032 Twin/Event decisions, generated templates=54, existing template passes=64128
+Processed 5650/59032 Twin/Event decisions, generated templates=54, existing template passes=64591
+Processed 5675/59032 Twin/Event decisions, generated templates=54, existing template passes=64992
+Processed 5700/59032 Twin/Event decisions, generated templates=54, existing template passes=65414
+Processed 5725/59032 Twin/Event decisions, generated templates=54, existing template passes=65782

@@ -1,0 +1,2298 @@
+[scan] 6AF2 loading candles from futures_contract_5m_candles
+[scan] 6AF3 loading candles from futures_contract_5m_candles
+[scan] 6AF4 loading candles from futures_contract_5m_candles
+[scan] 6AF5 loading candles from futures_contract_5m_candles
+[scan] 6AF6 loading candles from futures_contract_5m_candles
+[scan] 6AG2 loading candles from futures_contract_5m_candles
+[scan] 6AG3 loading candles from futures_contract_5m_candles
+[scan] 6AG4 loading candles from futures_contract_5m_candles
+[scan] 6AF2 loaded 507 candles from 2021-12-14 00:50:00 to 2022-01-14 13:50:00
+[scan] 6AF4 loaded 548 candles from 2023-12-19 00:30:00 to 2024-01-12 13:50:00
+[scan] 6AF2 candle 507/507 (100.0%) date 2022-01-14 13:50:00 open trades 0
+[scan] 6AF2 finalizing results
+[scan] 6AF4 candle 548/548 (100.0%) date 2024-01-12 13:50:00 open trades 4
+[scan] 6AF4 finalizing results
+[scan] 6AF3 loaded 391 candles from 2022-12-20 00:15:00 to 2023-01-13 15:10:00
+Symbol: 6AF2, setup total: 0, Bear: 0, Bull: 0 (1/1443)
+[scan] 6AF3 candle 391/391 (100.0%) date 2023-01-13 15:10:00 open trades 0
+[scan] 6AF3 finalizing results
+[scan] 6AG5 loading candles from futures_contract_5m_candles
+[scan] 6AF5 loaded 691 candles from 2024-12-17 00:10:00 to 2025-01-13 12:35:00
+[scan] 6AF5 candle 691/691 (100.0%) date 2025-01-13 12:35:00 open trades 2
+[scan] 6AF5 finalizing results
+Symbol: 6AF4, setup total: 4, Bear: 4, Bull: 0 (2/1443)
+[scan] 6AG5 loaded 892 candles from 2025-01-14 00:05:00 to 2025-02-14 15:00:00
+[scan] 6AF6 loaded 547 candles from 2025-12-16 00:10:00 to 2026-01-16 13:20:00
+[scan] 6AG2 loaded 224 candles from 2022-01-17 01:30:00 to 2022-02-14 15:15:00
+[scan] 6AF6 candle 547/547 (100.0%) date 2026-01-16 13:20:00 open trades 0
+[scan] 6AF6 finalizing results
+[scan] 6AG5 candle 892/892 (100.0%) date 2025-02-14 15:00:00 open trades 15
+[scan] 6AG5 finalizing results
+[scan] 6AG6 loading candles from futures_contract_5m_candles
+[scan] 6AG2 candle 224/224 (100.0%) date 2022-02-14 15:15:00 open trades 0
+[scan] 6AG3 loaded 509 candles from 2023-01-16 00:45:00 to 2023-02-13 09:30:00
+[scan] 6AG2 finalizing results
+[scan] 6AG3 candle 509/509 (100.0%) date 2023-02-13 09:30:00 open trades 0
+[scan] 6AG3 finalizing results
+Symbol: 6AF3, setup total: 0, Bear: 0, Bull: 0 (3/1443)
+[scan] 6AG6 loaded 898 candles from 2026-01-18 23:00:00 to 2026-02-13 15:00:00
+[scan] 6AG6 candle 898/898 (100.0%) date 2026-02-13 15:00:00 open trades 0
+[scan] 6AG6 finalizing results
+[scan] 6AH2 loading candles from futures_contract_5m_candles
+Symbol: 6AF5, setup total: 2, Bear: 2, Bull: 0 (4/1443)
+[scan] 6AH3 loading candles from futures_contract_5m_candles
+[scan] 6AG4 loaded 3352 candles from 2024-01-14 23:00:00 to 2024-02-16 14:35:00
+Symbol: 6AF6, setup total: 0, Bear: 0, Bull: 0 (5/1443)
+[scan] 6AH4 loading candles from futures_contract_5m_candles
+[scan] 6AG4 candle 3352/3352 (100.0%) date 2024-02-16 14:35:00 open trades 0
+[scan] 6AG4 finalizing results
+Symbol: 6AG5, setup total: 25, Bear: 25, Bull: 0 (6/1443)
+[scan] 6AH5 loading candles from futures_contract_5m_candles
+Symbol: 6AG2, setup total: 0, Bear: 0, Bull: 0 (7/1443)
+[scan] 6AH2 loaded 5289 candles from 2022-02-15 00:00:00 to 2022-03-14 13:15:00
+[scan] 6AH6 loading candles from futures_contract_5m_candles
+Symbol: 6AG3, setup total: 0, Bear: 0, Bull: 0 (8/1443)
+[scan] 6AJ2 loading candles from futures_contract_5m_candles
+[scan] 6AH2 candle 5289/5289 (100.0%) date 2022-03-14 13:15:00 open trades 0
+[scan] 6AH2 finalizing results
+[scan] 6AJ2 loaded 399 candles from 2022-03-15 00:10:00 to 2022-04-18 08:35:00
+Symbol: 6AG6, setup total: 0, Bear: 0, Bull: 0 (9/1443)
+[scan] 6AH3 loaded 5308 candles from 2023-02-14 00:00:00 to 2023-03-13 14:15:00
+[scan] 6AJ2 candle 399/399 (100.0%) date 2022-04-18 08:35:00 open trades 0
+[scan] 6AJ2 finalizing results
+[scan] 6AJ3 loading candles from futures_contract_5m_candles
+[scan] 6AH3 candle 5308/5308 (100.0%) date 2023-03-13 14:15:00 open trades 0
+[scan] 6AH3 finalizing results
+Symbol: 6AG4, setup total: 0, Bear: 0, Bull: 0 (10/1443)
+[scan] 6AJ3 loaded 629 candles from 2023-03-14 01:40:00 to 2023-04-14 18:45:00
+[scan] 6AJ3 candle 629/629 (100.0%) date 2023-04-14 18:45:00 open trades 0
+[scan] 6AJ3 finalizing results
+[scan] 6AH4 loaded 5584 candles from 2024-02-18 23:00:00 to 2024-03-18 14:10:00
+[scan] 6AJ4 loading candles from futures_contract_5m_candles
+[scan] 6AH5 loaded 5557 candles from 2025-02-16 23:00:00 to 2025-03-17 14:10:00
+Symbol: 6AH2, setup total: 0, Bear: 0, Bull: 0 (11/1443)
+[scan] 6AH5 candle 5557/5557 (100.0%) date 2025-03-17 14:10:00 open trades 0
+[scan] 6AH5 finalizing results
+[scan] 6AH6 loaded 5570 candles from 2026-02-15 23:00:00 to 2026-03-16 12:30:00
+[scan] 6AH4 candle 5584/5584 (100.0%) date 2024-03-18 14:10:00 open trades 0
+[scan] 6AH4 finalizing results
+[scan] 6AJ5 loading candles from futures_contract_5m_candles
+[scan] 6AJ4 loaded 2799 candles from 2024-03-19 00:10:00 to 2024-04-15 11:15:00
+[scan] 6AJ5 loaded 491 candles from 2025-03-18 00:10:00 to 2025-04-14 13:55:00
+Symbol: 6AJ2, setup total: 0, Bear: 0, Bull: 0 (12/1443)
+[scan] 6AJ5 candle 491/491 (100.0%) date 2025-04-14 13:55:00 open trades 0
+[scan] 6AJ4 candle 2799/2799 (100.0%) date 2024-04-15 11:15:00 open trades 0
+[scan] 6AJ4 finalizing results
+[scan] 6AJ5 finalizing results
+[scan] 6AJ6 loading candles from futures_contract_5m_candles
+[scan] 6AH6 candle 5570/5570 (100.0%) date 2026-03-16 12:30:00 open trades 0
+[scan] 6AH6 finalizing results
+[scan] 6AJ6 loaded 799 candles from 2026-03-17 00:00:00 to 2026-04-13 12:00:00
+Symbol: 6AH3, setup total: 0, Bear: 0, Bull: 0 (13/1443)
+[scan] 6AJ6 candle 799/799 (100.0%) date 2026-04-13 12:00:00 open trades 0
+[scan] 6AJ6 finalizing results
+[scan] 6AK1 loading candles from futures_contract_5m_candles
+[scan] 6AK1 loaded 181 candles from 2021-04-26 03:00:00 to 2021-05-17 12:55:00
+[scan] 6AK1 candle 181/181 (100.0%) date 2021-05-17 12:55:00 open trades 0
+[scan] 6AK1 finalizing results
+Symbol: 6AJ3, setup total: 0, Bear: 0, Bull: 0 (14/1443)
+[scan] 6AK2 loading candles from futures_contract_5m_candles
+[scan] 6AK2 loaded 293 candles from 2022-04-19 02:05:00 to 2022-05-16 12:35:00
+[scan] 6AK2 candle 293/293 (100.0%) date 2022-05-16 12:35:00 open trades 4
+[scan] 6AK2 finalizing results
+Symbol: 6AH5, setup total: 0, Bear: 0, Bull: 0 (15/1443)
+[scan] 6AK3 loading candles from futures_contract_5m_candles
+[scan] 6AK3 loaded 178 candles from 2023-04-18 00:45:00 to 2023-05-15 01:15:00
+[scan] 6AK3 candle 178/178 (100.0%) date 2023-05-15 01:15:00 open trades 0
+[scan] 6AK3 finalizing results
+Symbol: 6AH4, setup total: 0, Bear: 0, Bull: 0 (16/1443)
+[scan] 6AK4 loading candles from futures_contract_5m_candles
+[scan] 6AK4 loaded 966 candles from 2024-04-16 00:05:00 to 2024-05-13 12:30:00
+[scan] 6AK4 candle 966/966 (100.0%) date 2024-05-13 12:30:00 open trades 0
+[scan] 6AK4 finalizing results
+Symbol: 6AJ4, setup total: 0, Bear: 0, Bull: 0 (17/1443)
+[scan] 6AK5 loading candles from futures_contract_5m_candles
+[scan] 6AK5 loaded 187 candles from 2025-04-15 03:45:00 to 2025-05-19 14:10:00
+[scan] 6AK5 candle 187/187 (100.0%) date 2025-05-19 14:10:00 open trades 0
+[scan] 6AK5 finalizing results
+Symbol: 6AJ5, setup total: 0, Bear: 0, Bull: 0 (18/1443)
+[scan] 6AK6 loading candles from futures_contract_5m_candles
+[scan] 6AK6 loaded 249 candles from 2026-04-14 00:10:00 to 2026-04-23 18:40:00
+[scan] 6AK6 candle 249/249 (100.0%) date 2026-04-23 18:40:00 open trades 0
+[scan] 6AK6 finalizing results
+Symbol: 6AH6, setup total: 0, Bear: 0, Bull: 0 (19/1443)
+[scan] 6AM1 loading candles from futures_contract_5m_candles
+Symbol: 6AJ6, setup total: 0, Bear: 0, Bull: 0 (20/1443)
+[scan] 6AM2 loading candles from futures_contract_5m_candles
+Symbol: 6AK1, setup total: 0, Bear: 0, Bull: 0 (21/1443)
+[scan] 6AM3 loading candles from futures_contract_5m_candles
+[scan] 6AM1 loaded 5206 candles from 2021-05-18 00:00:00 to 2021-06-14 14:10:00
+Symbol: 6AK2, setup total: 26, Bear: 26, Bull: 0 (22/1443)
+[scan] 6AM4 loading candles from futures_contract_5m_candles
+[scan] 6AM1 candle 5206/5206 (100.0%) date 2021-06-14 14:10:00 open trades 0
+[scan] 6AM1 finalizing results
+[scan] 6AM2 loaded 5264 candles from 2022-05-17 00:00:00 to 2022-06-13 14:00:00
+Symbol: 6AK3, setup total: 0, Bear: 0, Bull: 0 (23/1443)
+[scan] 6AM5 loading candles from futures_contract_5m_candles
+Symbol: 6AK4, setup total: 0, Bear: 0, Bull: 0 (24/1443)
+[scan] 6AM2 candle 5264/5264 (100.0%) date 2022-06-13 14:00:00 open trades 0
+[scan] 6AM2 finalizing results
+[scan] 6AN1 loading candles from futures_contract_5m_candles
+[scan] 6AN1 loaded 338 candles from 2021-06-15 00:35:00 to 2021-07-19 13:55:00
+Symbol: 6AK5, setup total: 0, Bear: 0, Bull: 0 (25/1443)
+[scan] 6AN1 candle 338/338 (100.0%) date 2021-07-19 13:55:00 open trades 0
+[scan] 6AN1 finalizing results
+[scan] 6AN2 loading candles from futures_contract_5m_candles
+Symbol: 6AK6, setup total: 0, Bear: 0, Bull: 0 (26/1443)
+[scan] 6AN2 loaded 881 candles from 2022-06-14 00:00:00 to 2022-07-18 12:15:00
+[scan] 6AN3 loading candles from futures_contract_5m_candles
+[scan] 6AN2 candle 881/881 (100.0%) date 2022-07-18 12:15:00 open trades 0
+[scan] 6AN2 finalizing results
+[scan] 6AM3 loaded 6378 candles from 2023-05-16 00:00:00 to 2023-06-16 13:55:00
+[scan] 6AN3 loaded 604 candles from 2023-06-18 22:55:00 to 2023-07-17 13:35:00
+Symbol: 6AM1, setup total: 0, Bear: 0, Bull: 0 (27/1443)
+[scan] 6AN3 candle 604/604 (100.0%) date 2023-07-17 13:35:00 open trades 0
+[scan] 6AN3 finalizing results
+[scan] 6AM4 loaded 6620 candles from 2024-05-14 00:00:00 to 2024-06-17 13:45:00
+[scan] 6AN4 loading candles from futures_contract_5m_candles
+[scan] 6AM5 loaded 5251 candles from 2025-05-20 00:00:00 to 2025-06-16 14:05:00
+Symbol: 6AM2, setup total: 0, Bear: 0, Bull: 0 (28/1443)
+[scan] 6AN4 loaded 1137 candles from 2024-06-18 00:10:00 to 2024-07-15 13:25:00
+[scan] 6AN5 loading candles from futures_contract_5m_candles
+[scan] 6AM3 candle 6378/6378 (100.0%) date 2023-06-16 13:55:00 open trades 0
+[scan] 6AM3 finalizing results
+[scan] 6AN4 candle 1137/1137 (100.0%) date 2024-07-15 13:25:00 open trades 0
+[scan] 6AN4 finalizing results
+[scan] 6AN5 loaded 267 candles from 2025-06-17 02:05:00 to 2025-07-14 05:40:00
+[scan] 6AM4 candle 6620/6620 (100.0%) date 2024-06-17 13:45:00 open trades 0
+[scan] 6AM4 finalizing results
+[scan] 6AN5 candle 267/267 (100.0%) date 2025-07-14 05:40:00 open trades 0
+[scan] 6AN5 finalizing results
+Symbol: 6AN1, setup total: 78, Bear: 78, Bull: 0 (29/1443)
+[scan] 6AQ1 loading candles from futures_contract_5m_candles
+[scan] 6AQ1 loaded 170 candles from 2021-07-20 01:25:00 to 2021-08-16 11:05:00
+[scan] 6AM5 candle 5251/5251 (100.0%) date 2025-06-16 14:05:00 open trades 0
+[scan] 6AM5 finalizing results
+[scan] 6AQ1 candle 170/170 (100.0%) date 2021-08-16 11:05:00 open trades 0
+[scan] 6AQ1 finalizing results
+Symbol: 6AN2, setup total: 29, Bear: 29, Bull: 0 (30/1443)
+[scan] 6AQ2 loading candles from futures_contract_5m_candles
+[scan] 6AQ2 loaded 436 candles from 2022-07-19 02:00:00 to 2022-08-15 13:20:00
+[scan] 6AQ2 candle 436/436 (100.0%) date 2022-08-15 13:20:00 open trades 0
+[scan] 6AQ2 finalizing results
+Symbol: 6AN3, setup total: 0, Bear: 0, Bull: 0 (31/1443)
+[scan] 6AQ3 loading candles from futures_contract_5m_candles
+[scan] 6AQ3 loaded 591 candles from 2023-07-18 00:25:00 to 2023-08-14 12:40:00
+[scan] 6AQ3 candle 591/591 (100.0%) date 2023-08-14 12:40:00 open trades 0
+[scan] 6AQ3 finalizing results
+Symbol: 6AM3, setup total: 0, Bear: 0, Bull: 0 (32/1443)
+[scan] 6AQ4 loading candles from futures_contract_5m_candles
+[scan] 6AQ4 loaded 1064 candles from 2024-07-16 00:40:00 to 2024-08-19 09:35:00
+Symbol: 6AN4, setup total: 0, Bear: 0, Bull: 0 (33/1443)
+[scan] 6AQ4 candle 1064/1064 (100.0%) date 2024-08-19 09:35:00 open trades 8
+[scan] 6AQ4 finalizing results
+[scan] 6AQ5 loading candles from futures_contract_5m_candles
+[scan] 6AQ5 loaded 253 candles from 2025-07-15 01:30:00 to 2025-08-18 13:55:00
+[scan] 6AQ5 candle 253/253 (100.0%) date 2025-08-18 13:55:00 open trades 0
+[scan] 6AQ5 finalizing results
+Symbol: 6AN5, setup total: 0, Bear: 0, Bull: 0 (34/1443)
+[scan] 6AU1 loading candles from futures_contract_5m_candles
+Symbol: 6AM4, setup total: 0, Bear: 0, Bull: 0 (35/1443)
+[scan] 6AU2 loading candles from futures_contract_5m_candles
+[scan] 6AU1 loaded 5201 candles from 2021-08-17 00:00:00 to 2021-09-13 13:50:00
+Symbol: 6AM5, setup total: 0, Bear: 0, Bull: 0 (36/1443)
+[scan] 6AU3 loading candles from futures_contract_5m_candles
+Symbol: 6AQ1, setup total: 0, Bear: 0, Bull: 0 (37/1443)
+[scan] 6AU1 candle 5201/5201 (100.0%) date 2021-09-13 13:50:00 open trades 0
+[scan] 6AU1 finalizing results
+[scan] 6AU4 loading candles from futures_contract_5m_candles
+Symbol: 6AQ2, setup total: 0, Bear: 0, Bull: 0 (38/1443)
+[scan] 6AU5 loading candles from futures_contract_5m_candles
+Symbol: 6AQ3, setup total: 0, Bear: 0, Bull: 0 (39/1443)
+[scan] 6AU2 loaded 6618 candles from 2022-08-16 00:00:00 to 2022-09-19 14:10:00
+[scan] 6AV1 loading candles from futures_contract_5m_candles
+Symbol: 6AQ4, setup total: 22, Bear: 22, Bull: 0 (40/1443)
+[scan] 6AV1 loaded 588 candles from 2021-09-14 00:00:00 to 2021-10-18 12:20:00
+[scan] 6AV2 loading candles from futures_contract_5m_candles
+[scan] 6AU2 candle 6618/6618 (100.0%) date 2022-09-19 14:10:00 open trades 0
+[scan] 6AU2 finalizing results
+[scan] 6AV1 candle 588/588 (100.0%) date 2021-10-18 12:20:00 open trades 12
+[scan] 6AV1 finalizing results
+[scan] 6AV2 loaded 467 candles from 2022-09-20 00:00:00 to 2022-10-17 11:45:00
+Symbol: 6AQ5, setup total: 0, Bear: 0, Bull: 0 (41/1443)
+[scan] 6AU4 loaded 5247 candles from 2024-08-20 00:00:00 to 2024-09-16 14:00:00
+[scan] 6AV2 candle 467/467 (100.0%) date 2022-10-17 11:45:00 open trades 0
+[scan] 6AV2 finalizing results
+[scan] 6AU3 loaded 6681 candles from 2023-08-15 00:00:00 to 2023-09-18 14:15:00
+[scan] 6AV3 loading candles from futures_contract_5m_candles
+Symbol: 6AU1, setup total: 0, Bear: 0, Bull: 0 (42/1443)
+[scan] 6AV3 loaded 524 candles from 2023-09-19 00:50:00 to 2023-10-16 11:50:00
+[scan] 6AV3 candle 524/524 (100.0%) date 2023-10-16 11:50:00 open trades 0
+[scan] 6AV3 finalizing results
+[scan] 6AV4 loading candles from futures_contract_5m_candles
+[scan] 6AU3 candle 6681/6681 (100.0%) date 2023-09-18 14:15:00 open trades 0
+[scan] 6AU3 finalizing results
+[scan] 6AU5 loaded 5199 candles from 2025-08-19 00:00:00 to 2025-09-15 14:10:00
+Symbol: 6AU2, setup total: 0, Bear: 0, Bull: 0 (43/1443)
+[scan] 6AU4 candle 5247/5247 (100.0%) date 2024-09-16 14:00:00 open trades 0
+[scan] 6AU4 finalizing results
+[scan] 6AV4 loaded 942 candles from 2024-09-17 00:05:00 to 2024-10-11 14:05:00
+[scan] 6AV5 loading candles from futures_contract_5m_candles
+[scan] 6AV4 candle 942/942 (100.0%) date 2024-10-11 14:05:00 open trades 1
+[scan] 6AV4 finalizing results
+[scan] 6AV5 loaded 468 candles from 2025-09-16 00:00:00 to 2025-10-10 12:00:00
+[scan] 6AV5 candle 468/468 (100.0%) date 2025-10-10 12:00:00 open trades 39
+[scan] 6AV5 finalizing results
+Symbol: 6AV1, setup total: 36, Bear: 36, Bull: 0 (44/1443)
+[scan] 6AX1 loading candles from futures_contract_5m_candles
+[scan] 6AU5 candle 5199/5199 (100.0%) date 2025-09-15 14:10:00 open trades 0
+[scan] 6AU5 finalizing results
+[scan] 6AX1 loaded 305 candles from 2021-10-19 00:00:00 to 2021-11-15 14:55:00
+[scan] 6AX1 candle 305/305 (100.0%) date 2021-11-15 14:55:00 open trades 0
+[scan] 6AX1 finalizing results
+Symbol: 6AV2, setup total: 17, Bear: 17, Bull: 0 (45/1443)
+[scan] 6AX2 loading candles from futures_contract_5m_candles
+[scan] 6AX2 loaded 393 candles from 2022-10-18 05:25:00 to 2022-11-14 07:55:00
+[scan] 6AX2 candle 393/393 (100.0%) date 2022-11-14 07:55:00 open trades 0
+[scan] 6AX2 finalizing results
+Symbol: 6AV3, setup total: 0, Bear: 0, Bull: 0 (46/1443)
+[scan] 6AX3 loading candles from futures_contract_5m_candles
+[scan] 6AX3 loaded 426 candles from 2023-10-17 00:35:00 to 2023-11-13 15:05:00
+Symbol: 6AU3, setup total: 0, Bear: 0, Bull: 0 (47/1443)
+[scan] 6AX3 candle 426/426 (100.0%) date 2023-11-13 15:05:00 open trades 0
+[scan] 6AX3 finalizing results
+[scan] 6AX4 loading candles from futures_contract_5m_candles
+[scan] 6AX4 loaded 637 candles from 2024-10-13 22:05:00 to 2024-11-18 15:05:00
+Symbol: 6AU4, setup total: 0, Bear: 0, Bull: 0 (48/1443)
+[scan] 6AX4 candle 637/637 (100.0%) date 2024-11-18 15:05:00 open trades 0
+[scan] 6AX4 finalizing results
+[scan] 6AX5 loading candles from futures_contract_5m_candles
+[scan] 6AX5 loaded 588 candles from 2025-10-12 22:20:00 to 2025-11-17 14:45:00
+Symbol: 6AV4, setup total: 1, Bear: 1, Bull: 0 (49/1443)
+[scan] 6AX5 candle 588/588 (100.0%) date 2025-11-17 14:45:00 open trades 0
+[scan] 6AX5 finalizing results
+[scan] 6AZ1 loading candles from futures_contract_5m_candles
+Symbol: 6AV5, setup total: 39, Bear: 39, Bull: 0 (50/1443)
+[scan] 6AZ2 loading candles from futures_contract_5m_candles
+Symbol: 6AX1, setup total: 0, Bear: 0, Bull: 0 (51/1443)
+[scan] 6AZ3 loading candles from futures_contract_5m_candles
+Symbol: 6AU5, setup total: 0, Bear: 0, Bull: 0 (52/1443)
+[scan] 6AZ4 loading candles from futures_contract_5m_candles
+Symbol: 6AX2, setup total: 8, Bear: 8, Bull: 0 (53/1443)
+[scan] 6AZ1 loaded 5176 candles from 2021-11-16 00:00:00 to 2021-12-13 14:30:00
+[scan] 6AZ5 loading candles from futures_contract_5m_candles
+[scan] 6AZ1 candle 5176/5176 (100.0%) date 2021-12-13 14:30:00 open trades 0
+[scan] 6AZ1 finalizing results
+Symbol: 6AX3, setup total: 0, Bear: 0, Bull: 0 (54/1443)
+[scan] 6BF2 loading candles from futures_contract_5m_candles
+[scan] 6BF2 loaded 379 candles from 2021-12-14 01:00:00 to 2022-01-14 13:50:00
+Symbol: 6AX4, setup total: 0, Bear: 0, Bull: 0 (55/1443)
+[scan] 6BF2 candle 379/379 (100.0%) date 2022-01-14 13:50:00 open trades 0
+[scan] 6BF2 finalizing results
+[scan] 6BF3 loading candles from futures_contract_5m_candles
+[scan] 6AZ2 loaded 6589 candles from 2022-11-15 00:00:00 to 2022-12-19 14:55:00
+[scan] 6BF3 loaded 334 candles from 2022-12-20 03:00:00 to 2023-01-13 14:55:00
+Symbol: 6AX5, setup total: 0, Bear: 0, Bull: 0 (56/1443)
+[scan] 6AZ3 loaded 6606 candles from 2023-11-14 00:00:00 to 2023-12-18 15:05:00
+[scan] 6BF3 candle 334/334 (100.0%) date 2023-01-13 14:55:00 open trades 36
+[scan] 6BF3 finalizing results
+[scan] 6BF4 loading candles from futures_contract_5m_candles
+[scan] 6AZ4 loaded 5253 candles from 2024-11-19 00:00:00 to 2024-12-16 15:05:00
+[scan] 6BF4 loaded 505 candles from 2023-12-19 00:55:00 to 2024-01-12 14:45:00
+Symbol: 6AZ1, setup total: 0, Bear: 0, Bull: 0 (57/1443)
+[scan] 6BF4 candle 505/505 (100.0%) date 2024-01-12 14:45:00 open trades 0
+[scan] 6BF4 finalizing results
+[scan] 6BF5 loading candles from futures_contract_5m_candles
+[scan] 6AZ5 loaded 5084 candles from 2025-11-18 00:00:00 to 2025-12-15 15:10:00
+[scan] 6AZ4 candle 5253/5253 (100.0%) date 2024-12-16 15:05:00 open trades 0
+[scan] 6AZ4 finalizing results
+[scan] 6AZ2 candle 6589/6589 (100.0%) date 2022-12-19 14:55:00 open trades 0
+[scan] 6AZ2 finalizing results
+Symbol: 6BF2, setup total: 0, Bear: 0, Bull: 0 (58/1443)
+[scan] 6BF5 loaded 945 candles from 2024-12-17 00:25:00 to 2025-01-13 13:00:00
+[scan] 6BF6 loading candles from futures_contract_5m_candles
+[scan] 6AZ3 candle 6606/6606 (100.0%) date 2023-12-18 15:05:00 open trades 0
+[scan] 6AZ3 finalizing results
+[scan] 6BF5 candle 945/945 (100.0%) date 2025-01-13 13:00:00 open trades 0
+[scan] 6BF5 finalizing results
+[scan] 6BF6 loaded 578 candles from 2025-12-16 00:05:00 to 2026-01-16 11:50:00
+Symbol: 6BF3, setup total: 54, Bear: 54, Bull: 0 (59/1443)
+[scan] 6BF6 candle 578/578 (100.0%) date 2026-01-16 11:50:00 open trades 0
+[scan] 6BF6 finalizing results
+[scan] 6BG2 loading candles from futures_contract_5m_candles
+[scan] 6AZ5 candle 5084/5084 (100.0%) date 2025-12-15 15:10:00 open trades 0
+[scan] 6AZ5 finalizing results
+[scan] 6BG2 loaded 142 candles from 2022-01-17 11:55:00 to 2022-02-14 08:00:00
+[scan] 6BG2 candle 142/142 (100.0%) date 2022-02-14 08:00:00 open trades 0
+[scan] 6BG2 finalizing results
+Symbol: 6BF4, setup total: 0, Bear: 0, Bull: 0 (60/1443)
+[scan] 6BG3 loading candles from futures_contract_5m_candles
+[scan] 6BG3 loaded 238 candles from 2023-01-16 00:55:00 to 2023-02-13 09:50:00
+[scan] 6BG3 candle 238/238 (100.0%) date 2023-02-13 09:50:00 open trades 0
+[scan] 6BG3 finalizing results
+Symbol: 6AZ4, setup total: 0, Bear: 0, Bull: 0 (61/1443)
+[scan] 6BG4 loading candles from futures_contract_5m_candles
+Symbol: 6AZ2, setup total: 0, Bear: 0, Bull: 0 (62/1443)
+[scan] 6BG4 loaded 2130 candles from 2024-01-15 00:00:00 to 2024-02-16 13:30:00
+[scan] 6BG5 loading candles from futures_contract_5m_candles
+[scan] 6BG4 candle 2130/2130 (100.0%) date 2024-02-16 13:30:00 open trades 0
+[scan] 6BG4 finalizing results
+[scan] 6BG5 loaded 1198 candles from 2025-01-14 00:45:00 to 2025-02-14 12:55:00
+Symbol: 6AZ3, setup total: 0, Bear: 0, Bull: 0 (63/1443)
+[scan] 6BG6 loading candles from futures_contract_5m_candles
+[scan] 6BG5 candle 1198/1198 (100.0%) date 2025-02-14 12:55:00 open trades 0
+[scan] 6BG6 loaded 383 candles from 2026-01-18 23:35:00 to 2026-02-13 14:45:00
+[scan] 6BG5 finalizing results
+[scan] 6BG6 candle 383/383 (100.0%) date 2026-02-13 14:45:00 open trades 0
+[scan] 6BG6 finalizing results
+Symbol: 6BF5, setup total: 194, Bear: 194, Bull: 0 (64/1443)
+[scan] 6BH2 loading candles from futures_contract_5m_candles
+Symbol: 6BF6, setup total: 0, Bear: 0, Bull: 0 (65/1443)
+[scan] 6BH3 loading candles from futures_contract_5m_candles
+Symbol: 6BG2, setup total: 0, Bear: 0, Bull: 0 (66/1443)
+[scan] 6BH2 loaded 5265 candles from 2022-02-15 00:00:00 to 2022-03-14 14:10:00
+[scan] 6BH4 loading candles from futures_contract_5m_candles
+[scan] 6BH2 candle 5265/5265 (100.0%) date 2022-03-14 14:10:00 open trades 8
+[scan] 6BH2 finalizing results
+Symbol: 6AZ5, setup total: 0, Bear: 0, Bull: 0 (67/1443)
+[scan] 6BH5 loading candles from futures_contract_5m_candles
+Symbol: 6BG3, setup total: 2, Bear: 2, Bull: 0 (68/1443)
+[scan] 6BH6 loading candles from futures_contract_5m_candles
+Symbol: 6BG4, setup total: 0, Bear: 0, Bull: 0 (69/1443)
+[scan] 6BJ2 loading candles from futures_contract_5m_candles
+[scan] 6BH3 loaded 5267 candles from 2023-02-14 00:00:00 to 2023-03-13 14:05:00
+[scan] 6BJ2 loaded 249 candles from 2022-03-15 06:15:00 to 2022-04-18 06:25:00
+[scan] 6BJ2 candle 249/249 (100.0%) date 2022-04-18 06:25:00 open trades 0
+[scan] 6BJ2 finalizing results
+Symbol: 6BG5, setup total: 40, Bear: 40, Bull: 0 (70/1443)
+[scan] 6BJ3 loading candles from futures_contract_5m_candles
+[scan] 6BH3 candle 5267/5267 (100.0%) date 2023-03-13 14:05:00 open trades 0
+[scan] 6BH3 finalizing results
+[scan] 6BH4 loaded 5525 candles from 2024-02-18 23:00:00 to 2024-03-18 14:10:00
+[scan] 6BJ3 loaded 553 candles from 2023-03-14 01:15:00 to 2023-04-17 13:00:00
+[scan] 6BH5 loaded 5535 candles from 2025-02-16 23:00:00 to 2025-03-17 14:15:00
+Symbol: 6BG6, setup total: 0, Bear: 0, Bull: 0 (71/1443)
+[scan] 6BJ3 candle 553/553 (100.0%) date 2023-04-17 13:00:00 open trades 0
+[scan] 6BJ3 finalizing results
+[scan] 6BJ4 loading candles from futures_contract_5m_candles
+[scan] 6BH6 loaded 5523 candles from 2026-02-15 23:00:00 to 2026-03-16 14:05:00
+Symbol: 6BH2, setup total: 8, Bear: 8, Bull: 0 (72/1443)
+[scan] 6BJ4 loaded 1836 candles from 2024-03-19 00:40:00 to 2024-04-15 14:05:00
+[scan] 6BJ5 loading candles from futures_contract_5m_candles
+[scan] 6BH6 candle 5523/5523 (100.0%) date 2026-03-16 14:05:00 open trades 132
+[scan] 6BH6 finalizing results
+[scan] 6BH5 candle 5535/5535 (100.0%) date 2025-03-17 14:15:00 open trades 0
+[scan] 6BJ4 candle 1836/1836 (100.0%) date 2024-04-15 14:05:00 open trades 0
+[scan] 6BJ4 finalizing results
+[scan] 6BJ5 loaded 748 candles from 2025-03-18 01:25:00 to 2025-04-14 14:00:00
+[scan] 6BH5 finalizing results
+Symbol: 6BJ2, setup total: 0, Bear: 0, Bull: 0 (73/1443)
+[scan] 6BJ5 candle 748/748 (100.0%) date 2025-04-14 14:00:00 open trades 0
+[scan] 6BJ5 finalizing results
+[scan] 6BH4 candle 5525/5525 (100.0%) date 2024-03-18 14:10:00 open trades 0
+[scan] 6BH4 finalizing results
+[scan] 6BJ6 loading candles from futures_contract_5m_candles
+[scan] 6BJ6 loaded 468 candles from 2026-03-17 01:00:00 to 2026-04-13 11:00:00
+Symbol: 6BH3, setup total: 0, Bear: 0, Bull: 0 (74/1443)
+[scan] 6BJ6 candle 468/468 (100.0%) date 2026-04-13 11:00:00 open trades 0
+[scan] 6BJ6 finalizing results
+[scan] 6BK1 loading candles from futures_contract_5m_candles
+[scan] 6BK1 loaded 226 candles from 2021-04-25 22:10:00 to 2021-05-17 11:00:00
+[scan] 6BK1 candle 226/226 (100.0%) date 2021-05-17 11:00:00 open trades 0
+[scan] 6BK1 finalizing results
+Symbol: 6BJ3, setup total: 6, Bear: 6, Bull: 0 (75/1443)
+[scan] 6BK2 loading candles from futures_contract_5m_candles
+[scan] 6BK2 loaded 219 candles from 2022-04-19 06:20:00 to 2022-05-13 16:10:00
+[scan] 6BK2 candle 219/219 (100.0%) date 2022-05-13 16:10:00 open trades 0
+[scan] 6BK2 finalizing results
+Symbol: 6BJ4, setup total: 22, Bear: 0, Bull: 22 (76/1443)
+[scan] 6BK3 loading candles from futures_contract_5m_candles
+[scan] 6BK3 loaded 110 candles from 2023-04-18 01:35:00 to 2023-05-15 11:00:00
+[scan] 6BK3 candle 110/110 (100.0%) date 2023-05-15 11:00:00 open trades 0
+[scan] 6BK3 finalizing results
+Symbol: 6BH6, setup total: 132, Bear: 132, Bull: 0 (77/1443)
+[scan] 6BK4 loading candles from futures_contract_5m_candles
+[scan] 6BK4 loaded 765 candles from 2024-04-16 00:00:00 to 2024-05-13 13:20:00
+Symbol: 6BJ5, setup total: 2, Bear: 2, Bull: 0 (78/1443)
+[scan] 6BK4 candle 765/765 (100.0%) date 2024-05-13 13:20:00 open trades 18
+[scan] 6BK4 finalizing results
+[scan] 6BK5 loading candles from futures_contract_5m_candles
+[scan] 6BK5 loaded 398 candles from 2025-04-15 03:30:00 to 2025-05-19 12:45:00
+[scan] 6BK5 candle 398/398 (100.0%) date 2025-05-19 12:45:00 open trades 24
+[scan] 6BK5 finalizing results
+Symbol: 6BH5, setup total: 0, Bear: 0, Bull: 0 (79/1443)
+[scan] 6BK6 loading candles from futures_contract_5m_candles
+[scan] 6BK6 loaded 152 candles from 2026-04-14 07:00:00 to 2026-04-23 18:45:00
+[scan] 6BK6 candle 152/152 (100.0%) date 2026-04-23 18:45:00 open trades 0
+[scan] 6BK6 finalizing results
+Symbol: 6BH4, setup total: 0, Bear: 0, Bull: 0 (80/1443)
+[scan] 6BM1 loading candles from futures_contract_5m_candles
+Symbol: 6BJ6, setup total: 1, Bear: 1, Bull: 0 (81/1443)
+[scan] 6BM2 loading candles from futures_contract_5m_candles
+[scan] 6BM1 loaded 5178 candles from 2021-05-18 00:00:00 to 2021-06-14 13:35:00
+Symbol: 6BK1, setup total: 0, Bear: 0, Bull: 0 (82/1443)
+[scan] 6BM3 loading candles from futures_contract_5m_candles
+[scan] 6BM1 candle 5178/5178 (100.0%) date 2021-06-14 13:35:00 open trades 0
+[scan] 6BM1 finalizing results
+Symbol: 6BK2, setup total: 0, Bear: 0, Bull: 0 (83/1443)
+[scan] 6BM2 loaded 5253 candles from 2022-05-17 00:00:00 to 2022-06-13 14:15:00
+[scan] 6BM4 loading candles from futures_contract_5m_candles
+Symbol: 6BK3, setup total: 0, Bear: 0, Bull: 0 (84/1443)
+[scan] 6BM5 loading candles from futures_contract_5m_candles
+[scan] 6BM2 candle 5253/5253 (100.0%) date 2022-06-13 14:15:00 open trades 0
+[scan] 6BM2 finalizing results
+Symbol: 6BK4, setup total: 18, Bear: 18, Bull: 0 (85/1443)
+[scan] 6BN1 loading candles from futures_contract_5m_candles
+[scan] 6BN1 loaded 540 candles from 2021-06-15 00:50:00 to 2021-07-19 13:25:00
+Symbol: 6BK5, setup total: 37, Bear: 37, Bull: 0 (86/1443)
+[scan] 6BN1 candle 540/540 (100.0%) date 2021-07-19 13:25:00 open trades 0
+[scan] 6BN1 finalizing results
+[scan] 6BN2 loading candles from futures_contract_5m_candles
+Symbol: 6BK6, setup total: 0, Bear: 0, Bull: 0 (87/1443)
+[scan] 6BN2 loaded 656 candles from 2022-06-14 00:10:00 to 2022-07-18 12:05:00
+[scan] 6BM3 loaded 6371 candles from 2023-05-16 00:00:00 to 2023-06-16 14:15:00
+[scan] 6BN3 loading candles from futures_contract_5m_candles
+[scan] 6BN2 candle 656/656 (100.0%) date 2022-07-18 12:05:00 open trades 18
+[scan] 6BN2 finalizing results
+[scan] 6BN3 loaded 519 candles from 2023-06-18 22:00:00 to 2023-07-17 14:05:00
+Symbol: 6BM1, setup total: 0, Bear: 0, Bull: 0 (88/1443)
+[scan] 6BN3 candle 519/519 (100.0%) date 2023-07-17 14:05:00 open trades 0
+[scan] 6BN3 finalizing results
+[scan] 6BM4 loaded 6618 candles from 2024-05-14 00:00:00 to 2024-06-17 14:10:00
+[scan] 6BM5 loaded 5221 candles from 2025-05-20 00:00:00 to 2025-06-16 14:00:00
+[scan] 6BN4 loading candles from futures_contract_5m_candles
+[scan] 6BN4 loaded 471 candles from 2024-06-18 02:30:00 to 2024-07-15 13:05:00
+[scan] 6BN4 candle 471/471 (100.0%) date 2024-07-15 13:05:00 open trades 0
+[scan] 6BN4 finalizing results
+[scan] 6BM3 candle 6371/6371 (100.0%) date 2023-06-16 14:15:00 open trades 0
+[scan] 6BM3 finalizing results
+Symbol: 6BM2, setup total: 18, Bear: 18, Bull: 0 (89/1443)
+[scan] 6BN5 loading candles from futures_contract_5m_candles
+[scan] 6BM5 candle 5221/5221 (100.0%) date 2025-06-16 14:00:00 open trades 0
+[scan] 6BM5 finalizing results
+[scan] 6BN5 loaded 726 candles from 2025-06-17 00:55:00 to 2025-07-14 14:05:00
+Symbol: 6BN1, setup total: 52, Bear: 44, Bull: 8 (90/1443)
+[scan] 6BN5 candle 726/726 (100.0%) date 2025-07-14 14:05:00 open trades 0
+[scan] 6BN5 finalizing results
+[scan] 6BM4 candle 6618/6618 (100.0%) date 2024-06-17 14:10:00 open trades 0
+[scan] 6BM4 finalizing results
+[scan] 6BQ1 loading candles from futures_contract_5m_candles
+[scan] 6BQ1 loaded 238 candles from 2021-07-20 05:45:00 to 2021-08-16 13:55:00
+[scan] 6BQ1 candle 238/238 (100.0%) date 2021-08-16 13:55:00 open trades 0
+[scan] 6BQ1 finalizing results
+Symbol: 6BN2, setup total: 94, Bear: 82, Bull: 12 (91/1443)
+[scan] 6BQ2 loading candles from futures_contract_5m_candles
+[scan] 6BQ2 loaded 374 candles from 2022-07-19 01:05:00 to 2022-08-15 08:25:00
+Symbol: 6BN3, setup total: 0, Bear: 0, Bull: 0 (92/1443)
+[scan] 6BQ2 candle 374/374 (100.0%) date 2022-08-15 08:25:00 open trades 0
+[scan] 6BQ2 finalizing results
+[scan] 6BQ3 loading candles from futures_contract_5m_candles
+[scan] 6BQ3 loaded 695 candles from 2023-07-18 01:25:00 to 2023-08-14 13:45:00
+Symbol: 6BN4, setup total: 0, Bear: 0, Bull: 0 (93/1443)
+[scan] 6BQ3 candle 695/695 (100.0%) date 2023-08-14 13:45:00 open trades 0
+[scan] 6BQ3 finalizing results
+[scan] 6BQ4 loading candles from futures_contract_5m_candles
+Symbol: 6BM3, setup total: 0, Bear: 0, Bull: 0 (94/1443)
+[scan] 6BQ4 loaded 807 candles from 2024-07-16 01:25:00 to 2024-08-19 13:55:00
+[scan] 6BQ5 loading candles from futures_contract_5m_candles
+[scan] 6BQ4 candle 807/807 (100.0%) date 2024-08-19 13:55:00 open trades 12
+[scan] 6BQ4 finalizing results
+[scan] 6BQ5 loaded 608 candles from 2025-07-15 06:05:00 to 2025-08-18 13:45:00
+Symbol: 6BM5, setup total: 0, Bear: 0, Bull: 0 (95/1443)
+[scan] 6BQ5 candle 608/608 (100.0%) date 2025-08-18 13:45:00 open trades 93
+[scan] 6BQ5 finalizing results
+[scan] 6BU1 loading candles from futures_contract_5m_candles
+Symbol: 6BN5, setup total: 0, Bear: 0, Bull: 0 (96/1443)
+[scan] 6BU2 loading candles from futures_contract_5m_candles
+Symbol: 6BM4, setup total: 0, Bear: 0, Bull: 0 (97/1443)
+[scan] 6BU3 loading candles from futures_contract_5m_candles
+Symbol: 6BQ1, setup total: 0, Bear: 0, Bull: 0 (98/1443)
+[scan] 6BU4 loading candles from futures_contract_5m_candles
+Symbol: 6BQ2, setup total: 0, Bear: 0, Bull: 0 (99/1443)
+[scan] 6BU5 loading candles from futures_contract_5m_candles
+Symbol: 6BQ3, setup total: 37, Bear: 22, Bull: 15 (100/1443)
+[scan] 6BV1 loading candles from futures_contract_5m_candles
+[scan] 6BU1 loaded 5173 candles from 2021-08-17 00:00:00 to 2021-09-13 14:05:00
+[scan] 6BV1 loaded 548 candles from 2021-09-14 04:20:00 to 2021-10-18 09:30:00
+Symbol: 6BQ4, setup total: 32, Bear: 32, Bull: 0 (101/1443)
+[scan] 6BV2 loading candles from futures_contract_5m_candles
+[scan] 6BV1 candle 548/548 (100.0%) date 2021-10-18 09:30:00 open trades 315
+[scan] 6BV1 finalizing results
+Symbol: 6BQ5, setup total: 146, Bear: 146, Bull: 0 (102/1443)
+[scan] 6BU1 candle 5173/5173 (100.0%) date 2021-09-13 14:05:00 open trades 0
+[scan] 6BU1 finalizing results
+[scan] 6BV3 loading candles from futures_contract_5m_candles
+[scan] 6BU2 loaded 6608 candles from 2022-08-16 00:00:00 to 2022-09-19 14:05:00
+[scan] 6BV2 loaded 1387 candles from 2022-09-20 00:05:00 to 2022-10-17 13:40:00
+[scan] 6BU4 loaded 5238 candles from 2024-08-20 00:00:00 to 2024-09-16 14:00:00
+Symbol: 6BV1, setup total: 495, Bear: 495, Bull: 0 (103/1443)
+[scan] 6BV3 loaded 644 candles from 2023-09-19 01:15:00 to 2023-10-16 13:30:00
+[scan] 6BU3 loaded 6624 candles from 2023-08-15 00:00:00 to 2023-09-18 14:10:00
+[scan] 6BV4 loading candles from futures_contract_5m_candles
+[scan] 6BV3 candle 644/644 (100.0%) date 2023-10-16 13:30:00 open trades 0
+[scan] 6BV3 finalizing results
+[scan] 6BV2 candle 1387/1387 (100.0%) date 2022-10-17 13:40:00 open trades 12
+[scan] 6BV2 finalizing results
+[scan] 6BV4 loaded 656 candles from 2024-09-17 06:00:00 to 2024-10-11 08:45:00
+Symbol: 6BU1, setup total: 0, Bear: 0, Bull: 0 (104/1443)
+[scan] 6BV4 candle 656/656 (100.0%) date 2024-10-11 08:45:00 open trades 28
+[scan] 6BV4 finalizing results
+[scan] 6BU5 loaded 5207 candles from 2025-08-19 00:00:00 to 2025-09-15 14:00:00
+[scan] 6BU2 candle 6608/6608 (100.0%) date 2022-09-19 14:05:00 open trades 0
+[scan] 6BU2 finalizing results
+[scan] 6BV5 loading candles from futures_contract_5m_candles
+[scan] 6BU3 candle 6624/6624 (100.0%) date 2023-09-18 14:10:00 open trades 0
+[scan] 6BU3 finalizing results
+[scan] 6BU4 candle 5238/5238 (100.0%) date 2024-09-16 14:00:00 open trades 0
+[scan] 6BU4 finalizing results
+Symbol: 6BV3, setup total: 56, Bear: 56, Bull: 0 (105/1443)
+[scan] 6BU5 candle 5207/5207 (100.0%) date 2025-09-15 14:00:00 open trades 0
+[scan] 6BU5 finalizing results
+[scan] 6BV5 loaded 754 candles from 2025-09-16 00:00:00 to 2025-10-10 13:50:00
+[scan] 6BX1 loading candles from futures_contract_5m_candles
+[scan] 6BX1 loaded 213 candles from 2021-10-19 01:50:00 to 2021-11-15 07:20:00
+[scan] 6BX1 candle 213/213 (100.0%) date 2021-11-15 07:20:00 open trades 8
+[scan] 6BX1 finalizing results
+Symbol: 6BV2, setup total: 244, Bear: 244, Bull: 0 (106/1443)
+[scan] 6BV5 candle 754/754 (100.0%) date 2025-10-10 13:50:00 open trades 0
+[scan] 6BV5 finalizing results
+[scan] 6BX2 loading candles from futures_contract_5m_candles
+Symbol: 6BV4, setup total: 28, Bear: 28, Bull: 0 (107/1443)
+[scan] 6BX2 loaded 684 candles from 2022-10-18 00:00:00 to 2022-11-14 13:45:00
+[scan] 6BX3 loading candles from futures_contract_5m_candles
+[scan] 6BX2 candle 684/684 (100.0%) date 2022-11-14 13:45:00 open trades 0
+[scan] 6BX2 finalizing results
+[scan] 6BX3 loaded 571 candles from 2023-10-17 00:50:00 to 2023-11-13 13:20:00
+Symbol: 6BU2, setup total: 270, Bear: 270, Bull: 0 (108/1443)
+[scan] 6BX3 candle 571/571 (100.0%) date 2023-11-13 13:20:00 open trades 4
+[scan] 6BX3 finalizing results
+[scan] 6BX4 loading candles from futures_contract_5m_candles
+Symbol: 6BU3, setup total: 0, Bear: 0, Bull: 0 (109/1443)
+[scan] 6BX5 loading candles from futures_contract_5m_candles
+[scan] 6BX4 loaded 975 candles from 2024-10-13 22:05:00 to 2024-11-18 15:05:00
+[scan] 6BX4 candle 975/975 (100.0%) date 2024-11-18 15:05:00 open trades 0
+[scan] 6BX4 finalizing results
+Symbol: 6BU4, setup total: 0, Bear: 0, Bull: 0 (110/1443)
+[scan] 6BZ1 loading candles from futures_contract_5m_candles
+[scan] 6BX5 loaded 1085 candles from 2025-10-13 01:30:00 to 2025-11-17 14:35:00
+[scan] 6BX5 candle 1085/1085 (100.0%) date 2025-11-17 14:35:00 open trades 0
+[scan] 6BX5 finalizing results
+Symbol: 6BU5, setup total: 0, Bear: 0, Bull: 0 (111/1443)
+[scan] 6BZ2 loading candles from futures_contract_5m_candles
+Symbol: 6BX1, setup total: 8, Bear: 8, Bull: 0 (112/1443)
+[scan] 6BZ3 loading candles from futures_contract_5m_candles
+Symbol: 6BV5, setup total: 366, Bear: 366, Bull: 0 (113/1443)
+[scan] 6BZ4 loading candles from futures_contract_5m_candles
+Symbol: 6BX2, setup total: 33, Bear: 33, Bull: 0 (114/1443)
+[scan] 6BZ5 loading candles from futures_contract_5m_candles
+Symbol: 6BX3, setup total: 4, Bear: 4, Bull: 0 (115/1443)
+[scan] 6BZ1 loaded 5179 candles from 2021-11-16 00:00:00 to 2021-12-13 15:10:00
+[scan] 6CF2 loading candles from futures_contract_5m_candles
+[scan] 6CF2 loaded 247 candles from 2021-12-15 00:05:00 to 2022-01-18 08:40:00
+[scan] 6BZ1 candle 5179/5179 (100.0%) date 2021-12-13 15:10:00 open trades 0
+[scan] 6BZ1 finalizing results
+Symbol: 6BX4, setup total: 0, Bear: 0, Bull: 0 (116/1443)
+[scan] 6CF2 candle 247/247 (100.0%) date 2022-01-18 08:40:00 open trades 0
+[scan] 6CF2 finalizing results
+[scan] 6CF3 loading candles from futures_contract_5m_candles
+[scan] 6BZ2 loaded 6599 candles from 2022-11-15 00:00:00 to 2022-12-19 15:10:00
+[scan] 6CF3 loaded 260 candles from 2022-12-21 00:40:00 to 2023-01-17 12:50:00
+[scan] 6CF3 candle 260/260 (100.0%) date 2023-01-17 12:50:00 open trades 0
+Symbol: 6BX5, setup total: 0, Bear: 0, Bull: 0 (117/1443)
+[scan] 6CF3 finalizing results
+[scan] 6BZ3 loaded 6577 candles from 2023-11-14 00:00:00 to 2023-12-18 15:10:00
+[scan] 6CF4 loading candles from futures_contract_5m_candles
+[scan] 6CF4 loaded 158 candles from 2023-12-20 07:35:00 to 2024-01-16 14:35:00
+[scan] 6CF4 candle 158/158 (100.0%) date 2024-01-16 14:35:00 open trades 0
+[scan] 6CF4 finalizing results
+Symbol: 6CF2, setup total: 0, Bear: 0, Bull: 0 (118/1443)
+[scan] 6BZ2 candle 6599/6599 (100.0%) date 2022-12-19 15:10:00 open trades 0
+[scan] 6BZ2 finalizing results
+[scan] 6BZ4 loaded 5240 candles from 2024-11-19 00:00:00 to 2024-12-16 15:15:00
+[scan] 6CF5 loading candles from futures_contract_5m_candles
+[scan] 6CF5 loaded 435 candles from 2024-12-18 00:55:00 to 2025-01-14 14:45:00
+Symbol: 6BZ1, setup total: 0, Bear: 0, Bull: 0 (119/1443)
+[scan] 6BZ5 loaded 5021 candles from 2025-11-18 00:00:00 to 2025-12-15 15:00:00
+[scan] 6BZ3 candle 6577/6577 (100.0%) date 2023-12-18 15:10:00 open trades 0
+[scan] 6BZ3 finalizing results
+[scan] 6CF6 loading candles from futures_contract_5m_candles
+[scan] 6CF5 candle 435/435 (100.0%) date 2025-01-14 14:45:00 open trades 0
+[scan] 6CF5 finalizing results
+[scan] 6CF6 loaded 183 candles from 2025-12-17 13:05:00 to 2026-01-20 15:05:00
+[scan] 6CF6 candle 183/183 (100.0%) date 2026-01-20 15:05:00 open trades 3
+[scan] 6CF6 finalizing results
+[scan] 6BZ4 candle 5240/5240 (100.0%) date 2024-12-16 15:15:00 open trades 0
+[scan] 6BZ4 finalizing results
+Symbol: 6CF3, setup total: 0, Bear: 0, Bull: 0 (120/1443)
+[scan] 6CG2 loading candles from futures_contract_5m_candles
+[scan] 6BZ5 candle 5021/5021 (100.0%) date 2025-12-15 15:00:00 open trades 0
+[scan] 6BZ5 finalizing results
+[scan] 6CG2 loaded 104 candles from 2022-01-19 06:25:00 to 2022-02-15 15:05:00
+[scan] 6CG2 candle 104/104 (100.0%) date 2022-02-15 15:05:00 open trades 0
+[scan] 6CG2 finalizing results
+Symbol: 6CF4, setup total: 0, Bear: 0, Bull: 0 (121/1443)
+[scan] 6CG3 loading candles from futures_contract_5m_candles
+[scan] 6CG3 loaded 174 candles from 2023-01-18 02:55:00 to 2023-02-14 03:25:00
+[scan] 6CG3 candle 174/174 (100.0%) date 2023-02-14 03:25:00 open trades 0
+[scan] 6CG3 finalizing results
+Symbol: 6BZ2, setup total: 0, Bear: 0, Bull: 0 (122/1443)
+[scan] 6CG4 loading candles from futures_contract_5m_candles
+Symbol: 6BZ3, setup total: 0, Bear: 0, Bull: 0 (123/1443)
+[scan] 6CG5 loading candles from futures_contract_5m_candles
+[scan] 6CG4 loaded 1146 candles from 2024-01-17 00:10:00 to 2024-02-20 14:40:00
+[scan] 6CG4 candle 1146/1146 (100.0%) date 2024-02-20 14:40:00 open trades 0
+[scan] 6CG4 finalizing results
+Symbol: 6CF5, setup total: 0, Bear: 0, Bull: 0 (124/1443)
+[scan] 6CG5 loaded 632 candles from 2025-01-15 08:00:00 to 2025-02-18 09:05:00
+[scan] 6CG5 candle 632/632 (100.0%) date 2025-02-18 09:05:00 open trades 0
+[scan] 6CG5 finalizing results
+[scan] 6CG6 loading candles from futures_contract_5m_candles
+[scan] 6CG6 loaded 391 candles from 2026-01-21 04:05:00 to 2026-02-17 03:40:00
+Symbol: 6CF6, setup total: 3, Bear: 3, Bull: 0 (125/1443)
+[scan] 6CG6 candle 391/391 (100.0%) date 2026-02-17 03:40:00 open trades 0
+[scan] 6CG6 finalizing results
+[scan] 6CH2 loading candles from futures_contract_5m_candles
+Symbol: 6BZ4, setup total: 0, Bear: 0, Bull: 0 (126/1443)
+[scan] 6CH3 loading candles from futures_contract_5m_candles
+Symbol: 6BZ5, setup total: 0, Bear: 0, Bull: 0 (127/1443)
+[scan] 6CH4 loading candles from futures_contract_5m_candles
+Symbol: 6CG2, setup total: 0, Bear: 0, Bull: 0 (128/1443)
+[scan] 6CH5 loading candles from futures_contract_5m_candles
+Symbol: 6CG3, setup total: 0, Bear: 0, Bull: 0 (129/1443)
+[scan] 6CH6 loading candles from futures_contract_5m_candles
+[scan] 6CH2 loaded 5066 candles from 2022-02-16 00:00:00 to 2022-03-15 13:50:00
+Symbol: 6CG4, setup total: 0, Bear: 0, Bull: 0 (130/1443)
+[scan] 6CJ2 loading candles from futures_contract_5m_candles
+[scan] 6CJ2 loaded 195 candles from 2022-03-16 00:00:00 to 2022-04-19 09:00:00
+[scan] 6CJ2 candle 195/195 (100.0%) date 2022-04-19 09:00:00 open trades 0
+[scan] 6CJ2 finalizing results
+Symbol: 6CG5, setup total: 0, Bear: 0, Bull: 0 (131/1443)
+[scan] 6CH2 candle 5066/5066 (100.0%) date 2022-03-15 13:50:00 open trades 0
+[scan] 6CH2 finalizing results
+[scan] 6CH3 loaded 5113 candles from 2023-02-15 00:00:00 to 2023-03-14 13:55:00
+[scan] 6CJ3 loading candles from futures_contract_5m_candles
+[scan] 6CJ3 loaded 205 candles from 2023-03-15 00:55:00 to 2023-04-18 11:20:00
+[scan] 6CJ3 candle 205/205 (100.0%) date 2023-04-18 11:20:00 open trades 0
+[scan] 6CJ3 finalizing results
+[scan] 6CH4 loaded 5166 candles from 2024-02-21 00:00:00 to 2024-03-19 14:10:00
+Symbol: 6CG6, setup total: 0, Bear: 0, Bull: 0 (132/1443)
+[scan] 6CJ4 loading candles from futures_contract_5m_candles
+[scan] 6CH3 candle 5113/5113 (100.0%) date 2023-03-14 13:55:00 open trades 144
+[scan] 6CH5 loaded 5056 candles from 2025-02-19 00:00:00 to 2025-03-18 14:10:00
+[scan] 6CH3 finalizing results
+[scan] 6CH4 candle 5166/5166 (100.0%) date 2024-03-19 14:10:00 open trades 0
+[scan] 6CH4 finalizing results
+Symbol: 6CJ2, setup total: 0, Bear: 0, Bull: 0 (133/1443)
+[scan] 6CJ4 loaded 1025 candles from 2024-03-20 00:50:00 to 2024-04-16 12:20:00
+[scan] 6CH5 candle 5056/5056 (100.0%) date 2025-03-18 14:10:00 open trades 0
+[scan] 6CH5 finalizing results
+[scan] 6CJ4 candle 1025/1025 (100.0%) date 2024-04-16 12:20:00 open trades 0
+[scan] 6CJ4 finalizing results
+[scan] 6CJ5 loading candles from futures_contract_5m_candles
+[scan] 6CJ5 loaded 328 candles from 2025-03-19 07:40:00 to 2025-04-15 12:25:00
+Symbol: 6CH2, setup total: 0, Bear: 0, Bull: 0 (134/1443)
+[scan] 6CJ5 candle 328/328 (100.0%) date 2025-04-15 12:25:00 open trades 0
+[scan] 6CJ5 finalizing results
+[scan] 6CJ6 loading candles from futures_contract_5m_candles
+[scan] 6CH6 loaded 5084 candles from 2026-02-18 00:00:00 to 2026-03-17 14:10:00
+[scan] 6CJ6 loaded 301 candles from 2026-03-18 01:00:00 to 2026-04-14 14:05:00
+[scan] 6CJ6 candle 301/301 (100.0%) date 2026-04-14 14:05:00 open trades 0
+[scan] 6CJ6 finalizing results
+Symbol: 6CJ3, setup total: 0, Bear: 0, Bull: 0 (135/1443)
+[scan] 6CH6 candle 5084/5084 (100.0%) date 2026-03-17 14:10:00 open trades 0
+[scan] 6CH6 finalizing results
+[scan] 6CK1 loading candles from futures_contract_5m_candles
+[scan] 6CK1 loaded 90 candles from 2021-04-26 06:40:00 to 2021-05-18 14:05:00
+[scan] 6CK1 candle 90/90 (100.0%) date 2021-05-18 14:05:00 open trades 0
+[scan] 6CK1 finalizing results
+Symbol: 6CH3, setup total: 144, Bear: 144, Bull: 0 (136/1443)
+[scan] 6CK2 loading candles from futures_contract_5m_candles
+[scan] 6CK2 loaded 61 candles from 2022-04-21 00:50:00 to 2022-05-13 14:30:00
+[scan] 6CK2 candle 61/61 (100.0%) date 2022-05-13 14:30:00 open trades 0
+[scan] 6CK2 finalizing results
+Symbol: 6CH4, setup total: 0, Bear: 0, Bull: 0 (137/1443)
+[scan] 6CK3 loading candles from futures_contract_5m_candles
+[scan] 6CK3 loaded 99 candles from 2023-04-19 07:20:00 to 2023-05-15 15:50:00
+[scan] 6CK3 candle 99/99 (100.0%) date 2023-05-15 15:50:00 open trades 0
+[scan] 6CK3 finalizing results
+Symbol: 6CJ4, setup total: 0, Bear: 0, Bull: 0 (138/1443)
+[scan] 6CK4 loading candles from futures_contract_5m_candles
+[scan] 6CK4 loaded 251 candles from 2024-04-17 00:00:00 to 2024-05-13 20:45:00
+[scan] 6CK4 candle 251/251 (100.0%) date 2024-05-13 20:45:00 open trades 0
+[scan] 6CK4 finalizing results
+Symbol: 6CH5, setup total: 0, Bear: 0, Bull: 0 (139/1443)
+[scan] 6CK5 loading candles from futures_contract_5m_candles
+[scan] 6CK5 loaded 171 candles from 2025-04-16 02:50:00 to 2025-05-20 00:40:00
+[scan] 6CK5 candle 171/171 (100.0%) date 2025-05-20 00:40:00 open trades 0
+[scan] 6CK5 finalizing results
+Symbol: 6CJ5, setup total: 0, Bear: 0, Bull: 0 (140/1443)
+[scan] 6CK6 loading candles from futures_contract_5m_candles
+[scan] 6CK6 loaded 65 candles from 2026-04-15 02:10:00 to 2026-04-23 17:45:00
+[scan] 6CK6 candle 65/65 (100.0%) date 2026-04-23 17:45:00 open trades 0
+[scan] 6CK6 finalizing results
+Symbol: 6CJ6, setup total: 0, Bear: 0, Bull: 0 (141/1443)
+[scan] 6CM1 loading candles from futures_contract_5m_candles
+Symbol: 6CH6, setup total: 0, Bear: 0, Bull: 0 (142/1443)
+[scan] 6CM2 loading candles from futures_contract_5m_candles
+Symbol: 6CK1, setup total: 0, Bear: 0, Bull: 0 (143/1443)
+[scan] 6CM3 loading candles from futures_contract_5m_candles
+Symbol: 6CK2, setup total: 0, Bear: 0, Bull: 0 (144/1443)
+[scan] 6CM4 loading candles from futures_contract_5m_candles
+Symbol: 6CK3, setup total: 0, Bear: 0, Bull: 0 (145/1443)
+[scan] 6CM5 loading candles from futures_contract_5m_candles
+Symbol: 6CK4, setup total: 0, Bear: 0, Bull: 0 (146/1443)
+[scan] 6CM1 loaded 5054 candles from 2021-05-19 00:00:00 to 2021-06-15 14:00:00
+[scan] 6CN1 loading candles from futures_contract_5m_candles
+[scan] 6CN1 loaded 297 candles from 2021-06-16 00:00:00 to 2021-07-19 20:00:00
+Symbol: 6CK5, setup total: 0, Bear: 0, Bull: 0 (147/1443)
+[scan] 6CM2 loaded 5119 candles from 2022-05-18 00:00:00 to 2022-06-14 14:15:00
+[scan] 6CN1 candle 297/297 (100.0%) date 2021-07-19 20:00:00 open trades 0
+[scan] 6CN1 finalizing results
+[scan] 6CN2 loading candles from futures_contract_5m_candles
+[scan] 6CM3 loaded 6288 candles from 2023-05-17 00:00:00 to 2023-06-20 13:50:00
+[scan] 6CN2 loaded 289 candles from 2022-06-15 02:20:00 to 2022-07-19 13:40:00
+Symbol: 6CK6, setup total: 0, Bear: 0, Bull: 0 (148/1443)
+[scan] 6CM1 candle 5054/5054 (100.0%) date 2021-06-15 14:00:00 open trades 0
+[scan] 6CM1 finalizing results
+[scan] 6CN2 candle 289/289 (100.0%) date 2022-07-19 13:40:00 open trades 0
+[scan] 6CN2 finalizing results
+[scan] 6CN3 loading candles from futures_contract_5m_candles
+[scan] 6CM2 candle 5119/5119 (100.0%) date 2022-06-14 14:15:00 open trades 0
+[scan] 6CM2 finalizing results
+[scan] 6CN3 loaded 207 candles from 2023-06-21 07:50:00 to 2023-07-18 13:55:00
+[scan] 6CN3 candle 207/207 (100.0%) date 2023-07-18 13:55:00 open trades 0
+[scan] 6CN3 finalizing results
+Symbol: 6CN1, setup total: 1, Bear: 1, Bull: 0 (149/1443)
+[scan] 6CN4 loading candles from futures_contract_5m_candles
+[scan] 6CM3 candle 6288/6288 (100.0%) date 2023-06-20 13:50:00 open trades 0
+[scan] 6CM3 finalizing results
+[scan] 6CN4 loaded 269 candles from 2024-06-19 02:05:00 to 2024-07-16 13:35:00
+[scan] 6CN4 candle 269/269 (100.0%) date 2024-07-16 13:35:00 open trades 0
+[scan] 6CN4 finalizing results
+[scan] 6CM4 loaded 6470 candles from 2024-05-15 00:00:00 to 2024-06-18 14:15:00
+Symbol: 6CN2, setup total: 0, Bear: 0, Bull: 0 (150/1443)
+[scan] 6CM5 loaded 5038 candles from 2025-05-21 00:00:00 to 2025-06-17 12:55:00
+[scan] 6CN5 loading candles from futures_contract_5m_candles
+[scan] 6CN5 loaded 177 candles from 2025-06-18 10:15:00 to 2025-07-15 12:50:00
+[scan] 6CN5 candle 177/177 (100.0%) date 2025-07-15 12:50:00 open trades 0
+[scan] 6CN5 finalizing results
+Symbol: 6CM1, setup total: 0, Bear: 0, Bull: 0 (151/1443)
+[scan] 6CM4 candle 6470/6470 (100.0%) date 2024-06-18 14:15:00 open trades 0
+[scan] 6CM4 finalizing results
+[scan] 6CQ1 loading candles from futures_contract_5m_candles
+[scan] 6CQ1 loaded 121 candles from 2021-07-21 00:15:00 to 2021-08-17 11:00:00
+[scan] 6CQ1 candle 121/121 (100.0%) date 2021-08-17 11:00:00 open trades 0
+[scan] 6CQ1 finalizing results
+Symbol: 6CN3, setup total: 0, Bear: 0, Bull: 0 (152/1443)
+[scan] 6CM5 candle 5038/5038 (100.0%) date 2025-06-17 12:55:00 open trades 0
+[scan] 6CM5 finalizing results
+[scan] 6CQ2 loading candles from futures_contract_5m_candles
+[scan] 6CQ2 loaded 97 candles from 2022-07-20 04:30:00 to 2022-08-15 17:45:00
+[scan] 6CQ2 candle 97/97 (100.0%) date 2022-08-15 17:45:00 open trades 0
+[scan] 6CQ2 finalizing results
+Symbol: 6CM2, setup total: 0, Bear: 0, Bull: 0 (153/1443)
+[scan] 6CQ3 loading candles from futures_contract_5m_candles
+[scan] 6CQ3 loaded 152 candles from 2023-07-19 12:40:00 to 2023-08-15 12:30:00
+[scan] 6CQ3 candle 152/152 (100.0%) date 2023-08-15 12:30:00 open trades 0
+[scan] 6CQ3 finalizing results
+Symbol: 6CN4, setup total: 0, Bear: 0, Bull: 0 (154/1443)
+[scan] 6CQ4 loading candles from futures_contract_5m_candles
+[scan] 6CQ4 loaded 282 candles from 2024-07-17 08:25:00 to 2024-08-20 13:40:00
+[scan] 6CQ4 candle 282/282 (100.0%) date 2024-08-20 13:40:00 open trades 0
+[scan] 6CQ4 finalizing results
+Symbol: 6CM3, setup total: 0, Bear: 0, Bull: 0 (155/1443)
+[scan] 6CQ5 loading candles from futures_contract_5m_candles
+[scan] 6CQ5 loaded 149 candles from 2025-07-16 00:45:00 to 2025-08-19 06:00:00
+[scan] 6CQ5 candle 149/149 (100.0%) date 2025-08-19 06:00:00 open trades 0
+[scan] 6CQ5 finalizing results
+Symbol: 6CN5, setup total: 0, Bear: 0, Bull: 0 (156/1443)
+[scan] 6CU1 loading candles from futures_contract_5m_candles
+Symbol: 6CM4, setup total: 0, Bear: 0, Bull: 0 (157/1443)
+[scan] 6CU2 loading candles from futures_contract_5m_candles
+Symbol: 6CQ1, setup total: 0, Bear: 0, Bull: 0 (158/1443)
+[scan] 6CU3 loading candles from futures_contract_5m_candles
+Symbol: 6CM5, setup total: 0, Bear: 0, Bull: 0 (159/1443)
+[scan] 6CU4 loading candles from futures_contract_5m_candles
+Symbol: 6CQ2, setup total: 0, Bear: 0, Bull: 0 (160/1443)
+[scan] 6CU5 loading candles from futures_contract_5m_candles
+Symbol: 6CQ3, setup total: 0, Bear: 0, Bull: 0 (161/1443)
+[scan] 6CU1 loaded 5030 candles from 2021-08-18 00:00:00 to 2021-09-14 13:35:00
+[scan] 6CV1 loading candles from futures_contract_5m_candles
+[scan] 6CV1 loaded 312 candles from 2021-09-15 01:10:00 to 2021-10-19 10:35:00
+[scan] 6CV1 candle 312/312 (100.0%) date 2021-10-19 10:35:00 open trades 0
+[scan] 6CV1 finalizing results
+Symbol: 6CQ4, setup total: 0, Bear: 0, Bull: 0 (162/1443)
+[scan] 6CU1 candle 5030/5030 (100.0%) date 2021-09-14 13:35:00 open trades 0
+[scan] 6CU1 finalizing results
+[scan] 6CV2 loading candles from futures_contract_5m_candles
+[scan] 6CU2 loaded 6419 candles from 2022-08-17 00:00:00 to 2022-09-20 14:05:00
+[scan] 6CV2 loaded 215 candles from 2022-09-21 00:40:00 to 2022-10-18 13:00:00
+[scan] 6CV2 candle 215/215 (100.0%) date 2022-10-18 13:00:00 open trades 0
+Symbol: 6CQ5, setup total: 0, Bear: 0, Bull: 0 (163/1443)
+[scan] 6CV2 finalizing results
+[scan] 6CV3 loading candles from futures_contract_5m_candles
+[scan] 6CU2 candle 6419/6419 (100.0%) date 2022-09-20 14:05:00 open trades 0
+[scan] 6CU2 finalizing results
+[scan] 6CV3 loaded 227 candles from 2023-09-20 00:40:00 to 2023-10-17 13:30:00
+Symbol: 6CV1, setup total: 0, Bear: 0, Bull: 0 (164/1443)
+[scan] 6CU4 loaded 5065 candles from 2024-08-21 00:00:00 to 2024-09-17 14:15:00
+[scan] 6CV3 candle 227/227 (100.0%) date 2023-10-17 13:30:00 open trades 0
+[scan] 6CV3 finalizing results
+[scan] 6CU3 loaded 6458 candles from 2023-08-16 00:00:00 to 2023-09-19 14:10:00
+[scan] 6CV4 loading candles from futures_contract_5m_candles
+[scan] 6CV4 loaded 304 candles from 2024-09-18 02:00:00 to 2024-10-15 12:50:00
+[scan] 6CV4 candle 304/304 (100.0%) date 2024-10-15 12:50:00 open trades 0
+[scan] 6CV4 finalizing results
+[scan] 6CU5 loaded 5005 candles from 2025-08-20 00:00:00 to 2025-09-16 14:10:00
+Symbol: 6CU1, setup total: 0, Bear: 0, Bull: 0 (165/1443)
+[scan] 6CU4 candle 5065/5065 (100.0%) date 2024-09-17 14:15:00 open trades 0
+[scan] 6CU4 finalizing results
+[scan] 6CV5 loading candles from futures_contract_5m_candles
+[scan] 6CV5 loaded 348 candles from 2025-09-17 02:20:00 to 2025-10-14 14:10:00
+[scan] 6CV5 candle 348/348 (100.0%) date 2025-10-14 14:10:00 open trades 0
+[scan] 6CV5 finalizing results
+Symbol: 6CV2, setup total: 4, Bear: 4, Bull: 0 (166/1443)
+[scan] 6CU5 candle 5005/5005 (100.0%) date 2025-09-16 14:10:00 open trades 0
+[scan] 6CU5 finalizing results
+[scan] 6CX1 loading candles from futures_contract_5m_candles
+[scan] 6CX1 loaded 195 candles from 2021-10-20 09:15:00 to 2021-11-16 10:30:00
+[scan] 6CX1 candle 195/195 (100.0%) date 2021-11-16 10:30:00 open trades 0
+[scan] 6CX1 finalizing results
+[scan] 6CU3 candle 6458/6458 (100.0%) date 2023-09-19 14:10:00 open trades 0
+[scan] 6CU3 finalizing results
+Symbol: 6CV3, setup total: 0, Bear: 0, Bull: 0 (167/1443)
+[scan] 6CX2 loading candles from futures_contract_5m_candles
+[scan] 6CX2 loaded 205 candles from 2022-10-19 12:35:00 to 2022-11-15 01:00:00
+[scan] 6CX2 candle 205/205 (100.0%) date 2022-11-15 01:00:00 open trades 0
+[scan] 6CX2 finalizing results
+Symbol: 6CU2, setup total: 0, Bear: 0, Bull: 0 (168/1443)
+[scan] 6CX3 loading candles from futures_contract_5m_candles
+[scan] 6CX3 loaded 194 candles from 2023-10-18 07:25:00 to 2023-11-14 15:05:00
+[scan] 6CX3 candle 194/194 (100.0%) date 2023-11-14 15:05:00 open trades 0
+[scan] 6CX3 finalizing results
+Symbol: 6CV4, setup total: 0, Bear: 0, Bull: 0 (169/1443)
+[scan] 6CX4 loading candles from futures_contract_5m_candles
+[scan] 6CX4 loaded 394 candles from 2024-10-16 13:55:00 to 2024-11-19 14:30:00
+[scan] 6CX4 candle 394/394 (100.0%) date 2024-11-19 14:30:00 open trades 0
+[scan] 6CX4 finalizing results
+Symbol: 6CU4, setup total: 0, Bear: 0, Bull: 0 (170/1443)
+[scan] 6CX5 loading candles from futures_contract_5m_candles
+[scan] 6CX5 loaded 337 candles from 2025-10-15 06:10:00 to 2025-11-18 12:00:00
+Symbol: 6CV5, setup total: 0, Bear: 0, Bull: 0 (171/1443)
+[scan] 6CX5 candle 337/337 (100.0%) date 2025-11-18 12:00:00 open trades 0
+[scan] 6CX5 finalizing results
+[scan] 6CZ1 loading candles from futures_contract_5m_candles
+Symbol: 6CU5, setup total: 0, Bear: 0, Bull: 0 (172/1443)
+[scan] 6CZ2 loading candles from futures_contract_5m_candles
+Symbol: 6CX1, setup total: 0, Bear: 0, Bull: 0 (173/1443)
+[scan] 6CZ3 loading candles from futures_contract_5m_candles
+Symbol: 6CU3, setup total: 0, Bear: 0, Bull: 0 (174/1443)
+[scan] 6CZ4 loading candles from futures_contract_5m_candles
+Symbol: 6CX2, setup total: 0, Bear: 0, Bull: 0 (175/1443)
+[scan] 6CZ5 loading candles from futures_contract_5m_candles
+Symbol: 6CX3, setup total: 0, Bear: 0, Bull: 0 (176/1443)
+[scan] 6EF2 loading candles from futures_contract_5m_candles
+[scan] 6CZ1 loaded 5012 candles from 2021-11-17 00:00:00 to 2021-12-14 15:15:00
+Symbol: 6CX4, setup total: 0, Bear: 0, Bull: 0 (177/1443)
+[scan] 6CZ1 candle 5012/5012 (100.0%) date 2021-12-14 15:15:00 open trades 0
+[scan] 6CZ1 finalizing results
+[scan] 6EF3 loading candles from futures_contract_5m_candles
+[scan] 6EF2 loaded 1251 candles from 2021-12-14 00:10:00 to 2022-01-14 15:05:00
+Symbol: 6CX5, setup total: 0, Bear: 0, Bull: 0 (178/1443)
+[scan] 6EF2 candle 1251/1251 (100.0%) date 2022-01-14 15:05:00 open trades 0
+[scan] 6EF2 finalizing results
+[scan] 6EF4 loading candles from futures_contract_5m_candles
+[scan] 6EF3 loaded 1269 candles from 2022-12-20 00:00:00 to 2023-01-13 15:00:00
+[scan] 6CZ2 loaded 6436 candles from 2022-11-16 00:00:00 to 2022-12-20 15:05:00
+[scan] 6CZ4 loaded 5154 candles from 2024-11-20 00:00:00 to 2024-12-17 14:55:00
+[scan] 6EF3 candle 1269/1269 (100.0%) date 2023-01-13 15:00:00 open trades 0
+[scan] 6EF3 finalizing results
+Symbol: 6CZ1, setup total: 0, Bear: 0, Bull: 0 (179/1443)
+[scan] 6CZ3 loaded 6392 candles from 2023-11-15 00:00:00 to 2023-12-19 15:00:00
+[scan] 6EF4 loaded 1190 candles from 2023-12-19 00:55:00 to 2024-01-12 15:10:00
+[scan] 6EF5 loading candles from futures_contract_5m_candles
+[scan] 6EF4 candle 1190/1190 (100.0%) date 2024-01-12 15:10:00 open trades 0
+[scan] 6EF4 finalizing results
+[scan] 6CZ5 loaded 4827 candles from 2025-11-19 00:00:00 to 2025-12-16 15:10:00
+[scan] 6CZ4 candle 5154/5154 (100.0%) date 2024-12-17 14:55:00 open trades 0
+[scan] 6CZ4 finalizing results
+[scan] 6CZ2 candle 6436/6436 (100.0%) date 2022-12-20 15:05:00 open trades 0
+[scan] 6CZ2 finalizing results
+Symbol: 6EF2, setup total: 0, Bear: 0, Bull: 0 (180/1443)
+[scan] 6EF5 loaded 1580 candles from 2024-12-17 00:00:00 to 2025-01-13 15:00:00
+[scan] 6EF6 loading candles from futures_contract_5m_candles
+[scan] 6EF5 candle 1580/1580 (100.0%) date 2025-01-13 15:00:00 open trades 8
+[scan] 6EF5 finalizing results
+[scan] 6CZ5 candle 4827/4827 (100.0%) date 2025-12-16 15:10:00 open trades 0
+[scan] 6CZ5 finalizing results
+[scan] 6EF6 loaded 1832 candles from 2025-12-16 00:15:00 to 2026-01-16 15:10:00
+Symbol: 6EF3, setup total: 10, Bear: 10, Bull: 0 (181/1443)
+[scan] 6EG2 loading candles from futures_contract_5m_candles
+[scan] 6CZ3 candle 6392/6392 (100.0%) date 2023-12-19 15:00:00 open trades 0
+[scan] 6CZ3 finalizing results
+[scan] 6EF6 candle 1832/1832 (100.0%) date 2026-01-16 15:10:00 open trades 0
+[scan] 6EF6 finalizing results
+Symbol: 6EF4, setup total: 0, Bear: 0, Bull: 0 (182/1443)
+[scan] 6EG2 loaded 989 candles from 2022-01-16 23:00:00 to 2022-02-14 15:10:00
+[scan] 6EG2 candle 989/989 (100.0%) date 2022-02-14 15:10:00 open trades 0
+[scan] 6EG2 finalizing results
+[scan] 6EG3 loading candles from futures_contract_5m_candles
+Symbol: 6CZ4, setup total: 0, Bear: 0, Bull: 0 (183/1443)
+[scan] 6EG3 loaded 1014 candles from 2023-01-16 00:30:00 to 2023-02-13 14:50:00
+[scan] 6EG3 candle 1014/1014 (100.0%) date 2023-02-13 14:50:00 open trades 10
+[scan] 6EG3 finalizing results
+[scan] 6EG4 loading candles from futures_contract_5m_candles
+Symbol: 6CZ2, setup total: 0, Bear: 0, Bull: 0 (184/1443)
+[scan] 6EG4 loaded 2394 candles from 2024-01-14 23:45:00 to 2024-02-16 13:45:00
+[scan] 6EG5 loading candles from futures_contract_5m_candles
+Symbol: 6EF5, setup total: 8, Bear: 8, Bull: 0 (185/1443)
+[scan] 6EG4 candle 2394/2394 (100.0%) date 2024-02-16 13:45:00 open trades 28
+[scan] 6EG4 finalizing results
+[scan] 6EG5 loaded 2297 candles from 2025-01-14 00:00:00 to 2025-02-14 13:55:00
+[scan] 6EG6 loading candles from futures_contract_5m_candles
+[scan] 6EG5 candle 2297/2297 (100.0%) date 2025-02-14 13:55:00 open trades 0
+[scan] 6EG5 finalizing results
+Symbol: 6CZ5, setup total: 0, Bear: 0, Bull: 0 (186/1443)
+[scan] 6EG6 loaded 2322 candles from 2026-01-18 23:00:00 to 2026-02-13 14:35:00
+[scan] 6EH2 loading candles from futures_contract_5m_candles
+[scan] 6EG6 candle 2322/2322 (100.0%) date 2026-02-13 14:35:00 open trades 80
+[scan] 6EG6 finalizing results
+Symbol: 6CZ3, setup total: 0, Bear: 0, Bull: 0 (187/1443)
+[scan] 6EH3 loading candles from futures_contract_5m_candles
+Symbol: 6EF6, setup total: 28, Bear: 28, Bull: 0 (188/1443)
+[scan] 6EH2 loaded 5351 candles from 2022-02-15 00:00:00 to 2022-03-14 14:10:00
+[scan] 6EH4 loading candles from futures_contract_5m_candles
+Symbol: 6EG2, setup total: 96, Bear: 96, Bull: 0 (189/1443)
+[scan] 6EH3 loaded 5360 candles from 2023-02-14 00:00:00 to 2023-03-13 14:10:00
+[scan] 6EH5 loading candles from futures_contract_5m_candles
+[scan] 6EH2 candle 5351/5351 (100.0%) date 2022-03-14 14:10:00 open trades 0
+[scan] 6EH2 finalizing results
+Symbol: 6EG3, setup total: 10, Bear: 10, Bull: 0 (190/1443)
+[scan] 6EH3 candle 5360/5360 (100.0%) date 2023-03-13 14:10:00 open trades 0
+[scan] 6EH3 finalizing results
+[scan] 6EH6 loading candles from futures_contract_5m_candles
+[scan] 6EH4 loaded 5601 candles from 2024-02-18 23:00:00 to 2024-03-18 14:10:00
+Symbol: 6EG4, setup total: 28, Bear: 28, Bull: 0 (191/1443)
+[scan] 6EH5 loaded 5615 candles from 2025-02-16 23:00:00 to 2025-03-17 14:15:00
+[scan] 6EJ2 loading candles from futures_contract_5m_candles
+Symbol: 6EG5, setup total: 0, Bear: 0, Bull: 0 (192/1443)
+[scan] 6EJ3 loading candles from futures_contract_5m_candles
+[scan] 6EJ2 loaded 1254 candles from 2022-03-15 00:05:00 to 2022-04-18 14:10:00
+[scan] 6EH5 candle 5615/5615 (100.0%) date 2025-03-17 14:15:00 open trades 0
+[scan] 6EH5 finalizing results
+[scan] 6EH4 candle 5601/5601 (100.0%) date 2024-03-18 14:10:00 open trades 0
+[scan] 6EH4 finalizing results
+Symbol: 6EG6, setup total: 81, Bear: 81, Bull: 0 (193/1443)
+[scan] 6EJ2 candle 1254/1254 (100.0%) date 2022-04-18 14:10:00 open trades 0
+[scan] 6EJ2 finalizing results
+[scan] 6EJ3 loaded 1068 candles from 2023-03-14 00:25:00 to 2023-04-17 13:45:00
+[scan] 6EJ4 loading candles from futures_contract_5m_candles
+[scan] 6EJ3 candle 1068/1068 (100.0%) date 2023-04-17 13:45:00 open trades 11
+[scan] 6EJ3 finalizing results
+Symbol: 6EH2, setup total: 0, Bear: 0, Bull: 0 (194/1443)
+[scan] 6EJ5 loading candles from futures_contract_5m_candles
+Symbol: 6EH3, setup total: 0, Bear: 0, Bull: 0 (195/1443)
+[scan] 6EJ4 loaded 2120 candles from 2024-03-19 00:15:00 to 2024-04-15 14:10:00
+[scan] 6EJ6 loading candles from futures_contract_5m_candles
+[scan] 6EH6 loaded 5638 candles from 2026-02-15 23:00:00 to 2026-03-16 14:10:00
+[scan] 6EJ4 candle 2120/2120 (100.0%) date 2024-04-15 14:10:00 open trades 0
+[scan] 6EJ4 finalizing results
+Symbol: 6EH5, setup total: 0, Bear: 0, Bull: 0 (196/1443)
+[scan] 6EJ5 loaded 2014 candles from 2025-03-18 00:20:00 to 2025-04-14 13:45:00
+[scan] 6EK1 loading candles from futures_contract_5m_candles
+[scan] 6EH6 candle 5638/5638 (100.0%) date 2026-03-16 14:10:00 open trades 0
+[scan] 6EH6 finalizing results
+[scan] 6EJ5 candle 2014/2014 (100.0%) date 2025-04-14 13:45:00 open trades 0
+[scan] 6EJ5 finalizing results
+Symbol: 6EH4, setup total: 0, Bear: 0, Bull: 0 (197/1443)
+[scan] 6EK1 loaded 679 candles from 2021-04-25 23:20:00 to 2021-05-17 13:00:00
+[scan] 6EK1 candle 679/679 (100.0%) date 2021-05-17 13:00:00 open trades 5
+[scan] 6EK1 finalizing results
+[scan] 6EJ6 loaded 2243 candles from 2026-03-17 00:00:00 to 2026-04-13 13:55:00
+[scan] 6EK2 loading candles from futures_contract_5m_candles
+[scan] 6EJ6 candle 2243/2243 (100.0%) date 2026-04-13 13:55:00 open trades 0
+[scan] 6EJ6 finalizing results
+[scan] 6EK2 loaded 783 candles from 2022-04-19 02:10:00 to 2022-05-16 12:50:00
+Symbol: 6EJ2, setup total: 134, Bear: 134, Bull: 0 (198/1443)
+[scan] 6EK2 candle 783/783 (100.0%) date 2022-05-16 12:50:00 open trades 10
+[scan] 6EK2 finalizing results
+[scan] 6EK3 loading candles from futures_contract_5m_candles
+[scan] 6EK3 loaded 428 candles from 2023-04-18 05:40:00 to 2023-05-15 13:50:00
+Symbol: 6EJ3, setup total: 113, Bear: 113, Bull: 0 (199/1443)
+[scan] 6EK3 candle 428/428 (100.0%) date 2023-05-15 13:50:00 open trades 0
+[scan] 6EK3 finalizing results
+[scan] 6EK4 loading candles from futures_contract_5m_candles
+Symbol: 6EJ4, setup total: 0, Bear: 0, Bull: 0 (200/1443)
+[scan] 6EK5 loading candles from futures_contract_5m_candles
+[scan] 6EK4 loaded 1347 candles from 2024-04-16 00:00:00 to 2024-05-13 12:00:00
+[scan] 6EK4 candle 1347/1347 (100.0%) date 2024-05-13 12:00:00 open trades 0
+[scan] 6EK4 finalizing results
+Symbol: 6EJ5, setup total: 0, Bear: 0, Bull: 0 (201/1443)
+[scan] 6EK6 loading candles from futures_contract_5m_candles
+Symbol: 6EH6, setup total: 0, Bear: 0, Bull: 0 (202/1443)
+[scan] 6EK6 loaded 627 candles from 2026-04-14 00:30:00 to 2026-04-23 20:05:00
+[scan] 6EK6 candle 627/627 (100.0%) date 2026-04-23 20:05:00 open trades 0
+[scan] 6EK6 finalizing results
+[scan] 6EK5 loaded 2252 candles from 2025-04-15 00:30:00 to 2025-05-19 14:10:00
+[scan] 6EM1 loading candles from futures_contract_5m_candles
+[scan] 6EK5 candle 2252/2252 (100.0%) date 2025-05-19 14:10:00 open trades 0
+[scan] 6EK5 finalizing results
+Symbol: 6EK1, setup total: 7, Bear: 7, Bull: 0 (203/1443)
+[scan] 6EM2 loading candles from futures_contract_5m_candles
+Symbol: 6EJ6, setup total: 0, Bear: 0, Bull: 0 (204/1443)
+[scan] 6EM3 loading candles from futures_contract_5m_candles
+Symbol: 6EK2, setup total: 10, Bear: 10, Bull: 0 (205/1443)
+[scan] 6EM4 loading candles from futures_contract_5m_candles
+Symbol: 6EK3, setup total: 14, Bear: 14, Bull: 0 (206/1443)
+[scan] 6EM1 loaded 5274 candles from 2021-05-18 00:00:00 to 2021-06-14 14:15:00
+[scan] 6EM5 loading candles from futures_contract_5m_candles
+[scan] 6EM1 candle 5274/5274 (100.0%) date 2021-06-14 14:15:00 open trades 0
+[scan] 6EM1 finalizing results
+Symbol: 6EK4, setup total: 0, Bear: 0, Bull: 0 (207/1443)
+[scan] 6EM2 loaded 5365 candles from 2022-05-17 00:00:00 to 2022-06-13 14:10:00
+[scan] 6EM3 loaded 6434 candles from 2023-05-16 00:00:00 to 2023-06-16 14:10:00
+[scan] 6EN1 loading candles from futures_contract_5m_candles
+[scan] 6EM2 candle 5365/5365 (100.0%) date 2022-06-13 14:10:00 open trades 0
+[scan] 6EM2 finalizing results
+[scan] 6EM3 candle 6434/6434 (100.0%) date 2023-06-16 14:10:00 open trades 0
+[scan] 6EM3 finalizing results
+Symbol: 6EK6, setup total: 0, Bear: 0, Bull: 0 (208/1443)
+[scan] 6EN1 loaded 1245 candles from 2021-06-15 00:20:00 to 2021-07-19 13:55:00
+[scan] 6EN1 candle 1245/1245 (100.0%) date 2021-07-19 13:55:00 open trades 0
+[scan] 6EN1 finalizing results
+[scan] 6EN2 loading candles from futures_contract_5m_candles
+Symbol: 6EK5, setup total: 0, Bear: 0, Bull: 0 (209/1443)
+[scan] 6EN3 loading candles from futures_contract_5m_candles
+[scan] 6EM4 loaded 6726 candles from 2024-05-14 00:00:00 to 2024-06-17 14:10:00
+[scan] 6EM5 loaded 5330 candles from 2025-05-20 00:00:00 to 2025-06-16 14:15:00
+[scan] 6EN2 loaded 1505 candles from 2022-06-14 00:00:00 to 2022-07-18 13:30:00
+Symbol: 6EM1, setup total: 0, Bear: 0, Bull: 0 (210/1443)
+[scan] 6EN3 loaded 1352 candles from 2023-06-18 22:00:00 to 2023-07-17 13:55:00
+[scan] 6EN2 candle 1505/1505 (100.0%) date 2022-07-18 13:30:00 open trades 18
+[scan] 6EN2 finalizing results
+[scan] 6EM4 candle 6726/6726 (100.0%) date 2024-06-17 14:10:00 open trades 0
+[scan] 6EM4 finalizing results
+[scan] 6EN3 candle 1352/1352 (100.0%) date 2023-07-17 13:55:00 open trades 0
+[scan] 6EN3 finalizing results
+[scan] 6EN4 loading candles from futures_contract_5m_candles
+[scan] 6EM5 candle 5330/5330 (100.0%) date 2025-06-16 14:15:00 open trades 0
+[scan] 6EM5 finalizing results
+Symbol: 6EM2, setup total: 0, Bear: 0, Bull: 0 (211/1443)
+[scan] 6EN5 loading candles from futures_contract_5m_candles
+[scan] 6EN4 loaded 1311 candles from 2024-06-18 01:10:00 to 2024-07-15 12:15:00
+Symbol: 6EM3, setup total: 0, Bear: 0, Bull: 0 (212/1443)
+[scan] 6EN4 candle 1311/1311 (100.0%) date 2024-07-15 12:15:00 open trades 0
+[scan] 6EN4 finalizing results
+[scan] 6EQ1 loading candles from futures_contract_5m_candles
+[scan] 6EN5 loaded 1921 candles from 2025-06-17 00:10:00 to 2025-07-14 13:50:00
+Symbol: 6EN1, setup total: 0, Bear: 0, Bull: 0 (213/1443)
+[scan] 6EQ2 loading candles from futures_contract_5m_candles
+[scan] 6EN5 candle 1921/1921 (100.0%) date 2025-07-14 13:50:00 open trades 0
+[scan] 6EQ1 loaded 1013 candles from 2021-07-20 00:05:00 to 2021-08-16 13:15:00
+[scan] 6EN5 finalizing results
+[scan] 6EQ1 candle 1013/1013 (100.0%) date 2021-08-16 13:15:00 open trades 0
+[scan] 6EQ1 finalizing results
+Symbol: 6EN2, setup total: 74, Bear: 74, Bull: 0 (214/1443)
+[scan] 6EQ2 loaded 841 candles from 2022-07-19 00:50:00 to 2022-08-15 13:25:00
+[scan] 6EQ3 loading candles from futures_contract_5m_candles
+[scan] 6EQ2 candle 841/841 (100.0%) date 2022-08-15 13:25:00 open trades 42
+[scan] 6EQ2 finalizing results
+[scan] 6EQ3 loaded 834 candles from 2023-07-18 01:25:00 to 2023-08-14 12:05:00
+Symbol: 6EM4, setup total: 0, Bear: 0, Bull: 0 (215/1443)
+[scan] 6EQ3 candle 834/834 (100.0%) date 2023-08-14 12:05:00 open trades 0
+[scan] 6EQ3 finalizing results
+[scan] 6EQ4 loading candles from futures_contract_5m_candles
+Symbol: 6EN3, setup total: 54, Bear: 54, Bull: 0 (216/1443)
+[scan] 6EQ4 loaded 1067 candles from 2024-07-16 00:50:00 to 2024-08-19 13:30:00
+[scan] 6EQ5 loading candles from futures_contract_5m_candles
+[scan] 6EQ4 candle 1067/1067 (100.0%) date 2024-08-19 13:30:00 open trades 0
+[scan] 6EQ4 finalizing results
+Symbol: 6EM5, setup total: 0, Bear: 0, Bull: 0 (217/1443)
+[scan] 6EU1 loading candles from futures_contract_5m_candles
+Symbol: 6EN4, setup total: 0, Bear: 0, Bull: 0 (218/1443)
+[scan] 6EU2 loading candles from futures_contract_5m_candles
+[scan] 6EQ5 loaded 2306 candles from 2025-07-15 00:30:00 to 2025-08-18 13:55:00
+Symbol: 6EN5, setup total: 0, Bear: 0, Bull: 0 (219/1443)
+[scan] 6EU3 loading candles from futures_contract_5m_candles
+Symbol: 6EQ1, setup total: 0, Bear: 0, Bull: 0 (220/1443)
+[scan] 6EU4 loading candles from futures_contract_5m_candles
+Symbol: 6EQ2, setup total: 42, Bear: 42, Bull: 0 (221/1443)
+[scan] 6EQ5 candle 2306/2306 (100.0%) date 2025-08-18 13:55:00 open trades 2750
+[scan] 6EQ5 finalizing results
+[scan] 6EU5 loading candles from futures_contract_5m_candles
+[scan] 6EU1 loaded 5265 candles from 2021-08-17 00:00:00 to 2021-09-13 14:10:00
+Symbol: 6EQ3, setup total: 0, Bear: 0, Bull: 0 (222/1443)
+[scan] 6EV1 loading candles from futures_contract_5m_candles
+Symbol: 6EQ4, setup total: 0, Bear: 0, Bull: 0 (223/1443)
+[scan] 6EV2 loading candles from futures_contract_5m_candles
+[scan] 6EV1 loaded 1224 candles from 2021-09-14 00:45:00 to 2021-10-18 14:10:00
+[scan] 6EU1 candle 5265/5265 (100.0%) date 2021-09-13 14:10:00 open trades 0
+[scan] 6EU1 finalizing results
+[scan] 6EV1 candle 1224/1224 (100.0%) date 2021-10-18 14:10:00 open trades 27
+[scan] 6EV1 finalizing results
+Symbol: 6EU1, setup total: 0, Bear: 0, Bull: 0 (224/1443)
+[scan] 6EU2 loaded 6699 candles from 2022-08-16 00:00:00 to 2022-09-19 14:15:00
+[scan] 6EV3 loading candles from futures_contract_5m_candles
+[scan] 6EV2 loaded 1871 candles from 2022-09-20 00:00:00 to 2022-10-17 14:10:00
+Symbol: 6EV1, setup total: 27, Bear: 27, Bull: 0 (225/1443)
+[scan] 6EU4 loaded 5331 candles from 2024-08-20 00:00:00 to 2024-09-16 14:10:00
+[scan] 6EV2 candle 1871/1871 (100.0%) date 2022-10-17 14:10:00 open trades 40
+[scan] 6EV2 finalizing results
+[scan] 6EV4 loading candles from futures_contract_5m_candles
+[scan] 6EU3 loaded 6692 candles from 2023-08-15 00:00:00 to 2023-09-18 14:15:00
+[scan] 6EV3 loaded 1410 candles from 2023-09-19 00:05:00 to 2023-10-16 13:30:00
+Symbol: 6EQ5, setup total: 3012, Bear: 3012, Bull: 0 (226/1443)
+[scan] 6EU5 loaded 5322 candles from 2025-08-19 00:00:00 to 2025-09-15 14:10:00
+[scan] 6EV3 candle 1410/1410 (100.0%) date 2023-10-16 13:30:00 open trades 300
+[scan] 6EV3 finalizing results
+[scan] 6EV4 loaded 1538 candles from 2024-09-17 01:55:00 to 2024-10-11 12:00:00
+[scan] 6EU3 candle 6692/6692 (100.0%) date 2023-09-18 14:15:00 open trades 0
+[scan] 6EU3 finalizing results
+[scan] 6EV5 loading candles from futures_contract_5m_candles
+[scan] 6EV4 candle 1538/1538 (100.0%) date 2024-10-11 12:00:00 open trades 0
+[scan] 6EU5 candle 5322/5322 (100.0%) date 2025-09-15 14:10:00 open trades 0
+[scan] 6EU5 finalizing results
+[db] writing 6586 setup rows
+[scan] 6EV4 finalizing results
+[scan] 6EU4 candle 5331/5331 (100.0%) date 2024-09-16 14:10:00 open trades 0
+[scan] 6EU4 finalizing results
+[scan] 6EV5 loaded 1928 candles from 2025-09-16 00:10:00 to 2025-10-10 14:15:00
+[scan] 6EV5 candle 1928/1928 (100.0%) date 2025-10-10 14:15:00 open trades 0
+[scan] 6EV5 finalizing results
+[scan] 6EU2 candle 6699/6699 (100.0%) date 2022-09-19 14:15:00 open trades 0
+[scan] 6EU2 finalizing results
+[db] wrote 6586 setup rows
+Symbol: 6EV2, setup total: 47, Bear: 47, Bull: 0 (227/1443)
+[scan] 6EX1 loading candles from futures_contract_5m_candles
+Symbol: 6EU3, setup total: 0, Bear: 0, Bull: 0 (228/1443)
+[scan] 6EX1 loaded 1061 candles from 2021-10-19 00:15:00 to 2021-11-15 14:55:00
+[scan] 6EX2 loading candles from futures_contract_5m_candles
+[scan] 6EX1 candle 1061/1061 (100.0%) date 2021-11-15 14:55:00 open trades 0
+[scan] 6EX1 finalizing results
+Symbol: 6EV3, setup total: 304, Bear: 304, Bull: 0 (229/1443)
+[scan] 6EX2 loaded 935 candles from 2022-10-18 00:00:00 to 2022-11-14 14:55:00
+[scan] 6EX2 candle 935/935 (100.0%) date 2022-11-14 14:55:00 open trades 0
+[scan] 6EX2 finalizing results
+[scan] 6EX3 loading candles from futures_contract_5m_candles
+Symbol: 6EU5, setup total: 0, Bear: 0, Bull: 0 (230/1443)
+[scan] 6EX3 loaded 1130 candles from 2023-10-17 00:55:00 to 2023-11-13 13:50:00
+[scan] 6EX4 loading candles from futures_contract_5m_candles
+[scan] 6EX3 candle 1130/1130 (100.0%) date 2023-11-13 13:50:00 open trades 0
+[scan] 6EX3 finalizing results
+Symbol: 6EV4, setup total: 0, Bear: 0, Bull: 0 (231/1443)
+[scan] 6EX5 loading candles from futures_contract_5m_candles
+Symbol: 6EU4, setup total: 0, Bear: 0, Bull: 0 (232/1443)
+[scan] 6EX4 loaded 2169 candles from 2024-10-13 22:00:00 to 2024-11-18 14:15:00
+[scan] 6EZ1 loading candles from futures_contract_5m_candles
+[scan] 6EX4 candle 2169/2169 (100.0%) date 2024-11-18 14:15:00 open trades 0
+[scan] 6EX4 finalizing results
+[scan] 6EX5 loaded 1710 candles from 2025-10-12 22:00:00 to 2025-11-17 14:40:00
+Symbol: 6EV5, setup total: 562, Bear: 562, Bull: 0 (233/1443)
+[scan] 6EX5 candle 1710/1710 (100.0%) date 2025-11-17 14:40:00 open trades 0
+[scan] 6EX5 finalizing results
+[scan] 6EZ2 loading candles from futures_contract_5m_candles
+Symbol: 6EU2, setup total: 0, Bear: 0, Bull: 0 (234/1443)
+[scan] 6EZ3 loading candles from futures_contract_5m_candles
+Symbol: 6EX1, setup total: 0, Bear: 0, Bull: 0 (235/1443)
+[scan] 6EZ4 loading candles from futures_contract_5m_candles
+Symbol: 6EX2, setup total: 16, Bear: 16, Bull: 0 (236/1443)
+[scan] 6EZ5 loading candles from futures_contract_5m_candles
+Symbol: 6EX3, setup total: 0, Bear: 0, Bull: 0 (237/1443)
+[scan] 6EZ1 loaded 5250 candles from 2021-11-16 00:00:00 to 2021-12-13 15:10:00
+[scan] 6JF2 loading candles from futures_contract_5m_candles
+[scan] 6JF2 loaded 385 candles from 2021-12-14 00:50:00 to 2022-01-14 15:05:00
+[scan] 6JF2 candle 385/385 (100.0%) date 2022-01-14 15:05:00 open trades 0
+[scan] 6JF2 finalizing results
+Symbol: 6EX4, setup total: 0, Bear: 0, Bull: 0 (238/1443)
+[scan] 6EZ1 candle 5250/5250 (100.0%) date 2021-12-13 15:10:00 open trades 0
+[scan] 6EZ1 finalizing results
+[scan] 6JF3 loading candles from futures_contract_5m_candles
+[scan] 6JF3 loaded 547 candles from 2022-12-20 00:00:00 to 2023-01-13 13:55:00
+Symbol: 6EX5, setup total: 0, Bear: 0, Bull: 0 (239/1443)
+[scan] 6EZ2 loaded 6648 candles from 2022-11-15 00:00:00 to 2022-12-19 15:15:00
+[scan] 6JF3 candle 547/547 (100.0%) date 2023-01-13 13:55:00 open trades 0
+[scan] 6JF3 finalizing results
+[scan] 6EZ3 loaded 6686 candles from 2023-11-14 00:00:00 to 2023-12-18 15:10:00
+[scan] 6JF4 loading candles from futures_contract_5m_candles
+Symbol: 6JF2, setup total: 0, Bear: 0, Bull: 0 (240/1443)
+[scan] 6EZ4 loaded 5326 candles from 2024-11-19 00:00:00 to 2024-12-16 15:10:00
+[scan] 6JF5 loading candles from futures_contract_5m_candles
+[scan] 6JF4 loaded 1520 candles from 2023-12-19 00:00:00 to 2024-01-12 15:15:00
+[scan] 6EZ3 candle 6686/6686 (100.0%) date 2023-12-18 15:10:00 open trades 0
+[scan] 6EZ3 finalizing results
+Symbol: 6EZ1, setup total: 0, Bear: 0, Bull: 0 (241/1443)
+[scan] 6JF5 loaded 952 candles from 2024-12-17 00:00:00 to 2025-01-13 14:50:00
+[scan] 6EZ5 loaded 5165 candles from 2025-11-18 00:00:00 to 2025-12-15 15:10:00
+[scan] 6EZ4 candle 5326/5326 (100.0%) date 2024-12-16 15:10:00 open trades 0
+[scan] 6EZ4 finalizing results
+[scan] 6JF6 loading candles from futures_contract_5m_candles
+[scan] 6JF4 candle 1520/1520 (100.0%) date 2024-01-12 15:15:00 open trades 0
+[scan] 6JF4 finalizing results
+[scan] 6EZ2 candle 6648/6648 (100.0%) date 2022-12-19 15:15:00 open trades 0
+[scan] 6EZ2 finalizing results
+[scan] 6JF5 candle 952/952 (100.0%) date 2025-01-13 14:50:00 open trades 0
+[scan] 6JF5 finalizing results
+Symbol: 6JF3, setup total: 0, Bear: 0, Bull: 0 (242/1443)
+[scan] 6JG2 loading candles from futures_contract_5m_candles
+[scan] 6JF6 loaded 1273 candles from 2025-12-16 00:00:00 to 2026-01-16 15:10:00
+[scan] 6JG2 loaded 451 candles from 2022-01-17 00:55:00 to 2022-02-14 11:50:00
+Symbol: 6EZ3, setup total: 0, Bear: 0, Bull: 0 (243/1443)
+[scan] 6JG2 candle 451/451 (100.0%) date 2022-02-14 11:50:00 open trades 0
+[scan] 6JG2 finalizing results
+[scan] 6JF6 candle 1273/1273 (100.0%) date 2026-01-16 15:10:00 open trades 0
+[scan] 6JF6 finalizing results
+[scan] 6EZ5 candle 5165/5165 (100.0%) date 2025-12-15 15:10:00 open trades 0
+[scan] 6JG3 loading candles from futures_contract_5m_candles
+[scan] 6EZ5 finalizing results
+[scan] 6JG3 loaded 727 candles from 2023-01-16 00:10:00 to 2023-02-13 15:00:00
+Symbol: 6EZ4, setup total: 0, Bear: 0, Bull: 0 (244/1443)
+[scan] 6JG3 candle 727/727 (100.0%) date 2023-02-13 15:00:00 open trades 0
+[scan] 6JG3 finalizing results
+[scan] 6JG4 loading candles from futures_contract_5m_candles
+Symbol: 6JF4, setup total: 0, Bear: 0, Bull: 0 (245/1443)
+[scan] 6JG5 loading candles from futures_contract_5m_candles
+[scan] 6JG4 loaded 1598 candles from 2024-01-14 23:20:00 to 2024-02-16 15:00:00
+[scan] 6JG4 candle 1598/1598 (100.0%) date 2024-02-16 15:00:00 open trades 0
+[scan] 6JG4 finalizing results
+Symbol: 6EZ2, setup total: 0, Bear: 0, Bull: 0 (246/1443)
+[scan] 6JG6 loading candles from futures_contract_5m_candles
+[scan] 6JG5 loaded 1535 candles from 2025-01-14 00:10:00 to 2025-02-14 14:15:00
+Symbol: 6JF5, setup total: 0, Bear: 0, Bull: 0 (247/1443)
+[scan] 6JG5 candle 1535/1535 (100.0%) date 2025-02-14 14:15:00 open trades 0
+[scan] 6JG5 finalizing results
+[scan] 6JH2 loading candles from futures_contract_5m_candles
+[scan] 6JG6 loaded 1163 candles from 2026-01-18 23:00:00 to 2026-02-13 14:10:00
+[scan] 6JG6 candle 1163/1163 (100.0%) date 2026-02-13 14:10:00 open trades 0
+[scan] 6JG6 finalizing results
+Symbol: 6JG2, setup total: 0, Bear: 0, Bull: 0 (248/1443)
+[scan] 6JH3 loading candles from futures_contract_5m_candles
+Symbol: 6JF6, setup total: 0, Bear: 0, Bull: 0 (249/1443)
+[scan] 6JH4 loading candles from futures_contract_5m_candles
+[scan] 6JH2 loaded 5270 candles from 2022-02-15 00:00:00 to 2022-03-14 13:35:00
+Symbol: 6EZ5, setup total: 0, Bear: 0, Bull: 0 (250/1443)
+[scan] 6JH5 loading candles from futures_contract_5m_candles
+Symbol: 6JG3, setup total: 0, Bear: 0, Bull: 0 (251/1443)
+[scan] 6JH3 loaded 5304 candles from 2023-02-14 00:00:00 to 2023-03-13 14:10:00
+[scan] 6JH6 loading candles from futures_contract_5m_candles
+[scan] 6JH2 candle 5270/5270 (100.0%) date 2022-03-14 13:35:00 open trades 0
+[scan] 6JH2 finalizing results
+Symbol: 6JG4, setup total: 0, Bear: 0, Bull: 0 (252/1443)
+[scan] 6JJ2 loading candles from futures_contract_5m_candles
+[scan] 6JH4 loaded 5631 candles from 2024-02-18 23:00:00 to 2024-03-18 14:10:00
+[scan] 6JH3 candle 5304/5304 (100.0%) date 2023-03-13 14:10:00 open trades 0
+Symbol: 6JG5, setup total: 0, Bear: 0, Bull: 0 (253/1443)
+[scan] 6JH3 finalizing results
+[scan] 6JJ2 loaded 601 candles from 2022-03-15 00:10:00 to 2022-04-18 12:55:00
+[scan] 6JJ2 candle 601/601 (100.0%) date 2022-04-18 12:55:00 open trades 0
+[scan] 6JJ2 finalizing results
+[scan] 6JJ3 loading candles from futures_contract_5m_candles
+Symbol: 6JG6, setup total: 0, Bear: 0, Bull: 0 (254/1443)
+[scan] 6JJ4 loading candles from futures_contract_5m_candles
+[scan] 6JJ3 loaded 763 candles from 2023-03-14 00:05:00 to 2023-04-17 13:45:00
+[scan] 6JH4 candle 5631/5631 (100.0%) date 2024-03-18 14:10:00 open trades 0
+[scan] 6JH4 finalizing results
+[scan] 6JJ3 candle 763/763 (100.0%) date 2023-04-17 13:45:00 open trades 0
+[scan] 6JJ3 finalizing results
+Symbol: 6JH2, setup total: 0, Bear: 0, Bull: 0 (255/1443)
+[scan] 6JH6 loaded 5590 candles from 2026-02-15 23:00:00 to 2026-03-16 14:10:00
+[scan] 6JJ5 loading candles from futures_contract_5m_candles
+[scan] 6JH5 loaded 5587 candles from 2025-02-16 23:00:00 to 2025-03-17 14:10:00
+[scan] 6JJ4 loaded 1783 candles from 2024-03-19 00:00:00 to 2024-04-15 14:15:00
+Symbol: 6JH3, setup total: 0, Bear: 0, Bull: 0 (256/1443)
+[scan] 6JJ6 loading candles from futures_contract_5m_candles
+[scan] 6JJ4 candle 1783/1783 (100.0%) date 2024-04-15 14:15:00 open trades 0
+[scan] 6JJ4 finalizing results
+[scan] 6JJ6 loaded 1033 candles from 2026-03-17 00:30:00 to 2026-04-13 13:05:00
+Symbol: 6JJ2, setup total: 0, Bear: 0, Bull: 0 (257/1443)
+[scan] 6JJ6 candle 1033/1033 (100.0%) date 2026-04-13 13:05:00 open trades 0
+[scan] 6JJ6 finalizing results
+[scan] 6JJ5 loaded 1633 candles from 2025-03-18 00:05:00 to 2025-04-14 13:05:00
+[scan] 6JK1 loading candles from futures_contract_5m_candles
+[scan] 6JK1 loaded 132 candles from 2021-04-26 00:55:00 to 2021-05-17 12:55:00
+[scan] 6JK1 candle 132/132 (100.0%) date 2021-05-17 12:55:00 open trades 0
+[scan] 6JK1 finalizing results
+[scan] 6JH6 candle 5590/5590 (100.0%) date 2026-03-16 14:10:00 open trades 0
+[scan] 6JH6 finalizing results
+[scan] 6JJ5 candle 1633/1633 (100.0%) date 2025-04-14 13:05:00 open trades 0
+[scan] 6JJ5 finalizing results
+[scan] 6JH5 candle 5587/5587 (100.0%) date 2025-03-17 14:10:00 open trades 0
+Symbol: 6JH4, setup total: 0, Bear: 0, Bull: 0 (258/1443)
+[scan] 6JH5 finalizing results
+[scan] 6JK2 loading candles from futures_contract_5m_candles
+[scan] 6JK2 loaded 436 candles from 2022-04-19 00:55:00 to 2022-05-16 13:50:00
+[scan] 6JK2 candle 436/436 (100.0%) date 2022-05-16 13:50:00 open trades 0
+[scan] 6JK2 finalizing results
+Symbol: 6JJ3, setup total: 0, Bear: 0, Bull: 0 (259/1443)
+[scan] 6JK3 loading candles from futures_contract_5m_candles
+[scan] 6JK3 loaded 408 candles from 2023-04-18 00:00:00 to 2023-05-15 02:50:00
+[scan] 6JK3 candle 408/408 (100.0%) date 2023-05-15 02:50:00 open trades 0
+[scan] 6JK3 finalizing results
+Symbol: 6JJ4, setup total: 0, Bear: 0, Bull: 0 (260/1443)
+[scan] 6JK4 loading candles from futures_contract_5m_candles
+[scan] 6JK4 loaded 1463 candles from 2024-04-16 00:05:00 to 2024-05-13 14:10:00
+Symbol: 6JJ6, setup total: 0, Bear: 0, Bull: 0 (261/1443)
+[scan] 6JK4 candle 1463/1463 (100.0%) date 2024-05-13 14:10:00 open trades 0
+[scan] 6JK4 finalizing results
+[scan] 6JK5 loading candles from futures_contract_5m_candles
+[scan] 6JK5 loaded 1271 candles from 2025-04-15 01:25:00 to 2025-05-19 13:50:00
+Symbol: 6JK1, setup total: 0, Bear: 0, Bull: 0 (262/1443)
+[scan] 6JK5 candle 1271/1271 (100.0%) date 2025-05-19 13:50:00 open trades 0
+[scan] 6JK5 finalizing results
+[scan] 6JK6 loading candles from futures_contract_5m_candles
+[scan] 6JK6 loaded 443 candles from 2026-04-14 00:35:00 to 2026-04-23 18:05:00
+[scan] 6JK6 candle 443/443 (100.0%) date 2026-04-23 18:05:00 open trades 0
+[scan] 6JK6 finalizing results
+Symbol: 6JH6, setup total: 0, Bear: 0, Bull: 0 (263/1443)
+[scan] 6JM1 loading candles from futures_contract_5m_candles
+Symbol: 6JJ5, setup total: 0, Bear: 0, Bull: 0 (264/1443)
+[scan] 6JM2 loading candles from futures_contract_5m_candles
+Symbol: 6JH5, setup total: 0, Bear: 0, Bull: 0 (265/1443)
+[scan] 6JM3 loading candles from futures_contract_5m_candles
+[scan] 6JM1 loaded 5201 candles from 2021-05-18 00:00:00 to 2021-06-14 13:50:00
+[scan] 6JM2 loaded 5301 candles from 2022-05-17 00:00:00 to 2022-06-13 14:10:00
+Symbol: 6JK2, setup total: 0, Bear: 0, Bull: 0 (266/1443)
+[scan] 6JM4 loading candles from futures_contract_5m_candles
+Symbol: 6JK3, setup total: 0, Bear: 0, Bull: 0 (267/1443)
+[scan] 6JM1 candle 5201/5201 (100.0%) date 2021-06-14 13:50:00 open trades 0
+[scan] 6JM1 finalizing results
+[scan] 6JM2 candle 5301/5301 (100.0%) date 2022-06-13 14:10:00 open trades 0
+[scan] 6JM2 finalizing results
+[scan] 6JM5 loading candles from futures_contract_5m_candles
+Symbol: 6JK4, setup total: 0, Bear: 0, Bull: 0 (268/1443)
+[scan] 6JN1 loading candles from futures_contract_5m_candles
+[scan] 6JN1 loaded 310 candles from 2021-06-15 00:55:00 to 2021-07-19 14:10:00
+[scan] 6JN1 candle 310/310 (100.0%) date 2021-07-19 14:10:00 open trades 0
+[scan] 6JN1 finalizing results
+Symbol: 6JK5, setup total: 0, Bear: 0, Bull: 0 (269/1443)
+[scan] 6JM4 loaded 6714 candles from 2024-05-14 00:00:00 to 2024-06-17 14:10:00
+[scan] 6JN2 loading candles from futures_contract_5m_candles
+[scan] 6JM3 loaded 6426 candles from 2023-05-16 00:00:00 to 2023-06-16 14:15:00
+Symbol: 6JK6, setup total: 0, Bear: 0, Bull: 0 (270/1443)
+[scan] 6JN2 loaded 1217 candles from 2022-06-14 00:25:00 to 2022-07-18 13:45:00
+[scan] 6JN3 loading candles from futures_contract_5m_candles
+[scan] 6JN2 candle 1217/1217 (100.0%) date 2022-07-18 13:45:00 open trades 0
+[scan] 6JN2 finalizing results
+[scan] 6JM4 candle 6714/6714 (100.0%) date 2024-06-17 14:10:00 open trades 0
+[scan] 6JM4 finalizing results
+Symbol: 6JM1, setup total: 0, Bear: 0, Bull: 0 (271/1443)
+[scan] 6JM3 candle 6426/6426 (100.0%) date 2023-06-16 14:15:00 open trades 0
+[scan] 6JN4 loading candles from futures_contract_5m_candles
+[scan] 6JM3 finalizing results
+[scan] 6JM5 loaded 5286 candles from 2025-05-20 00:00:00 to 2025-06-16 13:55:00
+Symbol: 6JM2, setup total: 0, Bear: 0, Bull: 0 (272/1443)
+[scan] 6JN5 loading candles from futures_contract_5m_candles
+[scan] 6JN3 loaded 2001 candles from 2023-06-18 22:00:00 to 2023-07-17 14:10:00
+[scan] 6JN4 loaded 1400 candles from 2024-06-18 00:10:00 to 2024-07-15 14:10:00
+[scan] 6JN3 candle 2001/2001 (100.0%) date 2023-07-17 14:10:00 open trades 0
+[scan] 6JN3 finalizing results
+[scan] 6JN5 loaded 1436 candles from 2025-06-17 00:20:00 to 2025-07-14 13:20:00
+Symbol: 6JN1, setup total: 0, Bear: 0, Bull: 0 (273/1443)
+[scan] 6JM5 candle 5286/5286 (100.0%) date 2025-06-16 13:55:00 open trades 0
+[scan] 6JN4 candle 1400/1400 (100.0%) date 2024-07-15 14:10:00 open trades 0
+[scan] 6JN4 finalizing results
+[scan] 6JM5 finalizing results
+[scan] 6JN5 candle 1436/1436 (100.0%) date 2025-07-14 13:20:00 open trades 0
+[scan] 6JN5 finalizing results
+[scan] 6JQ1 loading candles from futures_contract_5m_candles
+[scan] 6JQ1 loaded 198 candles from 2021-07-20 13:35:00 to 2021-08-16 06:55:00
+[scan] 6JQ1 candle 198/198 (100.0%) date 2021-08-16 06:55:00 open trades 0
+[scan] 6JQ1 finalizing results
+Symbol: 6JN2, setup total: 0, Bear: 0, Bull: 0 (274/1443)
+[scan] 6JQ2 loading candles from futures_contract_5m_candles
+[scan] 6JQ2 loaded 749 candles from 2022-07-19 00:00:00 to 2022-08-15 12:05:00
+[scan] 6JQ2 candle 749/749 (100.0%) date 2022-08-15 12:05:00 open trades 0
+[scan] 6JQ2 finalizing results
+Symbol: 6JM4, setup total: 0, Bear: 0, Bull: 0 (275/1443)
+[scan] 6JQ3 loading candles from futures_contract_5m_candles
+[scan] 6JQ3 loaded 1199 candles from 2023-07-18 00:20:00 to 2023-08-14 12:30:00
+[scan] 6JQ3 candle 1199/1199 (100.0%) date 2023-08-14 12:30:00 open trades 0
+[scan] 6JQ3 finalizing results
+Symbol: 6JM3, setup total: 0, Bear: 0, Bull: 0 (276/1443)
+[scan] 6JQ4 loading candles from futures_contract_5m_candles
+[scan] 6JQ4 loaded 1662 candles from 2024-07-16 00:50:00 to 2024-08-19 14:00:00
+Symbol: 6JN3, setup total: 0, Bear: 0, Bull: 0 (277/1443)
+[scan] 6JQ4 candle 1662/1662 (100.0%) date 2024-08-19 14:00:00 open trades 0
+[scan] 6JQ4 finalizing results
+[scan] 6JQ5 loading candles from futures_contract_5m_candles
+[scan] 6JQ5 loaded 1282 candles from 2025-07-15 01:20:00 to 2025-08-18 11:55:00
+[scan] 6JQ5 candle 1282/1282 (100.0%) date 2025-08-18 11:55:00 open trades 0
+[scan] 6JQ5 finalizing results
+Symbol: 6JN4, setup total: 0, Bear: 0, Bull: 0 (278/1443)
+[scan] 6JU1 loading candles from futures_contract_5m_candles
+Symbol: 6JM5, setup total: 0, Bear: 0, Bull: 0 (279/1443)
+[scan] 6JU2 loading candles from futures_contract_5m_candles
+[scan] 6JU1 loaded 5200 candles from 2021-08-17 00:00:00 to 2021-09-13 14:05:00
+Symbol: 6JN5, setup total: 0, Bear: 0, Bull: 0 (280/1443)
+[scan] 6JU3 loading candles from futures_contract_5m_candles
+[scan] 6JU2 loaded 6654 candles from 2022-08-16 00:00:00 to 2022-09-19 13:40:00
+[scan] 6JU1 candle 5200/5200 (100.0%) date 2021-09-13 14:05:00 open trades 0
+[scan] 6JU1 finalizing results
+Symbol: 6JQ1, setup total: 0, Bear: 0, Bull: 0 (281/1443)
+[scan] 6JU4 loading candles from futures_contract_5m_candles
+[scan] 6JU3 loaded 6685 candles from 2023-08-15 00:00:00 to 2023-09-18 14:10:00
+[scan] 6JU2 candle 6654/6654 (100.0%) date 2022-09-19 13:40:00 open trades 0
+[scan] 6JU2 finalizing results
+Symbol: 6JQ2, setup total: 0, Bear: 0, Bull: 0 (282/1443)
+[scan] 6JU5 loading candles from futures_contract_5m_candles
+[scan] 6JU4 loaded 5295 candles from 2024-08-20 00:00:00 to 2024-09-16 14:10:00
+Symbol: 6JQ3, setup total: 0, Bear: 0, Bull: 0 (283/1443)
+[scan] 6JV1 loading candles from futures_contract_5m_candles
+[scan] 6JU3 candle 6685/6685 (100.0%) date 2023-09-18 14:10:00 open trades 0
+[scan] 6JU3 finalizing results
+[scan] 6JV1 loaded 258 candles from 2021-09-14 04:30:00 to 2021-10-18 12:55:00
+[scan] 6JV1 candle 258/258 (100.0%) date 2021-10-18 12:55:00 open trades 0
+[scan] 6JV1 finalizing results
+[scan] 6JU5 loaded 5295 candles from 2025-08-19 00:00:00 to 2025-09-15 14:10:00
+Symbol: 6JQ4, setup total: 0, Bear: 0, Bull: 0 (284/1443)
+[scan] 6JU4 candle 5295/5295 (100.0%) date 2024-09-16 14:10:00 open trades 0
+[scan] 6JU4 finalizing results
+[scan] 6JV2 loading candles from futures_contract_5m_candles
+[scan] 6JV2 loaded 1006 candles from 2022-09-20 00:15:00 to 2022-10-17 14:10:00
+[scan] 6JU5 candle 5295/5295 (100.0%) date 2025-09-15 14:10:00 open trades 0
+[scan] 6JU5 finalizing results
+[scan] 6JV2 candle 1006/1006 (100.0%) date 2022-10-17 14:10:00 open trades 0
+[scan] 6JV2 finalizing results
+Symbol: 6JQ5, setup total: 0, Bear: 0, Bull: 0 (285/1443)
+[scan] 6JV3 loading candles from futures_contract_5m_candles
+[scan] 6JV3 loaded 1071 candles from 2023-09-19 00:00:00 to 2023-10-16 13:40:00
+Symbol: 6JU1, setup total: 0, Bear: 0, Bull: 0 (286/1443)
+[scan] 6JV3 candle 1071/1071 (100.0%) date 2023-10-16 13:40:00 open trades 0
+[scan] 6JV3 finalizing results
+[scan] 6JV4 loading candles from futures_contract_5m_candles
+Symbol: 6JU2, setup total: 0, Bear: 0, Bull: 0 (287/1443)
+[scan] 6JV4 loaded 1877 candles from 2024-09-17 00:05:00 to 2024-10-11 06:10:00
+[scan] 6JV5 loading candles from futures_contract_5m_candles
+[scan] 6JV4 candle 1877/1877 (100.0%) date 2024-10-11 06:10:00 open trades 0
+[scan] 6JV4 finalizing results
+[scan] 6JV5 loaded 1145 candles from 2025-09-16 00:50:00 to 2025-10-10 13:50:00
+[scan] 6JV5 candle 1145/1145 (100.0%) date 2025-10-10 13:50:00 open trades 0
+[scan] 6JV5 finalizing results
+Symbol: 6JU3, setup total: 0, Bear: 0, Bull: 0 (288/1443)
+[scan] 6JX1 loading candles from futures_contract_5m_candles
+[scan] 6JX1 loaded 402 candles from 2021-10-19 02:15:00 to 2021-11-15 08:25:00
+[scan] 6JX1 candle 402/402 (100.0%) date 2021-11-15 08:25:00 open trades 0
+[scan] 6JX1 finalizing results
+Symbol: 6JV1, setup total: 0, Bear: 0, Bull: 0 (289/1443)
+[scan] 6JX2 loading candles from futures_contract_5m_candles
+[scan] 6JX2 loaded 463 candles from 2022-10-18 00:40:00 to 2022-11-14 14:40:00
+[scan] 6JX2 candle 463/463 (100.0%) date 2022-11-14 14:40:00 open trades 0
+[scan] 6JX2 finalizing results
+Symbol: 6JU4, setup total: 0, Bear: 0, Bull: 0 (290/1443)
+[scan] 6JX3 loading candles from futures_contract_5m_candles
+[scan] 6JX3 loaded 689 candles from 2023-10-17 00:55:00 to 2023-11-13 15:10:00
+Symbol: 6JU5, setup total: 0, Bear: 0, Bull: 0 (291/1443)
+[scan] 6JX3 candle 689/689 (100.0%) date 2023-11-13 15:10:00 open trades 0
+[scan] 6JX3 finalizing results
+[scan] 6JX4 loading candles from futures_contract_5m_candles
+[scan] 6JX4 loaded 1379 candles from 2024-10-13 22:00:00 to 2024-11-18 15:00:00
+Symbol: 6JV2, setup total: 0, Bear: 0, Bull: 0 (292/1443)
+[scan] 6JX4 candle 1379/1379 (100.0%) date 2024-11-18 15:00:00 open trades 0
+[scan] 6JX4 finalizing results
+[scan] 6JX5 loading candles from futures_contract_5m_candles
+[scan] 6JX5 loaded 974 candles from 2025-10-12 22:00:00 to 2025-11-17 14:50:00
+Symbol: 6JV3, setup total: 0, Bear: 0, Bull: 0 (293/1443)
+[scan] 6JX5 candle 974/974 (100.0%) date 2025-11-17 14:50:00 open trades 0
+[scan] 6JX5 finalizing results
+[scan] 6JZ1 loading candles from futures_contract_5m_candles
+Symbol: 6JV4, setup total: 0, Bear: 0, Bull: 0 (294/1443)
+[scan] 6JZ1 loaded 5178 candles from 2021-11-16 00:00:00 to 2021-12-13 15:10:00
+[scan] 6JZ2 loading candles from futures_contract_5m_candles
+Symbol: 6JV5, setup total: 0, Bear: 0, Bull: 0 (295/1443)
+[scan] 6JZ3 loading candles from futures_contract_5m_candles
+[scan] 6JZ1 candle 5178/5178 (100.0%) date 2021-12-13 15:10:00 open trades 0
+[scan] 6JZ1 finalizing results
+Symbol: 6JX1, setup total: 0, Bear: 0, Bull: 0 (296/1443)
+[scan] 6JZ4 loading candles from futures_contract_5m_candles
+[scan] 6JZ2 loaded 6620 candles from 2022-11-15 00:00:00 to 2022-12-19 15:00:00
+Symbol: 6JX2, setup total: 0, Bear: 0, Bull: 0 (297/1443)
+[scan] 6JZ5 loading candles from futures_contract_5m_candles
+Symbol: 6JX3, setup total: 0, Bear: 0, Bull: 0 (298/1443)
+[scan] 6JZ3 loaded 6660 candles from 2023-11-14 00:00:00 to 2023-12-18 15:10:00
+[scan] 6NH2 loading candles from futures_contract_5m_candles
+Symbol: 6JX4, setup total: 0, Bear: 0, Bull: 0 (299/1443)
+[scan] 6NH3 loading candles from futures_contract_5m_candles
+[scan] 6JZ4 loaded 5275 candles from 2024-11-19 00:00:00 to 2024-12-16 15:15:00
+[scan] 6JZ2 candle 6620/6620 (100.0%) date 2022-12-19 15:00:00 open trades 0
+[scan] 6JZ2 finalizing results
+Symbol: 6JX5, setup total: 0, Bear: 0, Bull: 0 (300/1443)
+[scan] 6JZ5 loaded 5133 candles from 2025-11-18 00:00:00 to 2025-12-15 15:15:00
+[scan] 6NH4 loading candles from futures_contract_5m_candles
+Symbol: 6JZ1, setup total: 0, Bear: 0, Bull: 0 (301/1443)
+[scan] 6JZ4 candle 5275/5275 (100.0%) date 2024-12-16 15:15:00 open trades 0
+[scan] 6JZ4 finalizing results
+[scan] 6NH5 loading candles from futures_contract_5m_candles
+[scan] 6JZ3 candle 6660/6660 (100.0%) date 2023-12-18 15:10:00 open trades 0
+[scan] 6JZ3 finalizing results
+[scan] 6JZ5 candle 5133/5133 (100.0%) date 2025-12-15 15:15:00 open trades 0
+Symbol: 6JZ2, setup total: 0, Bear: 0, Bull: 0 (302/1443)
+[scan] 6JZ5 finalizing results
+[scan] 6NH6 loading candles from futures_contract_5m_candles
+Symbol: 6JZ4, setup total: 0, Bear: 0, Bull: 0 (303/1443)
+[scan] 6NM1 loading candles from futures_contract_5m_candles
+Symbol: 6JZ3, setup total: 0, Bear: 0, Bull: 0 (304/1443)
+[scan] 6NM2 loading candles from futures_contract_5m_candles
+[scan] 6NH2 loaded 17213 candles from 2021-12-14 00:00:00 to 2022-03-14 13:05:00
+Symbol: 6JZ5, setup total: 0, Bear: 0, Bull: 0 (305/1443)
+[scan] 6NM3 loading candles from futures_contract_5m_candles
+[scan] 6NH3 loaded 15616 candles from 2022-12-20 00:00:00 to 2023-03-13 10:45:00
+[scan] 6NM1 loaded 9517 candles from 2021-04-25 22:00:00 to 2021-06-14 14:05:00
+[scan] 6NH2 candle 17213/17213 (100.0%) date 2022-03-14 13:05:00 open trades 0
+[scan] 6NH2 finalizing results
+[scan] 6NH4 loaded 17024 candles from 2023-12-19 00:00:00 to 2024-03-18 07:30:00
+Symbol: 6NH2, setup total: 0, Bear: 0, Bull: 0 (306/1443)
+[scan] 6NM4 loading candles from futures_contract_5m_candles
+[scan] 6NM1 candle 9517/9517 (100.0%) date 2021-06-14 14:05:00 open trades 0
+[scan] 6NM1 finalizing results
+[scan] 6NH5 loaded 16963 candles from 2024-12-17 00:00:00 to 2025-03-17 10:40:00
+[scan] 6NH3 candle 15616/15616 (100.0%) date 2023-03-13 10:45:00 open trades 0
+[scan] 6NH3 finalizing results
+Symbol: 6NM1, setup total: 0, Bear: 0, Bull: 0 (307/1443)
+[scan] 6NM5 loading candles from futures_contract_5m_candles
+Symbol: 6NH3, setup total: 0, Bear: 0, Bull: 0 (308/1443)
+[scan] 6NM2 loaded 17260 candles from 2022-03-15 00:00:00 to 2022-06-13 13:45:00
+[scan] 6NH6 loaded 16965 candles from 2025-12-16 00:00:00 to 2026-03-16 13:40:00
+[scan] 6NM6 loading candles from futures_contract_5m_candles
+[scan] 6NH4 candle 17024/17024 (100.0%) date 2024-03-18 07:30:00 open trades 0
+[scan] 6NH4 finalizing results
+[scan] 6NM3 loaded 18539 candles from 2023-03-14 00:00:00 to 2023-06-16 14:00:00
+Symbol: 6NH4, setup total: 0, Bear: 0, Bull: 0 (309/1443)
+[scan] 6NH5 candle 16963/16963 (100.0%) date 2025-03-17 10:40:00 open trades 0
+[scan] 6NH5 finalizing results
+[scan] 6NU1 loading candles from futures_contract_5m_candles
+[scan] 6NM2 candle 17260/17260 (100.0%) date 2022-06-13 13:45:00 open trades 0
+[scan] 6NM2 finalizing results
+Symbol: 6NH5, setup total: 0, Bear: 0, Bull: 0 (310/1443)
+[scan] 6NU2 loading candles from futures_contract_5m_candles
+Symbol: 6NM2, setup total: 0, Bear: 0, Bull: 0 (311/1443)
+[scan] 6NM6 loaded 7632 candles from 2026-03-17 00:00:00 to 2026-04-23 23:55:00
+[scan] 6NU3 loading candles from futures_contract_5m_candles
+[scan] 6NM6 candle 7632/7632 (100.0%) date 2026-04-23 23:55:00 open trades 0
+[scan] 6NM6 finalizing results
+[scan] 6NM3 candle 18539/18539 (100.0%) date 2023-06-16 14:00:00 open trades 0
+[scan] 6NM3 finalizing results
+[scan] 6NH6 candle 16965/16965 (100.0%) date 2026-03-16 13:40:00 open trades 0
+[scan] 6NH6 finalizing results
+Symbol: 6NM6, setup total: 0, Bear: 0, Bull: 0 (312/1443)
+[scan] 6NU4 loading candles from futures_contract_5m_candles
+Symbol: 6NM3, setup total: 0, Bear: 0, Bull: 0 (313/1443)
+[scan] 6NU5 loading candles from futures_contract_5m_candles
+Symbol: 6NH6, setup total: 0, Bear: 0, Bull: 0 (314/1443)
+[scan] 6NZ1 loading candles from futures_contract_5m_candles
+[scan] 6NM4 loaded 17259 candles from 2024-03-19 00:00:00 to 2024-06-17 12:10:00
+[scan] 6NM4 candle 17259/17259 (100.0%) date 2024-06-17 12:10:00 open trades 0
+[scan] 6NM4 finalizing results
+[scan] 6NM5 loaded 17269 candles from 2025-03-18 00:00:00 to 2025-06-16 12:05:00
+Symbol: 6NM4, setup total: 0, Bear: 0, Bull: 0 (315/1443)
+[scan] 6NU1 loaded 17401 candles from 2021-06-15 00:00:00 to 2021-09-13 14:05:00
+[scan] 6NZ2 loading candles from futures_contract_5m_candles
+[scan] 6NU1 candle 17401/17401 (100.0%) date 2021-09-13 14:05:00 open trades 0
+[scan] 6NU1 finalizing results
+[scan] 6NM5 candle 17269/17269 (100.0%) date 2025-06-16 12:05:00 open trades 0
+[scan] 6NM5 finalizing results
+[scan] 6NU2 loaded 18925 candles from 2022-06-14 00:00:00 to 2022-09-19 14:10:00
+Symbol: 6NU1, setup total: 0, Bear: 0, Bull: 0 (316/1443)
+[scan] 6NU3 loaded 17832 candles from 2023-06-18 22:00:00 to 2023-09-18 13:40:00
+[scan] 6NZ1 loaded 17479 candles from 2021-09-14 00:00:00 to 2021-12-13 15:10:00
+[scan] 6NZ3 loading candles from futures_contract_5m_candles
+Symbol: 6NM5, setup total: 0, Bear: 0, Bull: 0 (317/1443)
+[scan] 6NZ4 loading candles from futures_contract_5m_candles
+[scan] 6NU5 loaded 17427 candles from 2025-06-17 00:00:00 to 2025-09-15 11:15:00
+[scan] 6NU4 loaded 17516 candles from 2024-06-18 00:00:00 to 2024-09-16 14:00:00
+[scan] 6NU3 candle 17832/17832 (100.0%) date 2023-09-18 13:40:00 open trades 0
+[scan] 6NU3 finalizing results
+[scan] 6NZ1 candle 17479/17479 (100.0%) date 2021-12-13 15:10:00 open trades 0
+[scan] 6NZ1 finalizing results
+Symbol: 6NU3, setup total: 0, Bear: 0, Bull: 0 (318/1443)
+[scan] 6NZ5 loading candles from futures_contract_5m_candles
+Symbol: 6NZ1, setup total: 0, Bear: 0, Bull: 0 (319/1443)
+[scan] 6NZ2 loaded 17510 candles from 2022-09-20 00:00:00 to 2022-12-19 15:00:00
+[scan] 6SH2 loading candles from futures_contract_5m_candles
+[scan] 6NU5 candle 17427/17427 (100.0%) date 2025-09-15 11:15:00 open trades 0
+[scan] 6NU5 finalizing results
+Symbol: 6NU5, setup total: 0, Bear: 0, Bull: 0 (320/1443)
+[scan] 6NU4 candle 17516/17516 (100.0%) date 2024-09-16 14:00:00 open trades 0
+[scan] 6NU4 finalizing results
+[scan] 6SH3 loading candles from futures_contract_5m_candles
+Symbol: 6NU4, setup total: 0, Bear: 0, Bull: 0 (321/1443)
+[scan] 6SH4 loading candles from futures_contract_5m_candles
+[scan] 6NZ3 loaded 17561 candles from 2023-09-19 00:00:00 to 2023-12-18 11:50:00
+[scan] 6NZ4 loaded 17564 candles from 2024-09-17 00:00:00 to 2024-12-16 13:55:00
+[scan] 6NZ5 loaded 17358 candles from 2025-09-16 00:00:00 to 2025-12-15 12:55:00
+[scan] 6NZ4 candle 17564/17564 (100.0%) date 2024-12-16 13:55:00 open trades 0
+[scan] 6NZ4 finalizing results
+Symbol: 6NZ4, setup total: 0, Bear: 0, Bull: 0 (322/1443)
+[scan] 6SH5 loading candles from futures_contract_5m_candles
+[scan] 6SH2 loaded 16820 candles from 2021-12-14 00:00:00 to 2022-03-14 14:05:00
+[scan] 6NZ5 candle 17358/17358 (100.0%) date 2025-12-15 12:55:00 open trades 0
+[scan] 6NZ5 finalizing results
+[scan] 6SH4 loaded 16836 candles from 2023-12-19 00:00:00 to 2024-03-18 13:15:00
+Symbol: 6NZ5, setup total: 0, Bear: 0, Bull: 0 (323/1443)
+[scan] 6SH6 loading candles from futures_contract_5m_candles
+[scan] 6SH2 candle 16820/16820 (100.0%) date 2022-03-14 14:05:00 open trades 0
+[scan] 6SH2 finalizing results
+[scan] 6NZ3 candle 17561/17561 (100.0%) date 2023-12-18 11:50:00 open trades 0
+[scan] 6NZ3 finalizing results
+Symbol: 6SH2, setup total: 0, Bear: 0, Bull: 0 (324/1443)
+[scan] 6SH3 loaded 15402 candles from 2022-12-20 00:00:00 to 2023-03-13 14:10:00
+[scan] 6SM1 loading candles from futures_contract_5m_candles
+[scan] 6SH4 candle 16836/16836 (100.0%) date 2024-03-18 13:15:00 open trades 0
+[scan] 6SH4 finalizing results
+Symbol: 6NZ3, setup total: 0, Bear: 0, Bull: 0 (325/1443)
+[scan] 6SM2 loading candles from futures_contract_5m_candles
+Symbol: 6SH4, setup total: 0, Bear: 0, Bull: 0 (326/1443)
+[scan] 6SM3 loading candles from futures_contract_5m_candles
+[scan] 6SH3 candle 15402/15402 (100.0%) date 2023-03-13 14:10:00 open trades 0
+[scan] 6SH3 finalizing results
+Symbol: 6SH3, setup total: 0, Bear: 0, Bull: 0 (327/1443)
+[scan] 6SM4 loading candles from futures_contract_5m_candles
+[scan] 6NU2 candle 18925/18925 (100.0%) date 2022-09-19 14:10:00 open trades 0
+[scan] 6NU2 finalizing results
+[scan] 6SM1 loaded 9326 candles from 2021-04-25 22:00:00 to 2021-06-14 13:40:00
+[scan] 6SH5 loaded 16986 candles from 2024-12-17 00:00:00 to 2025-03-17 14:00:00
+Symbol: 6NU2, setup total: 0, Bear: 0, Bull: 0 (328/1443)
+[scan] 6SM5 loading candles from futures_contract_5m_candles
+[scan] 6NZ2 candle 17510/17510 (100.0%) date 2022-12-19 15:00:00 open trades 0
+[scan] 6NZ2 finalizing results
+Symbol: 6NZ2, setup total: 0, Bear: 0, Bull: 0 (329/1443)
+[scan] 6SM1 candle 9326/9326 (100.0%) date 2021-06-14 13:40:00 open trades 0
+[scan] 6SM6 loading candles from futures_contract_5m_candles
+[scan] 6SM1 finalizing results
+[scan] 6SM2 loaded 17144 candles from 2022-03-15 00:00:00 to 2022-06-13 13:45:00
+Symbol: 6SM1, setup total: 0, Bear: 0, Bull: 0 (330/1443)
+[scan] 6SH5 candle 16986/16986 (100.0%) date 2025-03-17 14:00:00 open trades 0
+[scan] 6SH5 finalizing results
+[scan] 6SU1 loading candles from futures_contract_5m_candles
+[scan] 6SM3 loaded 18361 candles from 2023-03-14 00:00:00 to 2023-06-16 13:20:00
+[scan] 6SH6 loaded 16907 candles from 2025-12-16 00:00:00 to 2026-03-16 14:05:00
+Symbol: 6SH5, setup total: 0, Bear: 0, Bull: 0 (331/1443)
+[scan] 6SU2 loading candles from futures_contract_5m_candles
+[scan] 6SM2 candle 17144/17144 (100.0%) date 2022-06-13 13:45:00 open trades 0
+[scan] 6SM2 finalizing results
+Symbol: 6SM2, setup total: 0, Bear: 0, Bull: 0 (332/1443)
+[scan] 6SU3 loading candles from futures_contract_5m_candles
+[scan] 6SM6 loaded 7595 candles from 2026-03-17 00:00:00 to 2026-04-23 23:55:00
+[scan] 6SM6 candle 7595/7595 (100.0%) date 2026-04-23 23:55:00 open trades 0
+[scan] 6SM6 finalizing results
+Symbol: 6SM6, setup total: 0, Bear: 0, Bull: 0 (333/1443)
+[scan] 6SM4 loaded 17244 candles from 2024-03-19 00:00:00 to 2024-06-17 14:05:00
+[scan] 6SU4 loading candles from futures_contract_5m_candles
+[scan] 6SH6 candle 16907/16907 (100.0%) date 2026-03-16 14:05:00 open trades 23
+[scan] 6SH6 finalizing results
+[scan] 6SM5 loaded 17236 candles from 2025-03-18 00:00:00 to 2025-06-16 14:05:00
+Symbol: 6SH6, setup total: 131, Bear: 131, Bull: 0 (334/1443)
+[scan] 6SU5 loading candles from futures_contract_5m_candles
+[scan] 6SU1 loaded 16987 candles from 2021-06-15 00:00:00 to 2021-09-13 14:10:00
+[scan] 6SM4 candle 17244/17244 (100.0%) date 2024-06-17 14:05:00 open trades 0
+[scan] 6SM4 finalizing results
+Symbol: 6SM4, setup total: 0, Bear: 0, Bull: 0 (335/1443)
+[scan] 6SZ1 loading candles from futures_contract_5m_candles
+[scan] 6SU2 loaded 18734 candles from 2022-06-14 00:00:00 to 2022-09-19 14:15:00
+[scan] 6SM5 candle 17236/17236 (100.0%) date 2025-06-16 14:05:00 open trades 0
+[scan] 6SM5 finalizing results
+Symbol: 6SM5, setup total: 0, Bear: 0, Bull: 0 (336/1443)
+[scan] 6SU3 loaded 17576 candles from 2023-06-18 22:00:00 to 2023-09-18 14:05:00
+[scan] 6SZ2 loading candles from futures_contract_5m_candles
+[scan] 6SU4 loaded 17452 candles from 2024-06-18 00:00:00 to 2024-09-16 14:10:00
+[scan] 6SU3 candle 17576/17576 (100.0%) date 2023-09-18 14:05:00 open trades 0
+[scan] 6SU3 finalizing results
+[scan] 6SU5 loaded 17170 candles from 2025-06-17 00:00:00 to 2025-09-15 14:10:00
+Symbol: 6SU3, setup total: 0, Bear: 0, Bull: 0 (337/1443)
+[scan] 6SZ3 loading candles from futures_contract_5m_candles
+[scan] 6SZ1 loaded 17136 candles from 2021-09-14 00:00:00 to 2021-12-13 15:10:00
+[scan] 6SZ1 candle 17136/17136 (100.0%) date 2021-12-13 15:10:00 open trades 0
+[scan] 6SZ1 finalizing results
+[scan] 6SZ2 loaded 17290 candles from 2022-09-20 00:00:00 to 2022-12-19 14:30:00
+Symbol: 6SZ1, setup total: 0, Bear: 0, Bull: 0 (338/1443)
+[scan] 6SZ4 loading candles from futures_contract_5m_candles
+[scan] 6SU4 candle 17452/17452 (100.0%) date 2024-09-16 14:10:00 open trades 0
+[scan] 6SU4 finalizing results
+[scan] 6SU5 candle 17170/17170 (100.0%) date 2025-09-15 14:10:00 open trades 0
+[scan] 6SU5 finalizing results
+Symbol: 6SU4, setup total: 0, Bear: 0, Bull: 0 (339/1443)
+[scan] 6SZ5 loading candles from futures_contract_5m_candles
+Symbol: 6SU5, setup total: 0, Bear: 0, Bull: 0 (340/1443)
+[scan] CLF2 loading candles from futures_contract_5m_candles
+[scan] 6SZ3 loaded 17359 candles from 2023-09-19 00:00:00 to 2023-12-18 14:10:00
+[scan] 6SM3 candle 18361/18361 (100.0%) date 2023-06-16 13:20:00 open trades 0
+[scan] 6SM3 finalizing results
+[scan] 6SZ2 candle 17290/17290 (100.0%) date 2022-12-19 14:30:00 open trades 0
+[scan] 6SZ2 finalizing results
+[scan] CLF2 loaded 5547 candles from 2021-11-21 23:00:00 to 2021-12-20 19:25:00
+Symbol: 6SZ2, setup total: 0, Bear: 0, Bull: 0 (341/1443)
+[scan] CLF3 loading candles from futures_contract_5m_candles
+Symbol: 6SM3, setup total: 0, Bear: 0, Bull: 0 (342/1443)
+[scan] 6SZ4 loaded 17450 candles from 2024-09-17 00:00:00 to 2024-12-16 14:00:00
+[scan] CLF4 loading candles from futures_contract_5m_candles
+[scan] CLF3 loaded 5515 candles from 2022-11-22 00:00:00 to 2022-12-20 19:25:00
+[scan] 6SZ5 loaded 17128 candles from 2025-09-16 00:00:00 to 2025-12-15 14:50:00
+[scan] CLF4 loaded 5509 candles from 2023-11-21 00:00:00 to 2023-12-19 19:25:00
+[scan] 6SZ3 candle 17359/17359 (100.0%) date 2023-12-18 14:10:00 open trades 0
+[scan] 6SZ3 finalizing results
+Symbol: 6SZ3, setup total: 0, Bear: 0, Bull: 0 (343/1443)
+[scan] CLF5 loading candles from futures_contract_5m_candles
+[scan] 6SZ4 candle 17450/17450 (100.0%) date 2024-12-16 14:00:00 open trades 0
+[scan] 6SZ4 finalizing results
+Symbol: 6SZ4, setup total: 0, Bear: 0, Bull: 0 (344/1443)
+[scan] CLF6 loading candles from futures_contract_5m_candles
+[scan] 6SZ5 candle 17128/17128 (100.0%) date 2025-12-15 14:50:00 open trades 0
+[scan] 6SZ5 finalizing results
+Symbol: 6SZ5, setup total: 0, Bear: 0, Bull: 0 (345/1443)
+[scan] CLG2 loading candles from futures_contract_5m_candles
+[scan] CLF5 loaded 5500 candles from 2024-11-21 00:00:00 to 2024-12-19 19:25:00
+[scan] CLF6 loaded 5385 candles from 2025-11-21 00:00:00 to 2025-12-19 19:25:00
+[scan] CLG2 loaded 5857 candles from 2021-12-21 00:00:00 to 2022-01-20 19:25:00
+[scan] CLF3 candle 5515/5515 (100.0%) date 2022-12-20 19:25:00 open trades 1182
+[scan] CLF3 finalizing results
+[scan] CLF2 candle 5547/5547 (100.0%) date 2021-12-20 19:25:00 open trades 2910
+[scan] CLF2 finalizing results
+[scan] CLF4 candle 5509/5509 (100.0%) date 2023-12-19 19:25:00 open trades 1547
+[scan] CLF4 finalizing results
+[scan] CLF6 candle 5385/5385 (100.0%) date 2025-12-19 19:25:00 open trades 463
+[scan] CLF6 finalizing results
+[scan] CLF5 candle 5500/5500 (100.0%) date 2024-12-19 19:25:00 open trades 1231
+[scan] CLF5 finalizing results
+Symbol: CLF6, setup total: 8540, Bear: 3587, Bull: 4953 (346/1443)
+[scan] CLG3 loading candles from futures_contract_5m_candles
+[db] writing 9600 setup rows
+[scan] CLG3 loaded 5545 candles from 2022-12-21 00:00:00 to 2023-01-20 19:25:00
+[scan] CLG2 candle 5857/5857 (100.0%) date 2022-01-20 19:25:00 open trades 0
+[scan] CLG2 finalizing results
+[scan] 6SU2 candle 18734/18734 (100.0%) date 2022-09-19 14:15:00 open trades 0
+[scan] 6SU2 finalizing results
+[scan] CLG3 candle 5545/5545 (100.0%) date 2023-01-20 19:25:00 open trades 1978
+[scan] CLG3 finalizing results
+[scan] 6SU1 candle 16987/16987 (100.0%) date 2021-09-13 14:10:00 open trades 0
+[scan] 6SU1 finalizing results
+[db] wrote 9600 setup rows
+Symbol: CLF3, setup total: 13798, Bear: 6549, Bull: 7249 (347/1443)
+[scan] CLG4 loading candles from futures_contract_5m_candles
+[db] writing 13798 setup rows
+[scan] CLG4 loaded 5799 candles from 2023-12-20 00:00:00 to 2024-01-22 19:25:00
+[scan] CLG4 candle 5799/5799 (100.0%) date 2024-01-22 19:25:00 open trades 575
+[scan] CLG4 finalizing results
+[db] wrote 13798 setup rows
+Symbol: CLF4, setup total: 15280, Bear: 13122, Bull: 2158 (348/1443)
+[scan] CLG5 loading candles from futures_contract_5m_candles
+[db] writing 15280 setup rows
+[scan] CLG5 loaded 5384 candles from 2024-12-20 00:00:00 to 2025-01-21 19:25:00
+[scan] CLG5 candle 5384/5384 (100.0%) date 2025-01-21 19:25:00 open trades 4578
+[scan] CLG5 finalizing results
+[db] wrote 15280 setup rows
+Symbol: CLF5, setup total: 12385, Bear: 7378, Bull: 5007 (349/1443)
+[scan] CLG6 loading candles from futures_contract_5m_candles
+[db] writing 12385 setup rows
+[scan] CLG6 loaded 5117 candles from 2025-12-21 23:00:00 to 2026-01-20 19:25:00
+[scan] CLG6 candle 5117/5117 (100.0%) date 2026-01-20 19:25:00 open trades 227
+[scan] CLG6 finalizing results
+[db] wrote 12385 setup rows
+Symbol: CLF2, setup total: 22895, Bear: 14910, Bull: 7985 (350/1443)
+[scan] CLH2 loading candles from futures_contract_5m_candles
+[db] writing 22895 setup rows
+[scan] CLH2 loaded 6100 candles from 2022-01-21 00:00:00 to 2022-02-22 19:25:00
+[scan] CLH2 candle 6100/6100 (100.0%) date 2022-02-22 19:25:00 open trades 813
+[scan] CLH2 finalizing results
+[db] wrote 22895 setup rows
+Symbol: 6SU2, setup total: 50, Bear: 50, Bull: 0 (351/1443)
+[scan] CLH3 loading candles from futures_contract_5m_candles
+Symbol: CLG2, setup total: 25809, Bear: 2236, Bull: 23573 (352/1443)
+[scan] CLH4 loading candles from futures_contract_5m_candles
+[db] writing 25859 setup rows
+[scan] CLH3 loaded 5722 candles from 2023-01-22 23:00:00 to 2023-02-21 19:25:00
+[scan] CLH4 loaded 5429 candles from 2024-01-23 00:00:00 to 2024-02-20 19:25:00
+[scan] CLH4 candle 5429/5429 (100.0%) date 2024-02-20 19:25:00 open trades 2007
+[scan] CLH4 finalizing results
+[scan] CLH3 candle 5722/5722 (100.0%) date 2023-02-21 19:25:00 open trades 3912
+[scan] CLH3 finalizing results
+[db] wrote 25859 setup rows
+Symbol: CLG3, setup total: 21419, Bear: 9737, Bull: 11682 (353/1443)
+[scan] CLH5 loading candles from futures_contract_5m_candles
+[db] writing 21419 setup rows
+[scan] CLH5 loaded 5807 candles from 2025-01-22 00:00:00 to 2025-02-20 19:25:00
+[scan] CLH5 candle 5807/5807 (100.0%) date 2025-02-20 19:25:00 open trades 2249
+[scan] CLH5 finalizing results
+[db] wrote 21419 setup rows
+Symbol: 6SU1, setup total: 0, Bear: 0, Bull: 0 (354/1443)
+[scan] CLH6 loading candles from futures_contract_5m_candles
+Symbol: CLG4, setup total: 10255, Bear: 6860, Bull: 3395 (355/1443)
+[scan] CLJ2 loading candles from futures_contract_5m_candles
+[db] writing 10255 setup rows
+[scan] CLH6 loaded 6121 candles from 2026-01-21 00:00:00 to 2026-02-20 19:25:00
+[scan] CLJ2 loaded 5325 candles from 2022-02-23 00:00:00 to 2022-03-22 18:25:00
+[scan] CLH6 candle 6121/6121 (100.0%) date 2026-02-20 19:25:00 open trades 115
+[scan] CLH6 finalizing results
+[scan] CLJ2 candle 5325/5325 (100.0%) date 2022-03-22 18:25:00 open trades 5762
+[scan] CLJ2 finalizing results
+[db] wrote 10255 setup rows
+Symbol: CLG5, setup total: 22715, Bear: 1891, Bull: 20824 (356/1443)
+[scan] CLJ3 loading candles from futures_contract_5m_candles
+[db] writing 22715 setup rows
+[scan] CLJ3 loaded 5332 candles from 2023-02-22 00:00:00 to 2023-03-21 18:25:00
+[scan] CLJ3 candle 5332/5332 (100.0%) date 2023-03-21 18:25:00 open trades 1806
+[scan] CLJ3 finalizing results
+[db] wrote 22715 setup rows
+Symbol: CLG6, setup total: 6858, Bear: 3379, Bull: 3479 (357/1443)
+[scan] CLJ4 loading candles from futures_contract_5m_candles
+[db] writing 6858 setup rows
+[scan] CLJ4 loaded 5578 candles from 2024-02-21 00:00:00 to 2024-03-20 18:25:00
+[scan] CLJ4 candle 5578/5578 (100.0%) date 2024-03-20 18:25:00 open trades 1113
+[scan] CLJ4 finalizing results
+[db] wrote 6858 setup rows
+Symbol: CLH2, setup total: 17818, Bear: 4060, Bull: 13758 (358/1443)
+[scan] CLJ5 loading candles from futures_contract_5m_candles
+[db] writing 17818 setup rows
+[scan] CLJ5 loaded 5283 candles from 2025-02-21 00:00:00 to 2025-03-20 18:25:00
+[scan] CLJ5 candle 5283/5283 (100.0%) date 2025-03-20 18:25:00 open trades 1081
+[scan] CLJ5 finalizing results
+[db] wrote 17818 setup rows
+Symbol: CLH4, setup total: 16921, Bear: 9126, Bull: 7795 (359/1443)
+[scan] CLJ6 loading candles from futures_contract_5m_candles
+[scan] CLJ6 loaded 5343 candles from 2026-02-22 23:00:00 to 2026-03-20 18:25:00
+[db] writing 16921 setup rows
+[scan] CLJ6 candle 5343/5343 (100.0%) date 2026-03-20 18:25:00 open trades 1766
+[scan] CLJ6 finalizing results
+[db] wrote 16921 setup rows
+Symbol: CLH3, setup total: 19597, Bear: 13119, Bull: 6478 (360/1443)
+[scan] CLK2 loading candles from futures_contract_5m_candles
+[scan] CLK2 loaded 5307 candles from 2022-03-23 00:00:00 to 2022-04-20 18:25:00
+[db] writing 19597 setup rows
+[scan] CLK2 candle 5307/5307 (100.0%) date 2022-04-20 18:25:00 open trades 7040
+[scan] CLK2 finalizing results
+[db] wrote 19597 setup rows
+Symbol: CLH5, setup total: 13806, Bear: 8700, Bull: 5106 (361/1443)
+[scan] CLK3 loading candles from futures_contract_5m_candles
+[db] writing 13806 setup rows
+[scan] CLK3 loaded 5558 candles from 2023-03-22 00:00:00 to 2023-04-20 18:25:00
+[scan] CLK3 candle 5558/5558 (100.0%) date 2023-04-20 18:25:00 open trades 5055
+[scan] CLK3 finalizing results
+[db] wrote 13806 setup rows
+Symbol: CLH6, setup total: 10789, Bear: 4430, Bull: 6359 (362/1443)
+[scan] CLK4 loading candles from futures_contract_5m_candles
+[db] writing 10789 setup rows
+[scan] CLK4 loaded 5863 candles from 2024-03-21 00:00:00 to 2024-04-22 18:25:00
+[scan] CLK4 candle 5863/5863 (100.0%) date 2024-04-22 18:25:00 open trades 643
+[scan] CLK4 finalizing results
+[db] wrote 10789 setup rows
+Symbol: CLJ2, setup total: 25176, Bear: 17479, Bull: 7697 (363/1443)
+[scan] CLK5 loading candles from futures_contract_5m_candles
+[db] writing 25176 setup rows
+[scan] CLK5 loaded 5826 candles from 2025-03-21 00:00:00 to 2025-04-22 18:25:00
+[scan] CLK5 candle 5826/5826 (100.0%) date 2025-04-22 18:25:00 open trades 1693
+[scan] CLK5 finalizing results
+[db] wrote 25176 setup rows
+Symbol: CLJ3, setup total: 12975, Bear: 7463, Bull: 5512 (364/1443)
+[scan] CLK6 loading candles from futures_contract_5m_candles
+[db] writing 12975 setup rows
+[scan] CLK6 loaded 5609 candles from 2026-03-22 22:00:00 to 2026-04-21 18:25:00
+[scan] CLK6 candle 5609/5609 (100.0%) date 2026-04-21 18:25:00 open trades 928
+[scan] CLK6 finalizing results
+[db] wrote 12975 setup rows
+Symbol: CLJ4, setup total: 13523, Bear: 3163, Bull: 10360 (365/1443)
+[scan] CLM1 loading candles from futures_contract_5m_candles
+[db] writing 13523 setup rows
+[scan] CLM1 loaded 5082 candles from 2021-04-25 22:00:00 to 2021-05-20 18:25:00
+[scan] CLM1 candle 5082/5082 (100.0%) date 2021-05-20 18:25:00 open trades 500
+[scan] CLM1 finalizing results
+[db] wrote 13523 setup rows
+Symbol: CLJ5, setup total: 14163, Bear: 10022, Bull: 4141 (366/1443)
+[scan] CLM2 loading candles from futures_contract_5m_candles
+[db] writing 14163 setup rows
+[scan] CLM2 loaded 5838 candles from 2022-04-21 00:00:00 to 2022-05-20 18:25:00
+[scan] CLM2 candle 5838/5838 (100.0%) date 2022-05-20 18:25:00 open trades 1543
+[scan] CLM2 finalizing results
+[db] wrote 14163 setup rows
+Symbol: CLJ6, setup total: 12027, Bear: 3519, Bull: 8508 (367/1443)
+[scan] CLM3 loading candles from futures_contract_5m_candles
+[db] writing 12027 setup rows
+[scan] CLM3 loaded 5863 candles from 2023-04-21 00:00:00 to 2023-05-22 18:25:00
+[scan] CLM3 candle 5863/5863 (100.0%) date 2023-05-22 18:25:00 open trades 2062
+[scan] CLM3 finalizing results
+[db] wrote 12027 setup rows
+Symbol: CLK2, setup total: 34995, Bear: 28125, Bull: 6870 (368/1443)
+[scan] CLM4 loading candles from futures_contract_5m_candles
+[db] writing 34995 setup rows
+[scan] CLM4 loaded 5565 candles from 2024-04-23 00:00:00 to 2024-05-21 18:25:00
+[scan] CLM4 candle 5565/5565 (100.0%) date 2024-05-21 18:25:00 open trades 920
+[scan] CLM4 finalizing results
+[db] wrote 34995 setup rows
+Symbol: CLK3, setup total: 19400, Bear: 2241, Bull: 17159 (369/1443)
+[scan] CLM5 loading candles from futures_contract_5m_candles
+[db] writing 19400 setup rows
+[scan] CLM5 loaded 5286 candles from 2025-04-23 00:00:00 to 2025-05-20 18:25:00
+[scan] CLM5 candle 5286/5286 (100.0%) date 2025-05-20 18:25:00 open trades 2244
+[scan] CLM5 finalizing results
+[db] wrote 19400 setup rows
+Symbol: CLK4, setup total: 14295, Bear: 3559, Bull: 10736 (370/1443)
+[scan] CLM6 loading candles from futures_contract_5m_candles
+[db] writing 14295 setup rows
+[scan] CLM6 loaded 552 candles from 2026-04-22 00:00:00 to 2026-04-23 23:55:00
+[scan] CLM6 candle 552/552 (100.0%) date 2026-04-23 23:55:00 open trades 5
+[scan] CLM6 finalizing results
+[db] wrote 14295 setup rows
+Symbol: CLK5, setup total: 10360, Bear: 5639, Bull: 4721 (371/1443)
+[scan] CLN1 loading candles from futures_contract_5m_candles
+[db] writing 10360 setup rows
+[scan] CLN1 loaded 6089 candles from 2021-05-21 00:00:00 to 2021-06-22 18:25:00
+[scan] CLN1 candle 6089/6089 (100.0%) date 2021-06-22 18:25:00 open trades 0
+[scan] CLN1 finalizing results
+[db] wrote 10360 setup rows
+Symbol: CLK6, setup total: 11717, Bear: 5219, Bull: 6498 (372/1443)
+[scan] CLN2 loading candles from futures_contract_5m_candles
+[db] writing 11717 setup rows
+[scan] CLN2 loaded 5689 candles from 2022-05-22 22:00:00 to 2022-06-21 18:25:00
+[scan] CLN2 candle 5689/5689 (100.0%) date 2022-06-21 18:25:00 open trades 916
+[scan] CLN2 finalizing results
+[db] wrote 11717 setup rows
+Symbol: CLM1, setup total: 10348, Bear: 2997, Bull: 7351 (373/1443)
+[scan] CLN3 loading candles from futures_contract_5m_candles
+[db] writing 10348 setup rows
+[scan] CLN3 loaded 5373 candles from 2023-05-23 00:00:00 to 2023-06-20 18:25:00
+[scan] CLN3 candle 5373/5373 (100.0%) date 2023-06-20 18:25:00 open trades 1895
+[scan] CLN3 finalizing results
+[db] wrote 10348 setup rows
+Symbol: CLM2, setup total: 20527, Bear: 7506, Bull: 13021 (374/1443)
+[scan] CLN4 loading candles from futures_contract_5m_candles
+[db] writing 20527 setup rows
+[scan] CLN4 loaded 5650 candles from 2024-05-22 00:00:00 to 2024-06-20 18:25:00
+[scan] CLN4 candle 5650/5650 (100.0%) date 2024-06-20 18:25:00 open trades 2615
+[scan] CLN4 finalizing results
+[db] wrote 20527 setup rows
+Symbol: CLM3, setup total: 14501, Bear: 9630, Bull: 4871 (375/1443)
+[scan] CLN5 loading candles from futures_contract_5m_candles
+[db] writing 14501 setup rows
+[scan] CLN5 loaded 5953 candles from 2025-05-21 00:00:00 to 2025-06-20 18:25:00
+[scan] CLN5 candle 5953/5953 (100.0%) date 2025-06-20 18:25:00 open trades 160
+[scan] CLN5 finalizing results
+[db] wrote 14501 setup rows
+Symbol: CLM4, setup total: 15529, Bear: 11902, Bull: 3627 (376/1443)
+[scan] CLQ1 loading candles from futures_contract_5m_candles
+[db] writing 15529 setup rows
+[scan] CLQ1 loaded 5282 candles from 2021-06-23 00:00:00 to 2021-07-20 18:25:00
+[scan] CLQ1 candle 5282/5282 (100.0%) date 2021-07-20 18:25:00 open trades 163
+[scan] CLQ1 finalizing results
+[db] wrote 15529 setup rows
+Symbol: CLM5, setup total: 23706, Bear: 14233, Bull: 9473 (377/1443)
+[scan] CLQ2 loading candles from futures_contract_5m_candles
+[db] writing 23706 setup rows
+[scan] CLQ2 loaded 5532 candles from 2022-06-22 00:00:00 to 2022-07-20 18:25:00
+[scan] CLQ2 candle 5532/5532 (100.0%) date 2022-07-20 18:25:00 open trades 2044
+[scan] CLQ2 finalizing results
+[db] wrote 23706 setup rows
+Symbol: CLM6, setup total: 219, Bear: 76, Bull: 143 (378/1443)
+[scan] CLQ3 loading candles from futures_contract_5m_candles
+Symbol: CLN1, setup total: 14486, Bear: 1009, Bull: 13477 (379/1443)
+[scan] CLQ4 loading candles from futures_contract_5m_candles
+[db] writing 14705 setup rows
+[scan] CLQ3 loaded 5804 candles from 2023-06-21 00:00:00 to 2023-07-20 18:25:00
+[scan] CLQ4 loaded 5803 candles from 2024-06-21 00:00:00 to 2024-07-22 18:25:00
+[scan] CLQ4 candle 5803/5803 (100.0%) date 2024-07-22 18:25:00 open trades 48
+[scan] CLQ4 finalizing results
+[scan] CLQ3 candle 5804/5804 (100.0%) date 2023-07-20 18:25:00 open trades 1351
+[scan] CLQ3 finalizing results
+[db] wrote 14705 setup rows
+Symbol: CLN2, setup total: 12130, Bear: 3789, Bull: 8341 (380/1443)
+[scan] CLQ5 loading candles from futures_contract_5m_candles
+[db] writing 12130 setup rows
+[scan] CLQ5 loaded 5813 candles from 2025-06-22 22:00:00 to 2025-07-22 18:25:00
+[scan] CLQ5 candle 5813/5813 (100.0%) date 2025-07-22 18:25:00 open trades 2184
+[scan] CLQ5 finalizing results
+[db] wrote 12130 setup rows
+Symbol: CLN3, setup total: 15290, Bear: 9453, Bull: 5837 (381/1443)
+[scan] CLU1 loading candles from futures_contract_5m_candles
+[db] writing 15290 setup rows
+[scan] CLU1 loaded 6150 candles from 2021-07-21 00:00:00 to 2021-08-20 18:25:00
+[scan] CLU1 candle 6150/6150 (100.0%) date 2021-08-20 18:25:00 open trades 59
+[scan] CLU1 finalizing results
+[db] wrote 15290 setup rows
+Symbol: CLN4, setup total: 22864, Bear: 16120, Bull: 6744 (382/1443)
+[scan] CLU2 loading candles from futures_contract_5m_candles
+[db] writing 22864 setup rows
+[scan] CLU2 loaded 6146 candles from 2022-07-21 00:00:00 to 2022-08-22 18:25:00
+[scan] CLU2 candle 6146/6146 (100.0%) date 2022-08-22 18:25:00 open trades 722
+[scan] CLU2 finalizing results
+[db] wrote 22864 setup rows
+Symbol: CLN5, setup total: 12203, Bear: 3182, Bull: 9021 (383/1443)
+[scan] CLU3 loading candles from futures_contract_5m_candles
+[db] writing 12203 setup rows
+[scan] CLU3 loaded 6105 candles from 2023-07-21 00:00:00 to 2023-08-22 18:25:00
+[scan] CLU3 candle 6105/6105 (100.0%) date 2023-08-22 18:25:00 open trades 5439
+[scan] CLU3 finalizing results
+[db] wrote 12203 setup rows
+Symbol: CLQ1, setup total: 9593, Bear: 4999, Bull: 4594 (384/1443)
+[scan] CLU4 loading candles from futures_contract_5m_candles
+[db] writing 9593 setup rows
+[scan] CLU4 loaded 5547 candles from 2024-07-23 00:00:00 to 2024-08-20 18:25:00
+[scan] CLU4 candle 5547/5547 (100.0%) date 2024-08-20 18:25:00 open trades 1554
+[scan] CLU4 finalizing results
+[db] wrote 9593 setup rows
+Symbol: CLQ2, setup total: 16779, Bear: 9205, Bull: 7574 (385/1443)
+[scan] CLU5 loading candles from futures_contract_5m_candles
+[db] writing 16779 setup rows
+[scan] CLU5 loaded 5570 candles from 2025-07-23 00:00:00 to 2025-08-20 18:25:00
+[scan] CLU5 candle 5570/5570 (100.0%) date 2025-08-20 18:25:00 open trades 1078
+[scan] CLU5 finalizing results
+[db] wrote 16779 setup rows
+Symbol: CLQ4, setup total: 6523, Bear: 3195, Bull: 3328 (386/1443)
+[scan] CLV1 loading candles from futures_contract_5m_candles
+[db] writing 6523 setup rows
+[scan] CLV1 loaded 5847 candles from 2021-08-22 22:00:00 to 2021-09-21 18:25:00
+[scan] CLV1 candle 5847/5847 (100.0%) date 2021-09-21 18:25:00 open trades 139
+[scan] CLV1 finalizing results
+[db] wrote 6523 setup rows
+Symbol: CLQ3, setup total: 11299, Bear: 3721, Bull: 7578 (387/1443)
+[scan] CLV2 loading candles from futures_contract_5m_candles
+[db] writing 11299 setup rows
+[scan] CLV2 loaded 5551 candles from 2022-08-23 00:00:00 to 2022-09-20 18:25:00
+[scan] CLV2 candle 5551/5551 (100.0%) date 2022-09-20 18:25:00 open trades 1002
+[scan] CLV2 finalizing results
+[db] wrote 11299 setup rows
+Symbol: CLQ5, setup total: 20793, Bear: 7587, Bull: 13206 (388/1443)
+[scan] CLV3 loading candles from futures_contract_5m_candles
+[db] writing 20793 setup rows
+[scan] CLV3 loaded 5581 candles from 2023-08-23 00:00:00 to 2023-09-20 18:25:00
+[scan] CLV3 candle 5581/5581 (100.0%) date 2023-09-20 18:25:00 open trades 1278
+[scan] CLV3 finalizing results
+[db] wrote 20793 setup rows
+Symbol: CLU1, setup total: 11312, Bear: 6605, Bull: 4707 (389/1443)
+[scan] CLV4 loading candles from futures_contract_5m_candles
+[db] writing 11312 setup rows
+[scan] CLV4 loaded 6071 candles from 2024-08-21 00:00:00 to 2024-09-20 18:25:00
+[scan] CLV4 candle 6071/6071 (100.0%) date 2024-09-20 18:25:00 open trades 6566
+[scan] CLV4 finalizing results
+[db] wrote 11312 setup rows
+Symbol: CLU2, setup total: 9949, Bear: 6054, Bull: 3895 (390/1443)
+[scan] CLV5 loading candles from futures_contract_5m_candles
+[db] writing 9949 setup rows
+[scan] CLV5 loaded 6070 candles from 2025-08-21 00:00:00 to 2025-09-22 18:25:00
+[scan] CLV5 candle 6070/6070 (100.0%) date 2025-09-22 18:25:00 open trades 845
+[scan] CLV5 finalizing results
+[db] wrote 9949 setup rows
+Symbol: CLU3, setup total: 30483, Bear: 7844, Bull: 22639 (391/1443)
+[scan] CLX1 loading candles from futures_contract_5m_candles
+[db] writing 30483 setup rows
+[scan] CLX1 loaded 5601 candles from 2021-09-22 00:00:00 to 2021-10-20 18:25:00
+[scan] CLX1 candle 5601/5601 (100.0%) date 2021-10-20 18:25:00 open trades 26
+[scan] CLX1 finalizing results
+[db] wrote 30483 setup rows
+Symbol: CLU4, setup total: 14991, Bear: 8000, Bull: 6991 (392/1443)
+[scan] CLX2 loading candles from futures_contract_5m_candles
+[db] writing 14991 setup rows
+[scan] CLX2 loaded 5839 candles from 2022-09-21 00:00:00 to 2022-10-20 18:25:00
+[scan] CLX2 candle 5839/5839 (100.0%) date 2022-10-20 18:25:00 open trades 5544
+[scan] CLX2 finalizing results
+[db] wrote 14991 setup rows
+Symbol: CLU5, setup total: 16290, Bear: 10703, Bull: 5587 (393/1443)
+[scan] CLX3 loading candles from futures_contract_5m_candles
+[db] writing 16290 setup rows
+[scan] CLX3 loaded 5813 candles from 2023-09-21 00:00:00 to 2023-10-20 18:25:00
+[scan] CLX3 candle 5813/5813 (100.0%) date 2023-10-20 18:25:00 open trades 2071
+[scan] CLX3 finalizing results
+[db] wrote 16290 setup rows
+Symbol: CLV1, setup total: 13249, Bear: 2855, Bull: 10394 (394/1443)
+[scan] CLX4 loading candles from futures_contract_5m_candles
+[db] writing 13249 setup rows
+[scan] CLX4 loaded 5867 candles from 2024-09-22 22:00:00 to 2024-10-22 18:25:00
+[scan] CLX4 candle 5867/5867 (100.0%) date 2024-10-22 18:25:00 open trades 1595
+[scan] CLX4 finalizing results
+[db] wrote 13249 setup rows
+Symbol: CLV2, setup total: 13391, Bear: 7252, Bull: 6139 (395/1443)
+[scan] CLX5 loading candles from futures_contract_5m_candles
+[db] writing 13391 setup rows
+[scan] CLX5 loaded 5556 candles from 2025-09-23 00:00:00 to 2025-10-21 18:25:00
+[scan] CLX5 candle 5556/5556 (100.0%) date 2025-10-21 18:25:00 open trades 207
+[scan] CLX5 finalizing results
+[db] wrote 13391 setup rows
+Symbol: CLV3, setup total: 20367, Bear: 1401, Bull: 18966 (396/1443)
+[scan] CLZ1 loading candles from futures_contract_5m_candles
+[db] writing 20367 setup rows
+[scan] CLZ1 loaded 5879 candles from 2021-10-21 00:00:00 to 2021-11-19 19:25:00
+[scan] CLZ1 candle 5879/5879 (100.0%) date 2021-11-19 19:25:00 open trades 213
+[scan] CLZ1 finalizing results
+[db] wrote 20367 setup rows
+Symbol: CLV4, setup total: 31472, Bear: 17725, Bull: 13747 (397/1443)
+[scan] CLZ2 loading candles from futures_contract_5m_candles
+[db] writing 31472 setup rows
+[scan] CLZ2 loaded 5864 candles from 2022-10-21 00:00:00 to 2022-11-21 19:25:00
+[scan] CLZ2 candle 5864/5864 (100.0%) date 2022-11-21 19:25:00 open trades 208
+[scan] CLZ2 finalizing results
+[db] wrote 31472 setup rows
+Symbol: CLV5, setup total: 12265, Bear: 4593, Bull: 7672 (398/1443)
+[scan] CLZ3 loading candles from futures_contract_5m_candles
+[db] writing 12265 setup rows
+[scan] CLZ3 loaded 5646 candles from 2023-10-22 22:00:00 to 2023-11-20 19:25:00
+[scan] CLZ3 candle 5646/5646 (100.0%) date 2023-11-20 19:25:00 open trades 11927
+[scan] CLZ3 finalizing results
+[db] wrote 12265 setup rows
+Symbol: CLX1, setup total: 16767, Bear: 1894, Bull: 14873 (399/1443)
+[scan] CLZ4 loading candles from futures_contract_5m_candles
+[db] writing 16767 setup rows
+[scan] CLZ4 loaded 5579 candles from 2024-10-23 00:00:00 to 2024-11-20 19:25:00
+[scan] CLZ4 candle 5579/5579 (100.0%) date 2024-11-20 19:25:00 open trades 3579
+[scan] CLZ4 finalizing results
+[db] wrote 16767 setup rows
+Symbol: CLX2, setup total: 23504, Bear: 7400, Bull: 16104 (400/1443)
+[scan] CLZ5 loading candles from futures_contract_5m_candles
+[db] writing 23504 setup rows
+[scan] CLZ5 loaded 5841 candles from 2025-10-22 00:00:00 to 2025-11-20 19:25:00
+[scan] CLZ5 candle 5841/5841 (100.0%) date 2025-11-20 19:25:00 open trades 990
+[scan] CLZ5 finalizing results
+[db] wrote 23504 setup rows
+Symbol: CLX3, setup total: 17107, Bear: 10634, Bull: 6473 (401/1443)
+[scan] EMDH2 loading candles from futures_contract_5m_candles
+[db] writing 17107 setup rows
+[scan] EMDH2 loaded 10906 candles from 2021-12-19 23:00:00 to 2022-03-17 20:50:00
+[scan] EMDH2 candle 10906/10906 (100.0%) date 2022-03-17 20:50:00 open trades 1322
+[scan] EMDH2 finalizing results
+[db] wrote 17107 setup rows
+Symbol: CLX4, setup total: 14526, Bear: 8869, Bull: 5657 (402/1443)
+[scan] EMDH3 loading candles from futures_contract_5m_candles
+[db] writing 14526 setup rows
+[scan] EMDH3 loaded 10858 candles from 2022-12-18 23:00:00 to 2023-03-16 20:30:00
+[scan] EMDH3 candle 10858/10858 (100.0%) date 2023-03-16 20:30:00 open trades 3573
+[scan] EMDH3 finalizing results
+[db] wrote 14526 setup rows
+Symbol: CLX5, setup total: 14212, Bear: 9252, Bull: 4960 (403/1443)
+[scan] EMDH4 loading candles from futures_contract_5m_candles
+[db] writing 14212 setup rows
+[scan] EMDH4 loaded 11326 candles from 2023-12-17 23:10:00 to 2024-03-15 07:15:00
+[scan] EMDH4 candle 11326/11326 (100.0%) date 2024-03-15 07:15:00 open trades 972
+[scan] EMDH4 finalizing results
+[db] wrote 14212 setup rows
+Symbol: CLZ1, setup total: 13235, Bear: 7684, Bull: 5551 (404/1443)
+[scan] EMDH5 loading candles from futures_contract_5m_candles
+[db] writing 13235 setup rows
+[scan] EMDH5 loaded 11509 candles from 2024-12-22 23:00:00 to 2025-03-21 10:30:00
+[scan] EMDH5 candle 11509/11509 (100.0%) date 2025-03-21 10:30:00 open trades 3227
+[scan] EMDH5 finalizing results
+[db] wrote 13235 setup rows
+Symbol: CLZ2, setup total: 8898, Bear: 4062, Bull: 4836 (405/1443)
+[scan] EMDH6 loading candles from futures_contract_5m_candles
+[db] writing 8898 setup rows
+[scan] EMDH6 loaded 11700 candles from 2025-12-21 23:00:00 to 2026-03-20 10:20:00
+[scan] EMDH6 candle 11700/11700 (100.0%) date 2026-03-20 10:20:00 open trades 1105
+[scan] EMDH6 finalizing results
+[db] wrote 8898 setup rows
+Symbol: CLZ3, setup total: 42007, Bear: 37080, Bull: 4927 (406/1443)
+[scan] EMDM1 loading candles from futures_contract_5m_candles
+[db] writing 42007 setup rows
+[scan] EMDM1 loaded 6086 candles from 2021-04-25 22:00:00 to 2021-06-17 20:50:00
+[scan] EMDM1 candle 6086/6086 (100.0%) date 2021-06-17 20:50:00 open trades 2256
+[scan] EMDM1 finalizing results
+[db] wrote 42007 setup rows
+Symbol: CLZ4, setup total: 19110, Bear: 6125, Bull: 12985 (407/1443)
+[scan] EMDM2 loading candles from futures_contract_5m_candles
+[db] writing 19110 setup rows
+[scan] EMDM2 loaded 10902 candles from 2022-03-20 22:00:00 to 2022-06-17 12:30:00
+[scan] EMDM2 candle 10902/10902 (100.0%) date 2022-06-17 12:30:00 open trades 188
+[scan] EMDM2 finalizing results
+[db] wrote 19110 setup rows
+Symbol: CLZ5, setup total: 14233, Bear: 7799, Bull: 6434 (408/1443)
+[scan] EMDM3 loading candles from futures_contract_5m_candles
+[db] writing 14233 setup rows
+[scan] EMDM3 loaded 10818 candles from 2023-03-19 22:00:00 to 2023-06-15 20:45:00
+[scan] EMDM3 candle 10818/10818 (100.0%) date 2023-06-15 20:45:00 open trades 585
+[scan] EMDM3 finalizing results
+[db] wrote 14233 setup rows
+Symbol: EMDH2, setup total: 60691, Bear: 42002, Bull: 18689 (409/1443)
+[scan] EMDM4 loading candles from futures_contract_5m_candles
+[db] writing 60691 setup rows
+[scan] EMDM4 loaded 11274 candles from 2024-03-17 22:00:00 to 2024-06-21 07:30:00
+[scan] EMDM4 candle 11274/11274 (100.0%) date 2024-06-21 07:30:00 open trades 3633
+[scan] EMDM4 finalizing results
+[db] wrote 60691 setup rows
+Symbol: EMDH3, setup total: 66842, Bear: 17588, Bull: 49254 (410/1443)
+[scan] EMDM5 loading candles from futures_contract_5m_candles
+[db] writing 66842 setup rows
+[scan] EMDM5 loaded 11711 candles from 2025-03-23 22:00:00 to 2025-06-20 10:50:00
+[scan] EMDM5 candle 11711/11711 (100.0%) date 2025-06-20 10:50:00 open trades 3308
+[scan] EMDM5 finalizing results
+[db] wrote 66842 setup rows
+Symbol: EMDH4, setup total: 41362, Bear: 16950, Bull: 24412 (411/1443)
+[scan] EMDM6 loading candles from futures_contract_5m_candles
+[db] writing 41362 setup rows
+[scan] EMDM6 loaded 4862 candles from 2026-03-22 22:00:00 to 2026-04-23 23:45:00
+[scan] EMDM6 candle 4862/4862 (100.0%) date 2026-04-23 23:45:00 open trades 67
+[scan] EMDM6 finalizing results
+[db] wrote 41362 setup rows
+Symbol: EMDH5, setup total: 51947, Bear: 32633, Bull: 19314 (412/1443)
+[scan] EMDU1 loading candles from futures_contract_5m_candles
+[db] writing 51947 setup rows
+[scan] EMDU1 loaded 10141 candles from 2021-06-20 22:00:00 to 2021-09-16 20:10:00
+[scan] EMDU1 candle 10141/10141 (100.0%) date 2021-09-16 20:10:00 open trades 11816
+[scan] EMDU1 finalizing results
+[db] wrote 51947 setup rows
+Symbol: EMDH6, setup total: 44109, Bear: 17461, Bull: 26648 (413/1443)
+[scan] EMDU2 loading candles from futures_contract_5m_candles
+[db] writing 44109 setup rows
+[scan] EMDU2 loaded 10561 candles from 2022-06-19 22:00:00 to 2022-09-16 13:00:00
+[scan] EMDU2 candle 10561/10561 (100.0%) date 2022-09-16 13:00:00 open trades 11065
+[scan] EMDU2 finalizing results
+[db] wrote 44109 setup rows
+Symbol: EMDM1, setup total: 20468, Bear: 9095, Bull: 11373 (414/1443)
+[scan] EMDU3 loading candles from futures_contract_5m_candles
+[db] writing 20468 setup rows
+[scan] EMDU3 loaded 11234 candles from 2023-06-18 22:00:00 to 2023-09-15 03:25:00
+[scan] EMDU3 candle 11234/11234 (100.0%) date 2023-09-15 03:25:00 open trades 3838
+[scan] EMDU3 finalizing results
+[db] wrote 20468 setup rows
+Symbol: EMDM2, setup total: 77028, Bear: 56363, Bull: 20665 (415/1443)
+[scan] EMDU4 loading candles from futures_contract_5m_candles
+[db] writing 77028 setup rows
+[scan] EMDU4 loaded 10647 candles from 2024-06-23 22:25:00 to 2024-09-19 20:05:00
+[scan] EMDU4 candle 10647/10647 (100.0%) date 2024-09-19 20:05:00 open trades 3337
+[scan] EMDU4 finalizing results
+[db] wrote 77028 setup rows
+Symbol: EMDM3, setup total: 31630, Bear: 19315, Bull: 12315 (416/1443)
+[scan] EMDU5 loading candles from futures_contract_5m_candles
+[db] writing 31630 setup rows
+[scan] EMDU5 loaded 11070 candles from 2025-06-22 22:35:00 to 2025-09-18 19:55:00
+[scan] EMDU5 candle 11070/11070 (100.0%) date 2025-09-18 19:55:00 open trades 451
+[scan] EMDU5 finalizing results
+[db] wrote 31630 setup rows
+Symbol: EMDM4, setup total: 74430, Bear: 30258, Bull: 44172 (417/1443)
+[scan] EMDZ1 loading candles from futures_contract_5m_candles
+[db] writing 74430 setup rows
+[scan] EMDZ1 loaded 10734 candles from 2021-09-19 22:00:00 to 2021-12-17 13:05:00
+[scan] EMDZ1 candle 10734/10734 (100.0%) date 2021-12-17 13:05:00 open trades 4364
+[scan] EMDZ1 finalizing results
+[db] wrote 74430 setup rows
+Symbol: EMDM5, setup total: 56145, Bear: 19494, Bull: 36651 (418/1443)
+[scan] EMDZ2 loading candles from futures_contract_5m_candles
+[db] writing 56145 setup rows
+[scan] EMDZ2 loaded 12118 candles from 2022-09-18 22:00:00 to 2022-12-16 11:05:00
+[scan] EMDZ2 candle 12118/12118 (100.0%) date 2022-12-16 11:05:00 open trades 1219
+[scan] EMDZ2 finalizing results
+[db] wrote 56145 setup rows
+Symbol: EMDM6, setup total: 11836, Bear: 3064, Bull: 8772 (419/1443)
+[scan] EMDZ3 loading candles from futures_contract_5m_candles
+[db] writing 11836 setup rows
+[scan] EMDZ3 loaded 12134 candles from 2023-09-17 22:00:00 to 2023-12-15 13:35:00
+[scan] EMDZ3 candle 12134/12134 (100.0%) date 2023-12-15 13:35:00 open trades 224
+[scan] EMDZ3 finalizing results
+[db] wrote 11836 setup rows
+Symbol: EMDU1, setup total: 59122, Bear: 18241, Bull: 40881 (420/1443)
+[scan] EMDZ4 loading candles from futures_contract_5m_candles
+[db] writing 59122 setup rows
+[scan] EMDZ4 loaded 11414 candles from 2024-09-22 22:00:00 to 2024-12-20 11:20:00
+[scan] EMDZ4 candle 11414/11414 (100.0%) date 2024-12-20 11:20:00 open trades 971
+[scan] EMDZ4 finalizing results
+[db] wrote 59122 setup rows
+Symbol: EMDU2, setup total: 94226, Bear: 20642, Bull: 73584 (421/1443)
+[scan] EMDZ5 loading candles from futures_contract_5m_candles
+[db] writing 94226 setup rows
+[scan] EMDZ5 loaded 11731 candles from 2025-09-21 22:00:00 to 2025-12-19 10:50:00
+[scan] EMDZ5 candle 11731/11731 (100.0%) date 2025-12-19 10:50:00 open trades 3570
+[scan] EMDZ5 finalizing results
+[db] wrote 94226 setup rows
+Symbol: EMDU3, setup total: 66861, Bear: 33906, Bull: 32955 (422/1443)
+[scan] ESH2 loading candles from futures_contract_5m_candles
+[db] writing 66861 setup rows
+[scan] ESH2 loaded 17478 candles from 2021-12-19 23:00:00 to 2022-03-18 13:25:00
+[scan] ESH2 candle 17478/17478 (100.0%) date 2022-03-18 13:25:00 open trades 2216
+[scan] ESH2 finalizing results
+[db] wrote 66861 setup rows
+Symbol: EMDU4, setup total: 59302, Bear: 24841, Bull: 34461 (423/1443)
+[scan] ESH3 loading candles from futures_contract_5m_candles
+[db] writing 59302 setup rows
+[scan] ESH3 loaded 17202 candles from 2022-12-18 23:00:00 to 2023-03-17 13:25:00
+[scan] ESH3 candle 17202/17202 (100.0%) date 2023-03-17 13:25:00 open trades 5243
+[scan] ESH3 finalizing results

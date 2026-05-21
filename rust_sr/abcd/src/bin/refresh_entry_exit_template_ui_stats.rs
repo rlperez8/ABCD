@@ -22,6 +22,27 @@ fn database_url_from_env() -> Result<String, Box<dyn std::error::Error>> {
         })
 }
 
+fn result_table_name_for_run(run_id: &str) -> String {
+    let suffix = run_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("entry_exit_template_results_{suffix}")
+}
+
+fn quoted_identifier(identifier: &str) -> String {
+    debug_assert!(identifier
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_'));
+    format!("`{identifier}`")
+}
+
 async fn latest_run_id(pool: &MySqlPool) -> Result<Option<String>, sqlx::Error> {
     let row = sqlx::query(
         r#"
@@ -160,6 +181,7 @@ async fn ensure_entry_exit_template_result_index(
 
 async fn refresh_entry_exit_template_ui_stats(
     pool: &MySqlPool,
+    result_table_name: &str,
     run_id: &str,
 ) -> Result<u64, sqlx::Error> {
     ensure_entry_exit_template_ui_stats_table(pool).await?;
@@ -169,7 +191,7 @@ async fn refresh_entry_exit_template_ui_stats(
         .execute(pool)
         .await?;
 
-    let result = sqlx::query(
+    let result = sqlx::query(&format!(
         r#"
         INSERT INTO entry_exit_template_ui_stats (
             run_id,
@@ -262,13 +284,14 @@ async fn refresh_entry_exit_template_ui_stats(
                     ELSE 0
                 END AS bearish_win_rate,
                 COALESCE(AVG(CASE WHEN market = 'Bearish' THEN COALESCE(result_r, 0) ELSE NULL END), 0) AS bearish_avg_r
-            FROM entry_exit_template_results
+            FROM {}
             WHERE run_id = ?
             GROUP BY template_uid
         ) r ON r.template_uid = t.template_uid
         WHERE t.origin_run_id = ?
         "#,
-    )
+        quoted_identifier(result_table_name)
+    ))
     .bind(run_id)
     .bind(run_id)
     .execute(pool)
@@ -415,6 +438,7 @@ fn record_condition(
 
 async fn refresh_entry_exit_template_condition_stats(
     pool: &MySqlPool,
+    result_table_name: &str,
     run_id: &str,
 ) -> Result<u64, sqlx::Error> {
     ensure_entry_exit_template_condition_stats_table(pool).await?;
@@ -425,7 +449,7 @@ async fn refresh_entry_exit_template_condition_stats(
         .await?;
 
     let mut aggregates: HashMap<(String, String, String), ConditionAggregate> = HashMap::new();
-    let mut rows = sqlx::query(
+    let condition_sql = format!(
         r#"
         SELECT
             r.template_uid,
@@ -448,14 +472,14 @@ async fn refresh_entry_exit_template_condition_stats(
             CAST(ps.six_month AS SIGNED) AS six_month,
             CAST(ps.twelve_month AS SIGNED) AS twelve_month,
             ps.full_pattern_length
-        FROM entry_exit_template_results r FORCE INDEX (idx_entry_exit_template_results_run_setup)
+        FROM {} r FORCE INDEX (idx_entry_exit_template_results_run_setup)
         LEFT JOIN pattern_setups ps
           ON ps.setup_id = r.setup_id
         WHERE r.run_id = ?
         "#,
-    )
-    .bind(run_id)
-    .fetch(pool);
+        quoted_identifier(result_table_name)
+    );
+    let mut rows = sqlx::query(&condition_sql).bind(run_id).fetch(pool);
 
     while let Some(row) = rows.try_next().await? {
         let template_uid: String = row.try_get("template_uid")?;
@@ -684,10 +708,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("Refreshing Entry/Exit template UI stats for run {run_id}...");
+    let result_table_name = result_table_name_for_run(&run_id);
     ensure_entry_exit_template_result_indexes(&pool).await?;
-    let rows = refresh_entry_exit_template_ui_stats(&pool, &run_id).await?;
+    let rows = refresh_entry_exit_template_ui_stats(&pool, &result_table_name, &run_id).await?;
     println!("Refreshed {rows} template UI stat row(s).");
-    let condition_rows = refresh_entry_exit_template_condition_stats(&pool, &run_id).await?;
+    let condition_rows =
+        refresh_entry_exit_template_condition_stats(&pool, &result_table_name, &run_id).await?;
     println!("Refreshed {condition_rows} template condition stat row(s).");
 
     Ok(())

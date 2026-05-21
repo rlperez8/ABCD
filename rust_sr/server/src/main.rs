@@ -562,6 +562,11 @@ struct PatternSummary {
     pub market: String,
     pub pattern_id: Option<String>,
     pub pattern_group_id: String,
+    pub event_id: Option<String>,
+    pub event_rank: Option<i64>,
+    pub is_event_primary: Option<bool>,
+    pub event_sister_count: Option<i64>,
+    pub event_similarity_score: Option<f64>,
     pub prop_strategy_id: Option<String>,
     pub harmonic_type: Option<String>,
     pub reversal_type: Option<String>,
@@ -766,6 +771,7 @@ struct PatternFamilyParams {
     min_setup_count: Option<i64>,
     year: Option<i64>,
     source_scope: Option<String>,
+    source_timeframe: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -779,7 +785,10 @@ struct Phase1ResultsParams {
 #[derive(Deserialize, Debug)]
 struct Phase1FamilyPatternsParams {
     family_key: Option<String>,
+    all_families: Option<bool>,
     source_scope: Option<String>,
+    source_timeframe: Option<String>,
+    symbol: Option<String>,
     year: Option<i64>,
     limit: Option<i64>,
     offset: Option<i64>,
@@ -913,6 +922,16 @@ struct EntryExitTemplateParams {
     limit: Option<i64>,
 }
 
+#[derive(Deserialize, Debug)]
+struct EntryExitBuildDashboardParams {
+    run_id: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitBuildListParams {
+    limit: Option<i64>,
+}
+
 #[derive(sqlx::FromRow, Serialize)]
 struct EntryExitTemplateCreatorRun {
     run_id: String,
@@ -966,10 +985,64 @@ struct EntryExitTemplateSnapshot {
     market_edge_score: f64,
 }
 
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitTemplateCoverageRow {
+    test_id: Option<String>,
+    run_id: Option<String>,
+    source_scope: Option<String>,
+    root_symbol: String,
+    exchange_name: Option<String>,
+    contract_symbol: String,
+    source_timeframe: String,
+    pattern_count: i64,
+    scanned_pattern_count: Option<i64>,
+    universe_pattern_count: Option<i64>,
+    contract_count: Option<i64>,
+    status: Option<String>,
+    sort_order: Option<i64>,
+    first_d_confirm_date: Option<NaiveDateTime>,
+    last_d_confirm_date: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitTemplateBuildSummary {
+    test_id: String,
+    run_id: String,
+    build_label: Option<String>,
+    source_scope: String,
+    source_timeframe: String,
+    scan_year_start: Option<i64>,
+    scan_year_end: Option<i64>,
+    scan_year_label: String,
+    patterns_scanned: i64,
+    templates_created: i64,
+    coverage_patterns: i64,
+    root_count: i64,
+    exchange_count: i64,
+    requested_limit: i64,
+    result_rows: i64,
+    elapsed_ms: i64,
+    created_at: Option<NaiveDateTime>,
+    updated_at: Option<NaiveDateTime>,
+}
+
 #[derive(Serialize)]
 struct EntryExitTemplateResponse {
     run: Option<EntryExitTemplateCreatorRun>,
+    build_summary: Option<EntryExitTemplateBuildSummary>,
     templates: Vec<EntryExitTemplateSnapshot>,
+    coverage: Vec<EntryExitTemplateCoverageRow>,
+}
+
+#[derive(Serialize)]
+struct EntryExitBuildDashboardResponse {
+    build_summary: Option<EntryExitTemplateBuildSummary>,
+    coverage: Vec<EntryExitTemplateCoverageRow>,
+}
+
+#[derive(Serialize)]
+struct EntryExitBuildListResponse {
+    builds: Vec<EntryExitTemplateBuildSummary>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -1055,11 +1128,295 @@ struct EntryExitRouterRunsParams {
     limit: Option<i64>,
 }
 
+#[derive(Deserialize, Debug)]
+struct EntryExitSimEquityCurveParams {
+    sim_run_id: String,
+    point_limit: Option<i64>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimEquityPoint {
+    point_index: i64,
+    event_date: NaiveDateTime,
+    outcome: String,
+    result_r: f64,
+    cumulative_r: f64,
+    drawdown_r: f64,
+    daily_r: f64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimEquityCurveResponse {
+    sim_run_id: String,
+    points: Vec<EntryExitSimEquityPoint>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimDailyRParams {
+    sim_run_id: String,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimDailyRRow {
+    trade_date: NaiveDate,
+    total_r: f64,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    best_trade_r: f64,
+    worst_trade_r: f64,
+    worst_intraday_r: f64,
+    hit_daily_loss: i64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimDailyRResponse {
+    sim_run_id: String,
+    days: Vec<EntryExitSimDailyRRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimDailyTradesParams {
+    sim_run_id: String,
+    trade_date: String,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimDailyTradeRow {
+    id: i64,
+    setup_id: String,
+    pattern_id: Option<String>,
+    family_key: String,
+    template_uid: String,
+    template_label: String,
+    symbol: String,
+    market: String,
+    outcome: String,
+    exit_reason: String,
+    result_r: f64,
+    entry_date: Option<NaiveDateTime>,
+    exit_date: Option<NaiveDateTime>,
+    d_confirm_date: NaiveDateTime,
+    trade_direction: Option<String>,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimDailyTradesResponse {
+    sim_run_id: String,
+    trade_date: NaiveDate,
+    trades: Vec<EntryExitSimDailyTradeRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimHourlyParams {
+    sim_run_id: String,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimHourlyRow {
+    entry_hour: i64,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    daily_loss_day_trades: i64,
+    daily_loss_day_count: i64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimHourlyResponse {
+    sim_run_id: String,
+    hours: Vec<EntryExitSimHourlyRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimTradeCadenceParams {
+    sim_run_id: String,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimTradeCadenceRow {
+    first_trade_at: Option<NaiveDateTime>,
+    last_trade_at: Option<NaiveDateTime>,
+    trades: i64,
+    trade_days: i64,
+    gap_count: i64,
+    avg_gap_minutes: f64,
+    median_gap_minutes: f64,
+    min_gap_minutes: f64,
+    max_gap_minutes: f64,
+    avg_trades_per_day: f64,
+    max_trades_per_day: i64,
+    max_trades_per_hour: i64,
+    max_trades_5m_window: i64,
+    max_trades_15m_window: i64,
+    gap_0_1m: i64,
+    gap_1_5m: i64,
+    gap_5_15m: i64,
+    gap_15_30m: i64,
+    gap_30_60m: i64,
+    gap_over_60m: i64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimTradeCadenceResponse {
+    sim_run_id: String,
+    cadence: Option<EntryExitSimTradeCadenceRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimContributionParams {
+    sim_run_id: String,
+    limit: Option<i64>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimSymbolContributionRow {
+    root_symbol: String,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    daily_loss_day_trades: i64,
+    daily_loss_day_count: i64,
+    family_count: i64,
+    template_count: i64,
+    contract_count: i64,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimFamilyContributionRow {
+    family_key: String,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    daily_loss_day_trades: i64,
+    daily_loss_day_count: i64,
+    symbol_count: i64,
+    template_count: i64,
+    contract_count: i64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimSymbolContributionResponse {
+    sim_run_id: String,
+    symbols: Vec<EntryExitSimSymbolContributionRow>,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimFamilyContributionResponse {
+    sim_run_id: String,
+    families: Vec<EntryExitSimFamilyContributionRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimStreaksParams {
+    sim_run_id: String,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimStreakRow {
+    streak_number: i64,
+    streak_type: String,
+    start_index: i64,
+    end_index: i64,
+    start_date: NaiveDateTime,
+    end_date: NaiveDateTime,
+    streak_length: i64,
+    sum_r: f64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimStreaksResponse {
+    sim_run_id: String,
+    streaks: Vec<EntryExitSimStreakRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimLossClusteringParams {
+    sim_run_id: String,
+    window_limit: Option<i64>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimLossSummaryRow {
+    losses: i64,
+    loss_gap_count: i64,
+    avg_loss_gap_minutes: f64,
+    median_loss_gap_minutes: f64,
+    min_loss_gap_minutes: f64,
+    max_loss_gap_minutes: f64,
+    clustered_60m_loss_pairs: i64,
+    same_day_loss_pairs: i64,
+    clustered_60m_rate: f64,
+    loss_days: i64,
+    loss_days_5_plus: i64,
+    worst_loss_day: Option<NaiveDate>,
+    worst_loss_day_losses: i64,
+    worst_loss_day_r: f64,
+    worst_loss_hour_date: Option<NaiveDate>,
+    worst_loss_hour: Option<i64>,
+    worst_loss_hour_losses: i64,
+    worst_loss_hour_r: f64,
+    max_loss_streak: i64,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimLossGapBucketRow {
+    bucket_key: String,
+    bucket_label: String,
+    sort_order: i64,
+    gap_count: i64,
+    gap_percent: f64,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimLossWindowRow {
+    trade_date: NaiveDate,
+    entry_hour: i64,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    total_r: f64,
+    loss_rate: f64,
+    top_root_symbol: String,
+    top_family_key: String,
+    top_template_uid: String,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimLossClusteringResponse {
+    sim_run_id: String,
+    summary: Option<EntryExitSimLossSummaryRow>,
+    buckets: Vec<EntryExitSimLossGapBucketRow>,
+    windows: Vec<EntryExitSimLossWindowRow>,
+}
+
 #[derive(Clone, sqlx::FromRow, Serialize)]
 struct EntryExitRouterRunDb {
     router_run_id: String,
+    playbook_id: Option<String>,
     train_run_id: String,
     source_scope: String,
+    source_timeframe: Option<String>,
     test_year: i64,
     min_train_tests: i64,
     sister_window_minutes: i64,
@@ -1069,10 +1426,24 @@ struct EntryExitRouterRunDb {
     no_route_patterns: i64,
     skipped_non_trade_patterns: i64,
     skipped_symbol_patterns: i64,
+    skipped_overlap_patterns: i64,
     trade_choices: i64,
     watchlist_choices: i64,
     skip_choices: i64,
+    manual_family_bans_applied: i64,
     symbol_filter_enabled: i64,
+    one_trade_at_a_time: i64,
+    one_trade_per_root_symbol: i64,
+    one_trade_per_minute: i64,
+    trade_cooldown_minutes: i64,
+    daily_loss_lockout: i64,
+    near_pass_protection: i64,
+    near_pass_within_r: f64,
+    near_pass_daily_loss_r: f64,
+    loss_cluster_day_lockout: i64,
+    loss_cluster_loss_count: i64,
+    loss_cluster_window_minutes: i64,
+    playbook_description: Option<String>,
     symbol_trade_roots: i64,
     symbol_skip_roots: i64,
     symbol_min_tests: i64,
@@ -1088,6 +1459,7 @@ struct EntryExitRouterRunDb {
     win_count: i64,
     loss_count: i64,
     no_entry_count: i64,
+    trade_win_rate: Option<f64>,
     avg_r: f64,
     sum_r: f64,
     best_r: f64,
@@ -1103,8 +1475,12 @@ struct EntryExitRouterRunSnapshot {
     prop: EntryExitRouterPropStats,
 }
 
-#[derive(Default, Clone, Serialize)]
+#[derive(Default, Clone, Serialize, sqlx::FromRow)]
 struct EntryExitRouterPropStats {
+    profit_target_r: f64,
+    max_drawdown_r_limit: f64,
+    daily_loss_r_limit: f64,
+    sim_plays_used: Option<i64>,
     cycles: i64,
     passed: i64,
     daily_fails: i64,
@@ -1114,13 +1490,6 @@ struct EntryExitRouterPropStats {
     closed_pass_rate: f64,
     max_drawdown_r: f64,
     max_loss_streak: i64,
-}
-
-#[derive(sqlx::FromRow)]
-struct EntryExitRouterReplayTrade {
-    event_date: NaiveDateTime,
-    outcome: String,
-    result_r: f64,
 }
 
 #[derive(sqlx::FromRow, Serialize)]
@@ -1141,11 +1510,66 @@ struct EntryExitRouterSymbolChoice {
     created_at: Option<NaiveDateTime>,
 }
 
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitRouterFamilyChoice {
+    router_run_id: String,
+    train_run_id: String,
+    family_key: String,
+    template_uid: String,
+    template_label: String,
+    template_name: String,
+    template_rank: i64,
+    score: f64,
+    train_eval_count: i64,
+    train_pass_count: i64,
+    train_fail_count: i64,
+    train_no_entry_count: i64,
+    train_avg_r: f64,
+    train_win_rate: f64,
+    train_fail_rate: f64,
+    route_status: String,
+    status_reason: String,
+    harmonic_type: String,
+    market: String,
+    family_bin: String,
+    family_size_bucket: String,
+    family_time_bin: String,
+    family_x_strictness: String,
+    test_eval_count: i64,
+    test_pass_count: i64,
+    test_fail_count: i64,
+    test_no_entry_count: i64,
+    test_avg_r: f64,
+    test_sum_r: f64,
+    test_best_r: f64,
+    test_worst_r: f64,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitManualFamilyBan {
+    family_key: String,
+    reason: String,
+    created_at: Option<NaiveDateTime>,
+    updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitManualSymbolBan {
+    root_symbol: String,
+    reason: String,
+    created_at: Option<NaiveDateTime>,
+    updated_at: Option<NaiveDateTime>,
+}
+
 #[derive(Serialize)]
 struct EntryExitRouterRunsResponse {
     current_run: Option<EntryExitRouterRunSnapshot>,
     runs: Vec<EntryExitRouterRunSnapshot>,
     symbols: Vec<EntryExitRouterSymbolChoice>,
+    family_routes: Vec<EntryExitRouterFamilyChoice>,
+    manual_family_bans: Vec<EntryExitManualFamilyBan>,
+    manual_symbol_bans: Vec<EntryExitManualSymbolBan>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -1523,6 +1947,22 @@ fn normalize_pattern_family_source_scope(value: Option<&str>) -> PatternFamilySo
     }
 }
 
+fn normalize_pattern_family_timeframe_filter(value: Option<&str>) -> Option<String> {
+    let timeframe = value
+        .map(str::trim)
+        .filter(|item| !item.is_empty() && !item.eq_ignore_ascii_case("all"))?;
+    let normalized = timeframe.to_ascii_lowercase();
+    let allowed = [
+        "1m", "3m", "5m", "15m", "30m", "1h", "4h", "12h", "1d", "daily",
+    ];
+
+    if allowed.contains(&normalized.as_str()) {
+        Some(normalized)
+    } else {
+        None
+    }
+}
+
 fn pattern_family_source_scope_label(scope: PatternFamilySourceScope) -> &'static str {
     match scope {
         PatternFamilySourceScope::All => "all",
@@ -1649,6 +2089,28 @@ async fn table_exists(pool: &MySqlPool, table_name: &str) -> Result<bool, sqlx::
         "#,
     )
     .bind(table_name)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(count > 0)
+}
+
+async fn table_column_exists(
+    pool: &MySqlPool,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, sqlx::Error> {
+    let count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+        "#,
+    )
+    .bind(table_name)
+    .bind(column_name)
     .fetch_one(pool)
     .await?;
 
@@ -1857,6 +2319,51 @@ async fn fetch_cached_pattern_setup_contract_storage(
         .collect())
 }
 
+async fn fetch_live_pattern_setup_contract_storage(
+    pool: &MySqlPool,
+) -> Result<Vec<PatternSetupContractStorage>, sqlx::Error> {
+    if !table_exists(pool, "pattern_setups").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            COALESCE(NULLIF(source_table, ''), 'unknown') AS table_name,
+            COALESCE(NULLIF(root_symbol, ''), 'Unknown') AS root_symbol,
+            COALESCE(NULLIF(contract_symbol, ''), NULLIF(symbol, ''), 'Unknown') AS contract_symbol,
+            COALESCE(NULLIF(source_timeframe, ''), 'unknown') AS source_timeframe,
+            CAST(COUNT(*) AS SIGNED) AS setup_count,
+            CAST(DATE(MIN(d_date)) AS CHAR) AS first_d_date,
+            CAST(DATE(MAX(d_date)) AS CHAR) AS last_d_date,
+            CAST(0 AS SIGNED) AS estimated_bytes
+        FROM pattern_setups
+        GROUP BY
+            COALESCE(NULLIF(source_table, ''), 'unknown'),
+            COALESCE(NULLIF(root_symbol, ''), 'Unknown'),
+            COALESCE(NULLIF(contract_symbol, ''), NULLIF(symbol, ''), 'Unknown'),
+            COALESCE(NULLIF(source_timeframe, ''), 'unknown')
+        ORDER BY setup_count DESC, root_symbol ASC, contract_symbol ASC, source_timeframe ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| PatternSetupContractStorage {
+            table_name: row.try_get("table_name").unwrap_or_default(),
+            root_symbol: row.try_get("root_symbol").unwrap_or_default(),
+            contract_symbol: row.try_get("contract_symbol").unwrap_or_default(),
+            source_timeframe: row.try_get("source_timeframe").unwrap_or_default(),
+            setup_count: read_i64_or_zero(&row, "setup_count"),
+            first_d_date: row.try_get("first_d_date").ok(),
+            last_d_date: row.try_get("last_d_date").ok(),
+            estimated_bytes: read_i64_or_zero(&row, "estimated_bytes").max(0) as u64,
+        })
+        .collect())
+}
+
 async fn fetch_cached_pattern_setup_timeframe_pattern_storage(
     pool: &MySqlPool,
 ) -> Result<Vec<PatternSetupTimeframePatternStorage>, sqlx::Error> {
@@ -1878,6 +2385,57 @@ async fn fetch_cached_pattern_setup_timeframe_pattern_storage(
             last_d_date,
             estimated_bytes
         FROM storage_pattern_setup_timeframe_pattern_summary
+        ORDER BY setup_count DESC, root_symbol ASC, source_timeframe ASC, market ASC, harmonic_type ASC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| PatternSetupTimeframePatternStorage {
+            table_name: row.try_get("table_name").unwrap_or_default(),
+            root_symbol: row.try_get("root_symbol").unwrap_or_default(),
+            contract_symbol: row.try_get("contract_symbol").unwrap_or_default(),
+            source_timeframe: row.try_get("source_timeframe").unwrap_or_default(),
+            market: row.try_get("market").unwrap_or_default(),
+            harmonic_type: row.try_get("harmonic_type").unwrap_or_default(),
+            setup_count: read_i64_or_zero(&row, "setup_count"),
+            first_d_date: row.try_get("first_d_date").ok(),
+            last_d_date: row.try_get("last_d_date").ok(),
+            estimated_bytes: read_i64_or_zero(&row, "estimated_bytes").max(0) as u64,
+        })
+        .collect())
+}
+
+async fn fetch_live_pattern_setup_timeframe_pattern_storage(
+    pool: &MySqlPool,
+) -> Result<Vec<PatternSetupTimeframePatternStorage>, sqlx::Error> {
+    if !table_exists(pool, "pattern_setups").await? {
+        return Ok(Vec::new());
+    }
+
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            COALESCE(NULLIF(source_table, ''), 'unknown') AS table_name,
+            COALESCE(NULLIF(root_symbol, ''), 'Unknown') AS root_symbol,
+            COALESCE(NULLIF(contract_symbol, ''), NULLIF(symbol, ''), 'Unknown') AS contract_symbol,
+            COALESCE(NULLIF(source_timeframe, ''), 'unknown') AS source_timeframe,
+            COALESCE(NULLIF(market, ''), 'Unknown') AS market,
+            COALESCE(NULLIF(harmonic_type, ''), 'Unknown') AS harmonic_type,
+            CAST(COUNT(*) AS SIGNED) AS setup_count,
+            CAST(DATE(MIN(d_date)) AS CHAR) AS first_d_date,
+            CAST(DATE(MAX(d_date)) AS CHAR) AS last_d_date,
+            CAST(0 AS SIGNED) AS estimated_bytes
+        FROM pattern_setups
+        GROUP BY
+            COALESCE(NULLIF(source_table, ''), 'unknown'),
+            COALESCE(NULLIF(root_symbol, ''), 'Unknown'),
+            COALESCE(NULLIF(contract_symbol, ''), NULLIF(symbol, ''), 'Unknown'),
+            COALESCE(NULLIF(source_timeframe, ''), 'unknown'),
+            COALESCE(NULLIF(market, ''), 'Unknown'),
+            COALESCE(NULLIF(harmonic_type, ''), 'Unknown')
         ORDER BY setup_count DESC, root_symbol ASC, source_timeframe ASC, market ASC, harmonic_type ASC
         "#,
     )
@@ -2017,8 +2575,26 @@ async fn build_candle_storage_response(
     let futures_roots = fetch_cached_futures_root_storage(pool).await?;
     let setup_roots = fetch_cached_pattern_setup_root_storage(pool).await?;
     let setup_markets = fetch_cached_pattern_setup_market_storage(pool).await?;
-    let setup_contracts = fetch_cached_pattern_setup_contract_storage(pool).await?;
-    let setup_patterns = fetch_cached_pattern_setup_timeframe_pattern_storage(pool).await?;
+    let setup_contracts = match fetch_live_pattern_setup_contract_storage(pool).await {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!(
+                "Live pattern setup contract summary failed; falling back to cache: {:?}",
+                error
+            );
+            fetch_cached_pattern_setup_contract_storage(pool).await?
+        }
+    };
+    let setup_patterns = match fetch_live_pattern_setup_timeframe_pattern_storage(pool).await {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!(
+                "Live pattern setup pattern summary failed; falling back to cache: {:?}",
+                error
+            );
+            fetch_cached_pattern_setup_timeframe_pattern_storage(pool).await?
+        }
+    };
     let disk_storage = fetch_database_disk_storage(pool).await;
 
     Ok(CandleStorageResponse {
@@ -3769,6 +4345,11 @@ async fn fetch_strategy_trades(
                 p.market,
                 p.pattern_id,
                 p.pattern_group_id,
+                CAST(NULL AS CHAR) AS event_id,
+                CAST(NULL AS SIGNED) AS event_rank,
+                CAST(NULL AS SIGNED) AS is_event_primary,
+                CAST(NULL AS SIGNED) AS event_sister_count,
+                CAST(NULL AS DOUBLE) AS event_similarity_score,
                 ? AS prop_strategy_id,
                 p.harmonic_type,
                 COALESCE(NULLIF(p.reversal_type, ''), 'None') AS reversal_type,
@@ -4890,6 +5471,11 @@ async fn fetch_current_open_setups(
             market,
             pattern_id,
             pattern_group_id,
+            CAST(NULL AS CHAR) AS event_id,
+            CAST(NULL AS SIGNED) AS event_rank,
+            CAST(NULL AS SIGNED) AS is_event_primary,
+            CAST(NULL AS SIGNED) AS event_sister_count,
+            CAST(NULL AS DOUBLE) AS event_similarity_score,
             prop_strategy_id,
             harmonic_type,
             COALESCE(NULLIF(reversal_type, ''), 'None') AS reversal_type,
@@ -5578,9 +6164,20 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_phase1_family_patterns)
             .service(fetch_phase1_leaderboard)
             .service(fetch_phase1_supply)
+            .service(fetch_entry_exit_builds)
+            .service(fetch_entry_exit_build_dashboard)
             .service(fetch_entry_exit_templates)
             .service(fetch_entry_exit_template_breakdown)
             .service(fetch_entry_exit_router_runs)
+            .service(fetch_entry_exit_sim_equity_curve)
+            .service(fetch_entry_exit_sim_daily_r)
+            .service(fetch_entry_exit_sim_daily_trades)
+            .service(fetch_entry_exit_sim_hourly)
+            .service(fetch_entry_exit_sim_trade_cadence)
+            .service(fetch_entry_exit_sim_symbol_contribution)
+            .service(fetch_entry_exit_sim_family_contribution)
+            .service(fetch_entry_exit_sim_streaks)
+            .service(fetch_entry_exit_sim_loss_clustering)
             .service(fetch_phase1_yearly_breakdown)
             .service(fetch_strategy_contract_weeks)
             .wrap(Logger::default()) // built-in Actix logs
@@ -5714,6 +6311,18 @@ async fn fetch_pattern_detail_from_pattern_setups(
         SELECT
             ps.symbol,
             ps.pattern_id,
+            ps.event_id,
+            CAST(ps.event_rank AS SIGNED) AS event_rank,
+            ps.is_event_primary,
+            CAST(ps.event_sister_count AS SIGNED) AS event_sister_count,
+            CAST(ps.event_similarity_score AS DOUBLE) AS event_similarity_score,
+            (
+                SELECT GROUP_CONCAT(twin.pattern_id ORDER BY twin.event_rank ASC SEPARATOR '|')
+                FROM pattern_setups twin
+                WHERE ps.event_id IS NOT NULL
+                  AND twin.event_id = ps.event_id
+                  AND twin.pattern_id IS NOT NULL
+            ) AS twin_pattern_ids,
             CAST(ps.x_date AS DATETIME) AS x_date,
             CAST(ps.x_open AS DECIMAL(18,6)) AS x_open,
             CAST(ps.x_high AS DECIMAL(18,6)) AS x_high,
@@ -6067,6 +6676,12 @@ async fn fetch_pattern_detail_from_prop_outcomes(
         SELECT
             p.symbol,
             p.pattern_id,
+            CAST(NULL AS CHAR) AS event_id,
+            CAST(NULL AS SIGNED) AS event_rank,
+            CAST(NULL AS SIGNED) AS is_event_primary,
+            CAST(NULL AS SIGNED) AS event_sister_count,
+            CAST(NULL AS DOUBLE) AS event_similarity_score,
+            CAST(NULL AS CHAR) AS twin_pattern_ids,
             p.x_date,
             CAST(p.x_open AS DECIMAL(18,6)) AS x_open,
             CAST(p.x_high AS DECIMAL(18,6)) AS x_high,
@@ -6637,6 +7252,92 @@ async fn fetch_pattern_families(
     let min_setup_count = params.min_setup_count.unwrap_or(1).max(0);
     let year = params.year.filter(|year| (1900..=2200).contains(year));
     let source_scope = normalize_pattern_family_source_scope(params.source_scope.as_deref());
+    let source_timeframe =
+        normalize_pattern_family_timeframe_filter(params.source_timeframe.as_deref());
+
+    if source_timeframe.is_some() {
+        let source_filter = match source_scope {
+            PatternFamilySourceScope::Futures => {
+                "AND COALESCE(ps.source_table, '') LIKE 'futures_contract_%_candles'"
+            }
+            PatternFamilySourceScope::Daily => {
+                "AND COALESCE(ps.source_table, '') = 'candles' AND COALESCE(ps.source_timeframe, '') = 'daily'"
+            }
+            PatternFamilySourceScope::All => "",
+        };
+        let timeframe_filter = "AND COALESCE(ps.source_timeframe, '') = ?";
+        let year_filter = if year.is_some() {
+            "AND YEAR(ps.d_date) = ?"
+        } else {
+            ""
+        };
+        let sql = format!(
+            r#"
+            SELECT
+                ps.pattern_family_key AS family_key,
+                'concrete_pattern' AS family_name,
+                CAST(5 AS SIGNED) AS family_level,
+                'harmonic_type,bin,size_bucket,time_bin,x_strictness' AS included_dimensions,
+                'D' AS outcome_model,
+                'All' AS market,
+                ps.pattern_family_harmonic_type AS harmonic_type,
+                ps.pattern_family_bin AS bin,
+                'All' AS reversal_type,
+                ps.pattern_family_size_bucket AS size_bucket,
+                ps.pattern_family_time_bin AS time_bin,
+                ps.pattern_family_x_strictness AS x_strictness,
+                'All' AS three_month_trend,
+                'All' AS six_month_trend,
+                'All' AS twelve_month_trend,
+                CAST(COUNT(*) AS SIGNED) AS setup_count,
+                CAST(COUNT(DISTINCT ps.symbol) AS SIGNED) AS symbol_count,
+                DATE(MIN(ps.d_date)) AS first_d_date,
+                DATE(MAX(ps.d_date)) AS last_d_date
+            FROM pattern_setups ps
+            WHERE ps.d_date IS NOT NULL
+              AND ps.pattern_family_key IS NOT NULL
+              AND ps.pattern_family_harmonic_type IS NOT NULL
+              AND ps.pattern_family_bin IS NOT NULL
+              AND ps.pattern_family_size_bucket IS NOT NULL
+              AND ps.pattern_family_time_bin IS NOT NULL
+              {source_filter}
+              {timeframe_filter}
+              {year_filter}
+            GROUP BY
+                ps.pattern_family_key,
+                ps.pattern_family_harmonic_type,
+                ps.pattern_family_bin,
+                ps.pattern_family_size_bucket,
+                ps.pattern_family_time_bin,
+                ps.pattern_family_x_strictness
+            HAVING COUNT(*) >= ?
+            ORDER BY setup_count DESC, symbol_count DESC, family_key ASC
+            LIMIT ?
+            "#,
+            source_filter = source_filter,
+            timeframe_filter = timeframe_filter,
+            year_filter = year_filter,
+        );
+        let mut query = sqlx::query_as::<_, PatternFamilySummary>(&sql)
+            .bind(source_timeframe.as_deref().unwrap_or_default());
+        if let Some(year) = year {
+            query = query.bind(year);
+        }
+        query = query.bind(min_setup_count).bind(limit);
+
+        let rows = query.fetch_all(pool.get_ref()).await;
+
+        return match rows {
+            Ok(rows) => HttpResponse::Ok().json(rows),
+            Err(error) if is_missing_table_error(&error) => {
+                HttpResponse::Ok().json(Vec::<PatternFamilySummary>::new())
+            }
+            Err(error) => {
+                eprintln!("Pattern families timeframe DB error: {:?}", error);
+                HttpResponse::InternalServerError().finish()
+            }
+        };
+    }
 
     if year.is_some() || source_scope != PatternFamilySourceScope::All {
         let rows = sqlx::query_as::<_, PatternFamilySummary>(
@@ -6838,12 +7539,21 @@ async fn fetch_phase1_family_patterns(
     pool: web::Data<MySqlPool>,
     params: web::Json<Phase1FamilyPatternsParams>,
 ) -> impl Responder {
-    let Some(family_key) = params
+    let family_key = params
         .family_key
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-    else {
+        .map(str::to_owned);
+    let all_families = params.all_families.unwrap_or(false);
+    let symbol_filter_value = params
+        .symbol
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("all"))
+        .map(str::to_owned);
+
+    if family_key.is_none() && !all_families {
         return HttpResponse::Ok().json(PatternSummariesResponse {
             patterns: Vec::new(),
             total_count: 0,
@@ -6852,115 +7562,18 @@ async fn fetch_phase1_family_patterns(
             latest_entry_date: None,
             entry_dates: Vec::new(),
         });
-    };
+    }
 
     let source_scope = normalize_pattern_family_source_scope(params.source_scope.as_deref());
-    let source_scope_label = pattern_family_source_scope_label(source_scope);
+    let source_timeframe =
+        normalize_pattern_family_timeframe_filter(params.source_timeframe.as_deref());
     let period_year = params
         .year
         .filter(|year| (1900..=2200).contains(year))
         .unwrap_or(0);
-    let limit = params.limit.unwrap_or(500).clamp(1, 5_000);
+    let limit = params.limit.unwrap_or(500).clamp(1, 20_000);
     let offset = params.offset.unwrap_or(0).max(0);
     let include_count = params.include_count.unwrap_or(true);
-
-    let family_from_source = if period_year > 0 || source_scope != PatternFamilySourceScope::All {
-        sqlx::query_as::<_, PatternFamilySummary>(
-            r#"
-            SELECT
-                family_key,
-                family_name,
-                CAST(family_level AS SIGNED) AS family_level,
-                included_dimensions,
-                outcome_model,
-                market,
-                harmonic_type,
-                bin,
-                reversal_type,
-                size_bucket,
-                time_bin,
-                x_strictness,
-                three_month_trend,
-                six_month_trend,
-                twelve_month_trend,
-                CAST(setup_count AS SIGNED) AS setup_count,
-                CAST(symbol_count AS SIGNED) AS symbol_count,
-                first_d_date,
-                last_d_date
-            FROM pattern_family_source_summary
-            WHERE family_key = ?
-              AND source_scope = ?
-              AND period_year = ?
-            LIMIT 1
-            "#,
-        )
-        .bind(family_key)
-        .bind(source_scope_label)
-        .bind(period_year)
-        .fetch_optional(pool.get_ref())
-        .await
-    } else {
-        Ok(None)
-    };
-
-    let family = match family_from_source {
-        Ok(Some(family)) => Some(family),
-        Ok(None) if period_year == 0 => match sqlx::query_as::<_, PatternFamilySummary>(
-            r#"
-            SELECT
-                family_key,
-                family_name,
-                CAST(family_level AS SIGNED) AS family_level,
-                included_dimensions,
-                outcome_model,
-                market,
-                harmonic_type,
-                bin,
-                reversal_type,
-                size_bucket,
-                time_bin,
-                x_strictness,
-                three_month_trend,
-                six_month_trend,
-                twelve_month_trend,
-                CAST(setup_count AS SIGNED) AS setup_count,
-                CAST(symbol_count AS SIGNED) AS symbol_count,
-                first_d_date,
-                last_d_date
-            FROM pattern_family_summary
-            WHERE family_key = ?
-            LIMIT 1
-            "#,
-        )
-        .bind(family_key)
-        .fetch_optional(pool.get_ref())
-        .await
-        {
-            Ok(family) => family,
-            Err(error) if is_missing_table_error(&error) => None,
-            Err(error) => {
-                eprintln!("Phase 1 family lookup DB error: {:?}", error);
-                return HttpResponse::InternalServerError().finish();
-            }
-        },
-        Ok(None) => None,
-        Err(error) if is_missing_table_error(&error) => None,
-        Err(error) => {
-            eprintln!("Phase 1 source family lookup DB error: {:?}", error);
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
-
-    let Some(family) = family else {
-        return HttpResponse::Ok().json(PatternSummariesResponse {
-            patterns: Vec::new(),
-            total_count: 0,
-            has_more: false,
-            earliest_entry_date: None,
-            latest_entry_date: None,
-            entry_dates: Vec::new(),
-        });
-    };
 
     let source_filter = match source_scope {
         PatternFamilySourceScope::Futures => {
@@ -6970,6 +7583,21 @@ async fn fetch_phase1_family_patterns(
             "AND COALESCE(ps.source_table, '') = 'candles' AND COALESCE(ps.source_timeframe, '') = 'daily'"
         }
         PatternFamilySourceScope::All => "",
+    };
+    let family_filter = if family_key.is_some() {
+        "AND ps.pattern_family_key = ?"
+    } else {
+        ""
+    };
+    let symbol_filter = if symbol_filter_value.is_some() {
+        "AND ps.symbol = ?"
+    } else {
+        ""
+    };
+    let timeframe_filter = if source_timeframe.is_some() {
+        "AND COALESCE(ps.source_timeframe, '') = ?"
+    } else {
+        ""
     };
     let year_filter = if period_year > 0 {
         "AND YEAR(ps.d_date) = ?"
@@ -6996,6 +7624,11 @@ async fn fetch_phase1_family_patterns(
             ps.market,
             ps.pattern_id,
             ps.pattern_group_id,
+            ps.event_id,
+            CAST(ps.event_rank AS SIGNED) AS event_rank,
+            ps.is_event_primary,
+            CAST(ps.event_sister_count AS SIGNED) AS event_sister_count,
+            CAST(ps.event_similarity_score AS DOUBLE) AS event_similarity_score,
             ps.pattern_family_key AS prop_strategy_id,
             ps.pattern_family_harmonic_type AS harmonic_type,
             'None' AS reversal_type,
@@ -7019,18 +7652,32 @@ async fn fetch_phase1_family_patterns(
             CAST(NULL AS DECIMAL(18,6)) AS crab_accuracy,
             CAST(NULL AS DECIMAL(18,6)) AS shark_accuracy
         FROM pattern_setups ps
-        WHERE ps.pattern_family_key = ?
-          AND ps.d_date IS NOT NULL
+        WHERE ps.d_date IS NOT NULL
+          {family_filter}
+          {symbol_filter}
           {source_filter}
+          {timeframe_filter}
           {year_filter}
         ORDER BY ps.d_date ASC, ps.setup_id ASC
         LIMIT ? OFFSET ?
         "#,
+        family_filter = family_filter,
+        symbol_filter = symbol_filter,
         source_filter = source_filter,
+        timeframe_filter = timeframe_filter,
         year_filter = year_filter,
     );
 
-    let mut query = sqlx::query_as::<_, PatternSummary>(&sql).bind(family_key);
+    let mut query = sqlx::query_as::<_, PatternSummary>(&sql);
+    if let Some(value) = family_key.as_deref() {
+        query = query.bind(value);
+    }
+    if let Some(value) = symbol_filter_value.as_deref() {
+        query = query.bind(value);
+    }
+    if let Some(value) = source_timeframe.as_deref() {
+        query = query.bind(value);
+    }
     if period_year > 0 {
         query = query.bind(period_year);
     }
@@ -7045,22 +7692,65 @@ async fn fetch_phase1_family_patterns(
         }
     };
 
-    let total_count = if include_count {
-        family.setup_count
+    let (total_count, earliest_entry_date, latest_entry_date) = if include_count {
+        let count_sql = format!(
+            r#"
+            SELECT
+                CAST(COUNT(*) AS SIGNED) AS total_count,
+                CAST(MIN(COALESCE(ps.d_confirm_date, ps.d_date)) AS DATETIME) AS earliest_entry_date,
+                CAST(MAX(COALESCE(ps.d_confirm_date, ps.d_date)) AS DATETIME) AS latest_entry_date
+            FROM pattern_setups ps
+            WHERE ps.d_date IS NOT NULL
+              {family_filter}
+              {symbol_filter}
+              {source_filter}
+              {timeframe_filter}
+              {year_filter}
+            "#,
+            family_filter = family_filter,
+            symbol_filter = symbol_filter,
+            source_filter = source_filter,
+            timeframe_filter = timeframe_filter,
+            year_filter = year_filter,
+        );
+        let mut count_query = sqlx::query(&count_sql);
+        if let Some(value) = family_key.as_deref() {
+            count_query = count_query.bind(value);
+        }
+        if let Some(value) = symbol_filter_value.as_deref() {
+            count_query = count_query.bind(value);
+        }
+        if let Some(value) = source_timeframe.as_deref() {
+            count_query = count_query.bind(value);
+        }
+        if period_year > 0 {
+            count_query = count_query.bind(period_year);
+        }
+
+        match count_query.fetch_one(pool.get_ref()).await {
+            Ok(row) => (
+                row.try_get::<i64, _>("total_count").unwrap_or(0),
+                row.try_get::<Option<NaiveDateTime>, _>("earliest_entry_date")
+                    .ok()
+                    .flatten(),
+                row.try_get::<Option<NaiveDateTime>, _>("latest_entry_date")
+                    .ok()
+                    .flatten(),
+            ),
+            Err(error) if is_missing_table_error(&error) => (0, None, None),
+            Err(error) => {
+                eprintln!("Phase 1 family patterns count DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
     } else {
-        -1
+        (-1, None, None)
     };
     let has_more = if total_count >= 0 {
         offset + (patterns.len() as i64) < total_count
     } else {
         patterns.len() as i64 >= limit
     };
-    let earliest_entry_date = family
-        .first_d_date
-        .and_then(|date| date.and_hms_opt(0, 0, 0));
-    let latest_entry_date = family
-        .last_d_date
-        .and_then(|date| date.and_hms_opt(0, 0, 0));
     let mut seen_dates = HashSet::new();
     let entry_dates = patterns
         .iter()
@@ -7441,6 +8131,874 @@ async fn fetch_phase1_supply(
     })
 }
 
+async fn ensure_entry_exit_template_build_coverage_ui_table(
+    pool: &MySqlPool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_template_build_coverage_ui (
+            run_id VARCHAR(64) NOT NULL,
+            source_scope VARCHAR(16) NOT NULL,
+            root_symbol VARCHAR(32) NOT NULL,
+            exchange_name VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+            source_timeframe VARCHAR(16) NOT NULL DEFAULT 'unknown',
+            pattern_count BIGINT NOT NULL DEFAULT 0,
+            contract_count BIGINT NOT NULL DEFAULT 0,
+            first_d_confirm_date DATETIME NULL,
+            last_d_confirm_date DATETIME NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (run_id, root_symbol, source_timeframe),
+            INDEX idx_entry_exit_build_coverage_run_exchange (run_id, exchange_name, pattern_count),
+            INDEX idx_entry_exit_build_coverage_run_root (run_id, root_symbol)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_entry_exit_template_build_coverage_rows_ui_table(
+    pool: &MySqlPool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_template_build_coverage_rows_ui (
+            test_id VARCHAR(64) NOT NULL,
+            run_id VARCHAR(64) NOT NULL,
+            source_scope VARCHAR(16) NOT NULL,
+            exchange_name VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+            root_symbol VARCHAR(32) NOT NULL,
+            source_timeframe VARCHAR(16) NOT NULL DEFAULT 'unknown',
+            scanned_pattern_count BIGINT NOT NULL DEFAULT 0,
+            universe_pattern_count BIGINT NOT NULL DEFAULT 0,
+            contract_count BIGINT NOT NULL DEFAULT 0,
+            status VARCHAR(16) NOT NULL DEFAULT 'Not scanned',
+            sort_order BIGINT NOT NULL DEFAULT 0,
+            first_d_confirm_date DATETIME NULL,
+            last_d_confirm_date DATETIME NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (test_id, root_symbol, source_timeframe),
+            INDEX idx_entry_exit_build_coverage_rows_run_exchange (run_id, exchange_name, sort_order),
+            INDEX idx_entry_exit_build_coverage_rows_status (run_id, status, scanned_pattern_count)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_entry_exit_template_build_summary_ui_table(
+    pool: &MySqlPool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_template_build_summary_ui (
+            test_id VARCHAR(64) NOT NULL PRIMARY KEY,
+            run_id VARCHAR(64) NOT NULL UNIQUE,
+            build_label VARCHAR(32) NULL,
+            source_scope VARCHAR(16) NOT NULL,
+            source_timeframe VARCHAR(16) NOT NULL DEFAULT 'unknown',
+            scan_year_start INT NULL,
+            scan_year_end INT NULL,
+            scan_year_label VARCHAR(32) NOT NULL DEFAULT 'All',
+            patterns_scanned BIGINT NOT NULL DEFAULT 0,
+            templates_created BIGINT NOT NULL DEFAULT 0,
+            coverage_patterns BIGINT NOT NULL DEFAULT 0,
+            root_count BIGINT NOT NULL DEFAULT 0,
+            exchange_count BIGINT NOT NULL DEFAULT 0,
+            requested_limit BIGINT NOT NULL DEFAULT 0,
+            result_rows BIGINT NOT NULL DEFAULT 0,
+            elapsed_ms BIGINT NOT NULL DEFAULT 0,
+            created_at DATETIME NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_entry_exit_build_summary_run (run_id),
+            INDEX idx_entry_exit_build_summary_created (created_at)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn refresh_entry_exit_template_build_coverage_ui(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<u64, sqlx::Error> {
+    ensure_entry_exit_template_build_coverage_ui_table(pool).await?;
+
+    sqlx::query("DELETE FROM entry_exit_template_build_coverage_ui WHERE run_id = ?")
+        .bind(run_id)
+        .execute(pool)
+        .await?;
+
+    let result = sqlx::query(
+        r#"
+        INSERT INTO entry_exit_template_build_coverage_ui (
+            run_id,
+            source_scope,
+            root_symbol,
+            exchange_name,
+            source_timeframe,
+            pattern_count,
+            contract_count,
+            first_d_confirm_date,
+            last_d_confirm_date
+        )
+        SELECT
+            ? AS run_id,
+            COALESCE(
+                (
+                    SELECT source_scope
+                    FROM entry_exit_template_creator_runs
+                    WHERE run_id = ?
+                    LIMIT 1
+                ),
+                'unknown'
+            ) AS source_scope,
+            coverage_source.root_symbol,
+            CASE
+                WHEN coverage_source.root_symbol IN ('6A', '6B', '6C', '6E', '6J', '6M', '6N', '6S', 'BTC', 'EMD', 'ES', 'GF', 'HE', 'LE', 'M2K', 'MES', 'MNQ', 'NKD', 'NQ', 'RTY') THEN 'CME'
+                WHEN coverage_source.root_symbol IN ('KE', 'UB', 'YM', 'ZB', 'ZC', 'ZF', 'ZL', 'ZM', 'ZN', 'ZS', 'ZT', 'ZW') THEN 'CBOT'
+                WHEN coverage_source.root_symbol IN ('GC', 'HG', 'MGC', 'SI') THEN 'COMEX'
+                WHEN coverage_source.root_symbol IN ('CL', 'HO', 'MCL', 'NG', 'PA', 'PL', 'QG', 'QM', 'RB') THEN 'NYMEX'
+                WHEN coverage_source.root_symbol REGEXP '^(ZB|ZN)[FGHJKMNQUVXZ][0-9]{1,2}$' THEN 'CBOT'
+                ELSE 'Unknown'
+            END AS exchange_name,
+            coverage_source.source_timeframe,
+            CAST(COUNT(DISTINCT coverage_source.setup_id) AS SIGNED) AS pattern_count,
+            CAST(COUNT(DISTINCT coverage_source.contract_symbol) AS SIGNED) AS contract_count,
+            MIN(coverage_source.d_confirm_date) AS first_d_confirm_date,
+            MAX(coverage_source.d_confirm_date) AS last_d_confirm_date
+        FROM (
+            SELECT
+                r.setup_id,
+                COALESCE(NULLIF(p.root_symbol, ''), NULLIF(r.symbol, ''), 'Unknown') AS root_symbol,
+                COALESCE(NULLIF(p.contract_symbol, ''), NULLIF(r.symbol, ''), 'Unknown') AS contract_symbol,
+                COALESCE(NULLIF(p.source_timeframe, ''), 'unknown') AS source_timeframe,
+                COALESCE(p.d_confirm_date, r.d_confirm_date) AS d_confirm_date
+            FROM entry_exit_template_results r
+            LEFT JOIN pattern_setups p
+              ON p.setup_id = r.setup_id
+            WHERE r.run_id = ?
+        ) coverage_source
+        GROUP BY coverage_source.root_symbol, coverage_source.source_timeframe
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
+async fn refresh_entry_exit_template_build_coverage_rows_ui(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<u64, sqlx::Error> {
+    ensure_entry_exit_template_build_coverage_rows_ui_table(pool).await?;
+
+    let mut affected = 0_u64;
+    sqlx::query("DELETE FROM entry_exit_template_build_coverage_rows_ui WHERE run_id = ?")
+        .bind(run_id)
+        .execute(pool)
+        .await?;
+
+    let scanned_result = sqlx::query(
+        r#"
+        INSERT INTO entry_exit_template_build_coverage_rows_ui (
+            test_id,
+            run_id,
+            source_scope,
+            exchange_name,
+            root_symbol,
+            source_timeframe,
+            scanned_pattern_count,
+            universe_pattern_count,
+            contract_count,
+            status,
+            sort_order,
+            first_d_confirm_date,
+            last_d_confirm_date
+        )
+        SELECT
+            scanned.run_id AS test_id,
+            scanned.run_id,
+            scanned.source_scope,
+            scanned.exchange_name,
+            scanned.root_symbol,
+            scanned.source_timeframe,
+            scanned.scanned_pattern_count,
+            0 AS universe_pattern_count,
+            scanned.contract_count,
+            'Scanned' AS status,
+            ROW_NUMBER() OVER (
+                ORDER BY
+                    CASE scanned.exchange_name
+                        WHEN 'CME' THEN 1
+                        WHEN 'CBOT' THEN 2
+                        WHEN 'NYMEX' THEN 3
+                        WHEN 'COMEX' THEN 4
+                        ELSE 9
+                    END,
+                    scanned.scanned_pattern_count DESC,
+                    scanned.root_symbol ASC,
+                    scanned.source_timeframe ASC
+            ) AS sort_order,
+            scanned.first_d_confirm_date,
+            scanned.last_d_confirm_date
+        FROM (
+            SELECT
+                c.run_id,
+                c.source_scope,
+                CASE
+                    WHEN normalized.root_symbol IN ('6A', '6B', '6C', '6E', '6J', '6M', '6N', '6S', 'BTC', 'EMD', 'ES', 'GF', 'HE', 'LE', 'M2K', 'MES', 'MNQ', 'NKD', 'NQ', 'RTY') THEN 'CME'
+                    WHEN normalized.root_symbol IN ('KE', 'UB', 'YM', 'ZB', 'ZC', 'ZF', 'ZL', 'ZM', 'ZN', 'ZS', 'ZT', 'ZW') THEN 'CBOT'
+                    WHEN normalized.root_symbol IN ('GC', 'HG', 'MGC', 'SI') THEN 'COMEX'
+                    WHEN normalized.root_symbol IN ('CL', 'HO', 'MCL', 'NG', 'PA', 'PL', 'QG', 'QM', 'RB') THEN 'NYMEX'
+                    ELSE COALESCE(MAX(NULLIF(c.exchange_name, '')), 'Unknown')
+                END AS exchange_name,
+                normalized.root_symbol,
+                c.source_timeframe,
+                CAST(SUM(c.pattern_count) AS SIGNED) AS scanned_pattern_count,
+                CAST(SUM(c.contract_count) AS SIGNED) AS contract_count,
+                MIN(c.first_d_confirm_date) AS first_d_confirm_date,
+                MAX(c.last_d_confirm_date) AS last_d_confirm_date
+            FROM entry_exit_template_build_coverage_ui c
+            JOIN (
+                SELECT
+                    run_id,
+                    source_timeframe,
+                    root_symbol AS original_root_symbol,
+                    CASE
+                        WHEN root_symbol REGEXP '^ZB[FGHJKMNQUVXZ][0-9]{1,2}$' THEN 'ZB'
+                        WHEN root_symbol REGEXP '^ZN[FGHJKMNQUVXZ][0-9]{1,2}$' THEN 'ZN'
+                        ELSE root_symbol
+                    END AS root_symbol
+                FROM entry_exit_template_build_coverage_ui
+                WHERE run_id = ?
+            ) normalized
+              ON normalized.run_id = c.run_id
+             AND normalized.source_timeframe = c.source_timeframe
+             AND normalized.original_root_symbol = c.root_symbol
+            WHERE c.run_id = ?
+            GROUP BY c.run_id, c.source_scope, normalized.root_symbol, c.source_timeframe
+        ) scanned
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+    affected += scanned_result.rows_affected();
+
+    let universe_result = sqlx::query(
+        r#"
+        INSERT INTO entry_exit_template_build_coverage_rows_ui (
+            test_id,
+            run_id,
+            source_scope,
+            exchange_name,
+            root_symbol,
+            source_timeframe,
+            scanned_pattern_count,
+            universe_pattern_count,
+            contract_count,
+            status,
+            sort_order,
+            first_d_confirm_date,
+            last_d_confirm_date
+        )
+        SELECT
+            ? AS test_id,
+            ? AS run_id,
+            universe.source_scope,
+            universe.exchange_name,
+            universe.root_symbol,
+            universe.source_timeframe,
+            0 AS scanned_pattern_count,
+            universe.universe_pattern_count,
+            universe.contract_count,
+            'Not scanned' AS status,
+            100000 AS sort_order,
+            universe.first_d_confirm_date,
+            universe.last_d_confirm_date
+        FROM (
+            SELECT
+                run_meta.source_scope,
+                CASE
+                    WHEN normalized.root_symbol IN ('6A', '6B', '6C', '6E', '6J', '6M', '6N', '6S', 'BTC', 'EMD', 'ES', 'GF', 'HE', 'LE', 'M2K', 'MES', 'MNQ', 'NKD', 'NQ', 'RTY') THEN 'CME'
+                    WHEN normalized.root_symbol IN ('KE', 'UB', 'YM', 'ZB', 'ZC', 'ZF', 'ZL', 'ZM', 'ZN', 'ZS', 'ZT', 'ZW') THEN 'CBOT'
+                    WHEN normalized.root_symbol IN ('GC', 'HG', 'MGC', 'SI') THEN 'COMEX'
+                    WHEN normalized.root_symbol IN ('CL', 'HO', 'MCL', 'NG', 'PA', 'PL', 'QG', 'QM', 'RB') THEN 'NYMEX'
+                    ELSE 'Unknown'
+                END AS exchange_name,
+                normalized.root_symbol,
+                normalized.source_timeframe,
+                CAST(COUNT(DISTINCT normalized.setup_id) AS SIGNED) AS universe_pattern_count,
+                CAST(COUNT(DISTINCT normalized.contract_symbol) AS SIGNED) AS contract_count,
+                MIN(normalized.d_confirm_date) AS first_d_confirm_date,
+                MAX(normalized.d_confirm_date) AS last_d_confirm_date
+            FROM (
+                SELECT
+                    ps.setup_id,
+                    CASE
+                        WHEN COALESCE(NULLIF(ps.root_symbol, ''), NULLIF(ps.symbol, ''), 'Unknown') REGEXP '^ZB[FGHJKMNQUVXZ][0-9]{1,2}$' THEN 'ZB'
+                        WHEN COALESCE(NULLIF(ps.root_symbol, ''), NULLIF(ps.symbol, ''), 'Unknown') REGEXP '^ZN[FGHJKMNQUVXZ][0-9]{1,2}$' THEN 'ZN'
+                        ELSE COALESCE(NULLIF(ps.root_symbol, ''), NULLIF(ps.symbol, ''), 'Unknown')
+                    END AS root_symbol,
+                    COALESCE(NULLIF(ps.contract_symbol, ''), NULLIF(ps.symbol, ''), 'Unknown') AS contract_symbol,
+                    COALESCE(NULLIF(ps.source_timeframe, ''), 'unknown') AS source_timeframe,
+                    COALESCE(ps.d_confirm_date, ps.d_date) AS d_confirm_date,
+                    ps.source_table
+                FROM pattern_setups ps
+                JOIN (
+                    SELECT DISTINCT source_timeframe
+                    FROM entry_exit_template_build_coverage_ui
+                    WHERE run_id = ?
+                ) build_timeframes
+                  ON build_timeframes.source_timeframe = COALESCE(NULLIF(ps.source_timeframe, ''), 'unknown')
+                WHERE ps.d_date IS NOT NULL
+                  AND ps.full_pattern_length > 0
+                  AND ABS(ps.cd_price_length) > 0
+            ) normalized
+            JOIN entry_exit_template_creator_runs run_meta
+              ON run_meta.run_id = ?
+            WHERE (
+                (run_meta.source_scope = 'futures' AND COALESCE(normalized.source_table, '') LIKE 'futures_contract_%_candles')
+                OR (run_meta.source_scope = 'daily' AND COALESCE(normalized.source_table, '') = 'candles' AND normalized.source_timeframe = 'daily')
+                OR (run_meta.source_scope NOT IN ('futures', 'daily'))
+            )
+            GROUP BY run_meta.source_scope, normalized.root_symbol, normalized.source_timeframe
+        ) universe
+        ON DUPLICATE KEY UPDATE
+            universe_pattern_count = VALUES(universe_pattern_count),
+            contract_count = GREATEST(entry_exit_template_build_coverage_rows_ui.contract_count, VALUES(contract_count)),
+            status = CASE
+                WHEN scanned_pattern_count > 0 THEN 'Scanned'
+                ELSE VALUES(status)
+            END
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+    affected += universe_result.rows_affected();
+
+    let sort_result = sqlx::query(
+        r#"
+        UPDATE entry_exit_template_build_coverage_rows_ui rows_ui
+        JOIN (
+            SELECT
+                test_id,
+                root_symbol,
+                source_timeframe,
+                ROW_NUMBER() OVER (
+                    ORDER BY
+                        CASE exchange_name
+                            WHEN 'CME' THEN 1
+                            WHEN 'CBOT' THEN 2
+                            WHEN 'NYMEX' THEN 3
+                            WHEN 'COMEX' THEN 4
+                            ELSE 9
+                        END,
+                        CASE status WHEN 'Scanned' THEN 0 ELSE 1 END,
+                        scanned_pattern_count DESC,
+                        root_symbol ASC,
+                        source_timeframe ASC
+                ) AS next_sort_order
+            FROM entry_exit_template_build_coverage_rows_ui
+            WHERE test_id = ?
+        ) ranked
+          ON ranked.test_id = rows_ui.test_id
+         AND ranked.root_symbol = rows_ui.root_symbol
+         AND ranked.source_timeframe = rows_ui.source_timeframe
+        SET rows_ui.sort_order = ranked.next_sort_order
+        WHERE rows_ui.test_id = ?
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+    affected += sort_result.rows_affected();
+
+    Ok(affected)
+}
+
+async fn refresh_entry_exit_template_build_summary_ui(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<u64, sqlx::Error> {
+    ensure_entry_exit_template_build_summary_ui_table(pool).await?;
+
+    let result = sqlx::query(
+        r#"
+        INSERT INTO entry_exit_template_build_summary_ui (
+            test_id,
+            run_id,
+            build_label,
+            source_scope,
+            source_timeframe,
+            scan_year_start,
+            scan_year_end,
+            scan_year_label,
+            patterns_scanned,
+            templates_created,
+            coverage_patterns,
+            root_count,
+            exchange_count,
+            requested_limit,
+            result_rows,
+            elapsed_ms,
+            created_at
+        )
+        SELECT
+            r.run_id AS test_id,
+            r.run_id,
+            NULL AS build_label,
+            r.source_scope,
+            COALESCE(NULLIF(coverage.source_timeframe, ''), 'unknown') AS source_timeframe,
+            years.scan_year_start,
+            years.scan_year_end,
+            CASE
+                WHEN years.scan_year_start IS NULL AND r.period_year > 0 THEN CAST(r.period_year AS CHAR)
+                WHEN years.scan_year_start IS NULL THEN 'All'
+                WHEN years.scan_year_start = years.scan_year_end THEN CAST(years.scan_year_start AS CHAR)
+                ELSE CONCAT(years.scan_year_start, '-', years.scan_year_end)
+            END AS scan_year_label,
+            r.scanned_patterns AS patterns_scanned,
+            r.templates_created,
+            COALESCE(coverage.coverage_patterns, 0) AS coverage_patterns,
+            COALESCE(coverage.root_count, 0) AS root_count,
+            COALESCE(coverage.exchange_count, 0) AS exchange_count,
+            r.requested_limit,
+            r.result_rows,
+            r.elapsed_ms,
+            r.created_at
+        FROM entry_exit_template_creator_runs r
+        LEFT JOIN (
+            SELECT
+                run_id,
+                CAST(SUM(pattern_count) AS SIGNED) AS coverage_patterns,
+                CAST(COUNT(DISTINCT root_symbol) AS SIGNED) AS root_count,
+                CAST(COUNT(DISTINCT CASE WHEN pattern_count > 0 THEN exchange_name ELSE NULL END) AS SIGNED) AS exchange_count,
+                CASE
+                    WHEN COUNT(DISTINCT source_timeframe) = 1 THEN MIN(source_timeframe)
+                    WHEN COUNT(DISTINCT source_timeframe) > 1 THEN 'mixed'
+                    ELSE 'unknown'
+                END AS source_timeframe
+            FROM entry_exit_template_build_coverage_ui
+            WHERE run_id = ?
+            GROUP BY run_id
+        ) coverage
+          ON coverage.run_id = r.run_id
+        LEFT JOIN (
+            SELECT
+                run_id,
+                MIN(YEAR(d_confirm_date)) AS scan_year_start,
+                MAX(YEAR(d_confirm_date)) AS scan_year_end
+            FROM entry_exit_template_results
+            WHERE run_id = ?
+            GROUP BY run_id
+        ) years
+          ON years.run_id = r.run_id
+        WHERE r.run_id = ?
+        ON DUPLICATE KEY UPDATE
+            run_id = VALUES(run_id),
+            build_label = COALESCE(VALUES(build_label), build_label),
+            source_scope = VALUES(source_scope),
+            source_timeframe = VALUES(source_timeframe),
+            scan_year_start = VALUES(scan_year_start),
+            scan_year_end = VALUES(scan_year_end),
+            scan_year_label = VALUES(scan_year_label),
+            patterns_scanned = VALUES(patterns_scanned),
+            templates_created = VALUES(templates_created),
+            coverage_patterns = VALUES(coverage_patterns),
+            root_count = VALUES(root_count),
+            exchange_count = VALUES(exchange_count),
+            requested_limit = VALUES(requested_limit),
+            result_rows = VALUES(result_rows),
+            elapsed_ms = VALUES(elapsed_ms),
+            created_at = VALUES(created_at)
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
+async fn fetch_entry_exit_template_build_summary_ui(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<Option<EntryExitTemplateBuildSummary>, sqlx::Error> {
+    ensure_entry_exit_template_build_summary_ui_table(pool).await?;
+
+    sqlx::query_as::<_, EntryExitTemplateBuildSummary>(
+        r#"
+        SELECT
+            test_id,
+            run_id,
+            build_label,
+            source_scope,
+            source_timeframe,
+            scan_year_start,
+            scan_year_end,
+            scan_year_label,
+            patterns_scanned,
+            templates_created,
+            coverage_patterns,
+            root_count,
+            exchange_count,
+            requested_limit,
+            result_rows,
+            elapsed_ms,
+            created_at,
+            updated_at
+        FROM entry_exit_template_build_summary_ui
+        WHERE run_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn fetch_entry_exit_template_build_summary_ui_strict(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<Option<EntryExitTemplateBuildSummary>, sqlx::Error> {
+    sqlx::query_as::<_, EntryExitTemplateBuildSummary>(
+        r#"
+        SELECT
+            test_id,
+            run_id,
+            build_label,
+            source_scope,
+            source_timeframe,
+            scan_year_start,
+            scan_year_end,
+            scan_year_label,
+            patterns_scanned,
+            templates_created,
+            coverage_patterns,
+            root_count,
+            exchange_count,
+            requested_limit,
+            result_rows,
+            elapsed_ms,
+            created_at,
+            updated_at
+        FROM entry_exit_template_build_summary_ui
+        WHERE run_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn fetch_entry_exit_template_build_summaries_ui_strict(
+    pool: &MySqlPool,
+    limit: i64,
+) -> Result<Vec<EntryExitTemplateBuildSummary>, sqlx::Error> {
+    sqlx::query_as::<_, EntryExitTemplateBuildSummary>(
+        r#"
+        SELECT
+            test_id,
+            run_id,
+            build_label,
+            source_scope,
+            source_timeframe,
+            scan_year_start,
+            scan_year_end,
+            scan_year_label,
+            patterns_scanned,
+            templates_created,
+            coverage_patterns,
+            root_count,
+            exchange_count,
+            requested_limit,
+            result_rows,
+            elapsed_ms,
+            created_at,
+            updated_at
+        FROM entry_exit_template_build_summary_ui
+        ORDER BY COALESCE(created_at, updated_at) DESC, run_id DESC
+        LIMIT ?
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+}
+
+async fn fetch_entry_exit_template_build_coverage_rows_ui(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<Vec<EntryExitTemplateCoverageRow>, sqlx::Error> {
+    ensure_entry_exit_template_build_coverage_rows_ui_table(pool).await?;
+
+    sqlx::query_as::<_, EntryExitTemplateCoverageRow>(
+        r#"
+        SELECT
+            test_id,
+            run_id,
+            source_scope,
+            root_symbol,
+            exchange_name,
+            root_symbol AS contract_symbol,
+            source_timeframe,
+            scanned_pattern_count AS pattern_count,
+            scanned_pattern_count,
+            universe_pattern_count,
+            contract_count,
+            status,
+            sort_order,
+            first_d_confirm_date,
+            last_d_confirm_date
+        FROM entry_exit_template_build_coverage_rows_ui
+        WHERE run_id = ?
+        ORDER BY sort_order ASC, exchange_name ASC, scanned_pattern_count DESC, root_symbol ASC, source_timeframe ASC
+        "#,
+    )
+    .bind(run_id)
+    .fetch_all(pool)
+    .await
+}
+
+async fn fetch_entry_exit_template_build_coverage_rows_ui_strict(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<Vec<EntryExitTemplateCoverageRow>, sqlx::Error> {
+    sqlx::query_as::<_, EntryExitTemplateCoverageRow>(
+        r#"
+        SELECT
+            test_id,
+            run_id,
+            source_scope,
+            root_symbol,
+            exchange_name,
+            root_symbol AS contract_symbol,
+            source_timeframe,
+            scanned_pattern_count AS pattern_count,
+            scanned_pattern_count,
+            universe_pattern_count,
+            contract_count,
+            status,
+            sort_order,
+            first_d_confirm_date,
+            last_d_confirm_date
+        FROM entry_exit_template_build_coverage_rows_ui
+        WHERE run_id = ?
+        ORDER BY sort_order ASC, exchange_name ASC, scanned_pattern_count DESC, root_symbol ASC, source_timeframe ASC
+        "#,
+    )
+    .bind(run_id)
+    .fetch_all(pool)
+    .await
+}
+
+async fn fetch_entry_exit_template_build_coverage_ui(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<Vec<EntryExitTemplateCoverageRow>, sqlx::Error> {
+    ensure_entry_exit_template_build_coverage_ui_table(pool).await?;
+
+    sqlx::query_as::<_, EntryExitTemplateCoverageRow>(
+        r#"
+        SELECT
+            NULL AS test_id,
+            NULL AS run_id,
+            source_scope,
+            root_symbol,
+            exchange_name,
+            root_symbol AS contract_symbol,
+            source_timeframe,
+            pattern_count,
+            pattern_count AS scanned_pattern_count,
+            0 AS universe_pattern_count,
+            contract_count,
+            CASE WHEN pattern_count > 0 THEN 'Scanned' ELSE 'Not scanned' END AS status,
+            0 AS sort_order,
+            first_d_confirm_date,
+            last_d_confirm_date
+        FROM entry_exit_template_build_coverage_ui
+        WHERE run_id = ?
+        ORDER BY pattern_count DESC, exchange_name ASC, root_symbol ASC, source_timeframe ASC
+        "#,
+    )
+    .bind(run_id)
+    .fetch_all(pool)
+    .await
+}
+
+async fn fetch_entry_exit_template_build_coverage_fallback(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<Vec<EntryExitTemplateCoverageRow>, sqlx::Error> {
+    sqlx::query_as::<_, EntryExitTemplateCoverageRow>(
+        r#"
+        SELECT
+            NULL AS test_id,
+            NULL AS run_id,
+            NULL AS source_scope,
+            coverage_source.root_symbol,
+            NULL AS exchange_name,
+            coverage_source.contract_symbol,
+            coverage_source.source_timeframe,
+            COUNT(*) AS pattern_count,
+            COUNT(*) AS scanned_pattern_count,
+            0 AS universe_pattern_count,
+            NULL AS contract_count,
+            CASE WHEN COUNT(*) > 0 THEN 'Scanned' ELSE 'Not scanned' END AS status,
+            0 AS sort_order,
+            MIN(coverage_source.d_confirm_date) AS first_d_confirm_date,
+            MAX(coverage_source.d_confirm_date) AS last_d_confirm_date
+        FROM (
+            SELECT
+                COALESCE(NULLIF(p.root_symbol, ''), r.symbol, 'Unknown') AS root_symbol,
+                COALESCE(NULLIF(p.contract_symbol, ''), r.symbol, 'Unknown') AS contract_symbol,
+                COALESCE(NULLIF(p.source_timeframe, ''), 'unknown') AS source_timeframe,
+                r.d_confirm_date
+            FROM entry_exit_template_results r
+            JOIN (
+                SELECT COALESCE(
+                    (
+                        SELECT template_uid
+                        FROM entry_exit_template_ui_stats
+                        WHERE run_id = ?
+                        ORDER BY eval_count DESC, pass_count DESC
+                        LIMIT 1
+                    ),
+                    (
+                        SELECT template_uid
+                        FROM entry_exit_templates
+                        WHERE origin_run_id = ?
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                    )
+                ) AS template_uid
+            ) representative
+              ON representative.template_uid = r.template_uid
+            LEFT JOIN pattern_setups p
+              ON p.setup_id = r.setup_id
+            WHERE r.run_id = ?
+        ) coverage_source
+        GROUP BY coverage_source.root_symbol, coverage_source.contract_symbol, coverage_source.source_timeframe
+        ORDER BY pattern_count DESC, root_symbol ASC, contract_symbol ASC
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .fetch_all(pool)
+    .await
+}
+
+#[route("/entry-exit/build-dashboard", method = "GET", method = "POST")]
+async fn fetch_entry_exit_build_dashboard(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitBuildDashboardParams>,
+) -> impl Responder {
+    let run_id = params.run_id.trim();
+    if run_id.is_empty() {
+        return HttpResponse::BadRequest().body("run_id is required");
+    }
+
+    let has_summary_table =
+        match table_exists(pool.get_ref(), "entry_exit_template_build_summary_ui").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit build summary table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    let has_coverage_table =
+        match table_exists(pool.get_ref(), "entry_exit_template_build_coverage_rows_ui").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit build coverage table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+
+    let build_summary = if has_summary_table {
+        match fetch_entry_exit_template_build_summary_ui_strict(pool.get_ref(), run_id).await {
+            Ok(summary) => summary,
+            Err(error) => {
+                eprintln!("Entry/Exit build dashboard summary DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        None
+    };
+
+    let coverage = if has_coverage_table {
+        match fetch_entry_exit_template_build_coverage_rows_ui_strict(pool.get_ref(), run_id).await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("Entry/Exit build dashboard coverage DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    HttpResponse::Ok().json(EntryExitBuildDashboardResponse {
+        build_summary,
+        coverage,
+    })
+}
+
+#[route("/entry-exit/builds", method = "GET", method = "POST")]
+async fn fetch_entry_exit_builds(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitBuildListParams>,
+) -> impl Responder {
+    let limit = params.limit.unwrap_or(25).clamp(1, 100);
+    match table_exists(pool.get_ref(), "entry_exit_template_build_summary_ui").await {
+        Ok(true) => {}
+        Ok(false) => {
+            return HttpResponse::Ok().json(EntryExitBuildListResponse { builds: Vec::new() });
+        }
+        Err(error) => {
+            eprintln!("Entry/Exit build summary table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let builds =
+        match fetch_entry_exit_template_build_summaries_ui_strict(pool.get_ref(), limit).await {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("Entry/Exit build list DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+
+    HttpResponse::Ok().json(EntryExitBuildListResponse { builds })
+}
+
 #[route("/entry-exit/templates", method = "GET", method = "POST")]
 async fn fetch_entry_exit_templates(
     pool: web::Data<MySqlPool>,
@@ -7460,20 +9018,12 @@ async fn fetch_entry_exit_templates(
             return HttpResponse::InternalServerError().finish();
         }
     };
-    let has_results = match table_exists(pool.get_ref(), "entry_exit_template_results").await {
-        Ok(value) => value,
-        Err(error) => {
-            eprintln!(
-                "Entry/Exit template results table lookup failed: {:?}",
-                error
-            );
-            return HttpResponse::InternalServerError().finish();
-        }
-    };
-    if !has_runs || !has_templates || !has_results {
+    if !has_runs || !has_templates {
         return HttpResponse::Ok().json(EntryExitTemplateResponse {
             run: None,
+            build_summary: None,
             templates: Vec::new(),
+            coverage: Vec::new(),
         });
     }
 
@@ -7628,7 +9178,9 @@ async fn fetch_entry_exit_templates(
     let Some(run) = run else {
         return HttpResponse::Ok().json(EntryExitTemplateResponse {
             run: None,
+            build_summary: None,
             templates: Vec::new(),
+            coverage: Vec::new(),
         });
     };
 
@@ -7691,9 +9243,58 @@ async fn fetch_entry_exit_templates(
         }
     };
 
+    let has_coverage_table =
+        match table_exists(pool.get_ref(), "entry_exit_template_build_coverage_rows_ui").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit build coverage table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    let coverage = if has_coverage_table {
+        match fetch_entry_exit_template_build_coverage_rows_ui_strict(pool.get_ref(), &run.run_id)
+            .await
+        {
+            Ok(rows) => rows,
+            Err(error) if is_missing_table_error(&error) => Vec::new(),
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit stored build coverage rows DB error: {:?}",
+                    error
+                );
+                Vec::new()
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    let has_summary_table =
+        match table_exists(pool.get_ref(), "entry_exit_template_build_summary_ui").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit build summary table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    let build_summary = if has_summary_table {
+        match fetch_entry_exit_template_build_summary_ui_strict(pool.get_ref(), &run.run_id).await {
+            Ok(summary) => summary,
+            Err(error) if is_missing_table_error(&error) => None,
+            Err(error) => {
+                eprintln!("Entry/Exit build summary DB error: {:?}", error);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     HttpResponse::Ok().json(EntryExitTemplateResponse {
         run: Some(run),
+        build_summary,
         templates,
+        coverage,
     })
 }
 
@@ -7891,124 +9492,35 @@ async fn fetch_entry_exit_template_breakdown(
     })
 }
 
-struct EntryExitRouterOpenCycle {
-    current_date: NaiveDate,
-    equity_r: f64,
-    peak_r: f64,
-    daily_r: f64,
-    max_drawdown_r: f64,
-}
-
-impl EntryExitRouterOpenCycle {
-    fn new(date: NaiveDate) -> Self {
-        Self {
-            current_date: date,
-            equity_r: 0.0,
-            peak_r: 0.0,
-            daily_r: 0.0,
-            max_drawdown_r: 0.0,
-        }
-    }
-}
-
-fn close_entry_exit_router_prop_cycle(
-    stats: &mut EntryExitRouterPropStats,
-    cycle: &EntryExitRouterOpenCycle,
-    outcome: &str,
-) {
-    stats.cycles += 1;
-    stats.max_drawdown_r = stats.max_drawdown_r.max(cycle.max_drawdown_r);
-    match outcome {
-        "passed_profit_target" => stats.passed += 1,
-        "failed_daily_loss" => stats.daily_fails += 1,
-        "failed_drawdown" => stats.drawdown_fails += 1,
-        _ => stats.incomplete += 1,
-    }
-}
-
-async fn compute_entry_exit_router_prop_stats(
+async fn fetch_entry_exit_router_prop_stats(
     pool: &MySqlPool,
     router_run_id: &str,
 ) -> Result<EntryExitRouterPropStats, sqlx::Error> {
-    const PROFIT_TARGET_R: f64 = 30.0;
-    const MAX_DRAWDOWN_R: f64 = 20.0;
-    const DAILY_LOSS_R: f64 = 10.0;
-
-    let trades = sqlx::query_as::<_, EntryExitRouterReplayTrade>(
+    sqlx::query_as::<_, EntryExitRouterPropStats>(
         r#"
         SELECT
-            COALESCE(entry_date, d_confirm_date, d_date) AS event_date,
-            outcome,
-            COALESCE(result_r, 0) AS result_r
-        FROM entry_exit_template_family_router_results
-        WHERE router_run_id = ?
-        ORDER BY COALESCE(entry_date, d_confirm_date, d_date) ASC, id ASC
+            profit_target_r,
+            max_drawdown_r_limit,
+            daily_loss_r_limit,
+            sim_plays_used,
+            cycles,
+            passed,
+            daily_fails,
+            drawdown_fails,
+            incomplete,
+            pass_rate,
+            closed_pass_rate,
+            max_drawdown_r,
+            max_loss_streak
+        FROM entry_exit_playbook_sim_prop_summary
+        WHERE sim_run_id = ?
+        LIMIT 1
         "#,
     )
     .bind(router_run_id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut stats = EntryExitRouterPropStats::default();
-    let mut cycle: Option<EntryExitRouterOpenCycle> = None;
-    let mut current_loss_streak = 0_i64;
-
-    for trade in trades {
-        let date = trade.event_date.date();
-        let active_cycle = cycle.get_or_insert_with(|| EntryExitRouterOpenCycle::new(date));
-        if active_cycle.current_date != date {
-            active_cycle.current_date = date;
-            active_cycle.daily_r = 0.0;
-        }
-
-        active_cycle.equity_r += trade.result_r;
-        active_cycle.daily_r += trade.result_r;
-        active_cycle.peak_r = active_cycle.peak_r.max(active_cycle.equity_r);
-        active_cycle.max_drawdown_r = active_cycle
-            .max_drawdown_r
-            .max(active_cycle.peak_r - active_cycle.equity_r);
-
-        if trade.outcome == "pass" {
-            current_loss_streak = 0;
-        } else if trade.outcome == "fail" {
-            current_loss_streak += 1;
-            stats.max_loss_streak = stats.max_loss_streak.max(current_loss_streak);
-        }
-
-        let close_cycle_as = if active_cycle.daily_r <= -DAILY_LOSS_R {
-            Some("failed_daily_loss")
-        } else if active_cycle.max_drawdown_r >= MAX_DRAWDOWN_R {
-            Some("failed_drawdown")
-        } else if active_cycle.equity_r >= PROFIT_TARGET_R {
-            Some("passed_profit_target")
-        } else {
-            None
-        };
-
-        if let Some(outcome) = close_cycle_as {
-            if let Some(finished_cycle) = cycle.take() {
-                close_entry_exit_router_prop_cycle(&mut stats, &finished_cycle, outcome);
-            }
-        }
-    }
-
-    if let Some(finished_cycle) = cycle.take() {
-        close_entry_exit_router_prop_cycle(&mut stats, &finished_cycle, "open_incomplete");
-    }
-
-    let closed_cycles = stats.passed + stats.daily_fails + stats.drawdown_fails;
-    stats.pass_rate = if stats.cycles > 0 {
-        stats.passed as f64 / stats.cycles as f64 * 100.0
-    } else {
-        0.0
-    };
-    stats.closed_pass_rate = if closed_cycles > 0 {
-        stats.passed as f64 / closed_cycles as f64 * 100.0
-    } else {
-        0.0
-    };
-
-    Ok(stats)
+    .fetch_optional(pool)
+    .await
+    .map(|row| row.unwrap_or_default())
 }
 
 #[route("/entry-exit/router-runs", method = "GET", method = "POST")]
@@ -8029,17 +9541,30 @@ async fn fetch_entry_exit_router_runs(
             current_run: None,
             runs: Vec::new(),
             symbols: Vec::new(),
+            family_routes: Vec::new(),
+            manual_family_bans: Vec::new(),
+            manual_symbol_bans: Vec::new(),
         });
     }
 
-    let has_results =
-        match table_exists(pool.get_ref(), "entry_exit_template_family_router_results").await {
+    let has_prop_summary =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_prop_summary").await {
             Ok(value) => value,
             Err(error) => {
-                eprintln!("Entry/Exit router result table lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim prop summary table lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         };
+    let has_sim_runs = match table_exists(pool.get_ref(), "entry_exit_playbook_sim_runs").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Entry/Exit sim run table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
     let has_symbols = match table_exists(
         pool.get_ref(),
         "entry_exit_template_family_router_symbol_choices",
@@ -8052,6 +9577,14 @@ async fn fetch_entry_exit_router_runs(
             return HttpResponse::InternalServerError().finish();
         }
     };
+    let has_choices =
+        match table_exists(pool.get_ref(), "entry_exit_template_family_router_choices").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit router choice table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
 
     let requested_train_run_id = params
         .train_run_id
@@ -8059,10 +9592,394 @@ async fn fetch_entry_exit_router_runs(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     let limit = params.limit.unwrap_or(8).clamp(1, 12);
-    let run_columns = r#"
+    let router_one_trade_per_minute_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "one_trade_per_minute",
+    )
+    .await
+    {
+        Ok(true) => "CAST(one_trade_per_minute AS SIGNED)",
+        Ok(false) => "0",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit router one-trade-minute column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let router_trade_cooldown_minutes_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "trade_cooldown_minutes",
+    )
+    .await
+    {
+        Ok(true) => "trade_cooldown_minutes",
+        Ok(false) => "0",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit router cooldown column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let router_daily_loss_lockout_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "daily_loss_lockout",
+    )
+    .await
+    {
+        Ok(true) => "CAST(daily_loss_lockout AS SIGNED)",
+        Ok(false) => "0",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit router daily lockout column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let router_near_pass_protection_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "near_pass_protection",
+    )
+    .await
+    {
+        Ok(true) => "CAST(near_pass_protection AS SIGNED)",
+        Ok(false) => "0",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit router near-pass protection column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let router_near_pass_within_r_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "near_pass_within_r",
+    )
+    .await
+    {
+        Ok(true) => "near_pass_within_r",
+        Ok(false) => "0",
+        Err(error) => {
+            eprintln!("Entry/Exit router near-pass within column lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let router_near_pass_daily_loss_r_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "near_pass_daily_loss_r",
+    )
+    .await
+    {
+        Ok(true) => "near_pass_daily_loss_r",
+        Ok(false) => "0",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit router near-pass daily loss column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let router_loss_cluster_day_lockout_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "loss_cluster_day_lockout",
+    )
+    .await
+    {
+        Ok(true) => "CAST(loss_cluster_day_lockout AS SIGNED)",
+        Ok(false) => "0",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit router loss-cluster lockout column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let router_loss_cluster_loss_count_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "loss_cluster_loss_count",
+    )
+    .await
+    {
+        Ok(true) => "loss_cluster_loss_count",
+        Ok(false) => "0",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit router loss-cluster count column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let router_loss_cluster_window_minutes_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "loss_cluster_window_minutes",
+    )
+    .await
+    {
+        Ok(true) => "loss_cluster_window_minutes",
+        Ok(false) => "0",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit router loss-cluster window column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let router_playbook_description_column = match table_column_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_runs",
+        "playbook_description",
+    )
+    .await
+    {
+        Ok(true) => "playbook_description",
+        Ok(false) => "NULL",
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit router playbook description column lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let sim_one_trade_per_minute_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "one_trade_per_minute",
+        )
+        .await
+        {
+            Ok(true) => "CAST(one_trade_per_minute AS SIGNED)",
+            Ok(false) => "0",
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim one-trade-minute column lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "0"
+    };
+    let sim_trade_cooldown_minutes_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "trade_cooldown_minutes",
+        )
+        .await
+        {
+            Ok(true) => "trade_cooldown_minutes",
+            Ok(false) => "0",
+            Err(error) => {
+                eprintln!("Entry/Exit sim cooldown column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "0"
+    };
+    let sim_daily_loss_lockout_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "daily_loss_lockout",
+        )
+        .await
+        {
+            Ok(true) => "CAST(daily_loss_lockout AS SIGNED)",
+            Ok(false) => "0",
+            Err(error) => {
+                eprintln!("Entry/Exit sim daily lockout column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "0"
+    };
+    let sim_near_pass_protection_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "near_pass_protection",
+        )
+        .await
+        {
+            Ok(true) => "CAST(near_pass_protection AS SIGNED)",
+            Ok(false) => "0",
+            Err(error) => {
+                eprintln!("Entry/Exit sim near-pass protection column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "0"
+    };
+    let sim_near_pass_within_r_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "near_pass_within_r",
+        )
+        .await
+        {
+            Ok(true) => "near_pass_within_r",
+            Ok(false) => "0",
+            Err(error) => {
+                eprintln!("Entry/Exit sim near-pass within column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "0"
+    };
+    let sim_near_pass_daily_loss_r_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "near_pass_daily_loss_r",
+        )
+        .await
+        {
+            Ok(true) => "near_pass_daily_loss_r",
+            Ok(false) => "0",
+            Err(error) => {
+                eprintln!("Entry/Exit sim near-pass daily loss column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "0"
+    };
+    let sim_loss_cluster_day_lockout_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "loss_cluster_day_lockout",
+        )
+        .await
+        {
+            Ok(true) => "CAST(loss_cluster_day_lockout AS SIGNED)",
+            Ok(false) => "0",
+            Err(error) => {
+                eprintln!("Entry/Exit sim loss-cluster lockout column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "0"
+    };
+    let sim_loss_cluster_loss_count_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "loss_cluster_loss_count",
+        )
+        .await
+        {
+            Ok(true) => "loss_cluster_loss_count",
+            Ok(false) => "0",
+            Err(error) => {
+                eprintln!("Entry/Exit sim loss-cluster count column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "0"
+    };
+    let sim_loss_cluster_window_minutes_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "loss_cluster_window_minutes",
+        )
+        .await
+        {
+            Ok(true) => "loss_cluster_window_minutes",
+            Ok(false) => "0",
+            Err(error) => {
+                eprintln!("Entry/Exit sim loss-cluster window column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "0"
+    };
+    let sim_playbook_description_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "playbook_description",
+        )
+        .await
+        {
+            Ok(true) => "playbook_description",
+            Ok(false) => "NULL",
+            Err(error) => {
+                eprintln!("Entry/Exit sim playbook description column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "NULL"
+    };
+    let sim_trade_win_rate_column = if has_sim_runs {
+        match table_column_exists(
+            pool.get_ref(),
+            "entry_exit_playbook_sim_runs",
+            "trade_win_rate",
+        )
+        .await
+        {
+            Ok(true) => "trade_win_rate",
+            Ok(false) => "NULL",
+            Err(error) => {
+                eprintln!("Entry/Exit sim trade win rate column lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        "NULL"
+    };
+    let manual_family_bans_applied_column = if has_choices {
+        r#"
+        (
+            SELECT CAST(COUNT(*) AS SIGNED)
+            FROM entry_exit_template_family_router_choices manual_choices
+            WHERE manual_choices.router_run_id = entry_exit_template_family_router_runs.router_run_id
+              AND manual_choices.route_status = 'SKIP'
+              AND LOWER(COALESCE(manual_choices.status_reason, '')) LIKE '%manual%'
+        )
+        "#
+    } else {
+        "0"
+    };
+    let run_columns = format!(
+        r#"
         router_run_id,
+        CAST(NULL AS CHAR) AS playbook_id,
         train_run_id,
         source_scope,
+        NULLIF(source_timeframe, '') AS source_timeframe,
         test_year,
         min_train_tests,
         sister_window_minutes,
@@ -8072,10 +9989,24 @@ async fn fetch_entry_exit_router_runs(
         no_route_patterns,
         skipped_non_trade_patterns,
         skipped_symbol_patterns,
+        skipped_overlap_patterns,
         trade_choices,
         watchlist_choices,
         skip_choices,
+        {manual_family_bans_applied_column} AS manual_family_bans_applied,
         CAST(symbol_filter_enabled AS SIGNED) AS symbol_filter_enabled,
+        CAST(one_trade_at_a_time AS SIGNED) AS one_trade_at_a_time,
+        CAST(one_trade_per_root_symbol AS SIGNED) AS one_trade_per_root_symbol,
+        {router_one_trade_per_minute_column} AS one_trade_per_minute,
+        {router_trade_cooldown_minutes_column} AS trade_cooldown_minutes,
+        {router_daily_loss_lockout_column} AS daily_loss_lockout,
+        {router_near_pass_protection_column} AS near_pass_protection,
+        {router_near_pass_within_r_column} AS near_pass_within_r,
+        {router_near_pass_daily_loss_r_column} AS near_pass_daily_loss_r,
+        {router_loss_cluster_day_lockout_column} AS loss_cluster_day_lockout,
+        {router_loss_cluster_loss_count_column} AS loss_cluster_loss_count,
+        {router_loss_cluster_window_minutes_column} AS loss_cluster_window_minutes,
+        {router_playbook_description_column} AS playbook_description,
         symbol_trade_roots,
         symbol_skip_roots,
         symbol_min_tests,
@@ -8091,21 +10022,23 @@ async fn fetch_entry_exit_router_runs(
         win_count,
         loss_count,
         no_entry_count,
+        CAST(NULL AS DOUBLE) AS trade_win_rate,
         avg_r,
         sum_r,
         best_r,
         worst_r,
         elapsed_ms,
         created_at
-    "#;
+    "#
+    );
 
     let current_sql = if requested_train_run_id.is_some() {
         format!(
-            "SELECT {run_columns} FROM entry_exit_template_family_router_runs WHERE train_run_id = ? ORDER BY test_year DESC, created_at DESC LIMIT 1"
+            "SELECT {run_columns} FROM entry_exit_template_family_router_runs WHERE train_run_id = ? AND test_year = 0 ORDER BY created_at DESC LIMIT 1"
         )
     } else {
         format!(
-            "SELECT {run_columns} FROM entry_exit_template_family_router_runs ORDER BY test_year DESC, created_at DESC LIMIT 1"
+            "SELECT {run_columns} FROM entry_exit_template_family_router_runs WHERE test_year = 0 ORDER BY created_at DESC LIMIT 1"
         )
     };
 
@@ -8134,35 +10067,127 @@ async fn fetch_entry_exit_router_runs(
             current_run: None,
             runs: Vec::new(),
             symbols: Vec::new(),
+            family_routes: Vec::new(),
+            manual_family_bans: Vec::new(),
+            manual_symbol_bans: Vec::new(),
         });
     };
 
-    let runs_sql = format!(
-        "SELECT {run_columns} FROM entry_exit_template_family_router_runs WHERE train_run_id = ? ORDER BY test_year DESC, created_at DESC LIMIT ?"
+    let playbook_runs_sql = format!(
+        "SELECT {run_columns} FROM entry_exit_template_family_router_runs WHERE train_run_id = ? AND test_year = 0 ORDER BY created_at DESC LIMIT 24"
     );
-    let runs = match sqlx::query_as::<_, EntryExitRouterRunDb>(&runs_sql)
+    let mut runs = match sqlx::query_as::<_, EntryExitRouterRunDb>(&playbook_runs_sql)
         .bind(&current_run.train_run_id)
-        .bind(limit)
         .fetch_all(pool.get_ref())
         .await
     {
-        Ok(rows) => rows,
-        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Ok(rows) if !rows.is_empty() => rows,
+        Ok(_) => vec![current_run.clone()],
+        Err(error) if is_missing_table_error(&error) => vec![current_run.clone()],
         Err(error) => {
-            eprintln!("Entry/Exit router runs DB error: {:?}", error);
+            eprintln!("Entry/Exit playbook run list DB error: {:?}", error);
             return HttpResponse::InternalServerError().finish();
         }
     };
 
+    if has_sim_runs {
+        let sim_run_columns = format!(
+            r#"
+            sim_run_id AS router_run_id,
+            playbook_id,
+            build_id AS train_run_id,
+            source_scope,
+            NULLIF(source_timeframe, '') AS source_timeframe,
+            test_year,
+            min_train_tests,
+            sister_window_minutes,
+            families_selected,
+            patterns_scanned,
+            routed_patterns,
+            no_route_patterns,
+            skipped_non_trade_patterns,
+            skipped_symbol_patterns,
+            skipped_overlap_patterns,
+            trade_choices,
+            watchlist_choices,
+            skip_choices,
+            manual_family_bans_applied,
+            CAST(symbol_filter_enabled AS SIGNED) AS symbol_filter_enabled,
+            CAST(one_trade_at_a_time AS SIGNED) AS one_trade_at_a_time,
+            CAST(one_trade_per_root_symbol AS SIGNED) AS one_trade_per_root_symbol,
+            {sim_one_trade_per_minute_column} AS one_trade_per_minute,
+            {sim_trade_cooldown_minutes_column} AS trade_cooldown_minutes,
+            {sim_daily_loss_lockout_column} AS daily_loss_lockout,
+            {sim_near_pass_protection_column} AS near_pass_protection,
+            {sim_near_pass_within_r_column} AS near_pass_within_r,
+            {sim_near_pass_daily_loss_r_column} AS near_pass_daily_loss_r,
+            {sim_loss_cluster_day_lockout_column} AS loss_cluster_day_lockout,
+            {sim_loss_cluster_loss_count_column} AS loss_cluster_loss_count,
+            {sim_loss_cluster_window_minutes_column} AS loss_cluster_window_minutes,
+            {sim_playbook_description_column} AS playbook_description,
+            symbol_trade_roots,
+            symbol_skip_roots,
+            symbol_min_tests,
+            symbol_min_win_rate,
+            symbol_min_avg_r,
+            CAST(prop_filter_enabled AS SIGNED) AS prop_filter_enabled,
+            trade_min_tests,
+            trade_min_win_rate,
+            trade_min_avg_r,
+            watchlist_min_tests,
+            watchlist_min_win_rate,
+            watchlist_min_avg_r,
+            win_count,
+            loss_count,
+            no_entry_count,
+            {sim_trade_win_rate_column} AS trade_win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            elapsed_ms,
+            created_at
+        "#
+        );
+        let playbook_ids = runs
+            .iter()
+            .filter(|run| run.test_year == 0)
+            .map(|run| run.router_run_id.clone())
+            .collect::<Vec<_>>();
+        let playbook_id_placeholders = std::iter::repeat("?")
+            .take(playbook_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sim_runs_sql = format!(
+            "SELECT {sim_run_columns} FROM entry_exit_playbook_sim_runs WHERE build_id = ? AND playbook_id IN ({playbook_id_placeholders}) ORDER BY playbook_id DESC, test_year DESC, created_at DESC LIMIT ?"
+        );
+        if !playbook_ids.is_empty() {
+            let mut query = sqlx::query_as::<_, EntryExitRouterRunDb>(&sim_runs_sql)
+                .bind(&current_run.train_run_id);
+            for playbook_id in &playbook_ids {
+                query = query.bind(playbook_id);
+            }
+            let sim_runs = match query.bind(limit).fetch_all(pool.get_ref()).await {
+                Ok(rows) => rows,
+                Err(error) if is_missing_table_error(&error) => Vec::new(),
+                Err(error) => {
+                    eprintln!("Entry/Exit sim runs DB error: {:?}", error);
+                    return HttpResponse::InternalServerError().finish();
+                }
+            };
+            runs.extend(sim_runs);
+        }
+    }
+
     let current_run_id = current_run.router_run_id.clone();
     let mut snapshots = Vec::with_capacity(runs.len());
     for run in runs {
-        let prop = if has_results {
-            match compute_entry_exit_router_prop_stats(pool.get_ref(), &run.router_run_id).await {
+        let prop = if has_prop_summary {
+            match fetch_entry_exit_router_prop_stats(pool.get_ref(), &run.router_run_id).await {
                 Ok(stats) => stats,
                 Err(error) if is_missing_table_error(&error) => EntryExitRouterPropStats::default(),
                 Err(error) => {
-                    eprintln!("Entry/Exit router prop replay DB error: {:?}", error);
+                    eprintln!("Entry/Exit sim prop summary DB error: {:?}", error);
                     return HttpResponse::InternalServerError().finish();
                 }
             }
@@ -8177,8 +10202,16 @@ async fn fetch_entry_exit_router_runs(
         .find(|run| run.run.router_run_id == current_run_id)
         .cloned();
 
-    let symbols = if has_symbols {
-        match sqlx::query_as::<_, EntryExitRouterSymbolChoice>(
+    let run_ids: Vec<String> = snapshots
+        .iter()
+        .map(|snapshot| snapshot.run.router_run_id.clone())
+        .collect();
+    let symbols = if has_symbols && !run_ids.is_empty() {
+        let run_id_placeholders = std::iter::repeat("?")
+            .take(run_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let symbol_choices_sql = format!(
             r#"
             SELECT
                 router_run_id,
@@ -8196,17 +10229,21 @@ async fn fetch_entry_exit_router_runs(
                 train_sum_r,
                 created_at
             FROM entry_exit_template_family_router_symbol_choices
-            WHERE router_run_id = ?
+            WHERE router_run_id IN ({run_id_placeholders})
             ORDER BY
+                router_run_id DESC,
                 CASE route_status WHEN 'SKIP' THEN 0 WHEN 'WATCHLIST' THEN 1 ELSE 2 END,
                 train_avg_r ASC,
                 train_eval_count DESC
-            LIMIT 100
+            LIMIT 1200
             "#,
-        )
-        .bind(&current_run_id)
-        .fetch_all(pool.get_ref())
-        .await
+            run_id_placeholders = run_id_placeholders,
+        );
+        let mut query = sqlx::query_as::<_, EntryExitRouterSymbolChoice>(&symbol_choices_sql);
+        for run_id in &run_ids {
+            query = query.bind(run_id);
+        }
+        match query.fetch_all(pool.get_ref()).await
         {
             Ok(rows) => rows,
             Err(error) if is_missing_table_error(&error) => Vec::new(),
@@ -8219,10 +10256,884 @@ async fn fetch_entry_exit_router_runs(
         Vec::new()
     };
 
+    let family_routes = if has_choices && !run_ids.is_empty() {
+        let run_id_placeholders = std::iter::repeat("?")
+            .take(run_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let family_routes_sql = format!(
+            r#"
+            SELECT
+                c.router_run_id,
+                c.train_run_id,
+                c.family_key,
+                c.template_uid,
+                c.template_label,
+                c.template_name,
+                c.template_rank,
+                c.score,
+                c.train_eval_count,
+                c.train_pass_count,
+                c.train_fail_count,
+                c.train_no_entry_count,
+                c.train_avg_r,
+                c.train_win_rate,
+                c.train_fail_rate,
+                c.route_status,
+                c.status_reason,
+                c.harmonic_type,
+                c.market,
+                c.family_bin,
+                c.family_size_bucket,
+                c.family_time_bin,
+                c.family_x_strictness,
+                COALESCE(r.test_eval_count, 0) AS test_eval_count,
+                COALESCE(r.test_pass_count, 0) AS test_pass_count,
+                COALESCE(r.test_fail_count, 0) AS test_fail_count,
+                COALESCE(r.test_no_entry_count, 0) AS test_no_entry_count,
+                COALESCE(r.test_avg_r, 0) AS test_avg_r,
+                COALESCE(r.test_sum_r, 0) AS test_sum_r,
+                COALESCE(r.test_best_r, 0) AS test_best_r,
+                COALESCE(r.test_worst_r, 0) AS test_worst_r,
+                c.created_at
+            FROM entry_exit_template_family_router_choices c
+            LEFT JOIN (
+                SELECT
+                    router_run_id,
+                    family_key,
+                    template_uid,
+                    CAST(COUNT(*) AS SIGNED) AS test_eval_count,
+                    CAST(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) AS SIGNED) AS test_pass_count,
+                    CAST(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END) AS SIGNED) AS test_fail_count,
+                    CAST(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END) AS SIGNED) AS test_no_entry_count,
+                    COALESCE(AVG(COALESCE(result_r, 0)), 0) AS test_avg_r,
+                    COALESCE(SUM(COALESCE(result_r, 0)), 0) AS test_sum_r,
+                    COALESCE(MAX(COALESCE(result_r, 0)), 0) AS test_best_r,
+                    COALESCE(MIN(COALESCE(result_r, 0)), 0) AS test_worst_r
+                FROM entry_exit_template_family_router_results
+                WHERE router_run_id IN ({run_id_placeholders})
+                GROUP BY router_run_id, family_key, template_uid
+            ) r
+              ON r.router_run_id = c.router_run_id
+             AND r.family_key = c.family_key
+             AND r.template_uid = c.template_uid
+            WHERE c.router_run_id IN ({run_id_placeholders})
+            ORDER BY
+                c.created_at DESC,
+                c.router_run_id DESC,
+                CASE c.route_status WHEN 'TRADE' THEN 0 WHEN 'WATCHLIST' THEN 1 ELSE 2 END,
+                COALESCE(r.test_avg_r, c.train_avg_r) DESC,
+                c.score DESC,
+                c.train_eval_count DESC
+            LIMIT 6000
+            "#,
+            run_id_placeholders = run_id_placeholders,
+        );
+        let mut query = sqlx::query_as::<_, EntryExitRouterFamilyChoice>(&family_routes_sql);
+        for run_id in &run_ids {
+            query = query.bind(run_id);
+        }
+        for run_id in &run_ids {
+            query = query.bind(run_id);
+        }
+
+        match query.fetch_all(pool.get_ref()).await {
+            Ok(rows) => rows,
+            Err(error) if is_missing_table_error(&error) => Vec::new(),
+            Err(error) => {
+                eprintln!("Entry/Exit router family choices DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    let manual_family_bans = match table_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_manual_family_skips",
+    )
+    .await
+    {
+        Ok(true) => match sqlx::query_as::<_, EntryExitManualFamilyBan>(
+            r#"
+                SELECT family_key, reason, created_at, updated_at
+                FROM entry_exit_template_family_router_manual_family_skips
+                ORDER BY updated_at DESC, created_at DESC, family_key ASC
+                "#,
+        )
+        .fetch_all(pool.get_ref())
+        .await
+        {
+            Ok(rows) => rows,
+            Err(error) if is_missing_table_error(&error) => Vec::new(),
+            Err(error) => {
+                eprintln!("Entry/Exit manual family ban DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        },
+        Ok(false) => Vec::new(),
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit manual family ban table lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let manual_symbol_bans = match table_exists(
+        pool.get_ref(),
+        "entry_exit_template_family_router_manual_symbol_skips",
+    )
+    .await
+    {
+        Ok(true) => match sqlx::query_as::<_, EntryExitManualSymbolBan>(
+            r#"
+                SELECT root_symbol, reason, created_at, updated_at
+                FROM entry_exit_template_family_router_manual_symbol_skips
+                ORDER BY updated_at DESC, created_at DESC, root_symbol ASC
+                "#,
+        )
+        .fetch_all(pool.get_ref())
+        .await
+        {
+            Ok(rows) => rows,
+            Err(error) if is_missing_table_error(&error) => Vec::new(),
+            Err(error) => {
+                eprintln!("Entry/Exit manual symbol ban DB error: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        },
+        Ok(false) => Vec::new(),
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit manual symbol ban table lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
     HttpResponse::Ok().json(EntryExitRouterRunsResponse {
         current_run: current_snapshot,
         runs: snapshots,
         symbols,
+        family_routes,
+        manual_family_bans,
+        manual_symbol_bans,
+    })
+}
+
+#[route("/entry-exit/sim-equity-curve", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_equity_curve(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimEquityCurveParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_points =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_equity_points").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit sim equity table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_points {
+        return HttpResponse::Ok().json(EntryExitSimEquityCurveResponse {
+            sim_run_id: sim_run_id.to_string(),
+            points: Vec::new(),
+        });
+    }
+
+    let point_limit = params.point_limit.unwrap_or(1200).clamp(100, 5000) as usize;
+    let rows = match sqlx::query_as::<_, EntryExitSimEquityPoint>(
+        r#"
+        SELECT
+            point_index,
+            event_date,
+            outcome,
+            result_r,
+            cumulative_r,
+            drawdown_r,
+            daily_r
+        FROM entry_exit_playbook_sim_equity_points
+        WHERE sim_run_id = ?
+        ORDER BY point_index ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim equity DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let points = if rows.len() <= point_limit {
+        rows
+    } else {
+        let last_index = rows.len().saturating_sub(1);
+        let step = last_index as f64 / point_limit.saturating_sub(1).max(1) as f64;
+        let mut sampled = Vec::with_capacity(point_limit);
+        let mut last_added_index = None;
+        for sample_index in 0..point_limit {
+            let source_index = (sample_index as f64 * step).round() as usize;
+            let source_index = source_index.min(last_index);
+            if last_added_index == Some(source_index) {
+                continue;
+            }
+            sampled.push(rows[source_index].clone());
+            last_added_index = Some(source_index);
+        }
+        sampled
+    };
+
+    HttpResponse::Ok().json(EntryExitSimEquityCurveResponse {
+        sim_run_id: sim_run_id.to_string(),
+        points,
+    })
+}
+
+#[route("/entry-exit/sim-daily-r", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_daily_r(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimDailyRParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_daily_r = match table_exists(pool.get_ref(), "entry_exit_playbook_sim_daily_r").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Entry/Exit sim daily R table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_daily_r {
+        return HttpResponse::Ok().json(EntryExitSimDailyRResponse {
+            sim_run_id: sim_run_id.to_string(),
+            days: Vec::new(),
+        });
+    }
+
+    let days = match sqlx::query_as::<_, EntryExitSimDailyRRow>(
+        r#"
+        SELECT
+            trade_date,
+            total_r,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            best_trade_r,
+            worst_trade_r,
+            worst_intraday_r,
+            CAST(hit_daily_loss AS SIGNED) AS hit_daily_loss
+        FROM entry_exit_playbook_sim_daily_r
+        WHERE sim_run_id = ?
+        ORDER BY trade_date ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim daily R DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimDailyRResponse {
+        sim_run_id: sim_run_id.to_string(),
+        days,
+    })
+}
+
+#[route("/entry-exit/sim-daily-trades", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_daily_trades(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimDailyTradesParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let trade_date = match NaiveDate::parse_from_str(params.trade_date.trim(), "%Y-%m-%d") {
+        Ok(value) => value,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid trade_date"),
+    };
+
+    let has_results =
+        match table_exists(pool.get_ref(), "entry_exit_template_family_router_results").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim daily trade table lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_results {
+        return HttpResponse::Ok().json(EntryExitSimDailyTradesResponse {
+            sim_run_id: sim_run_id.to_string(),
+            trade_date,
+            trades: Vec::new(),
+        });
+    }
+
+    let trades = match sqlx::query_as::<_, EntryExitSimDailyTradeRow>(
+        r#"
+        SELECT
+            id,
+            setup_id,
+            pattern_id,
+            family_key,
+            template_uid,
+            template_label,
+            symbol,
+            market,
+            outcome,
+            exit_reason,
+            COALESCE(result_r, 0) AS result_r,
+            entry_date,
+            exit_date,
+            d_confirm_date,
+            trade_direction
+        FROM entry_exit_template_family_router_results
+        WHERE router_run_id = ?
+          AND DATE(COALESCE(entry_date, d_confirm_date, d_date)) = ?
+        ORDER BY COALESCE(entry_date, d_confirm_date, d_date) ASC, id ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .bind(trade_date)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim daily trades DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimDailyTradesResponse {
+        sim_run_id: sim_run_id.to_string(),
+        trade_date,
+        trades,
+    })
+}
+
+#[route("/entry-exit/sim-hourly", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_hourly(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimHourlyParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_hourly = match table_exists(pool.get_ref(), "entry_exit_playbook_sim_hourly").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Entry/Exit sim hourly table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_hourly {
+        return HttpResponse::Ok().json(EntryExitSimHourlyResponse {
+            sim_run_id: sim_run_id.to_string(),
+            hours: Vec::new(),
+        });
+    }
+
+    let hours = match sqlx::query_as::<_, EntryExitSimHourlyRow>(
+        r#"
+        SELECT
+            entry_hour,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            daily_loss_day_trades,
+            daily_loss_day_count
+        FROM entry_exit_playbook_sim_hourly
+        WHERE sim_run_id = ?
+        ORDER BY entry_hour ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim hourly DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimHourlyResponse {
+        sim_run_id: sim_run_id.to_string(),
+        hours,
+    })
+}
+
+#[route("/entry-exit/sim-trade-cadence", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_trade_cadence(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimTradeCadenceParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_cadence =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_trade_cadence").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim trade cadence table lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_cadence {
+        return HttpResponse::Ok().json(EntryExitSimTradeCadenceResponse {
+            sim_run_id: sim_run_id.to_string(),
+            cadence: None,
+        });
+    }
+
+    let cadence = match sqlx::query_as::<_, EntryExitSimTradeCadenceRow>(
+        r#"
+        SELECT
+            first_trade_at,
+            last_trade_at,
+            trades,
+            trade_days,
+            gap_count,
+            avg_gap_minutes,
+            median_gap_minutes,
+            min_gap_minutes,
+            max_gap_minutes,
+            avg_trades_per_day,
+            max_trades_per_day,
+            max_trades_per_hour,
+            max_trades_5m_window,
+            max_trades_15m_window,
+            gap_0_1m,
+            gap_1_5m,
+            gap_5_15m,
+            gap_15_30m,
+            gap_30_60m,
+            gap_over_60m
+        FROM entry_exit_playbook_sim_trade_cadence
+        WHERE sim_run_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(row) => row,
+        Err(error) if is_missing_table_error(&error) => None,
+        Err(error) => {
+            eprintln!("Entry/Exit sim trade cadence DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimTradeCadenceResponse {
+        sim_run_id: sim_run_id.to_string(),
+        cadence,
+    })
+}
+
+#[route("/entry-exit/sim-symbol-contribution", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_symbol_contribution(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimContributionParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_rows = match table_exists(
+        pool.get_ref(),
+        "entry_exit_playbook_sim_symbol_contribution",
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit sim symbol contribution table lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_rows {
+        return HttpResponse::Ok().json(EntryExitSimSymbolContributionResponse {
+            sim_run_id: sim_run_id.to_string(),
+            symbols: Vec::new(),
+        });
+    }
+
+    let limit = params.limit.unwrap_or(80).clamp(1, 500);
+    let symbols = match sqlx::query_as::<_, EntryExitSimSymbolContributionRow>(
+        r#"
+        SELECT
+            root_symbol,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            daily_loss_day_trades,
+            daily_loss_day_count,
+            family_count,
+            template_count,
+            contract_count
+        FROM entry_exit_playbook_sim_symbol_contribution
+        WHERE sim_run_id = ?
+        ORDER BY sum_r DESC, trades DESC, root_symbol ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(sim_run_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim symbol contribution DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimSymbolContributionResponse {
+        sim_run_id: sim_run_id.to_string(),
+        symbols,
+    })
+}
+
+#[route("/entry-exit/sim-family-contribution", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_family_contribution(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimContributionParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_rows = match table_exists(
+        pool.get_ref(),
+        "entry_exit_playbook_sim_family_contribution",
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit sim family contribution table lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_rows {
+        return HttpResponse::Ok().json(EntryExitSimFamilyContributionResponse {
+            sim_run_id: sim_run_id.to_string(),
+            families: Vec::new(),
+        });
+    }
+
+    let limit = params.limit.unwrap_or(80).clamp(1, 500);
+    let families = match sqlx::query_as::<_, EntryExitSimFamilyContributionRow>(
+        r#"
+        SELECT
+            family_key,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            daily_loss_day_trades,
+            daily_loss_day_count,
+            symbol_count,
+            template_count,
+            contract_count
+        FROM entry_exit_playbook_sim_family_contribution
+        WHERE sim_run_id = ?
+        ORDER BY sum_r DESC, trades DESC, family_key ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(sim_run_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim family contribution DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimFamilyContributionResponse {
+        sim_run_id: sim_run_id.to_string(),
+        families,
+    })
+}
+
+#[route("/entry-exit/sim-streaks", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_streaks(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimStreaksParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_streaks = match table_exists(pool.get_ref(), "entry_exit_playbook_sim_streaks").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Entry/Exit sim streak table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_streaks {
+        return HttpResponse::Ok().json(EntryExitSimStreaksResponse {
+            sim_run_id: sim_run_id.to_string(),
+            streaks: Vec::new(),
+        });
+    }
+
+    let streaks = match sqlx::query_as::<_, EntryExitSimStreakRow>(
+        r#"
+        SELECT
+            streak_number,
+            streak_type,
+            start_index,
+            end_index,
+            start_date,
+            end_date,
+            streak_length,
+            sum_r
+        FROM entry_exit_playbook_sim_streaks
+        WHERE sim_run_id = ?
+        ORDER BY streak_number ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim streak DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimStreaksResponse {
+        sim_run_id: sim_run_id.to_string(),
+        streaks,
+    })
+}
+
+#[route("/entry-exit/sim-loss-clustering", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_loss_clustering(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimLossClusteringParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_summary =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_loss_summary").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit sim loss summary table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    let has_buckets =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_loss_gap_buckets").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit sim loss gap table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    let has_windows =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_loss_windows").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("Entry/Exit sim loss window table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+
+    if !has_summary || !has_buckets || !has_windows {
+        return HttpResponse::Ok().json(EntryExitSimLossClusteringResponse {
+            sim_run_id: sim_run_id.to_string(),
+            summary: None,
+            buckets: Vec::new(),
+            windows: Vec::new(),
+        });
+    }
+
+    let summary = match sqlx::query_as::<_, EntryExitSimLossSummaryRow>(
+        r#"
+        SELECT
+            losses,
+            loss_gap_count,
+            avg_loss_gap_minutes,
+            median_loss_gap_minutes,
+            min_loss_gap_minutes,
+            max_loss_gap_minutes,
+            clustered_60m_loss_pairs,
+            same_day_loss_pairs,
+            clustered_60m_rate,
+            loss_days,
+            loss_days_5_plus,
+            worst_loss_day,
+            worst_loss_day_losses,
+            worst_loss_day_r,
+            worst_loss_hour_date,
+            worst_loss_hour,
+            worst_loss_hour_losses,
+            worst_loss_hour_r,
+            max_loss_streak
+        FROM entry_exit_playbook_sim_loss_summary
+        WHERE sim_run_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(row) => row,
+        Err(error) if is_missing_table_error(&error) => None,
+        Err(error) => {
+            eprintln!("Entry/Exit sim loss summary DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let buckets = match sqlx::query_as::<_, EntryExitSimLossGapBucketRow>(
+        r#"
+        SELECT
+            bucket_key,
+            bucket_label,
+            sort_order,
+            gap_count,
+            gap_percent
+        FROM entry_exit_playbook_sim_loss_gap_buckets
+        WHERE sim_run_id = ?
+        ORDER BY sort_order ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim loss gap DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let window_limit = params.window_limit.unwrap_or(40).clamp(1, 200);
+    let windows = match sqlx::query_as::<_, EntryExitSimLossWindowRow>(
+        r#"
+        SELECT
+            trade_date,
+            entry_hour,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            total_r,
+            loss_rate,
+            top_root_symbol,
+            top_family_key,
+            top_template_uid
+        FROM entry_exit_playbook_sim_loss_windows
+        WHERE sim_run_id = ?
+        ORDER BY losses DESC, total_r ASC, trade_date ASC, entry_hour ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(sim_run_id)
+    .bind(window_limit)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim loss window DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimLossClusteringResponse {
+        sim_run_id: sim_run_id.to_string(),
+        summary,
+        buckets,
+        windows,
     })
 }
 

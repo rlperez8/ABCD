@@ -106,4 +106,10 @@ pub struct Pattern {
     pub crab_accuracy: Option<Decimal>,
     pub shark_accuracy: Option<Decimal>,
     pub time_accuracy: Option<f64>,
+    pub event_id: Option<String>,
+    pub event_rank: Option<i64>,
+    pub is_event_primary: Option<bool>,
+    pub event_sister_count: Option<i64>,
+    pub event_similarity_score: Option<f64>,
+    pub twin_pattern_ids: Option<String>,
 }

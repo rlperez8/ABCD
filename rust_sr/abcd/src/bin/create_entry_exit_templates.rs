@@ -1,21 +1,27 @@
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use std::{collections::HashMap, env};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+};
 
 use chrono::{Datelike, NaiveDateTime, Timelike};
 use futures_util::TryStreamExt;
 use serde::Serialize;
 use sqlx::{MySql, MySqlPool, QueryBuilder, Row};
 
-const RESULT_BATCH_SIZE: usize = 1_000;
+const RESULT_BATCH_SIZE: usize = 2_000;
 
 #[derive(Debug)]
 struct Args {
     source_scope: String,
+    source_timeframe: Option<String>,
     period_year: i64,
     start_year: i64,
     end_year: i64,
     limit: i64,
-    sister_window_minutes: i64,
+    event_result_policy: String,
+    result_storage: String,
+    skip_condition_stats: bool,
     family_key: Option<String>,
     symbol: Option<String>,
 }
@@ -25,24 +31,48 @@ struct PatternSetup {
     setup_id: String,
     pattern_id: Option<String>,
     pattern_group_id: String,
+    event_id: Option<String>,
+    event_rank: Option<i64>,
+    event_sister_count: Option<i64>,
     symbol: String,
     root_symbol: Option<String>,
+    contract_symbol: Option<String>,
     source_table: Option<String>,
     source_timeframe: Option<String>,
     market: String,
     pattern_family_key: Option<String>,
-    x_date: NaiveDateTime,
-    x_high: f64,
-    x_low: f64,
-    a_date: NaiveDateTime,
-    a_high: f64,
-    a_low: f64,
     d_date: NaiveDateTime,
-    d_high: f64,
-    d_low: f64,
     d_confirm_date: NaiveDateTime,
     cd_price_length: f64,
     full_pattern_length: i64,
+}
+
+#[derive(Clone)]
+struct PatternEvent {
+    event_key: String,
+    event_id: Option<String>,
+    decision_date: NaiveDateTime,
+    candidates: Vec<PatternSetup>,
+}
+
+#[derive(Default)]
+struct BuildCoverageBucket {
+    pattern_count: i64,
+    contract_symbols: HashSet<String>,
+    first_d_confirm_date: Option<NaiveDateTime>,
+    last_d_confirm_date: Option<NaiveDateTime>,
+}
+
+struct StoredBuildCoverageRow {
+    run_id: String,
+    source_scope: String,
+    root_symbol: String,
+    exchange_name: String,
+    source_timeframe: String,
+    pattern_count: i64,
+    contract_count: i64,
+    first_d_confirm_date: Option<NaiveDateTime>,
+    last_d_confirm_date: Option<NaiveDateTime>,
 }
 
 #[derive(Clone, sqlx::FromRow)]
@@ -145,8 +175,17 @@ struct StoredTemplateResult {
     setup_id: String,
     pattern_id: Option<String>,
     pattern_group_id: String,
+    event_id: Option<String>,
+    event_rank: Option<i64>,
+    event_sister_count: Option<i64>,
+    event_decision_date: NaiveDateTime,
+    event_candidate_count: i64,
+    event_live_candidate_count: i64,
     pattern_family_key: Option<String>,
     symbol: String,
+    root_symbol: String,
+    exchange_name: String,
+    source_timeframe: String,
     market: String,
     d_date: NaiveDateTime,
     d_confirm_date: NaiveDateTime,
@@ -168,6 +207,8 @@ struct StoredTemplateResult {
 impl StoredTemplateResult {
     fn from_evaluation(
         template: &GeneratedTemplate,
+        event: &PatternEvent,
+        live_candidate_count: i64,
         setup: &PatternSetup,
         evaluation_order: i64,
         was_created_for_setup: bool,
@@ -178,8 +219,18 @@ impl StoredTemplateResult {
             setup_id: setup.setup_id.clone(),
             pattern_id: setup.pattern_id.clone(),
             pattern_group_id: setup.pattern_group_id.clone(),
+            event_id: event.event_id.clone(),
+            event_rank: setup.event_rank,
+            event_sister_count: setup.event_sister_count,
+            event_decision_date: event.decision_date,
+            event_candidate_count: event.candidates.len() as i64,
+            event_live_candidate_count: live_candidate_count,
             pattern_family_key: setup.pattern_family_key.clone(),
             symbol: setup.symbol.clone(),
+            root_symbol: normalized_root_symbol(setup),
+            exchange_name: exchange_for_root(&normalized_root_symbol(setup)).to_string(),
+            source_timeframe: clean_optional_text(setup.source_timeframe.as_deref())
+                .unwrap_or_else(|| "unknown".to_string()),
             market: setup.market.clone(),
             d_date: setup.d_date,
             d_confirm_date: setup.d_confirm_date,
@@ -200,8 +251,159 @@ impl StoredTemplateResult {
     }
 }
 
+#[derive(Clone, Default)]
+struct AggregateStats {
+    eval_count: i64,
+    pass_count: i64,
+    fail_count: i64,
+    no_entry_count: i64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+}
+
+impl AggregateStats {
+    fn record(&mut self, outcome: &str, result_r: Option<f64>) {
+        let result_r = result_r.unwrap_or(0.0);
+        if self.eval_count == 0 {
+            self.best_r = result_r;
+            self.worst_r = result_r;
+        } else {
+            self.best_r = self.best_r.max(result_r);
+            self.worst_r = self.worst_r.min(result_r);
+        }
+
+        self.eval_count += 1;
+        self.sum_r += result_r;
+        match outcome {
+            "pass" => self.pass_count += 1,
+            "fail" => self.fail_count += 1,
+            "no_entry" => self.no_entry_count += 1,
+            _ => {}
+        }
+    }
+
+    fn avg_r(&self) -> f64 {
+        if self.eval_count > 0 {
+            self.sum_r / self.eval_count as f64
+        } else {
+            0.0
+        }
+    }
+
+    fn win_rate(&self) -> f64 {
+        if self.eval_count > 0 {
+            self.pass_count as f64 / self.eval_count as f64
+        } else {
+            0.0
+        }
+    }
+}
+
+#[derive(Default)]
+struct SummaryCollector {
+    template_stats: HashMap<String, AggregateStats>,
+    market_stats: HashMap<(String, String), AggregateStats>,
+    condition_stats: HashMap<(String, String, String), AggregateStats>,
+}
+
+impl SummaryCollector {
+    fn record(&mut self, result: &StoredTemplateResult) {
+        self.template_stats
+            .entry(result.template_uid.clone())
+            .or_default()
+            .record(&result.outcome, result.result_r);
+        self.market_stats
+            .entry((
+                result.template_uid.clone(),
+                clean_condition_value(Some(result.market.clone())),
+            ))
+            .or_default()
+            .record(&result.outcome, result.result_r);
+
+        self.record_condition(
+            &result.template_uid,
+            "market",
+            Some(result.market.as_str()),
+            result,
+        );
+        self.record_condition(
+            &result.template_uid,
+            "pattern_family_key",
+            result.pattern_family_key.as_deref(),
+            result,
+        );
+        self.record_condition(
+            &result.template_uid,
+            "symbol",
+            Some(result.symbol.as_str()),
+            result,
+        );
+        self.record_condition(
+            &result.template_uid,
+            "root_symbol",
+            Some(result.root_symbol.as_str()),
+            result,
+        );
+        self.record_condition(
+            &result.template_uid,
+            "exchange",
+            Some(result.exchange_name.as_str()),
+            result,
+        );
+        self.record_condition(
+            &result.template_uid,
+            "source_timeframe",
+            Some(result.source_timeframe.as_str()),
+            result,
+        );
+        self.record_condition(
+            &result.template_uid,
+            "trade_direction",
+            result.trade_direction.as_deref(),
+            result,
+        );
+        self.record_condition(
+            &result.template_uid,
+            "exit_reason",
+            Some(result.exit_reason.as_str()),
+            result,
+        );
+        self.record_condition(
+            &result.template_uid,
+            "confirm_year",
+            Some(&result.d_confirm_date.year().to_string()),
+            result,
+        );
+        let confirm_session = confirm_session_value(Some(result.d_confirm_date));
+        self.record_condition(
+            &result.template_uid,
+            "confirm_session",
+            Some(confirm_session.as_str()),
+            result,
+        );
+    }
+
+    fn record_condition(
+        &mut self,
+        template_uid: &str,
+        condition_type: &str,
+        condition_value: Option<&str>,
+        result: &StoredTemplateResult,
+    ) {
+        self.condition_stats
+            .entry((
+                template_uid.to_string(),
+                condition_type.to_string(),
+                clean_condition_value(condition_value.map(str::to_string)),
+            ))
+            .or_default()
+            .record(&result.outcome, result.result_r);
+    }
+}
+
 fn usage() -> &'static str {
-    "Usage: cargo run --bin create_entry_exit_templates -- [--source futures|daily|all] [--year YYYY | --start-year YYYY --end-year YYYY] [--limit N] [--family FAMILY_KEY] [--symbol SYMBOL] [--sister-window-minutes N]\nUse --limit 0 to scan every deduped event in the selected period. Creates templates chronologically from deduped pattern events. It does not read entry_exit_tests or the Phase 1 optimizer routes."
+    "Usage: cargo run --bin create_entry_exit_templates -- [--source futures|daily|all] [--timeframe 1m|5m|daily] [--year YYYY | --start-year YYYY --end-year YYYY] [--limit N] [--family FAMILY_KEY] [--symbol SYMBOL] [--event-result-policy first|best] [--result-storage summary-only|full] [--skip-condition-stats]\nUse --limit 0 to scan every Twin/Event in the selected period. Default result storage is summary-only; use --result-storage full for raw audit rows. It does not read entry_exit_tests or the Phase 1 optimizer routes."
 }
 
 fn arg_value(args: &[String], name: &str) -> Option<String> {
@@ -218,6 +420,58 @@ fn normalize_source_scope(value: Option<String>) -> String {
     }
 }
 
+fn normalize_timeframe(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .map(|value| match value.as_str() {
+            "1" | "1min" | "1-min" | "1minute" | "1-minute" => "1m".to_string(),
+            "5" | "5min" | "5-min" | "5minute" | "5-minute" => "5m".to_string(),
+            "day" | "1d" => "daily".to_string(),
+            _ => value,
+        })
+}
+
+fn clean_optional_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn normalized_root_symbol(setup: &PatternSetup) -> String {
+    let root = clean_optional_text(setup.root_symbol.as_deref())
+        .or_else(|| clean_optional_text(setup.contract_symbol.as_deref()))
+        .or_else(|| clean_optional_text(Some(&setup.symbol)))
+        .unwrap_or_else(|| "Unknown".to_string())
+        .to_ascii_uppercase();
+    let bytes = root.as_bytes();
+    let is_treasury_contract = root.len() >= 4
+        && (root.starts_with("ZB") || root.starts_with("ZN"))
+        && matches!(
+            bytes.get(2).copied(),
+            Some(b'F' | b'G' | b'H' | b'J' | b'K' | b'M' | b'N' | b'Q' | b'U' | b'V' | b'X' | b'Z')
+        )
+        && bytes.get(3).is_some_and(u8::is_ascii_digit);
+
+    if is_treasury_contract {
+        root[..2].to_string()
+    } else {
+        root
+    }
+}
+
+fn exchange_for_root(root_symbol: &str) -> &'static str {
+    match root_symbol {
+        "6A" | "6B" | "6C" | "6E" | "6J" | "6M" | "6N" | "6S" | "BTC" | "EMD" | "ES" | "GF"
+        | "HE" | "LE" | "M2K" | "MES" | "MNQ" | "NKD" | "NQ" | "RTY" => "CME",
+        "KE" | "UB" | "YM" | "ZB" | "ZC" | "ZF" | "ZL" | "ZM" | "ZN" | "ZS" | "ZT" | "ZW" => "CBOT",
+        "GC" | "HG" | "MGC" | "SI" => "COMEX",
+        "CL" | "HO" | "MCL" | "NG" | "PA" | "PL" | "QG" | "QM" | "RB" => "NYMEX",
+        _ => "Unknown",
+    }
+}
+
 fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
     let raw_args = env::args().skip(1).collect::<Vec<_>>();
     if raw_args.iter().any(|arg| arg == "--help" || arg == "-h") {
@@ -226,6 +480,9 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
     }
 
     let source_scope = normalize_source_scope(arg_value(&raw_args, "--source"));
+    let source_timeframe = normalize_timeframe(
+        arg_value(&raw_args, "--timeframe").or_else(|| arg_value(&raw_args, "--tf")),
+    );
     let single_year = arg_value(&raw_args, "--year")
         .and_then(|value| value.parse::<i64>().ok())
         .filter(|year| (1900..=2200).contains(year));
@@ -260,10 +517,22 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
         .and_then(|value| value.parse::<i64>().ok())
         .unwrap_or(100)
         .clamp(0, 1_000_000);
-    let sister_window_minutes = arg_value(&raw_args, "--sister-window-minutes")
-        .and_then(|value| value.parse::<i64>().ok())
-        .unwrap_or(15)
-        .clamp(1, 240);
+    let event_result_policy = arg_value(&raw_args, "--event-result-policy")
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| value == "first" || value == "best")
+        .unwrap_or_else(|| "first".to_string());
+    let result_storage = arg_value(&raw_args, "--result-storage")
+        .or_else(|| arg_value(&raw_args, "--storage"))
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| value == "summary-only" || value == "full")
+        .unwrap_or_else(|| {
+            if raw_args.iter().any(|arg| arg == "--store-result-rows") {
+                "full".to_string()
+            } else {
+                "summary-only".to_string()
+            }
+        });
+    let skip_condition_stats = raw_args.iter().any(|arg| arg == "--skip-condition-stats");
     let family_key = arg_value(&raw_args, "--family")
         .or_else(|| arg_value(&raw_args, "--family-key"))
         .map(|value| value.trim().to_string())
@@ -274,11 +543,14 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
 
     Ok(Args {
         source_scope,
+        source_timeframe,
         period_year,
         start_year,
         end_year,
         limit,
-        sister_window_minutes,
+        event_result_policy,
+        result_storage,
+        skip_condition_stats,
         family_key,
         symbol,
     })
@@ -293,12 +565,16 @@ impl Args {
         }
     }
 
-    fn dedupe_limit(&self) -> Option<usize> {
+    fn event_limit(&self) -> Option<usize> {
         if self.limit > 0 {
             Some(self.limit as usize)
         } else {
             None
         }
+    }
+
+    fn stores_raw_results(&self) -> bool {
+        self.result_storage == "full"
     }
 }
 
@@ -316,6 +592,27 @@ fn creator_run_id() -> String {
         .map(|duration| duration.as_millis())
         .unwrap_or_default();
     format!("eetc-{started_at_ms}-{}", std::process::id())
+}
+
+fn result_table_name_for_run(run_id: &str) -> String {
+    let suffix = run_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("entry_exit_template_results_{suffix}")
+}
+
+fn quoted_identifier(identifier: &str) -> String {
+    debug_assert!(identifier
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_'));
+    format!("`{identifier}`")
 }
 
 async fn ensure_template_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
@@ -381,6 +678,12 @@ async fn ensure_template_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
             setup_id VARCHAR(64) NOT NULL,
             pattern_id VARCHAR(64) NULL,
             pattern_group_id VARCHAR(128) NOT NULL,
+            event_id VARCHAR(64) NULL,
+            event_rank BIGINT NULL,
+            event_sister_count BIGINT NOT NULL DEFAULT 1,
+            event_decision_date DATETIME NULL,
+            event_candidate_count BIGINT NOT NULL DEFAULT 1,
+            event_live_candidate_count BIGINT NOT NULL DEFAULT 1,
             pattern_family_key VARCHAR(64) NULL,
             symbol VARCHAR(32) NOT NULL,
             market VARCHAR(16) NOT NULL,
@@ -413,8 +716,70 @@ async fn ensure_template_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     .await?;
 
     ensure_entry_exit_template_ui_stats_table(pool).await?;
+    ensure_entry_exit_template_build_coverage_ui_table(pool).await?;
+    ensure_entry_exit_template_build_coverage_rows_ui_table(pool).await?;
+    ensure_entry_exit_template_build_summary_ui_table(pool).await?;
     ensure_entry_exit_template_condition_stats_table(pool).await?;
+    ensure_entry_exit_template_result_event_columns(pool).await?;
     ensure_entry_exit_template_indexes(pool).await?;
+
+    Ok(())
+}
+
+async fn ensure_entry_exit_template_result_event_columns(
+    pool: &MySqlPool,
+) -> Result<(), sqlx::Error> {
+    for (column, definition) in [
+        ("event_id", "VARCHAR(64) NULL AFTER pattern_group_id"),
+        ("event_rank", "BIGINT NULL AFTER event_id"),
+        (
+            "event_sister_count",
+            "BIGINT NOT NULL DEFAULT 1 AFTER event_rank",
+        ),
+        (
+            "event_decision_date",
+            "DATETIME NULL AFTER event_sister_count",
+        ),
+        (
+            "event_candidate_count",
+            "BIGINT NOT NULL DEFAULT 1 AFTER event_decision_date",
+        ),
+        (
+            "event_live_candidate_count",
+            "BIGINT NOT NULL DEFAULT 1 AFTER event_candidate_count",
+        ),
+    ] {
+        ensure_entry_exit_template_result_column(pool, column, definition).await?;
+    }
+
+    Ok(())
+}
+
+async fn ensure_entry_exit_template_result_column(
+    pool: &MySqlPool,
+    column: &str,
+    definition: &str,
+) -> Result<(), sqlx::Error> {
+    let exists: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = 'entry_exit_template_results'
+          AND column_name = ?
+        "#,
+    )
+    .bind(column)
+    .fetch_one(pool)
+    .await?;
+
+    if exists == 0 {
+        sqlx::query(&format!(
+            "ALTER TABLE entry_exit_template_results ADD COLUMN {column} {definition}"
+        ))
+        .execute(pool)
+        .await?;
+    }
 
     Ok(())
 }
@@ -450,6 +815,101 @@ async fn ensure_entry_exit_template_ui_stats_table(pool: &MySqlPool) -> Result<(
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (run_id, template_uid),
             INDEX idx_entry_exit_template_ui_stats_run_rank (run_id, pass_count, avg_r, eval_count)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_entry_exit_template_build_coverage_ui_table(
+    pool: &MySqlPool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_template_build_coverage_ui (
+            run_id VARCHAR(64) NOT NULL,
+            source_scope VARCHAR(16) NOT NULL,
+            root_symbol VARCHAR(32) NOT NULL,
+            exchange_name VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+            source_timeframe VARCHAR(16) NOT NULL DEFAULT 'unknown',
+            pattern_count BIGINT NOT NULL DEFAULT 0,
+            contract_count BIGINT NOT NULL DEFAULT 0,
+            first_d_confirm_date DATETIME NULL,
+            last_d_confirm_date DATETIME NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (run_id, root_symbol, source_timeframe),
+            INDEX idx_entry_exit_build_coverage_run_exchange (run_id, exchange_name, pattern_count),
+            INDEX idx_entry_exit_build_coverage_run_root (run_id, root_symbol)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_entry_exit_template_build_coverage_rows_ui_table(
+    pool: &MySqlPool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_template_build_coverage_rows_ui (
+            test_id VARCHAR(64) NOT NULL,
+            run_id VARCHAR(64) NOT NULL,
+            source_scope VARCHAR(16) NOT NULL,
+            exchange_name VARCHAR(32) NOT NULL DEFAULT 'Unknown',
+            root_symbol VARCHAR(32) NOT NULL,
+            source_timeframe VARCHAR(16) NOT NULL DEFAULT 'unknown',
+            scanned_pattern_count BIGINT NOT NULL DEFAULT 0,
+            universe_pattern_count BIGINT NOT NULL DEFAULT 0,
+            contract_count BIGINT NOT NULL DEFAULT 0,
+            status VARCHAR(16) NOT NULL DEFAULT 'Not scanned',
+            sort_order BIGINT NOT NULL DEFAULT 0,
+            first_d_confirm_date DATETIME NULL,
+            last_d_confirm_date DATETIME NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (test_id, root_symbol, source_timeframe),
+            INDEX idx_entry_exit_build_coverage_rows_run_exchange (run_id, exchange_name, sort_order),
+            INDEX idx_entry_exit_build_coverage_rows_status (run_id, status, scanned_pattern_count)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_entry_exit_template_build_summary_ui_table(
+    pool: &MySqlPool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_template_build_summary_ui (
+            test_id VARCHAR(64) NOT NULL PRIMARY KEY,
+            run_id VARCHAR(64) NOT NULL UNIQUE,
+            build_label VARCHAR(32) NULL,
+            source_scope VARCHAR(16) NOT NULL,
+            source_timeframe VARCHAR(16) NOT NULL DEFAULT 'unknown',
+            scan_year_start INT NULL,
+            scan_year_end INT NULL,
+            scan_year_label VARCHAR(32) NOT NULL DEFAULT 'All',
+            patterns_scanned BIGINT NOT NULL DEFAULT 0,
+            templates_created BIGINT NOT NULL DEFAULT 0,
+            coverage_patterns BIGINT NOT NULL DEFAULT 0,
+            root_count BIGINT NOT NULL DEFAULT 0,
+            exchange_count BIGINT NOT NULL DEFAULT 0,
+            requested_limit BIGINT NOT NULL DEFAULT 0,
+            result_rows BIGINT NOT NULL DEFAULT 0,
+            elapsed_ms BIGINT NOT NULL DEFAULT 0,
+            created_at DATETIME NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_entry_exit_build_summary_run (run_id),
+            INDEX idx_entry_exit_build_summary_created (created_at)
         )
         "#,
     )
@@ -505,6 +965,13 @@ async fn ensure_entry_exit_template_indexes(pool: &MySqlPool) -> Result<(), sqlx
         "stored Entry/Exit condition breakdowns",
     )
     .await?;
+    ensure_entry_exit_template_index(
+        pool,
+        "idx_entry_exit_template_results_run_family_template",
+        "run_id, pattern_family_key, template_uid, outcome, result_r",
+        "Entry/Exit family playbook training",
+    )
+    .await?;
 
     Ok(())
 }
@@ -540,9 +1007,23 @@ async fn ensure_entry_exit_template_index(
     Ok(())
 }
 
+async fn ensure_result_table_for_run(
+    pool: &MySqlPool,
+    table_name: &str,
+) -> Result<(), sqlx::Error> {
+    let quoted_table = quoted_identifier(table_name);
+    sqlx::query(&format!(
+        "CREATE TABLE IF NOT EXISTS {quoted_table} LIKE entry_exit_template_results"
+    ))
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 async fn fetch_patterns(pool: &MySqlPool, args: &Args) -> Result<Vec<PatternSetup>, sqlx::Error> {
     let raw_candidate_limit = if args.limit > 0 {
-        Some(args.limit.saturating_mul(10).max(args.limit).min(100_000))
+        Some(args.limit.saturating_mul(20).max(args.limit).min(1_000_000))
     } else {
         None
     };
@@ -557,6 +1038,11 @@ async fn fetch_patterns(pool: &MySqlPool, args: &Args) -> Result<Vec<PatternSetu
         "AND YEAR(COALESCE(ps.d_confirm_date, ps.d_date)) = ?"
     } else {
         "AND YEAR(COALESCE(ps.d_confirm_date, ps.d_date)) BETWEEN ? AND ?"
+    };
+    let timeframe_filter = if args.source_timeframe.is_some() {
+        "AND COALESCE(NULLIF(ps.source_timeframe, ''), 'unknown') = ?"
+    } else {
+        ""
     };
     let family_filter = if args.family_key.is_some() {
         "AND ps.pattern_family_key = ?"
@@ -579,21 +1065,17 @@ async fn fetch_patterns(pool: &MySqlPool, args: &Args) -> Result<Vec<PatternSetu
             ps.setup_id,
             ps.pattern_id,
             ps.pattern_group_id,
+            ps.event_id,
+            CAST(ps.event_rank AS SIGNED) AS event_rank,
+            CAST(ps.event_sister_count AS SIGNED) AS event_sister_count,
             ps.symbol,
             ps.root_symbol,
+            ps.contract_symbol,
             ps.source_table,
             ps.source_timeframe,
             ps.market,
             ps.pattern_family_key,
-            ps.x_date,
-            ps.x_high,
-            ps.x_low,
-            ps.a_date,
-            ps.a_high,
-            ps.a_low,
             ps.d_date,
-            ps.d_high,
-            ps.d_low,
             CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS d_confirm_date,
             ps.cd_price_length,
             CAST(ps.full_pattern_length AS SIGNED) AS full_pattern_length
@@ -603,6 +1085,7 @@ async fn fetch_patterns(pool: &MySqlPool, args: &Args) -> Result<Vec<PatternSetu
           AND ABS(ps.cd_price_length) > 0
           {source_filter}
           {year_filter}
+          {timeframe_filter}
           {family_filter}
           {symbol_filter}
         ORDER BY COALESCE(ps.d_confirm_date, ps.d_date) ASC, ps.setup_id ASC
@@ -610,6 +1093,7 @@ async fn fetch_patterns(pool: &MySqlPool, args: &Args) -> Result<Vec<PatternSetu
         "#,
         source_filter = source_filter,
         year_filter = year_filter,
+        timeframe_filter = timeframe_filter,
         family_filter = family_filter,
         symbol_filter = symbol_filter,
         limit_clause = limit_clause,
@@ -621,6 +1105,9 @@ async fn fetch_patterns(pool: &MySqlPool, args: &Args) -> Result<Vec<PatternSetu
     } else {
         query = query.bind(args.start_year).bind(args.end_year);
     }
+    if let Some(source_timeframe) = &args.source_timeframe {
+        query = query.bind(source_timeframe);
+    }
     if let Some(family_key) = &args.family_key {
         query = query.bind(family_key);
     }
@@ -631,144 +1118,69 @@ async fn fetch_patterns(pool: &MySqlPool, args: &Args) -> Result<Vec<PatternSetu
     if let Some(raw_candidate_limit) = raw_candidate_limit {
         query = query.bind(raw_candidate_limit);
     }
-    let candidates = query.fetch_all(pool).await?;
-    let before_count = candidates.len();
-    let patterns =
-        dedupe_sister_patterns(candidates, args.dedupe_limit(), args.sister_window_minutes);
-    println!(
-        "Pattern event filter: fetched {} raw candidates, kept {} distinct events, skipped {} sister pattern(s). Sister window={}m.",
-        before_count,
-        patterns.len(),
-        before_count.saturating_sub(patterns.len()),
-        args.sister_window_minutes
-    );
-    Ok(patterns)
+    query.fetch_all(pool).await
 }
 
-fn setup_root_symbol(setup: &PatternSetup) -> &str {
+fn pattern_event_key(setup: &PatternSetup) -> String {
     setup
-        .root_symbol
+        .event_id
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or(&setup.symbol)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("setup:{}", setup.setup_id))
 }
 
-fn minutes_between(left: NaiveDateTime, right: NaiveDateTime) -> i64 {
-    left.signed_duration_since(right).num_minutes().abs()
-}
+fn build_pattern_events(patterns: Vec<PatternSetup>, limit: Option<usize>) -> Vec<PatternEvent> {
+    let mut group_indexes: HashMap<String, usize> = HashMap::new();
+    let mut events: Vec<PatternEvent> = Vec::new();
 
-fn midpoint(high: f64, low: f64) -> f64 {
-    (high + low) / 2.0
-}
-
-fn similar_price(left: f64, right: f64, tolerance: f64) -> bool {
-    (left - right).abs() <= tolerance
-}
-
-fn anchor_time_window(
-    left: &PatternSetup,
-    right: &PatternSetup,
-    sister_window_minutes: i64,
-) -> i64 {
-    let pattern_minutes = left
-        .full_pattern_length
-        .max(right.full_pattern_length)
-        .saturating_mul(2)
-        .clamp(sister_window_minutes, 240);
-    pattern_minutes.max(sister_window_minutes)
-}
-
-fn is_sister_pattern(
-    kept: &PatternSetup,
-    candidate: &PatternSetup,
-    sister_window_minutes: i64,
-) -> bool {
-    if setup_root_symbol(kept) != setup_root_symbol(candidate) {
-        return false;
-    }
-    if !kept.market.eq_ignore_ascii_case(&candidate.market) {
-        return false;
-    }
-    if minutes_between(kept.d_confirm_date, candidate.d_confirm_date) > sister_window_minutes {
-        return false;
-    }
-
-    let anchor_window = anchor_time_window(kept, candidate, sister_window_minutes);
-    let anchor_time_matches = [
-        minutes_between(kept.x_date, candidate.x_date) <= anchor_window,
-        minutes_between(kept.a_date, candidate.a_date) <= anchor_window,
-        minutes_between(kept.d_date, candidate.d_date) <= sister_window_minutes,
-    ]
-    .into_iter()
-    .filter(|matched| *matched)
-    .count();
-    if anchor_time_matches < 2 {
-        return false;
-    }
-
-    let cd_scale = kept
-        .cd_price_length
-        .abs()
-        .max(candidate.cd_price_length.abs())
-        .max(0.000001);
-    let price_tolerance = cd_scale * 0.15;
-    let anchor_price_matches = [
-        similar_price(
-            midpoint(kept.x_high, kept.x_low),
-            midpoint(candidate.x_high, candidate.x_low),
-            price_tolerance,
-        ),
-        similar_price(
-            midpoint(kept.a_high, kept.a_low),
-            midpoint(candidate.a_high, candidate.a_low),
-            price_tolerance,
-        ),
-        similar_price(
-            midpoint(kept.d_high, kept.d_low),
-            midpoint(candidate.d_high, candidate.d_low),
-            price_tolerance,
-        ),
-    ]
-    .into_iter()
-    .filter(|matched| *matched)
-    .count();
-
-    anchor_price_matches >= 2
-}
-
-fn dedupe_sister_patterns(
-    candidates: Vec<PatternSetup>,
-    limit: Option<usize>,
-    sister_window_minutes: i64,
-) -> Vec<PatternSetup> {
-    let mut kept: Vec<PatternSetup> =
-        Vec::with_capacity(limit.unwrap_or(candidates.len()).min(candidates.len()));
-
-    for candidate in candidates {
-        let mut is_sister = false;
-        for existing in kept.iter().rev() {
-            if minutes_between(existing.d_confirm_date, candidate.d_confirm_date)
-                > sister_window_minutes
-            {
-                break;
-            }
-            if is_sister_pattern(existing, &candidate, sister_window_minutes) {
-                is_sister = true;
-                break;
-            }
-        }
-        if is_sister {
-            continue;
-        }
-
-        kept.push(candidate);
-        if limit.is_some_and(|limit| kept.len() >= limit) {
-            break;
+    for setup in patterns {
+        let event_key = pattern_event_key(&setup);
+        if let Some(index) = group_indexes.get(&event_key).copied() {
+            let event = &mut events[index];
+            event.decision_date = event.decision_date.min(setup.d_confirm_date);
+            event.candidates.push(setup);
+        } else {
+            group_indexes.insert(event_key.clone(), events.len());
+            events.push(PatternEvent {
+                event_key,
+                event_id: setup
+                    .event_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string),
+                decision_date: setup.d_confirm_date,
+                candidates: vec![setup],
+            });
         }
     }
 
-    kept
+    for event in &mut events {
+        event.candidates.sort_by(|left, right| {
+            left.d_confirm_date
+                .cmp(&right.d_confirm_date)
+                .then(
+                    left.event_rank
+                        .unwrap_or(i64::MAX)
+                        .cmp(&right.event_rank.unwrap_or(i64::MAX)),
+                )
+                .then(left.setup_id.cmp(&right.setup_id))
+        });
+    }
+
+    events.sort_by(|left, right| {
+        left.decision_date
+            .cmp(&right.decision_date)
+            .then(left.event_key.cmp(&right.event_key))
+    });
+
+    if let Some(limit) = limit {
+        events.truncate(limit);
+    }
+
+    events
 }
 
 fn futures_candle_table(source_table: Option<&str>) -> &'static str {
@@ -980,6 +1392,103 @@ fn evaluate_template(
         risk_points: Some(risk_points),
         trade_direction: Some(if direction > 0.0 { "long" } else { "short" }.to_string()),
     }
+}
+
+fn live_event_candidate_count(event: &PatternEvent) -> i64 {
+    event
+        .candidates
+        .iter()
+        .filter(|setup| setup.d_confirm_date <= event.decision_date)
+        .count()
+        .max(1) as i64
+}
+
+fn event_result_score(evaluation: &TemplateEvaluation) -> (f64, i64) {
+    let result_r = evaluation.result_r.unwrap_or(0.0);
+    let outcome_rank = match evaluation.outcome.as_str() {
+        "pass" => 2,
+        "no_entry" => 1,
+        "fail" => 0,
+        _ => 0,
+    };
+    (result_r, outcome_rank)
+}
+
+struct EventTemplateEvaluation {
+    selected_result: StoredTemplateResult,
+    passed_setup_ids: Vec<String>,
+    any_passed: bool,
+}
+
+fn evaluate_template_on_event(
+    template: &GeneratedTemplate,
+    event: &PatternEvent,
+    candle_cache: &HashMap<String, Vec<ForwardCandle>>,
+    evaluation_order: i64,
+    event_result_policy: &str,
+    created_for_setup_id: Option<&str>,
+) -> Option<EventTemplateEvaluation> {
+    let live_candidate_count = live_event_candidate_count(event);
+    let use_best = event_result_policy == "best";
+    let mut selected_setup: Option<&PatternSetup> = None;
+    let mut selected_evaluation: Option<TemplateEvaluation> = None;
+    let mut passed_setup_ids = Vec::new();
+
+    for setup in &event.candidates {
+        let candles = candle_cache
+            .get(&setup.setup_id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let evaluation = evaluate_template(template, setup, candles);
+        if evaluation.outcome == "pass" {
+            passed_setup_ids.push(setup.setup_id.clone());
+        }
+
+        let selectable = use_best || setup.d_confirm_date <= event.decision_date;
+        if !selectable {
+            continue;
+        }
+
+        let replace_selected = if use_best {
+            selected_evaluation
+                .as_ref()
+                .map(|current| event_result_score(&evaluation) > event_result_score(current))
+                .unwrap_or(true)
+        } else {
+            selected_setup.is_none()
+        };
+
+        if replace_selected {
+            selected_setup = Some(setup);
+            selected_evaluation = Some(evaluation);
+        }
+    }
+
+    let setup = selected_setup.or_else(|| event.candidates.first())?;
+    let evaluation = selected_evaluation.unwrap_or_else(|| {
+        let candles = candle_cache
+            .get(&setup.setup_id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        evaluate_template(template, setup, candles)
+    });
+    let was_created_for_setup = created_for_setup_id
+        .map(|origin_setup_id| origin_setup_id == setup.setup_id)
+        .unwrap_or(false);
+
+    Some(EventTemplateEvaluation {
+        selected_result: StoredTemplateResult::from_evaluation(
+            template,
+            event,
+            live_candidate_count,
+            setup,
+            evaluation_order,
+            was_created_for_setup,
+            &evaluation,
+        ),
+        any_passed: !passed_setup_ids.is_empty(),
+        passed_setup_ids,
+    })
 }
 
 fn candidate_price_stats(direction: f64, entry_price: f64, candle: &ForwardCandle) -> (f64, f64) {
@@ -1227,6 +1736,7 @@ async fn insert_template(
 
 async fn flush_result_batch(
     pool: &MySqlPool,
+    result_table_name: &str,
     run_id: &str,
     results: &mut Vec<StoredTemplateResult>,
 ) -> Result<(), sqlx::Error> {
@@ -1234,14 +1744,20 @@ async fn flush_result_batch(
         return Ok(());
     }
 
-    let mut query_builder = QueryBuilder::<MySql>::new(
+    let mut query_builder = QueryBuilder::<MySql>::new(format!(
         r#"
-        INSERT INTO entry_exit_template_results (
+        INSERT INTO {} (
             run_id,
             template_uid,
             setup_id,
             pattern_id,
             pattern_group_id,
+            event_id,
+            event_rank,
+            event_sister_count,
+            event_decision_date,
+            event_candidate_count,
+            event_live_candidate_count,
             pattern_family_key,
             symbol,
             market,
@@ -1262,7 +1778,8 @@ async fn flush_result_batch(
             trade_direction
         )
 "#,
-    );
+        quoted_identifier(result_table_name)
+    ));
 
     query_builder.push_values(results.iter(), |mut row, result| {
         row.push_bind(run_id)
@@ -1270,6 +1787,12 @@ async fn flush_result_batch(
             .push_bind(&result.setup_id)
             .push_bind(&result.pattern_id)
             .push_bind(&result.pattern_group_id)
+            .push_bind(&result.event_id)
+            .push_bind(result.event_rank)
+            .push_bind(result.event_sister_count.unwrap_or(1))
+            .push_bind(result.event_decision_date)
+            .push_bind(result.event_candidate_count)
+            .push_bind(result.event_live_candidate_count)
             .push_bind(&result.pattern_family_key)
             .push_bind(&result.symbol)
             .push_bind(&result.market)
@@ -1295,6 +1818,12 @@ async fn flush_result_batch(
         ON DUPLICATE KEY UPDATE
             evaluation_order = VALUES(evaluation_order),
             was_created_for_setup = VALUES(was_created_for_setup),
+            event_id = VALUES(event_id),
+            event_rank = VALUES(event_rank),
+            event_sister_count = VALUES(event_sister_count),
+            event_decision_date = VALUES(event_decision_date),
+            event_candidate_count = VALUES(event_candidate_count),
+            event_live_candidate_count = VALUES(event_live_candidate_count),
             outcome = VALUES(outcome),
             exit_reason = VALUES(exit_reason),
             result_r = VALUES(result_r),
@@ -1361,6 +1890,7 @@ async fn insert_run_summary(
 
 async fn refresh_entry_exit_template_ui_stats(
     pool: &MySqlPool,
+    result_table_name: &str,
     run_id: &str,
 ) -> Result<u64, sqlx::Error> {
     ensure_entry_exit_template_ui_stats_table(pool).await?;
@@ -1370,7 +1900,7 @@ async fn refresh_entry_exit_template_ui_stats(
         .execute(pool)
         .await?;
 
-    let result = sqlx::query(
+    let result = sqlx::query(&format!(
         r#"
         INSERT INTO entry_exit_template_ui_stats (
             run_id,
@@ -1463,13 +1993,636 @@ async fn refresh_entry_exit_template_ui_stats(
                     ELSE 0
                 END AS bearish_win_rate,
                 COALESCE(AVG(CASE WHEN market = 'Bearish' THEN COALESCE(result_r, 0) ELSE NULL END), 0) AS bearish_avg_r
-            FROM entry_exit_template_results
+            FROM {}
             WHERE run_id = ?
             GROUP BY template_uid
         ) r ON r.template_uid = t.template_uid
         WHERE t.origin_run_id = ?
         "#,
+        quoted_identifier(result_table_name)
+    ))
+    .bind(run_id)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
+async fn insert_entry_exit_template_ui_stats_from_summary(
+    pool: &MySqlPool,
+    run_id: &str,
+    templates: &[GeneratedTemplate],
+    summary: &SummaryCollector,
+) -> Result<u64, sqlx::Error> {
+    ensure_entry_exit_template_ui_stats_table(pool).await?;
+
+    sqlx::query("DELETE FROM entry_exit_template_ui_stats WHERE run_id = ?")
+        .bind(run_id)
+        .execute(pool)
+        .await?;
+
+    if templates.is_empty() {
+        return Ok(0);
+    }
+
+    let mut affected = 0_u64;
+    for chunk in templates.chunks(500) {
+        let mut query_builder = QueryBuilder::<MySql>::new(
+            r#"
+            INSERT INTO entry_exit_template_ui_stats (
+                run_id,
+                template_uid,
+                eval_count,
+                pass_count,
+                fail_count,
+                no_entry_count,
+                avg_r,
+                sum_r,
+                best_r,
+                worst_r,
+                bullish_eval_count,
+                bullish_pass_count,
+                bullish_fail_count,
+                bullish_no_entry_count,
+                bullish_win_rate,
+                bullish_avg_r,
+                bearish_eval_count,
+                bearish_pass_count,
+                bearish_fail_count,
+                bearish_no_entry_count,
+                bearish_win_rate,
+                bearish_avg_r,
+                market_edge_label,
+                market_edge_score
+            )
+            "#,
+        );
+
+        query_builder.push_values(chunk, |mut row, template| {
+            let total = summary
+                .template_stats
+                .get(&template.template_uid)
+                .cloned()
+                .unwrap_or_default();
+            let bullish = summary
+                .market_stats
+                .get(&(template.template_uid.clone(), "Bullish".to_string()))
+                .cloned()
+                .unwrap_or_default();
+            let bearish = summary
+                .market_stats
+                .get(&(template.template_uid.clone(), "Bearish".to_string()))
+                .cloned()
+                .unwrap_or_default();
+            let market_edge_score = (bullish.avg_r() - bearish.avg_r()).abs();
+            let market_edge_label = if market_edge_score < 0.05 {
+                "Flat"
+            } else if bullish.avg_r() > bearish.avg_r() {
+                "Bullish"
+            } else {
+                "Bearish"
+            };
+
+            row.push_bind(run_id)
+                .push_bind(&template.template_uid)
+                .push_bind(total.eval_count)
+                .push_bind(total.pass_count)
+                .push_bind(total.fail_count)
+                .push_bind(total.no_entry_count)
+                .push_bind(total.avg_r())
+                .push_bind(total.sum_r)
+                .push_bind(total.best_r)
+                .push_bind(total.worst_r)
+                .push_bind(bullish.eval_count)
+                .push_bind(bullish.pass_count)
+                .push_bind(bullish.fail_count)
+                .push_bind(bullish.no_entry_count)
+                .push_bind(bullish.win_rate())
+                .push_bind(bullish.avg_r())
+                .push_bind(bearish.eval_count)
+                .push_bind(bearish.pass_count)
+                .push_bind(bearish.fail_count)
+                .push_bind(bearish.no_entry_count)
+                .push_bind(bearish.win_rate())
+                .push_bind(bearish.avg_r())
+                .push_bind(market_edge_label)
+                .push_bind(market_edge_score);
+        });
+
+        affected += query_builder.build().execute(pool).await?.rows_affected();
+    }
+
+    Ok(affected)
+}
+
+async fn insert_entry_exit_template_condition_stats_from_summary(
+    pool: &MySqlPool,
+    run_id: &str,
+    summary: &SummaryCollector,
+) -> Result<u64, sqlx::Error> {
+    ensure_entry_exit_template_condition_stats_table(pool).await?;
+
+    sqlx::query("DELETE FROM entry_exit_template_condition_stats WHERE run_id = ?")
+        .bind(run_id)
+        .execute(pool)
+        .await?;
+
+    let mut rows = summary.condition_stats.iter().collect::<Vec<_>>();
+    rows.sort_by(|left, right| left.0.cmp(right.0));
+
+    let mut affected = 0_u64;
+    for chunk in rows.chunks(500) {
+        let mut query_builder = QueryBuilder::<MySql>::new(
+            r#"
+            INSERT INTO entry_exit_template_condition_stats (
+                run_id,
+                template_uid,
+                condition_type,
+                condition_value,
+                eval_count,
+                pass_count,
+                fail_count,
+                no_entry_count,
+                avg_r,
+                sum_r,
+                best_r,
+                worst_r
+            )
+            "#,
+        );
+
+        query_builder.push_values(
+            chunk,
+            |mut row, ((template_uid, condition_type, condition_value), aggregate)| {
+                row.push_bind(run_id)
+                    .push_bind(template_uid)
+                    .push_bind(condition_type)
+                    .push_bind(condition_value)
+                    .push_bind(aggregate.eval_count)
+                    .push_bind(aggregate.pass_count)
+                    .push_bind(aggregate.fail_count)
+                    .push_bind(aggregate.no_entry_count)
+                    .push_bind(aggregate.avg_r())
+                    .push_bind(aggregate.sum_r)
+                    .push_bind(aggregate.best_r)
+                    .push_bind(aggregate.worst_r);
+            },
+        );
+
+        affected += query_builder.build().execute(pool).await?.rows_affected();
+    }
+
+    Ok(affected)
+}
+
+fn first_date(left: Option<NaiveDateTime>, right: Option<NaiveDateTime>) -> Option<NaiveDateTime> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(left.min(right)),
+        (Some(value), None) | (None, Some(value)) => Some(value),
+        (None, None) => None,
+    }
+}
+
+fn last_date(left: Option<NaiveDateTime>, right: Option<NaiveDateTime>) -> Option<NaiveDateTime> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(left.max(right)),
+        (Some(value), None) | (None, Some(value)) => Some(value),
+        (None, None) => None,
+    }
+}
+
+async fn refresh_entry_exit_template_build_coverage_ui_from_events(
+    pool: &MySqlPool,
+    run_id: &str,
+    args: &Args,
+    events: &[PatternEvent],
+) -> Result<u64, sqlx::Error> {
+    ensure_entry_exit_template_build_coverage_ui_table(pool).await?;
+
+    sqlx::query("DELETE FROM entry_exit_template_build_coverage_ui WHERE run_id = ?")
+        .bind(run_id)
+        .execute(pool)
+        .await?;
+
+    let mut buckets: HashMap<(String, String), BuildCoverageBucket> = HashMap::new();
+    for event in events {
+        let Some(setup) = event.candidates.first() else {
+            continue;
+        };
+        let root_symbol = normalized_root_symbol(setup);
+        let source_timeframe = clean_optional_text(setup.source_timeframe.as_deref())
+            .or_else(|| args.source_timeframe.clone())
+            .unwrap_or_else(|| "unknown".to_string());
+        let contract_symbol = clean_optional_text(setup.contract_symbol.as_deref())
+            .or_else(|| clean_optional_text(Some(&setup.symbol)))
+            .unwrap_or_else(|| "Unknown".to_string());
+        let bucket = buckets
+            .entry((root_symbol, source_timeframe))
+            .or_insert_with(BuildCoverageBucket::default);
+        bucket.pattern_count += 1;
+        bucket.contract_symbols.insert(contract_symbol);
+        bucket.first_d_confirm_date =
+            first_date(bucket.first_d_confirm_date, Some(setup.d_confirm_date));
+        bucket.last_d_confirm_date =
+            last_date(bucket.last_d_confirm_date, Some(setup.d_confirm_date));
+    }
+
+    if buckets.is_empty() {
+        return Ok(0);
+    }
+
+    let mut rows = buckets
+        .into_iter()
+        .map(
+            |((root_symbol, source_timeframe), bucket)| StoredBuildCoverageRow {
+                run_id: run_id.to_string(),
+                source_scope: args.source_scope.clone(),
+                exchange_name: exchange_for_root(&root_symbol).to_string(),
+                root_symbol,
+                source_timeframe,
+                pattern_count: bucket.pattern_count,
+                contract_count: bucket.contract_symbols.len() as i64,
+                first_d_confirm_date: bucket.first_d_confirm_date,
+                last_d_confirm_date: bucket.last_d_confirm_date,
+            },
+        )
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        left.exchange_name
+            .cmp(&right.exchange_name)
+            .then_with(|| right.pattern_count.cmp(&left.pattern_count))
+            .then_with(|| left.root_symbol.cmp(&right.root_symbol))
+            .then_with(|| left.source_timeframe.cmp(&right.source_timeframe))
+    });
+
+    let mut query_builder = QueryBuilder::<MySql>::new(
+        r#"
+        INSERT INTO entry_exit_template_build_coverage_ui (
+            run_id,
+            source_scope,
+            root_symbol,
+            exchange_name,
+            source_timeframe,
+            pattern_count,
+            contract_count,
+            first_d_confirm_date,
+            last_d_confirm_date
+        )
+        "#,
+    );
+
+    query_builder.push_values(&rows, |mut builder, row| {
+        builder
+            .push_bind(&row.run_id)
+            .push_bind(&row.source_scope)
+            .push_bind(&row.root_symbol)
+            .push_bind(&row.exchange_name)
+            .push_bind(&row.source_timeframe)
+            .push_bind(row.pattern_count)
+            .push_bind(row.contract_count)
+            .push_bind(row.first_d_confirm_date)
+            .push_bind(row.last_d_confirm_date);
+    });
+
+    Ok(query_builder.build().execute(pool).await?.rows_affected())
+}
+
+async fn refresh_entry_exit_template_build_coverage_rows_ui(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<u64, sqlx::Error> {
+    ensure_entry_exit_template_build_coverage_rows_ui_table(pool).await?;
+
+    let mut affected = 0_u64;
+    sqlx::query("DELETE FROM entry_exit_template_build_coverage_rows_ui WHERE run_id = ?")
+        .bind(run_id)
+        .execute(pool)
+        .await?;
+
+    let scanned_result = sqlx::query(
+        r#"
+        INSERT INTO entry_exit_template_build_coverage_rows_ui (
+            test_id,
+            run_id,
+            source_scope,
+            exchange_name,
+            root_symbol,
+            source_timeframe,
+            scanned_pattern_count,
+            universe_pattern_count,
+            contract_count,
+            status,
+            sort_order,
+            first_d_confirm_date,
+            last_d_confirm_date
+        )
+        SELECT
+            scanned.run_id AS test_id,
+            scanned.run_id,
+            scanned.source_scope,
+            scanned.exchange_name,
+            scanned.root_symbol,
+            scanned.source_timeframe,
+            scanned.scanned_pattern_count,
+            0 AS universe_pattern_count,
+            scanned.contract_count,
+            'Scanned' AS status,
+            ROW_NUMBER() OVER (
+                ORDER BY
+                    CASE scanned.exchange_name
+                        WHEN 'CME' THEN 1
+                        WHEN 'CBOT' THEN 2
+                        WHEN 'NYMEX' THEN 3
+                        WHEN 'COMEX' THEN 4
+                        ELSE 9
+                    END,
+                    scanned.scanned_pattern_count DESC,
+                    scanned.root_symbol ASC,
+                    scanned.source_timeframe ASC
+            ) AS sort_order,
+            scanned.first_d_confirm_date,
+            scanned.last_d_confirm_date
+        FROM (
+            SELECT
+                c.run_id,
+                c.source_scope,
+                CASE
+                    WHEN normalized.root_symbol IN ('6A', '6B', '6C', '6E', '6J', '6M', '6N', '6S', 'BTC', 'EMD', 'ES', 'GF', 'HE', 'LE', 'M2K', 'MES', 'MNQ', 'NKD', 'NQ', 'RTY') THEN 'CME'
+                    WHEN normalized.root_symbol IN ('KE', 'UB', 'YM', 'ZB', 'ZC', 'ZF', 'ZL', 'ZM', 'ZN', 'ZS', 'ZT', 'ZW') THEN 'CBOT'
+                    WHEN normalized.root_symbol IN ('GC', 'HG', 'MGC', 'SI') THEN 'COMEX'
+                    WHEN normalized.root_symbol IN ('CL', 'HO', 'MCL', 'NG', 'PA', 'PL', 'QG', 'QM', 'RB') THEN 'NYMEX'
+                    ELSE COALESCE(MAX(NULLIF(c.exchange_name, '')), 'Unknown')
+                END AS exchange_name,
+                normalized.root_symbol,
+                c.source_timeframe,
+                CAST(SUM(c.pattern_count) AS SIGNED) AS scanned_pattern_count,
+                CAST(SUM(c.contract_count) AS SIGNED) AS contract_count,
+                MIN(c.first_d_confirm_date) AS first_d_confirm_date,
+                MAX(c.last_d_confirm_date) AS last_d_confirm_date
+            FROM entry_exit_template_build_coverage_ui c
+            JOIN (
+                SELECT
+                    run_id,
+                    source_timeframe,
+                    root_symbol AS original_root_symbol,
+                    CASE
+                        WHEN root_symbol REGEXP '^ZB[FGHJKMNQUVXZ][0-9]{1,2}$' THEN 'ZB'
+                        WHEN root_symbol REGEXP '^ZN[FGHJKMNQUVXZ][0-9]{1,2}$' THEN 'ZN'
+                        ELSE root_symbol
+                    END AS root_symbol
+                FROM entry_exit_template_build_coverage_ui
+                WHERE run_id = ?
+            ) normalized
+              ON normalized.run_id = c.run_id
+             AND normalized.source_timeframe = c.source_timeframe
+             AND normalized.original_root_symbol = c.root_symbol
+            WHERE c.run_id = ?
+            GROUP BY c.run_id, c.source_scope, normalized.root_symbol, c.source_timeframe
+        ) scanned
+        "#,
     )
+    .bind(run_id)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+    affected += scanned_result.rows_affected();
+
+    let universe_result = sqlx::query(
+        r#"
+        INSERT INTO entry_exit_template_build_coverage_rows_ui (
+            test_id,
+            run_id,
+            source_scope,
+            exchange_name,
+            root_symbol,
+            source_timeframe,
+            scanned_pattern_count,
+            universe_pattern_count,
+            contract_count,
+            status,
+            sort_order,
+            first_d_confirm_date,
+            last_d_confirm_date
+        )
+        SELECT
+            ? AS test_id,
+            ? AS run_id,
+            universe.source_scope,
+            universe.exchange_name,
+            universe.root_symbol,
+            universe.source_timeframe,
+            0 AS scanned_pattern_count,
+            universe.universe_pattern_count,
+            universe.contract_count,
+            'Not scanned' AS status,
+            100000 AS sort_order,
+            universe.first_d_confirm_date,
+            universe.last_d_confirm_date
+        FROM (
+            SELECT
+                run_meta.source_scope,
+                CASE
+                    WHEN normalized.root_symbol IN ('6A', '6B', '6C', '6E', '6J', '6M', '6N', '6S', 'BTC', 'EMD', 'ES', 'GF', 'HE', 'LE', 'M2K', 'MES', 'MNQ', 'NKD', 'NQ', 'RTY') THEN 'CME'
+                    WHEN normalized.root_symbol IN ('KE', 'UB', 'YM', 'ZB', 'ZC', 'ZF', 'ZL', 'ZM', 'ZN', 'ZS', 'ZT', 'ZW') THEN 'CBOT'
+                    WHEN normalized.root_symbol IN ('GC', 'HG', 'MGC', 'SI') THEN 'COMEX'
+                    WHEN normalized.root_symbol IN ('CL', 'HO', 'MCL', 'NG', 'PA', 'PL', 'QG', 'QM', 'RB') THEN 'NYMEX'
+                    ELSE 'Unknown'
+                END AS exchange_name,
+                normalized.root_symbol,
+                normalized.source_timeframe,
+                CAST(COUNT(DISTINCT normalized.setup_id) AS SIGNED) AS universe_pattern_count,
+                CAST(COUNT(DISTINCT normalized.contract_symbol) AS SIGNED) AS contract_count,
+                MIN(normalized.d_confirm_date) AS first_d_confirm_date,
+                MAX(normalized.d_confirm_date) AS last_d_confirm_date
+            FROM (
+                SELECT
+                    ps.setup_id,
+                    CASE
+                        WHEN COALESCE(NULLIF(ps.root_symbol, ''), NULLIF(ps.symbol, ''), 'Unknown') REGEXP '^ZB[FGHJKMNQUVXZ][0-9]{1,2}$' THEN 'ZB'
+                        WHEN COALESCE(NULLIF(ps.root_symbol, ''), NULLIF(ps.symbol, ''), 'Unknown') REGEXP '^ZN[FGHJKMNQUVXZ][0-9]{1,2}$' THEN 'ZN'
+                        ELSE COALESCE(NULLIF(ps.root_symbol, ''), NULLIF(ps.symbol, ''), 'Unknown')
+                    END AS root_symbol,
+                    COALESCE(NULLIF(ps.contract_symbol, ''), NULLIF(ps.symbol, ''), 'Unknown') AS contract_symbol,
+                    COALESCE(NULLIF(ps.source_timeframe, ''), 'unknown') AS source_timeframe,
+                    COALESCE(ps.d_confirm_date, ps.d_date) AS d_confirm_date,
+                    ps.source_table
+                FROM pattern_setups ps
+                JOIN (
+                    SELECT DISTINCT source_timeframe
+                    FROM entry_exit_template_build_coverage_ui
+                    WHERE run_id = ?
+                ) build_timeframes
+                  ON build_timeframes.source_timeframe = COALESCE(NULLIF(ps.source_timeframe, ''), 'unknown')
+                WHERE ps.d_date IS NOT NULL
+                  AND ps.full_pattern_length > 0
+                  AND ABS(ps.cd_price_length) > 0
+            ) normalized
+            JOIN entry_exit_template_creator_runs run_meta
+              ON run_meta.run_id = ?
+            WHERE (
+                (run_meta.source_scope = 'futures' AND COALESCE(normalized.source_table, '') LIKE 'futures_contract_%_candles')
+                OR (run_meta.source_scope = 'daily' AND COALESCE(normalized.source_table, '') = 'candles' AND normalized.source_timeframe = 'daily')
+                OR (run_meta.source_scope NOT IN ('futures', 'daily'))
+            )
+            GROUP BY run_meta.source_scope, normalized.root_symbol, normalized.source_timeframe
+        ) universe
+        ON DUPLICATE KEY UPDATE
+            universe_pattern_count = VALUES(universe_pattern_count),
+            contract_count = GREATEST(entry_exit_template_build_coverage_rows_ui.contract_count, VALUES(contract_count)),
+            status = CASE
+                WHEN scanned_pattern_count > 0 THEN 'Scanned'
+                ELSE VALUES(status)
+            END
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+    affected += universe_result.rows_affected();
+
+    let sort_result = sqlx::query(
+        r#"
+        UPDATE entry_exit_template_build_coverage_rows_ui rows_ui
+        JOIN (
+            SELECT
+                test_id,
+                root_symbol,
+                source_timeframe,
+                ROW_NUMBER() OVER (
+                    ORDER BY
+                        CASE exchange_name
+                            WHEN 'CME' THEN 1
+                            WHEN 'CBOT' THEN 2
+                            WHEN 'NYMEX' THEN 3
+                            WHEN 'COMEX' THEN 4
+                            ELSE 9
+                        END,
+                        CASE status WHEN 'Scanned' THEN 0 ELSE 1 END,
+                        scanned_pattern_count DESC,
+                        root_symbol ASC,
+                        source_timeframe ASC
+                ) AS next_sort_order
+            FROM entry_exit_template_build_coverage_rows_ui
+            WHERE test_id = ?
+        ) ranked
+          ON ranked.test_id = rows_ui.test_id
+         AND ranked.root_symbol = rows_ui.root_symbol
+         AND ranked.source_timeframe = rows_ui.source_timeframe
+        SET rows_ui.sort_order = ranked.next_sort_order
+        WHERE rows_ui.test_id = ?
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .execute(pool)
+    .await?;
+    affected += sort_result.rows_affected();
+
+    Ok(affected)
+}
+
+async fn refresh_entry_exit_template_build_summary_ui(
+    pool: &MySqlPool,
+    run_id: &str,
+) -> Result<u64, sqlx::Error> {
+    ensure_entry_exit_template_build_summary_ui_table(pool).await?;
+
+    let result = sqlx::query(
+        r#"
+        INSERT INTO entry_exit_template_build_summary_ui (
+            test_id,
+            run_id,
+            build_label,
+            source_scope,
+            source_timeframe,
+            scan_year_start,
+            scan_year_end,
+            scan_year_label,
+            patterns_scanned,
+            templates_created,
+            coverage_patterns,
+            root_count,
+            exchange_count,
+            requested_limit,
+            result_rows,
+            elapsed_ms,
+            created_at
+        )
+        SELECT
+            r.run_id AS test_id,
+            r.run_id,
+            NULL AS build_label,
+            r.source_scope,
+            COALESCE(NULLIF(coverage.source_timeframe, ''), 'unknown') AS source_timeframe,
+            years.scan_year_start,
+            years.scan_year_end,
+            CASE
+                WHEN years.scan_year_start IS NULL AND r.period_year > 0 THEN CAST(r.period_year AS CHAR)
+                WHEN years.scan_year_start IS NULL THEN 'All'
+                WHEN years.scan_year_start = years.scan_year_end THEN CAST(years.scan_year_start AS CHAR)
+                ELSE CONCAT(years.scan_year_start, '-', years.scan_year_end)
+            END AS scan_year_label,
+            r.scanned_patterns AS patterns_scanned,
+            r.templates_created,
+            COALESCE(coverage.coverage_patterns, 0) AS coverage_patterns,
+            COALESCE(coverage.root_count, 0) AS root_count,
+            COALESCE(coverage.exchange_count, 0) AS exchange_count,
+            r.requested_limit,
+            r.result_rows,
+            r.elapsed_ms,
+            r.created_at
+        FROM entry_exit_template_creator_runs r
+        LEFT JOIN (
+            SELECT
+                run_id,
+                CAST(SUM(pattern_count) AS SIGNED) AS coverage_patterns,
+                CAST(COUNT(DISTINCT root_symbol) AS SIGNED) AS root_count,
+                CAST(COUNT(DISTINCT CASE WHEN pattern_count > 0 THEN exchange_name ELSE NULL END) AS SIGNED) AS exchange_count,
+                CASE
+                    WHEN COUNT(DISTINCT source_timeframe) = 1 THEN MIN(source_timeframe)
+                    WHEN COUNT(DISTINCT source_timeframe) > 1 THEN 'mixed'
+                    ELSE 'unknown'
+                END AS source_timeframe
+            FROM entry_exit_template_build_coverage_ui
+            WHERE run_id = ?
+            GROUP BY run_id
+        ) coverage
+          ON coverage.run_id = r.run_id
+        LEFT JOIN (
+            SELECT
+                run_id,
+                MIN(YEAR(first_d_confirm_date)) AS scan_year_start,
+                MAX(YEAR(last_d_confirm_date)) AS scan_year_end
+            FROM entry_exit_template_build_coverage_ui
+            WHERE run_id = ?
+            GROUP BY run_id
+        ) years
+          ON years.run_id = r.run_id
+        WHERE r.run_id = ?
+        ON DUPLICATE KEY UPDATE
+            run_id = VALUES(run_id),
+            build_label = COALESCE(VALUES(build_label), build_label),
+            source_scope = VALUES(source_scope),
+            source_timeframe = VALUES(source_timeframe),
+            scan_year_start = VALUES(scan_year_start),
+            scan_year_end = VALUES(scan_year_end),
+            scan_year_label = VALUES(scan_year_label),
+            patterns_scanned = VALUES(patterns_scanned),
+            templates_created = VALUES(templates_created),
+            coverage_patterns = VALUES(coverage_patterns),
+            root_count = VALUES(root_count),
+            exchange_count = VALUES(exchange_count),
+            requested_limit = VALUES(requested_limit),
+            result_rows = VALUES(result_rows),
+            elapsed_ms = VALUES(elapsed_ms),
+            created_at = VALUES(created_at)
+        "#,
+    )
+    .bind(run_id)
     .bind(run_id)
     .bind(run_id)
     .execute(pool)
@@ -1616,6 +2769,7 @@ fn record_condition(
 
 async fn refresh_entry_exit_template_condition_stats(
     pool: &MySqlPool,
+    result_table_name: &str,
     run_id: &str,
 ) -> Result<u64, sqlx::Error> {
     ensure_entry_exit_template_condition_stats_table(pool).await?;
@@ -1626,7 +2780,7 @@ async fn refresh_entry_exit_template_condition_stats(
         .await?;
 
     let mut aggregates: HashMap<(String, String, String), ConditionAggregate> = HashMap::new();
-    let mut rows = sqlx::query(
+    let condition_sql = format!(
         r#"
         SELECT
             r.template_uid,
@@ -1649,14 +2803,14 @@ async fn refresh_entry_exit_template_condition_stats(
             CAST(ps.six_month AS SIGNED) AS six_month,
             CAST(ps.twelve_month AS SIGNED) AS twelve_month,
             ps.full_pattern_length
-        FROM entry_exit_template_results r FORCE INDEX (idx_entry_exit_template_results_run_setup)
+        FROM {} r FORCE INDEX (idx_entry_exit_template_results_run_setup)
         LEFT JOIN pattern_setups ps
           ON ps.setup_id = r.setup_id
         WHERE r.run_id = ?
         "#,
-    )
-    .bind(run_id)
-    .fetch(pool);
+        quoted_identifier(result_table_name)
+    );
+    let mut rows = sqlx::query(&condition_sql).bind(run_id).fetch(pool);
 
     while let Some(row) = rows.try_next().await? {
         let template_uid: String = row.try_get("template_uid")?;
@@ -1871,30 +3025,20 @@ async fn print_template_leaderboard(pool: &MySqlPool, run_id: &str) -> Result<()
             t.template_name,
             t.created_from_symbol,
             COALESCE(t.created_from_family_key, 'N/A') AS created_from_family_key,
-            COALESCE(r.eval_count, 0) AS eval_count,
-            COALESCE(r.pass_count, 0) AS pass_count,
-            COALESCE(r.fail_count, 0) AS fail_count,
-            COALESCE(r.no_entry_count, 0) AS no_entry_count,
-            COALESCE(r.avg_r, 0) AS avg_r
+            COALESCE(s.eval_count, 0) AS eval_count,
+            COALESCE(s.pass_count, 0) AS pass_count,
+            COALESCE(s.fail_count, 0) AS fail_count,
+            COALESCE(s.no_entry_count, 0) AS no_entry_count,
+            COALESCE(s.avg_r, 0) AS avg_r
         FROM entry_exit_templates t
-        LEFT JOIN (
-            SELECT
-                template_uid,
-                CAST(COUNT(*) AS SIGNED) AS eval_count,
-                CAST(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) AS SIGNED) AS pass_count,
-                CAST(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END) AS SIGNED) AS fail_count,
-                CAST(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END) AS SIGNED) AS no_entry_count,
-                AVG(COALESCE(result_r, 0)) AS avg_r
-            FROM entry_exit_template_results
-            WHERE run_id = ?
-            GROUP BY template_uid
-        ) r ON r.template_uid = t.template_uid
+        LEFT JOIN entry_exit_template_ui_stats s
+          ON s.run_id = t.origin_run_id
+         AND s.template_uid = t.template_uid
         WHERE t.origin_run_id = ?
         ORDER BY pass_count DESC, avg_r DESC, eval_count DESC
         LIMIT 12
         "#,
     )
-    .bind(run_id)
     .bind(run_id)
     .fetch_all(pool)
     .await?;
@@ -1938,7 +3082,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ensure_template_tables(&pool).await?;
 
     let patterns = fetch_patterns(&pool, &args).await?;
-    if patterns.is_empty() {
+    let raw_patterns_loaded = patterns.len();
+    let events = build_pattern_events(patterns, args.event_limit());
+    if events.is_empty() {
         println!(
             "No patterns found for source={} year={} family={:?} symbol={:?}",
             args.source_scope,
@@ -1950,78 +3096,134 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let run_id = creator_run_id();
+    let result_table_name = result_table_name_for_run(&run_id);
+    let store_raw_results = args.stores_raw_results();
+    if store_raw_results {
+        ensure_result_table_for_run(&pool, &result_table_name).await?;
+    }
     let started = Instant::now();
     let mut templates: Vec<GeneratedTemplate> = Vec::new();
     let mut existing_template_passes = 0_i64;
     let mut failed_to_create = 0_i64;
-    let mut result_rows = 0_i64;
     let mut pending_results: Vec<StoredTemplateResult> = Vec::with_capacity(RESULT_BATCH_SIZE);
+    let mut tested_template_events: HashSet<(String, String)> = HashSet::new();
+    let mut summary = SummaryCollector::default();
 
     println!(
-        "Entry/Exit template creator run {run_id}: {} patterns, source={}, year={}",
-        patterns.len(),
+        "Entry/Exit template creator run {run_id}: {} raw patterns -> {} Twin/Event decisions, source={}, timeframe={}, year={}, event_result_policy={}, result_storage={}",
+        raw_patterns_loaded,
+        events.len(),
         args.source_scope,
-        args.year_label()
+        args.source_timeframe.as_deref().unwrap_or("all"),
+        args.year_label(),
+        args.event_result_policy,
+        args.result_storage
     );
+    if store_raw_results {
+        println!("Build test results table: {result_table_name}");
+    } else {
+        println!("Build test result rows: summary-only (raw rows are not stored)");
+    }
     println!(
-        "Pattern loop: evaluate existing generated templates first; create one only if none pass."
+        "Pattern loop: raw twins may create templates; stored template stats are one selected result per Twin/Event."
     );
 
-    for (pattern_index, setup) in patterns.iter().enumerate() {
-        let candles = match fetch_forward_candles(&pool, setup).await {
-            Ok(candles) => candles,
-            Err(error) => {
-                eprintln!(
-                    "Candle fetch failed for setup {} ({}): {:?}",
-                    setup.setup_id, setup.symbol, error
-                );
-                Vec::new()
-            }
-        };
+    for (event_index, event) in events.iter().enumerate() {
+        let mut candle_cache: HashMap<String, Vec<ForwardCandle>> = HashMap::new();
+        for setup in &event.candidates {
+            let candles = match fetch_forward_candles(&pool, setup).await {
+                Ok(candles) => candles,
+                Err(error) => {
+                    eprintln!(
+                        "Candle fetch failed for setup {} ({}): {:?}",
+                        setup.setup_id, setup.symbol, error
+                    );
+                    Vec::new()
+                }
+            };
+            candle_cache.insert(setup.setup_id.clone(), candles);
+        }
 
-        let evaluation_order = pattern_index as i64 + 1;
-        let mut any_existing_passed = false;
-        for template in &templates {
-            let evaluation = evaluate_template(template, setup, &candles);
-            if evaluation.outcome == "pass" {
-                any_existing_passed = true;
-                existing_template_passes += 1;
-            }
-            pending_results.push(StoredTemplateResult::from_evaluation(
+        let evaluation_order = event_index as i64 + 1;
+        let mut covered_setup_ids: HashSet<String> = HashSet::new();
+        let template_count_at_event_start = templates.len();
+        for template_index in 0..template_count_at_event_start {
+            let template = &templates[template_index];
+            let Some(event_evaluation) = evaluate_template_on_event(
                 template,
-                setup,
+                event,
+                &candle_cache,
                 evaluation_order,
-                false,
-                &evaluation,
-            ));
-            result_rows += 1;
-            if pending_results.len() >= RESULT_BATCH_SIZE {
-                flush_result_batch(&pool, &run_id, &mut pending_results).await?;
+                &args.event_result_policy,
+                None,
+            ) else {
+                continue;
+            };
+            if event_evaluation.any_passed {
+                existing_template_passes += 1;
+                for setup_id in event_evaluation.passed_setup_ids {
+                    covered_setup_ids.insert(setup_id);
+                }
+            }
+            tested_template_events.insert((template.template_uid.clone(), event.event_key.clone()));
+            summary.record(&event_evaluation.selected_result);
+            if store_raw_results {
+                pending_results.push(event_evaluation.selected_result);
+            }
+            if store_raw_results && pending_results.len() >= RESULT_BATCH_SIZE {
+                flush_result_batch(&pool, &result_table_name, &run_id, &mut pending_results)
+                    .await?;
             }
         }
 
-        if !any_existing_passed {
+        for setup in &event.candidates {
+            if covered_setup_ids.contains(&setup.setup_id) {
+                continue;
+            }
+
+            let candles = candle_cache
+                .get(&setup.setup_id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
             let next_sequence = templates.len() + 1;
             match synthesize_template(&run_id, next_sequence, setup, &candles) {
                 Some(template) => {
                     let evaluation = evaluate_template(&template, setup, &candles);
                     insert_template(&pool, &template, setup, &evaluation, &run_id).await?;
-                    pending_results.push(StoredTemplateResult::from_evaluation(
+                    if let Some(event_evaluation) = evaluate_template_on_event(
                         &template,
-                        setup,
+                        event,
+                        &candle_cache,
                         evaluation_order,
-                        true,
-                        &evaluation,
-                    ));
-                    result_rows += 1;
-                    if pending_results.len() >= RESULT_BATCH_SIZE {
-                        flush_result_batch(&pool, &run_id, &mut pending_results).await?;
+                        &args.event_result_policy,
+                        Some(&setup.setup_id),
+                    ) {
+                        for setup_id in event_evaluation.passed_setup_ids {
+                            covered_setup_ids.insert(setup_id);
+                        }
+                        tested_template_events
+                            .insert((template.template_uid.clone(), event.event_key.clone()));
+                        summary.record(&event_evaluation.selected_result);
+                        if store_raw_results {
+                            pending_results.push(event_evaluation.selected_result);
+                        }
+                        if store_raw_results && pending_results.len() >= RESULT_BATCH_SIZE {
+                            flush_result_batch(
+                                &pool,
+                                &result_table_name,
+                                &run_id,
+                                &mut pending_results,
+                            )
+                            .await?;
+                        }
                     }
                     println!(
-                        "Created {} from pattern {}/{}: {} {} {} family={} result={:.2}R",
+                        "Created {} from event {}/{} candidate {}/{}: {} {} {} family={} result={:.2}R",
                         template.template_uid,
-                        pattern_index + 1,
-                        patterns.len(),
+                        event_index + 1,
+                        events.len(),
+                        setup.event_rank.unwrap_or(1),
+                        setup.event_sister_count.unwrap_or(event.candidates.len() as i64),
                         setup.symbol,
                         setup.market,
                         setup.d_confirm_date,
@@ -2033,9 +3235,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None => {
                     failed_to_create += 1;
                     println!(
-                        "No passing template could be synthesized for pattern {}/{}: {} {} {} family={}",
-                        pattern_index + 1,
-                        patterns.len(),
+                        "No passing template could be synthesized for event {}/{} candidate {}/{}: {} {} {} family={}",
+                        event_index + 1,
+                        events.len(),
+                        setup.event_rank.unwrap_or(1),
+                        setup.event_sister_count.unwrap_or(event.candidates.len() as i64),
                         setup.symbol,
                         setup.market,
                         setup.d_confirm_date,
@@ -2045,25 +3249,98 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        if (pattern_index + 1) % 25 == 0 || pattern_index + 1 == patterns.len() {
+        if (event_index + 1) % 25 == 0 || event_index + 1 == events.len() {
             println!(
-                "Processed {}/{} patterns, generated templates={}, existing template passes={}",
-                pattern_index + 1,
-                patterns.len(),
+                "Processed {}/{} Twin/Event decisions, generated templates={}, existing template passes={}",
+                event_index + 1,
+                events.len(),
                 templates.len(),
                 existing_template_passes
             );
         }
     }
 
-    flush_result_batch(&pool, &run_id, &mut pending_results).await?;
+    if store_raw_results {
+        flush_result_batch(&pool, &result_table_name, &run_id, &mut pending_results).await?;
+    }
+
+    println!();
+    println!(
+        "Template discovery complete: {} templates created. Filling missing template/event tests across {} decisions.",
+        templates.len(),
+        events.len()
+    );
+    let mut result_rows = tested_template_events.len() as i64;
+    let mut missing_result_rows = 0_i64;
+
+    for (event_index, event) in events.iter().enumerate() {
+        let mut candle_cache: HashMap<String, Vec<ForwardCandle>> = HashMap::new();
+        for setup in &event.candidates {
+            let candles = match fetch_forward_candles(&pool, setup).await {
+                Ok(candles) => candles,
+                Err(error) => {
+                    eprintln!(
+                        "Full coverage candle fetch failed for setup {} ({}): {:?}",
+                        setup.setup_id, setup.symbol, error
+                    );
+                    Vec::new()
+                }
+            };
+            candle_cache.insert(setup.setup_id.clone(), candles);
+        }
+
+        let evaluation_order = event_index as i64 + 1;
+        for template in &templates {
+            let result_key = (template.template_uid.clone(), event.event_key.clone());
+            if tested_template_events.contains(&result_key) {
+                continue;
+            }
+
+            let Some(event_evaluation) = evaluate_template_on_event(
+                template,
+                event,
+                &candle_cache,
+                evaluation_order,
+                &args.event_result_policy,
+                None,
+            ) else {
+                continue;
+            };
+            tested_template_events.insert(result_key);
+            summary.record(&event_evaluation.selected_result);
+            if store_raw_results {
+                pending_results.push(event_evaluation.selected_result);
+            }
+            result_rows += 1;
+            missing_result_rows += 1;
+            if store_raw_results && pending_results.len() >= RESULT_BATCH_SIZE {
+                flush_result_batch(&pool, &result_table_name, &run_id, &mut pending_results)
+                    .await?;
+            }
+        }
+
+        if (event_index + 1) % 500 == 0 || event_index + 1 == events.len() {
+            println!(
+                "Coverage fill {}/{} decisions, templates={}, missing_added={}, final_rows={}",
+                event_index + 1,
+                events.len(),
+                templates.len(),
+                missing_result_rows,
+                result_rows
+            );
+        }
+    }
+
+    if store_raw_results {
+        flush_result_batch(&pool, &result_table_name, &run_id, &mut pending_results).await?;
+    }
 
     let elapsed_ms = started.elapsed().as_millis() as i64;
     insert_run_summary(
         &pool,
         &run_id,
         &args,
-        patterns.len() as i64,
+        events.len() as i64,
         templates.len() as i64,
         existing_template_passes,
         failed_to_create,
@@ -2072,18 +3349,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
 
-    let ui_stats_rows = refresh_entry_exit_template_ui_stats(&pool, &run_id).await?;
-    let condition_stats_rows = refresh_entry_exit_template_condition_stats(&pool, &run_id).await?;
+    let ui_stats_rows =
+        insert_entry_exit_template_ui_stats_from_summary(&pool, &run_id, &templates, &summary)
+            .await?;
+    let condition_stats_rows = if args.skip_condition_stats {
+        println!("Skipped Entry/Exit condition stats refresh (--skip-condition-stats).");
+        0
+    } else {
+        insert_entry_exit_template_condition_stats_from_summary(&pool, &run_id, &summary).await?
+    };
+    let coverage_rows =
+        refresh_entry_exit_template_build_coverage_ui_from_events(&pool, &run_id, &args, &events)
+            .await?;
+    let coverage_table_rows =
+        refresh_entry_exit_template_build_coverage_rows_ui(&pool, &run_id).await?;
+    let build_summary_rows = refresh_entry_exit_template_build_summary_ui(&pool, &run_id).await?;
 
     println!();
     println!(
-        "Stored creator run {run_id}: scanned={}, templates_created={}, existing_template_passes={}, failed_to_create={}, result_rows={}, ui_stats_rows={}, condition_stats_rows={}, elapsed={:.2}s",
-        patterns.len(),
+        "Stored creator run {run_id}: scanned={}, templates_created={}, existing_template_passes={}, failed_to_create={}, result_rows={}, ui_stats_rows={}, coverage_rows={}, coverage_table_rows={}, build_summary_rows={}, condition_stats_rows={}, elapsed={:.2}s",
+        events.len(),
         templates.len(),
         existing_template_passes,
         failed_to_create,
         result_rows,
         ui_stats_rows,
+        coverage_rows,
+        coverage_table_rows,
+        build_summary_rows,
         condition_stats_rows,
         elapsed_ms as f64 / 1000.0
     );

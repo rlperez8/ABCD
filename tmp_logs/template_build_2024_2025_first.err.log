@@ -1,0 +1,13 @@
+mysql://rperezkc:Nar8uto!@localhost:3306/abcd : The term 'mysql://rperezkc:Nar8uto!@localhost:3306/abcd' is not 
+recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if 
+a path was included, verify that the path is correct and try again.
+At line:1 char:26
++ ... _DATABASE_URL = mysql://rperezkc:Nar8uto!@localhost:3306/abcd; cargo  ...
++                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (mysql://rperezk...lhost:3306/abcd:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+   Compiling abcd v0.1.0 (C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.71s
+     Running `target\debug\create_entry_exit_templates.exe --source futures --start-year 2024 --end-year 2025 --limit 0 --event-result-policy first`
+error: process didn't exit successfully: `target\debug\create_entry_exit_templates.exe --source futures --start-year 2024 --end-year 2025 --limit 0 --event-result-policy first` (exit code: 0xffffffff)

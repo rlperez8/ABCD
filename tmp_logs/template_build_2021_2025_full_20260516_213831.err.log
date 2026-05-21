@@ -1,0 +1,2 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
+     Running `target\debug\create_entry_exit_templates.exe --source futures --start-year 2021 --end-year 2025 --limit 0 --event-result-policy first`

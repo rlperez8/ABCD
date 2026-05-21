@@ -123,6 +123,14 @@ const parsePatternSummaryRecord = (pattern) => ({
   gartley_accuracy: parseOptionalFloat(pattern.gartley_accuracy),
   crab_accuracy: parseOptionalFloat(pattern.crab_accuracy),
   shark_accuracy: parseOptionalFloat(pattern.shark_accuracy),
+  event_id: pattern.event_id ?? null,
+  event_rank: parseOptionalInt(pattern.event_rank),
+  is_event_primary:
+    pattern.is_event_primary === null || pattern.is_event_primary === undefined
+      ? null
+      : parseBooleanFlag(pattern.is_event_primary),
+  event_sister_count: parseOptionalInt(pattern.event_sister_count),
+  event_similarity_score: parseOptionalFloat(pattern.event_similarity_score),
 });
 
 const DECIMAL_PATTERN_FIELDS = [
@@ -232,6 +240,19 @@ const parsePatternDetailRecord = (pattern) => {
   nextPattern.trade_cd_bc_bar_retracement = parseOptionalFloat(nextPattern.trade_cd_bc_bar_retracement);
   nextPattern.trade_cd_xa_bar_retracement = parseOptionalFloat(nextPattern.trade_cd_xa_bar_retracement);
   nextPattern.time_accuracy = parseOptionalFloat(nextPattern.time_accuracy);
+  nextPattern.event_id = nextPattern.event_id ?? null;
+  nextPattern.event_rank = parseOptionalInt(nextPattern.event_rank);
+  nextPattern.is_event_primary =
+    nextPattern.is_event_primary === null || nextPattern.is_event_primary === undefined
+      ? null
+      : parseBooleanFlag(nextPattern.is_event_primary);
+  nextPattern.event_sister_count = parseOptionalInt(nextPattern.event_sister_count);
+  nextPattern.event_similarity_score = parseOptionalFloat(nextPattern.event_similarity_score);
+  nextPattern.twin_pattern_ids = Array.isArray(nextPattern.twin_pattern_ids)
+    ? nextPattern.twin_pattern_ids.filter(Boolean)
+    : typeof nextPattern.twin_pattern_ids === 'string'
+      ? nextPattern.twin_pattern_ids.split('|').map((value) => value.trim()).filter(Boolean)
+      : [];
 
   return nextPattern;
 };
@@ -410,7 +431,47 @@ const parseEntryExitTemplateRun = (run = null) =>
       }
     : null;
 
+const parseEntryExitTemplateBuildSummary = (summary = null) =>
+  summary
+    ? {
+        ...summary,
+        scan_year_start: parseOptionalInt(summary?.scan_year_start),
+        scan_year_end: parseOptionalInt(summary?.scan_year_end),
+        patterns_scanned: parseOptionalInt(summary?.patterns_scanned) ?? 0,
+        templates_created: parseOptionalInt(summary?.templates_created) ?? 0,
+        coverage_patterns: parseOptionalInt(summary?.coverage_patterns) ?? 0,
+        root_count: parseOptionalInt(summary?.root_count) ?? 0,
+        exchange_count: parseOptionalInt(summary?.exchange_count) ?? 0,
+        requested_limit: parseOptionalInt(summary?.requested_limit) ?? 0,
+        result_rows: parseOptionalInt(summary?.result_rows) ?? 0,
+        elapsed_ms: parseOptionalInt(summary?.elapsed_ms) ?? 0,
+      }
+    : null;
+
+const parseEntryExitTemplateCoverageRow = (row = {}) => ({
+  ...row,
+  test_id: row?.test_id ?? null,
+  run_id: row?.run_id ?? null,
+  root_symbol: row?.root_symbol ?? 'Unknown',
+  source_scope: row?.source_scope ?? null,
+  exchange_name: row?.exchange_name ?? row?.exchange ?? null,
+  contract_symbol: row?.contract_symbol ?? row?.root_symbol ?? 'Unknown',
+  source_timeframe: row?.source_timeframe ?? 'unknown',
+  pattern_count: parseOptionalInt(row?.scanned_pattern_count ?? row?.pattern_count) ?? 0,
+  scanned_pattern_count: parseOptionalInt(row?.scanned_pattern_count ?? row?.pattern_count) ?? 0,
+  universe_pattern_count: parseOptionalInt(row?.universe_pattern_count) ?? 0,
+  contract_count: parseOptionalInt(row?.contract_count),
+  status: row?.status ?? null,
+  sort_order: parseOptionalInt(row?.sort_order),
+  first_d_confirm_date: row?.first_d_confirm_date ?? null,
+  last_d_confirm_date: row?.last_d_confirm_date ?? null,
+});
+
 const parseEntryExitRouterPropStats = (stats = {}) => ({
+  profit_target_r: parseOptionalFloat(stats?.profit_target_r) ?? 0,
+  max_drawdown_r_limit: parseOptionalFloat(stats?.max_drawdown_r_limit) ?? 0,
+  daily_loss_r_limit: parseOptionalFloat(stats?.daily_loss_r_limit) ?? 0,
+  sim_plays_used: parseOptionalInt(stats?.sim_plays_used),
   cycles: parseOptionalInt(stats?.cycles) ?? 0,
   passed: parseOptionalInt(stats?.passed) ?? 0,
   daily_fails: parseOptionalInt(stats?.daily_fails) ?? 0,
@@ -435,10 +496,24 @@ const parseEntryExitRouterRunRecord = (run = null) =>
         no_route_patterns: parseOptionalInt(run?.no_route_patterns) ?? 0,
         skipped_non_trade_patterns: parseOptionalInt(run?.skipped_non_trade_patterns) ?? 0,
         skipped_symbol_patterns: parseOptionalInt(run?.skipped_symbol_patterns) ?? 0,
+        skipped_overlap_patterns: parseOptionalInt(run?.skipped_overlap_patterns) ?? 0,
         trade_choices: parseOptionalInt(run?.trade_choices) ?? 0,
         watchlist_choices: parseOptionalInt(run?.watchlist_choices) ?? 0,
         skip_choices: parseOptionalInt(run?.skip_choices) ?? 0,
+        manual_family_bans_applied: parseOptionalInt(run?.manual_family_bans_applied) ?? 0,
         symbol_filter_enabled: parseBooleanFlag(run?.symbol_filter_enabled),
+        one_trade_at_a_time: parseBooleanFlag(run?.one_trade_at_a_time),
+        one_trade_per_root_symbol: parseBooleanFlag(run?.one_trade_per_root_symbol),
+        one_trade_per_minute: parseBooleanFlag(run?.one_trade_per_minute),
+        trade_cooldown_minutes: parseOptionalInt(run?.trade_cooldown_minutes) ?? 0,
+        daily_loss_lockout: parseBooleanFlag(run?.daily_loss_lockout),
+        near_pass_protection: parseBooleanFlag(run?.near_pass_protection),
+        near_pass_within_r: parseOptionalFloat(run?.near_pass_within_r) ?? 0,
+        near_pass_daily_loss_r: parseOptionalFloat(run?.near_pass_daily_loss_r) ?? 0,
+        loss_cluster_day_lockout: parseBooleanFlag(run?.loss_cluster_day_lockout),
+        loss_cluster_loss_count: parseOptionalInt(run?.loss_cluster_loss_count) ?? 0,
+        loss_cluster_window_minutes: parseOptionalInt(run?.loss_cluster_window_minutes) ?? 0,
+        playbook_description: typeof run?.playbook_description === 'string' ? run.playbook_description : '',
         symbol_trade_roots: parseOptionalInt(run?.symbol_trade_roots) ?? 0,
         symbol_skip_roots: parseOptionalInt(run?.symbol_skip_roots) ?? 0,
         symbol_min_tests: parseOptionalInt(run?.symbol_min_tests) ?? 0,
@@ -454,6 +529,7 @@ const parseEntryExitRouterRunRecord = (run = null) =>
         win_count: parseOptionalInt(run?.win_count) ?? 0,
         loss_count: parseOptionalInt(run?.loss_count) ?? 0,
         no_entry_count: parseOptionalInt(run?.no_entry_count) ?? 0,
+        trade_win_rate: parseOptionalFloat(run?.trade_win_rate),
         avg_r: parseOptionalFloat(run?.avg_r) ?? 0,
         sum_r: parseOptionalFloat(run?.sum_r) ?? 0,
         best_r: parseOptionalFloat(run?.best_r) ?? 0,
@@ -473,6 +549,220 @@ const parseEntryExitRouterSymbolRecord = (row = {}) => ({
   train_fail_rate: parseOptionalFloat(row?.train_fail_rate) ?? 0,
   train_avg_r: parseOptionalFloat(row?.train_avg_r) ?? 0,
   train_sum_r: parseOptionalFloat(row?.train_sum_r) ?? 0,
+});
+
+const parseEntryExitRouterFamilyRouteRecord = (row = {}) => ({
+  ...row,
+  template_rank: parseOptionalInt(row?.template_rank) ?? 0,
+  score: parseOptionalFloat(row?.score) ?? 0,
+  train_eval_count: parseOptionalInt(row?.train_eval_count) ?? 0,
+  train_pass_count: parseOptionalInt(row?.train_pass_count) ?? 0,
+  train_fail_count: parseOptionalInt(row?.train_fail_count) ?? 0,
+  train_no_entry_count: parseOptionalInt(row?.train_no_entry_count) ?? 0,
+  train_avg_r: parseOptionalFloat(row?.train_avg_r) ?? 0,
+  train_win_rate: parseOptionalFloat(row?.train_win_rate) ?? 0,
+  train_fail_rate: parseOptionalFloat(row?.train_fail_rate) ?? 0,
+  test_eval_count: parseOptionalInt(row?.test_eval_count) ?? 0,
+  test_pass_count: parseOptionalInt(row?.test_pass_count) ?? 0,
+  test_fail_count: parseOptionalInt(row?.test_fail_count) ?? 0,
+  test_no_entry_count: parseOptionalInt(row?.test_no_entry_count) ?? 0,
+  test_avg_r: parseOptionalFloat(row?.test_avg_r) ?? 0,
+  test_sum_r: parseOptionalFloat(row?.test_sum_r) ?? 0,
+  test_best_r: parseOptionalFloat(row?.test_best_r) ?? 0,
+  test_worst_r: parseOptionalFloat(row?.test_worst_r) ?? 0,
+});
+
+const parseEntryExitSimEquityPoint = (row = {}) => ({
+  ...row,
+  point_index: parseOptionalInt(row?.point_index) ?? 0,
+  result_r: parseOptionalFloat(row?.result_r) ?? 0,
+  cumulative_r: parseOptionalFloat(row?.cumulative_r) ?? 0,
+  drawdown_r: parseOptionalFloat(row?.drawdown_r) ?? 0,
+  daily_r: parseOptionalFloat(row?.daily_r) ?? 0,
+});
+
+const parseEntryExitSimDailyRRow = (row = {}) => ({
+  ...row,
+  total_r: parseOptionalFloat(row?.total_r) ?? 0,
+  trades: parseOptionalInt(row?.trades) ?? 0,
+  wins: parseOptionalInt(row?.wins) ?? 0,
+  losses: parseOptionalInt(row?.losses) ?? 0,
+  no_entries: parseOptionalInt(row?.no_entries) ?? 0,
+  best_trade_r: parseOptionalFloat(row?.best_trade_r) ?? 0,
+  worst_trade_r: parseOptionalFloat(row?.worst_trade_r) ?? 0,
+  worst_intraday_r: parseOptionalFloat(row?.worst_intraday_r) ?? 0,
+  hit_daily_loss: Boolean(parseOptionalInt(row?.hit_daily_loss) ?? row?.hit_daily_loss),
+});
+
+const parseEntryExitSimDailyTradeRow = (row = {}) => ({
+  ...row,
+  id: parseOptionalInt(row?.id) ?? 0,
+  result_r: parseOptionalFloat(row?.result_r) ?? 0,
+  family_key: row?.family_key ?? '',
+  template_uid: row?.template_uid ?? '',
+  template_label: row?.template_label ?? '',
+  symbol: row?.symbol ?? '',
+  market: row?.market ?? '',
+  outcome: row?.outcome ?? '',
+  exit_reason: row?.exit_reason ?? '',
+  trade_direction: row?.trade_direction ?? null,
+});
+
+const parseEntryExitSimHourlyRow = (row = {}) => ({
+  ...row,
+  entry_hour: parseOptionalInt(row?.entry_hour) ?? 0,
+  trades: parseOptionalInt(row?.trades) ?? 0,
+  wins: parseOptionalInt(row?.wins) ?? 0,
+  losses: parseOptionalInt(row?.losses) ?? 0,
+  no_entries: parseOptionalInt(row?.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row?.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row?.worst_r) ?? 0,
+  daily_loss_day_trades: parseOptionalInt(row?.daily_loss_day_trades) ?? 0,
+  daily_loss_day_count: parseOptionalInt(row?.daily_loss_day_count) ?? 0,
+});
+
+const parseEntryExitSimTradeCadence = (row = null) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    trades: parseOptionalInt(row?.trades) ?? 0,
+    trade_days: parseOptionalInt(row?.trade_days) ?? 0,
+    gap_count: parseOptionalInt(row?.gap_count) ?? 0,
+    avg_gap_minutes: parseOptionalFloat(row?.avg_gap_minutes) ?? 0,
+    median_gap_minutes: parseOptionalFloat(row?.median_gap_minutes) ?? 0,
+    min_gap_minutes: parseOptionalFloat(row?.min_gap_minutes) ?? 0,
+    max_gap_minutes: parseOptionalFloat(row?.max_gap_minutes) ?? 0,
+    avg_trades_per_day: parseOptionalFloat(row?.avg_trades_per_day) ?? 0,
+    max_trades_per_day: parseOptionalInt(row?.max_trades_per_day) ?? 0,
+    max_trades_per_hour: parseOptionalInt(row?.max_trades_per_hour) ?? 0,
+    max_trades_5m_window: parseOptionalInt(row?.max_trades_5m_window) ?? 0,
+    max_trades_15m_window: parseOptionalInt(row?.max_trades_15m_window) ?? 0,
+    gap_0_1m: parseOptionalInt(row?.gap_0_1m) ?? 0,
+    gap_1_5m: parseOptionalInt(row?.gap_1_5m) ?? 0,
+    gap_5_15m: parseOptionalInt(row?.gap_5_15m) ?? 0,
+    gap_15_30m: parseOptionalInt(row?.gap_15_30m) ?? 0,
+    gap_30_60m: parseOptionalInt(row?.gap_30_60m) ?? 0,
+    gap_over_60m: parseOptionalInt(row?.gap_over_60m) ?? 0,
+  };
+};
+
+const parseEntryExitSimSymbolContributionRow = (row = {}) => ({
+  ...row,
+  root_symbol: row?.root_symbol ?? '',
+  trades: parseOptionalInt(row?.trades) ?? 0,
+  wins: parseOptionalInt(row?.wins) ?? 0,
+  losses: parseOptionalInt(row?.losses) ?? 0,
+  no_entries: parseOptionalInt(row?.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row?.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row?.worst_r) ?? 0,
+  daily_loss_day_trades: parseOptionalInt(row?.daily_loss_day_trades) ?? 0,
+  daily_loss_day_count: parseOptionalInt(row?.daily_loss_day_count) ?? 0,
+  family_count: parseOptionalInt(row?.family_count) ?? 0,
+  template_count: parseOptionalInt(row?.template_count) ?? 0,
+  contract_count: parseOptionalInt(row?.contract_count) ?? 0,
+});
+
+const parseEntryExitSimFamilyContributionRow = (row = {}) => ({
+  ...row,
+  family_key: row?.family_key ?? '',
+  trades: parseOptionalInt(row?.trades) ?? 0,
+  wins: parseOptionalInt(row?.wins) ?? 0,
+  losses: parseOptionalInt(row?.losses) ?? 0,
+  no_entries: parseOptionalInt(row?.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row?.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row?.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row?.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row?.worst_r) ?? 0,
+  daily_loss_day_trades: parseOptionalInt(row?.daily_loss_day_trades) ?? 0,
+  daily_loss_day_count: parseOptionalInt(row?.daily_loss_day_count) ?? 0,
+  symbol_count: parseOptionalInt(row?.symbol_count) ?? 0,
+  template_count: parseOptionalInt(row?.template_count) ?? 0,
+  contract_count: parseOptionalInt(row?.contract_count) ?? 0,
+});
+
+const parseEntryExitSimStreakRow = (row = {}) => ({
+  ...row,
+  streak_number: parseOptionalInt(row?.streak_number) ?? 0,
+  start_index: parseOptionalInt(row?.start_index) ?? 0,
+  end_index: parseOptionalInt(row?.end_index) ?? 0,
+  streak_length: parseOptionalInt(row?.streak_length) ?? 0,
+  sum_r: parseOptionalFloat(row?.sum_r) ?? 0,
+});
+
+const parseEntryExitSimLossSummary = (row = null) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    losses: parseOptionalInt(row?.losses) ?? 0,
+    loss_gap_count: parseOptionalInt(row?.loss_gap_count) ?? 0,
+    avg_loss_gap_minutes: parseOptionalFloat(row?.avg_loss_gap_minutes) ?? 0,
+    median_loss_gap_minutes: parseOptionalFloat(row?.median_loss_gap_minutes) ?? 0,
+    min_loss_gap_minutes: parseOptionalFloat(row?.min_loss_gap_minutes) ?? 0,
+    max_loss_gap_minutes: parseOptionalFloat(row?.max_loss_gap_minutes) ?? 0,
+    clustered_60m_loss_pairs: parseOptionalInt(row?.clustered_60m_loss_pairs) ?? 0,
+    same_day_loss_pairs: parseOptionalInt(row?.same_day_loss_pairs) ?? 0,
+    clustered_60m_rate: parseOptionalFloat(row?.clustered_60m_rate) ?? 0,
+    loss_days: parseOptionalInt(row?.loss_days) ?? 0,
+    loss_days_5_plus: parseOptionalInt(row?.loss_days_5_plus) ?? 0,
+    worst_loss_day_losses: parseOptionalInt(row?.worst_loss_day_losses) ?? 0,
+    worst_loss_day_r: parseOptionalFloat(row?.worst_loss_day_r) ?? 0,
+    worst_loss_hour: parseOptionalInt(row?.worst_loss_hour),
+    worst_loss_hour_losses: parseOptionalInt(row?.worst_loss_hour_losses) ?? 0,
+    worst_loss_hour_r: parseOptionalFloat(row?.worst_loss_hour_r) ?? 0,
+    max_loss_streak: parseOptionalInt(row?.max_loss_streak) ?? 0,
+  };
+};
+
+const parseEntryExitSimLossGapBucket = (row = {}) => ({
+  ...row,
+  bucket_key: row?.bucket_key ?? '',
+  bucket_label: row?.bucket_label ?? '',
+  sort_order: parseOptionalInt(row?.sort_order) ?? 0,
+  gap_count: parseOptionalInt(row?.gap_count) ?? 0,
+  gap_percent: parseOptionalFloat(row?.gap_percent) ?? 0,
+});
+
+const parseEntryExitSimLossWindow = (row = {}) => ({
+  ...row,
+  entry_hour: parseOptionalInt(row?.entry_hour) ?? 0,
+  trades: parseOptionalInt(row?.trades) ?? 0,
+  wins: parseOptionalInt(row?.wins) ?? 0,
+  losses: parseOptionalInt(row?.losses) ?? 0,
+  no_entries: parseOptionalInt(row?.no_entries) ?? 0,
+  total_r: parseOptionalFloat(row?.total_r) ?? 0,
+  loss_rate: parseOptionalFloat(row?.loss_rate) ?? 0,
+  top_root_symbol: row?.top_root_symbol ?? '',
+  top_family_key: row?.top_family_key ?? '',
+  top_template_uid: row?.top_template_uid ?? '',
+});
+
+const parseEntryExitManualFamilyBanRecord = (row = {}) => ({
+  ...row,
+  family_key: row?.family_key ?? '',
+  reason: row?.reason ?? '',
+  created_at: row?.created_at ?? null,
+  updated_at: row?.updated_at ?? null,
+});
+
+const parseEntryExitManualSymbolBanRecord = (row = {}) => ({
+  ...row,
+  root_symbol: row?.root_symbol ?? '',
+  reason: row?.reason ?? '',
+  created_at: row?.created_at ?? null,
+  updated_at: row?.updated_at ?? null,
 });
 
 const parsePhase1YearlyBreakdown = (data = null) => {
@@ -1200,12 +1490,15 @@ export const fetchStrategyTrades = async (
 export const fetchPhase1FamilyPatterns = async (
   {
     familyKey = null,
+    allFamilies = false,
     sourceScope = 'futures',
+    sourceTimeframe = null,
+    symbol = null,
     year = null,
   } = {},
   pagination = { limit: 500, offset: 0, includeCount: true }
 ) => {
-  if (!familyKey) {
+  if (!familyKey && !allFamilies) {
     return {
       patterns: [],
       total_count: 0,
@@ -1219,7 +1512,10 @@ export const fetchPhase1FamilyPatterns = async (
   try {
     const data = await postJson('/phase1/family-patterns', {
       family_key: familyKey,
+      all_families: Boolean(allFamilies),
       source_scope: sourceScope,
+      source_timeframe: sourceTimeframe || null,
+      symbol: symbol || null,
       year: parseOptionalInt(year),
       limit: pagination.limit ?? 500,
       offset: pagination.offset ?? 0,
@@ -1464,6 +1760,7 @@ export const fetchPatternFamilies = async ({
   minSetupCount = 1,
   year = null,
   sourceScope = 'all',
+  sourceTimeframe = null,
 } = {}) => {
   try {
     const data = await postJson('/pattern-families', {
@@ -1471,6 +1768,7 @@ export const fetchPatternFamilies = async ({
       min_setup_count: minSetupCount,
       year: parseOptionalInt(year),
       source_scope: sourceScope,
+      source_timeframe: sourceTimeframe || null,
     });
 
     return Array.isArray(data) ? data.map(parsePatternFamilyRecord) : [];
@@ -1576,13 +1874,70 @@ export const fetchEntryExitTemplates = async ({
 
     return {
       run: parseEntryExitTemplateRun(data?.run ?? null),
+      build_summary: parseEntryExitTemplateBuildSummary(data?.build_summary ?? null),
       templates: Array.isArray(data?.templates)
         ? data.templates.map(parseEntryExitTemplateRecord)
+        : [],
+      coverage: Array.isArray(data?.coverage)
+        ? data.coverage.map(parseEntryExitTemplateCoverageRow)
         : [],
     };
   } catch (error) {
     console.error(error);
-    return { run: null, templates: [] };
+    return { run: null, build_summary: null, templates: [], coverage: [] };
+  }
+};
+
+export const fetchEntryExitBuildDashboard = async ({ runId = null } = {}) => {
+  try {
+    const data = await postJson('/entry-exit/build-dashboard', {
+      run_id: runId,
+    });
+    const buildSummary = parseEntryExitTemplateBuildSummary(data?.build_summary ?? null);
+
+    return {
+      run: buildSummary
+        ? {
+            run_id: buildSummary.run_id,
+            source_scope: buildSummary.source_scope,
+            period_year:
+              buildSummary.scan_year_start && buildSummary.scan_year_start === buildSummary.scan_year_end
+                ? buildSummary.scan_year_start
+                : 0,
+            requested_limit: buildSummary.requested_limit,
+            scanned_patterns: buildSummary.patterns_scanned,
+            templates_created: buildSummary.templates_created,
+            existing_template_passes: 0,
+            failed_to_create: 0,
+            result_rows: buildSummary.result_rows,
+            elapsed_ms: buildSummary.elapsed_ms,
+            created_at: buildSummary.created_at ?? null,
+          }
+        : null,
+      build_summary: buildSummary,
+      templates: [],
+      coverage: Array.isArray(data?.coverage)
+        ? data.coverage.map(parseEntryExitTemplateCoverageRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { run: null, build_summary: null, templates: [], coverage: [] };
+  }
+};
+
+export const fetchEntryExitBuilds = async ({ limit = 25 } = {}) => {
+  try {
+    const data = await postJson('/entry-exit/builds', {
+      limit: parseOptionalInt(limit),
+    });
+
+    return Array.isArray(data?.builds)
+      ? data.builds.map(parseEntryExitTemplateBuildSummary).filter(Boolean)
+      : [];
+  } catch (error) {
+    console.error(error);
+    return [];
   }
 };
 
@@ -1604,10 +1959,255 @@ export const fetchEntryExitRouterRuns = async ({
       symbols: Array.isArray(data?.symbols)
         ? data.symbols.map(parseEntryExitRouterSymbolRecord)
         : [],
+      family_routes: Array.isArray(data?.family_routes)
+        ? data.family_routes.map(parseEntryExitRouterFamilyRouteRecord)
+        : [],
+      manual_family_bans: Array.isArray(data?.manual_family_bans)
+        ? data.manual_family_bans.map(parseEntryExitManualFamilyBanRecord)
+        : [],
+      manual_symbol_bans: Array.isArray(data?.manual_symbol_bans)
+        ? data.manual_symbol_bans.map(parseEntryExitManualSymbolBanRecord)
+        : [],
     };
   } catch (error) {
     console.error(error);
-    return { current_run: null, runs: [], symbols: [] };
+    return {
+      current_run: null,
+      runs: [],
+      symbols: [],
+      family_routes: [],
+      manual_family_bans: [],
+      manual_symbol_bans: [],
+    };
+  }
+};
+
+export const fetchEntryExitSimEquityCurve = async ({
+  simRunId = null,
+  pointLimit = 1200,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', points: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-equity-curve', {
+      sim_run_id: simRunId,
+      point_limit: parseOptionalInt(pointLimit),
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      points: Array.isArray(data?.points)
+        ? data.points.map(parseEntryExitSimEquityPoint)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, points: [] };
+  }
+};
+
+export const fetchEntryExitSimDailyR = async ({
+  simRunId = null,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', days: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-daily-r', {
+      sim_run_id: simRunId,
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      days: Array.isArray(data?.days)
+        ? data.days.map(parseEntryExitSimDailyRRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, days: [] };
+  }
+};
+
+export const fetchEntryExitSimDailyTrades = async ({
+  simRunId = null,
+  tradeDate = null,
+} = {}) => {
+  if (!simRunId || !tradeDate) {
+    return { sim_run_id: '', trade_date: '', trades: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-daily-trades', {
+      sim_run_id: simRunId,
+      trade_date: tradeDate,
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      trade_date: data?.trade_date ?? tradeDate,
+      trades: Array.isArray(data?.trades)
+        ? data.trades.map(parseEntryExitSimDailyTradeRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, trade_date: tradeDate, trades: [] };
+  }
+};
+
+export const fetchEntryExitSimHourly = async ({
+  simRunId = null,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', hours: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-hourly', {
+      sim_run_id: simRunId,
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      hours: Array.isArray(data?.hours)
+        ? data.hours.map(parseEntryExitSimHourlyRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, hours: [] };
+  }
+};
+
+export const fetchEntryExitSimTradeCadence = async ({
+  simRunId = null,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', cadence: null };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-trade-cadence', {
+      sim_run_id: simRunId,
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      cadence: parseEntryExitSimTradeCadence(data?.cadence ?? null),
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, cadence: null };
+  }
+};
+
+export const fetchEntryExitSimSymbolContribution = async ({
+  simRunId = null,
+  limit = 120,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', symbols: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-symbol-contribution', {
+      sim_run_id: simRunId,
+      limit: parseOptionalInt(limit),
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      symbols: Array.isArray(data?.symbols)
+        ? data.symbols.map(parseEntryExitSimSymbolContributionRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, symbols: [] };
+  }
+};
+
+export const fetchEntryExitSimFamilyContribution = async ({
+  simRunId = null,
+  limit = 120,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', families: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-family-contribution', {
+      sim_run_id: simRunId,
+      limit: parseOptionalInt(limit),
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      families: Array.isArray(data?.families)
+        ? data.families.map(parseEntryExitSimFamilyContributionRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, families: [] };
+  }
+};
+
+export const fetchEntryExitSimStreaks = async ({
+  simRunId = null,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', streaks: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-streaks', {
+      sim_run_id: simRunId,
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      streaks: Array.isArray(data?.streaks)
+        ? data.streaks.map(parseEntryExitSimStreakRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, streaks: [] };
+  }
+};
+
+export const fetchEntryExitSimLossClustering = async ({
+  simRunId = null,
+  windowLimit = 40,
+} = {}) => {
+  if (!simRunId) {
+    return { sim_run_id: '', summary: null, buckets: [], windows: [] };
+  }
+
+  try {
+    const data = await postJson('/entry-exit/sim-loss-clustering', {
+      sim_run_id: simRunId,
+      window_limit: parseOptionalInt(windowLimit),
+    });
+
+    return {
+      sim_run_id: data?.sim_run_id ?? simRunId,
+      summary: parseEntryExitSimLossSummary(data?.summary ?? null),
+      buckets: Array.isArray(data?.buckets)
+        ? data.buckets.map(parseEntryExitSimLossGapBucket)
+        : [],
+      windows: Array.isArray(data?.windows)
+        ? data.windows.map(parseEntryExitSimLossWindow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { sim_run_id: simRunId, summary: null, buckets: [], windows: [] };
   }
 };
 

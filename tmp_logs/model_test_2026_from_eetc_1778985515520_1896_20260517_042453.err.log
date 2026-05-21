@@ -1,0 +1,2 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.53s
+     Running `target\debug\run_entry_exit_family_router.exe --train-run-id eetc-1778985515520-1896 --test-year 2026 --source futures --prop-filter --symbol-filter`

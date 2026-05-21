@@ -1,8 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import CandleChartPanel from '../candle-chart/CandleChartPanel';
 import {
+  fetchCandleStorageSummary,
+  fetchEntryExitBuilds,
+  fetchEntryExitBuildDashboard,
   fetchEntryExitTemplateBreakdown,
   fetchEntryExitRouterRuns,
+  fetchEntryExitSimDailyR,
+  fetchEntryExitSimDailyTrades,
+  fetchEntryExitSimEquityCurve,
+  fetchEntryExitSimFamilyContribution,
+  fetchEntryExitSimHourly,
+  fetchEntryExitSimLossClustering,
+  fetchEntryExitSimStreaks,
+  fetchEntryExitSimSymbolContribution,
+  fetchEntryExitSimTradeCadence,
   fetchEntryExitTemplates,
   fetchPatternDetail,
   fetchPatternFamilies,
@@ -20,10 +32,34 @@ import { formatPattern } from '../../utils/patternFormatting';
 const formatNumber = (value) =>
   Number.isFinite(Number(value)) ? Number(value).toLocaleString() : '0';
 
+const formatOptionalNumber = (value) =>
+  Number.isFinite(Number(value)) ? Number(value).toLocaleString() : 'N/A';
+
 const formatDate = (value) => {
   if (!value) return 'N/A';
   const text = String(value);
   return text.length > 10 ? text.slice(0, 10) : text;
+};
+
+const formatTime = (value) => {
+  if (!value) return 'N/A';
+  const text = String(value);
+  const timePart = text.includes('T') ? text.split('T')[1] : text.split(' ')[1];
+  return timePart ? timePart.slice(0, 5) : text.slice(11, 16) || 'N/A';
+};
+
+const formatHourLabel = (value) => `${String(Number(value || 0)).padStart(2, '0')}:00`;
+
+const minDateValue = (left, right) => {
+  if (!left) return right ?? null;
+  if (!right) return left;
+  return Date.parse(right) < Date.parse(left) ? right : left;
+};
+
+const maxDateValue = (left, right) => {
+  if (!left) return right ?? null;
+  if (!right) return left;
+  return Date.parse(right) > Date.parse(left) ? right : left;
 };
 
 const compactText = (value = '', maxLength = 18) => {
@@ -35,8 +71,28 @@ const compactText = (value = '', maxLength = 18) => {
   return `${text.slice(0, left)}...${text.slice(text.length - right)}`;
 };
 
+const formatEntryExitFamilyRouteLabel = (route = null, fallbackKey = '') => {
+  const parts = [
+    route?.harmonic_type,
+    route?.market,
+    route?.family_bin,
+    route?.family_size_bucket,
+    route?.family_time_bin,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(' / ') : compactText(fallbackKey || 'Family', 18);
+};
+
+const optionalNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const formatDecimal = (value, digits = 2) =>
   Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '0.00';
+
+const formatRatePercent = (value, digits = 1) =>
+  Number.isFinite(Number(value)) ? (Number(value) * 100).toFixed(digits) : '0.0';
 
 const formatMoney = (value) =>
   Number.isFinite(Number(value))
@@ -53,6 +109,10 @@ const formatRouteMode = (value = '') =>
     .filter(Boolean)
     .map((part) => (part.length <= 2 ? part.toUpperCase() : `${part[0].toUpperCase()}${part.slice(1)}`))
     .join(' ');
+
+// Temporary performance isolation: keep the standalone Entry / Exit page focused
+// on selected build data only while we diagnose the slow follow-on dashboard loads.
+const ENTRY_EXIT_STANDALONE_BUILD_ONLY = true;
 
 const parseTemplateRuleJson = (template = {}) => {
   if (!template.rule_json || typeof template.rule_json !== 'string') {
@@ -371,6 +431,107 @@ const SOURCE_OPTIONS = [
   { value: 'all', label: 'All' },
 ];
 
+const TIMEFRAME_OPTIONS = [
+  { value: 'All', label: 'All' },
+  { value: '1m', label: '1m' },
+  { value: '3m', label: '3m' },
+  { value: '5m', label: '5m' },
+  { value: '15m', label: '15m' },
+  { value: '30m', label: '30m' },
+  { value: '1h', label: '1h' },
+  { value: '4h', label: '4h' },
+  { value: '12h', label: '12h' },
+  { value: '1d', label: '1d' },
+  { value: 'daily', label: 'Daily' },
+];
+
+const FUTURES_EXCHANGE_BY_ROOT = {
+  '6A': 'CME',
+  '6B': 'CME',
+  '6C': 'CME',
+  '6E': 'CME',
+  '6J': 'CME',
+  '6M': 'CME',
+  '6N': 'CME',
+  '6S': 'CME',
+  BTC: 'CME',
+  CL: 'NYMEX',
+  EMD: 'CME',
+  ES: 'CME',
+  GC: 'COMEX',
+  GF: 'CME',
+  HE: 'CME',
+  HG: 'COMEX',
+  HO: 'NYMEX',
+  KE: 'CBOT',
+  LE: 'CME',
+  M2K: 'CME',
+  MCL: 'NYMEX',
+  MES: 'CME',
+  MGC: 'COMEX',
+  MNQ: 'CME',
+  NG: 'NYMEX',
+  NKD: 'CME',
+  NQ: 'CME',
+  PA: 'NYMEX',
+  PL: 'NYMEX',
+  QG: 'NYMEX',
+  QM: 'NYMEX',
+  RB: 'NYMEX',
+  RTY: 'CME',
+  SI: 'COMEX',
+  UB: 'CBOT',
+  YM: 'CBOT',
+  ZB: 'CBOT',
+  ZC: 'CBOT',
+  ZF: 'CBOT',
+  ZL: 'CBOT',
+  ZM: 'CBOT',
+  ZN: 'CBOT',
+  ZS: 'CBOT',
+  ZT: 'CBOT',
+  ZW: 'CBOT',
+};
+
+// TODO: Move this display-only mapping into a DB-backed Symbol Master / market catalog table.
+const normalizeFuturesRootSymbol = (rootSymbol = '') => {
+  const value = String(rootSymbol || '').trim().toUpperCase();
+  const treasuryContractRoot = value.match(/^(ZB|ZN)[FGHJKMNQUVXZ]\d{1,2}$/);
+  return treasuryContractRoot ? treasuryContractRoot[1] : value;
+};
+
+const getFuturesExchange = (rootSymbol = '') =>
+  FUTURES_EXCHANGE_BY_ROOT[normalizeFuturesRootSymbol(rootSymbol)] ?? null;
+
+const getExchangeClassSuffix = (exchange = '') =>
+  String(exchange || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+const DEFAULT_PATTERN_SCAN_FIT = {
+  key: 'default-fit-on',
+  label: 'Default Fit ON',
+  detail: 'Default fit only',
+};
+
+const getPatternCatalogSource = (row = {}) => {
+  const tableName = String(row.table_name || '').toLowerCase();
+  if (tableName.includes('futures') || tableName.includes('contract')) return 'Futures';
+  if (tableName.includes('stock') || tableName === 'candles' || tableName.includes('daily')) return 'Stocks';
+  return 'Other';
+};
+
+const getPatternCatalogSourceKey = (source = '') =>
+  String(source || 'other').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+const getPatternScanProfileKey = ({ source, timeframe, fitKey }) =>
+  [source || 'Other', timeframe || 'unknown', fitKey || DEFAULT_PATTERN_SCAN_FIT.key]
+    .map((part) => String(part).toLowerCase().replace(/[^a-z0-9]+/g, '-'))
+    .join('__');
+
+const getTimeframeSortIndex = (timeframe = '') => {
+  const index = TIMEFRAME_OPTIONS.findIndex((option) => option.value === timeframe);
+  return index === -1 ? TIMEFRAME_OPTIONS.length : index;
+};
+
 const SIM_ACCOUNT_RULES = {
   '25K': {
     startingBalance: 25000,
@@ -398,7 +559,272 @@ const SIM_ACCOUNT_RULES = {
   },
 };
 
+const ENTRY_EXIT_PROP_RULES = {
+  profitTargetR: 30,
+  dailyLossR: 10,
+  maxDrawdownR: 20,
+};
+
+const getEntryExitCooldownLabel = (run = {}) => {
+  const cooldownMinutes = Number(run.trade_cooldown_minutes || 0);
+  if (cooldownMinutes > 0) {
+    return `${formatNumber(cooldownMinutes)}m Cooldown`;
+  }
+  return run.one_trade_per_minute ? '1 Per Minute' : null;
+};
+
+const getEntryExitCooldownShortLabel = (run = {}) => {
+  const cooldownMinutes = Number(run.trade_cooldown_minutes || 0);
+  if (cooldownMinutes > 0) {
+    return `${formatNumber(cooldownMinutes)}m gap`;
+  }
+  return run.one_trade_per_minute ? '1/min' : null;
+};
+
+const getEntryExitPlaybookName = (run = {}, manualFamilyBansApplied = 0) => {
+  const pieces = [];
+  if (manualFamilyBansApplied) {
+    pieces.push('Manual Ban');
+  } else {
+    pieces.push('Base');
+  }
+
+  const executionPieces = [];
+  if (run.one_trade_at_a_time) {
+    executionPieces.push('1 Trade Total');
+  } else if (run.one_trade_per_root_symbol) {
+    executionPieces.push('1 Per Root');
+  }
+  const cooldownLabel = getEntryExitCooldownLabel(run);
+  if (cooldownLabel) {
+    executionPieces.push(cooldownLabel);
+  }
+  if (run.daily_loss_lockout) {
+    executionPieces.push('Daily Lockout');
+  }
+  if (run.near_pass_protection) {
+    executionPieces.push('Near Pass Protect');
+  }
+  if (run.loss_cluster_day_lockout) {
+    const lossCount = Number(run.loss_cluster_loss_count || 0) || 3;
+    const windowMinutes = Number(run.loss_cluster_window_minutes || 0) || 60;
+    executionPieces.push(`${formatNumber(lossCount)}L/${formatNumber(windowMinutes)}m Guard`);
+  }
+  if (executionPieces.length) {
+    pieces.push(executionPieces.join(' + '));
+  } else {
+    pieces.push('Overlap Off');
+  }
+
+  if (run.symbol_filter_enabled) {
+    pieces.push('Symbol Gate');
+  }
+  if (/CL (?:is marked SKIP|excluded)/i.test(String(run.playbook_description || ''))) {
+    pieces.push('CL Skip');
+  }
+
+  return pieces.join(' | ');
+};
+
+const buildEntryExitPlaybookRuleSections = ({
+  run = {},
+  playbookLabel = '',
+  playbookName = '',
+  manualFamilyBansApplied = 0,
+} = {}) => {
+  if (!run) return [];
+
+  const title = [playbookLabel, playbookName].filter(Boolean).join(' - ');
+  const cooldownMinutes = Number(run.trade_cooldown_minutes || 0);
+  const sisterWindow = Number(run.sister_window_minutes || 0);
+  const lossClusterCount = Number(run.loss_cluster_loss_count || 0) || 3;
+  const lossClusterWindow = Number(run.loss_cluster_window_minutes || 0) || 60;
+  const sections = [
+    {
+      title: 'Template Assignment',
+      detail: title || 'Selected playbook',
+      items: [
+        {
+          label: 'Build',
+          value: compactText(run.train_run_id, 24),
+          detail: `${formatRouteMode(run.source_scope)} ${run.source_timeframe || 'all-timeframe'}`,
+        },
+        {
+          label: 'Template Rules',
+          value: 'Unchanged',
+          detail: 'playbook selects templates, it does not rewrite entries/exits',
+        },
+        {
+          label: 'Family Mapping',
+          value: 'Best Match',
+          detail: 'each trade family gets its selected template',
+        },
+        ...(manualFamilyBansApplied
+          ? [
+              {
+                label: 'Manual Ban',
+                value: formatNumber(manualFamilyBansApplied),
+                detail: 'family ban applied when this playbook was built',
+                tone: 'skipped',
+              },
+            ]
+          : []),
+      ],
+    },
+  ];
+
+  const timingItems = [];
+  if (sisterWindow > 0) {
+    timingItems.push({
+      label: 'Twin Window',
+      value: `${formatNumber(sisterWindow)}m`,
+      detail: 'one candidate is chosen inside the twin window',
+    });
+  } else {
+    timingItems.push({
+      label: 'Twin Window',
+      value: 'Off',
+      detail: 'this playbook row does not group twin candidates',
+    });
+  }
+  if (run.one_trade_at_a_time) {
+    timingItems.push({
+      label: 'Overlap',
+      value: '1 Account',
+      detail: 'only one active trade across the whole account',
+      tone: 'skipped',
+    });
+  } else if (run.one_trade_per_root_symbol) {
+    timingItems.push({
+      label: 'Overlap',
+      value: '1 Root',
+      detail: 'only one active trade per root symbol',
+      tone: 'skipped',
+    });
+  } else {
+    timingItems.push({
+      label: 'Overlap',
+      value: 'Off',
+      detail: 'overlapping accepted trades are not limited here',
+    });
+  }
+  if (run.one_trade_per_minute) {
+    timingItems.push({
+      label: 'Entry Spacing',
+      value: '1/min',
+      detail: 'only one accepted entry per minute',
+      tone: 'skipped',
+    });
+  }
+  if (cooldownMinutes > 0) {
+    timingItems.push({
+      label: 'Trade Gap',
+      value: `${formatNumber(cooldownMinutes)}m`,
+      detail: 'rolling gap after each accepted win/loss trade',
+      tone: 'skipped',
+    });
+  } else if (!run.one_trade_per_minute) {
+    timingItems.push({
+      label: 'Trade Gap',
+      value: 'Off',
+      detail: 'no extra rolling time gap after accepted trades',
+    });
+  }
+  sections.push({
+    title: 'Trade Timing',
+    detail: 'when a routed candidate is allowed to become a trade',
+    items: timingItems,
+  });
+
+  const riskItems = [];
+  if (run.daily_loss_lockout) {
+    riskItems.push({
+      label: 'Daily Limit',
+      value: 'Lockout',
+      detail: '-10R stops trading for the rest of the date instead of failing the cycle',
+      tone: 'skipped',
+    });
+  } else {
+    riskItems.push({
+      label: 'Daily Limit',
+      value: 'Fail',
+      detail: '-10R counts as a prop daily-loss failure',
+      tone: 'loss',
+    });
+  }
+  if (run.near_pass_protection) {
+    riskItems.push({
+      label: 'Near Pass',
+      value: `${formatDecimal(run.near_pass_within_r, 0)}R`,
+      detail: `near target, daily lockout tightens to -${formatDecimal(run.near_pass_daily_loss_r, 0)}R`,
+      tone: 'skipped',
+    });
+  } else {
+    riskItems.push({
+      label: 'Near Pass',
+      value: 'Off',
+      detail: 'no extra protection near the pass target',
+    });
+  }
+  if (run.loss_cluster_day_lockout) {
+    riskItems.push({
+      label: 'Loss Cluster',
+      value: `${formatNumber(lossClusterCount)}L/${formatNumber(lossClusterWindow)}m`,
+      detail: 'locks the rest of the date after clustered losses',
+      tone: 'skipped',
+    });
+  } else {
+    riskItems.push({
+      label: 'Loss Cluster',
+      value: 'Off',
+      detail: 'clustered losses do not trigger a day lockout',
+    });
+  }
+  sections.push({
+    title: 'Prop Risk',
+    detail: 'how the replay handles prop-firm account risk',
+    items: riskItems,
+  });
+
+  return sections;
+};
+
+const buildEntryExitPlaybookDescription = (options = {}) =>
+  buildEntryExitPlaybookRuleSections(options)
+    .map((section) =>
+      `${section.title}: ${section.items
+        .map((item) => `${item.label} ${item.value}${item.detail ? ` (${item.detail})` : ''}`)
+        .join('; ')}`
+    )
+    .join('\n\n');
+
+const getEntryExitPlaybookRank = (run = {}, manualFamilyBansApplied = 0) => {
+  let rank = manualFamilyBansApplied ? 100 : 0;
+  if (run.one_trade_at_a_time) {
+    rank += 1;
+  } else if (run.one_trade_per_root_symbol) {
+    rank += 2;
+  }
+  if (run.one_trade_per_minute || Number(run.trade_cooldown_minutes || 0) > 0) {
+    rank += 4;
+  }
+  if (run.daily_loss_lockout) {
+    rank += 8;
+  }
+  if (run.near_pass_protection) {
+    rank += 16;
+  }
+  if (run.loss_cluster_day_lockout) {
+    rank += 32;
+  }
+  if (!run.symbol_filter_enabled) {
+    rank += 10;
+  }
+  return rank;
+};
+
 const getRouteKey = (route) => `${route.run_id}-${route.route_id}`;
+const getPatternFamilyKey = (pattern = {}) => pattern.prop_strategy_id ?? pattern.pattern_family_key ?? null;
 const getFamilyPatternKey = (pattern = {}) =>
   [
     pattern.pattern_id ?? '',
@@ -406,6 +832,20 @@ const getFamilyPatternKey = (pattern = {}) =>
     pattern.symbol ?? '',
     pattern.d_date ?? '',
   ].join('|');
+const getPatternBrowseText = (pattern = {}) =>
+  [
+    pattern.pattern_id,
+    pattern.pattern_group_id,
+    getPatternFamilyKey(pattern),
+    pattern.symbol,
+    pattern.market,
+    pattern.harmonic_type,
+    pattern.d_date,
+    pattern.d_confirm_date,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
 const getRouteTradeKey = (trade = {}) =>
   [
     trade.test_index ?? 1,
@@ -424,6 +864,58 @@ const patternMatchesTrade = (pattern = {}, trade = {}) => {
     trade.pattern_group_id &&
     pattern.pattern_group_id === trade.pattern_group_id;
   return Boolean(samePatternId || sameGroupId);
+};
+
+const getPatternEventKey = (pattern = {}, fallbackIndex = 0) =>
+  pattern.event_id || `solo:${getFamilyPatternKey(pattern)}:${fallbackIndex}`;
+
+const getPatternTimelineTime = (pattern = {}) => {
+  const parsed = Date.parse(pattern.d_confirm_date ?? pattern.d_date ?? pattern.entry_date ?? '');
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+};
+
+const groupTwinPatternRows = (rows = []) => {
+  const groups = new Map();
+
+  rows.forEach((pattern, index) => {
+    const key = getPatternEventKey(pattern, index);
+    const time = getPatternTimelineTime(pattern);
+    const existing = groups.get(key);
+    if (!existing || time < existing.time || (time === existing.time && index < existing.index)) {
+      groups.set(key, { index, time });
+    }
+  });
+
+  return rows
+    .map((pattern, index) => ({
+      index,
+      pattern,
+      group: groups.get(getPatternEventKey(pattern, index)) ?? { index, time: getPatternTimelineTime(pattern) },
+    }))
+    .sort((left, right) => {
+      if (left.group.time !== right.group.time) {
+        return left.group.time - right.group.time;
+      }
+      if (left.group.index !== right.group.index) {
+        return left.group.index - right.group.index;
+      }
+      const leftRank = Number.isFinite(Number(left.pattern.event_rank))
+        ? Number(left.pattern.event_rank)
+        : left.index + 1;
+      const rightRank = Number.isFinite(Number(right.pattern.event_rank))
+        ? Number(right.pattern.event_rank)
+        : right.index + 1;
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+      }
+      const leftTime = getPatternTimelineTime(left.pattern);
+      const rightTime = getPatternTimelineTime(right.pattern);
+      if (leftTime !== rightTime) {
+        return leftTime - rightTime;
+      }
+      return left.index - right.index;
+    })
+    .map((item) => item.pattern);
 };
 
 const DATE_TIME_TEXT_PATTERN = /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}:\d{2}(?::\d{2})?))?/;
@@ -576,6 +1068,7 @@ const mergeRouteTradeIntoPattern = (pattern = {}, trade = null) => {
 const SelectedSummaryRow = ({
   actionDisabled = false,
   actionLabel,
+  className = '',
   emptyText,
   index,
   isLoading = false,
@@ -583,11 +1076,21 @@ const SelectedSummaryRow = ({
   loadingText,
   metrics = [],
   onAction,
+  onMouseEnter,
+  onMouseLeave,
   status,
   tone = 'neutral',
 }) => {
   return (
-    <section className={`pattern-family-selected-card pattern-family-selected-card--${tone}`}>
+    <section
+      className={[
+        'pattern-family-selected-card',
+        `pattern-family-selected-card--${tone}`,
+        className,
+      ].filter(Boolean).join(' ')}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <header className="pattern-family-selected-head">
         <span className="pattern-family-selected-index">{String(index).padStart(2, '0')}</span>
         <div className="pattern-family-selected-head-copy">
@@ -630,7 +1133,8 @@ const SelectedSummaryRow = ({
   );
 };
 
-const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
+const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = false } = {}) => {
+  const isEntryExitStandalone = Boolean(entryExitOnly);
   const [families, setFamilies] = useState([]);
   const [yearOptions, setYearOptions] = useState([]);
   const [isLoading, setLoading] = useState(false);
@@ -638,6 +1142,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const [search, setSearch] = useState('');
   const [harmonicType, setHarmonicType] = useState('All');
   const [sourceScope, setSourceScope] = useState('futures');
+  const [timeframeFilter, setTimeframeFilter] = useState('All');
   const [yearFilter, setYearFilter] = useState('All');
   const [minSetups, setMinSetups] = useState('1');
   const [selectedFamilyKey, setSelectedFamilyKey] = useState(null);
@@ -649,6 +1154,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const [isFamilyPatternsLoading, setFamilyPatternsLoading] = useState(false);
   const [familyPatternsError, setFamilyPatternsError] = useState('');
   const [selectedFamilyPatternKey, setSelectedFamilyPatternKey] = useState(null);
+  const [patternBrowseScope, setPatternBrowseScope] = useState('selected');
+  const [patternBrowseSymbol, setPatternBrowseSymbol] = useState('All');
+  const [patternBrowseSearch, setPatternBrowseSearch] = useState('');
+  const [patternBrowseRows, setPatternBrowseRows] = useState([]);
+  const [patternBrowseMeta, setPatternBrowseMeta] = useState({ totalCount: 0, hasMore: false });
+  const [isPatternBrowseLoading, setPatternBrowseLoading] = useState(false);
+  const [patternBrowseError, setPatternBrowseError] = useState('');
+  const [appliedPatternNavigation, setAppliedPatternNavigation] = useState(null);
   const [routeTrades, setRouteTrades] = useState([]);
   const [isRouteTradesLoading, setRouteTradesLoading] = useState(false);
   const [routeTradesError, setRouteTradesError] = useState('');
@@ -658,12 +1171,76 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const [supplyData, setSupplyData] = useState({ symbols: [], families: [] });
   const [isSupplyLoading, setSupplyLoading] = useState(false);
   const [supplyError, setSupplyError] = useState('');
-  const [entryExitData, setEntryExitData] = useState({ run: null, templates: [] });
+  const [patternStorageData, setPatternStorageData] = useState(null);
+  const [isPatternStorageLoading, setPatternStorageLoading] = useState(false);
+  const [patternStorageError, setPatternStorageError] = useState('');
+  const [patternCatalogSource, setPatternCatalogSource] = useState('All');
+  const [patternCatalogTimeframe, setPatternCatalogTimeframe] = useState('All');
+  const [patternCatalogFit, setPatternCatalogFit] = useState('All');
+  const [selectedPatternCatalogProfileId, setSelectedPatternCatalogProfileId] = useState(null);
+  const [entryExitData, setEntryExitData] = useState({ run: null, build_summary: null, templates: [], coverage: [] });
+  const [entryExitBuildSummaries, setEntryExitBuildSummaries] = useState([]);
+  const [isEntryExitBuildListLoading, setEntryExitBuildListLoading] = useState(false);
+  const [entryExitBuildListError, setEntryExitBuildListError] = useState('');
   const [isEntryExitLoading, setEntryExitLoading] = useState(false);
   const [entryExitError, setEntryExitError] = useState('');
-  const [entryExitRouterData, setEntryExitRouterData] = useState({ current_run: null, runs: [], symbols: [] });
+  const [entryExitRouterData, setEntryExitRouterData] = useState({
+    current_run: null,
+    runs: [],
+    symbols: [],
+    family_routes: [],
+    manual_family_bans: [],
+    manual_symbol_bans: [],
+  });
   const [isEntryExitRouterLoading, setEntryExitRouterLoading] = useState(false);
   const [entryExitRouterError, setEntryExitRouterError] = useState('');
+  const [entryExitSimEquityCurve, setEntryExitSimEquityCurve] = useState({ sim_run_id: '', points: [] });
+  const [isEntryExitSimEquityLoading, setEntryExitSimEquityLoading] = useState(false);
+  const [entryExitSimEquityError, setEntryExitSimEquityError] = useState('');
+  const [entryExitSimDailyRData, setEntryExitSimDailyRData] = useState({ sim_run_id: '', days: [] });
+  const [isEntryExitSimDailyRLoading, setEntryExitSimDailyRLoading] = useState(false);
+  const [entryExitSimDailyRError, setEntryExitSimDailyRError] = useState('');
+  const [selectedSimulationDailyDate, setSelectedSimulationDailyDate] = useState('');
+  const [entryExitSimDailyTradesData, setEntryExitSimDailyTradesData] = useState({
+    sim_run_id: '',
+    trade_date: '',
+    trades: [],
+  });
+  const [isEntryExitSimDailyTradesLoading, setEntryExitSimDailyTradesLoading] = useState(false);
+  const [entryExitSimDailyTradesError, setEntryExitSimDailyTradesError] = useState('');
+  const [entryExitSimHourlyData, setEntryExitSimHourlyData] = useState({ sim_run_id: '', hours: [] });
+  const [isEntryExitSimHourlyLoading, setEntryExitSimHourlyLoading] = useState(false);
+  const [entryExitSimHourlyError, setEntryExitSimHourlyError] = useState('');
+  const [entryExitSimTradeCadenceData, setEntryExitSimTradeCadenceData] = useState({
+    sim_run_id: '',
+    cadence: null,
+  });
+  const [isEntryExitSimTradeCadenceLoading, setEntryExitSimTradeCadenceLoading] = useState(false);
+  const [entryExitSimTradeCadenceError, setEntryExitSimTradeCadenceError] = useState('');
+  const [entryExitSimSymbolContributionData, setEntryExitSimSymbolContributionData] = useState({
+    sim_run_id: '',
+    symbols: [],
+  });
+  const [isEntryExitSimSymbolContributionLoading, setEntryExitSimSymbolContributionLoading] = useState(false);
+  const [entryExitSimSymbolContributionError, setEntryExitSimSymbolContributionError] = useState('');
+  const [entryExitSimFamilyContributionData, setEntryExitSimFamilyContributionData] = useState({
+    sim_run_id: '',
+    families: [],
+  });
+  const [isEntryExitSimFamilyContributionLoading, setEntryExitSimFamilyContributionLoading] = useState(false);
+  const [entryExitSimFamilyContributionError, setEntryExitSimFamilyContributionError] = useState('');
+  const [entryExitSimStreakData, setEntryExitSimStreakData] = useState({ sim_run_id: '', streaks: [] });
+  const [isEntryExitSimStreakLoading, setEntryExitSimStreakLoading] = useState(false);
+  const [entryExitSimStreakError, setEntryExitSimStreakError] = useState('');
+  const [entryExitSimLossClusterData, setEntryExitSimLossClusterData] = useState({
+    sim_run_id: '',
+    summary: null,
+    buckets: [],
+    windows: [],
+  });
+  const [isEntryExitSimLossClusterLoading, setEntryExitSimLossClusterLoading] = useState(false);
+  const [entryExitSimLossClusterError, setEntryExitSimLossClusterError] = useState('');
+  const [entryExitSimulationTab, setEntryExitSimulationTab] = useState('overview');
   const [entryExitTemplateBreakdown, setEntryExitTemplateBreakdown] = useState({
     market: [],
     harmonic_type: [],
@@ -673,6 +1250,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   });
   const [isEntryExitTemplateBreakdownLoading, setEntryExitTemplateBreakdownLoading] = useState(false);
   const [entryExitTemplateBreakdownError, setEntryExitTemplateBreakdownError] = useState('');
+  const [selectedEntryExitRouterRunId, setSelectedEntryExitRouterRunId] = useState(null);
   const [selectedRouteTradeKey, setSelectedRouteTradeKey] = useState(null);
   const [selectedPatternRouteTrade, setSelectedPatternRouteTrade] = useState(null);
   const [isPatternRouteTradeLoading, setPatternRouteTradeLoading] = useState(false);
@@ -682,20 +1260,25 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const [isCanvasLoading, setCanvasLoading] = useState(false);
   const [canvasError, setCanvasError] = useState('');
   const [isCanvasExpanded, setCanvasExpanded] = useState(false);
-  const [showCanvasCandles, setShowCanvasCandles] = useState(false);
-  const [inspectorDetailMode, setInspectorDetailMode] = useState('trade');
+  const [showCanvasCandles, setShowCanvasCandles] = useState(true);
+  const [inspectorDetailMode, setInspectorDetailMode] = useState('pattern');
   const [routeLogicHover, setRouteLogicHover] = useState(null);
+  const [isRouteLogicCollapsed, setRouteLogicCollapsed] = useState(false);
   const simAccountSize = '50K';
   const simContracts = '1';
   const simTestsToChain = '1';
   const simDrawdownModel = 'intraday';
   const simOneTradeAtATime = false;
   const [browsePanel, setBrowsePanel] = useState(null);
-  const [testOverviewTab, setTestOverviewTab] = useState('overview');
-  const [selectedDataCollapseLevel, setSelectedDataCollapseLevel] = useState(0);
-  const [isInspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [testOverviewTab, setTestOverviewTab] = useState(isEntryExitStandalone ? 'entryExit' : 'patterns');
+  const [selectedDataCollapseLevel, setSelectedDataCollapseLevel] = useState(isEntryExitStandalone ? 2 : 0);
+  const [isInspectorCollapsed, setInspectorCollapsed] = useState(isEntryExitStandalone);
+  const [isPatternCardHovered, setPatternCardHovered] = useState(false);
   const [selectedEntryExitTemplateUid, setSelectedEntryExitTemplateUid] = useState(null);
   const [entryExitProfileTab, setEntryExitProfileTab] = useState('all');
+  const [selectedPlaybookView, setSelectedPlaybookView] = useState('dashboard');
+  const [selectedBuildCoverageExchangeKey, setSelectedBuildCoverageExchangeKey] = useState('');
+  const [selectedEntryExitModelDatasetId, setSelectedEntryExitModelDatasetId] = useState(null);
   const isSelectedDataCollapsed = selectedDataCollapseLevel >= 1;
   const isSelectedDataFullyCollapsed = selectedDataCollapseLevel >= 2;
   const selectionDeckToggleLabel =
@@ -704,8 +1287,155 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       : selectedDataCollapseLevel === 1
         ? 'Show Selection Deck header only'
         : 'Expand Selection Deck';
+  const entryExitModelDatasets = useMemo(
+    () =>
+      entryExitBuildSummaries.map((summary, index) => ({
+        id: summary.run_id,
+        buildLabel: summary.build_label || `B${index + 1}`,
+        label: summary.scan_year_label || compactText(summary.run_id, 20),
+        detail: `${formatNumber(summary.templates_created)} tests | ${formatNumber(
+          summary.patterns_scanned
+        )} patterns`,
+        summary,
+      })),
+    [entryExitBuildSummaries]
+  );
+  const selectedEntryExitModelDataset =
+    entryExitModelDatasets.find((dataset) => dataset.id === selectedEntryExitModelDatasetId) ??
+    entryExitModelDatasets[0] ??
+    null;
+  const selectedBuildRunId = selectedEntryExitModelDataset?.id ?? null;
+  const selectedBuildLabel = selectedEntryExitModelDataset?.buildLabel ?? '';
+  const selectedBuildRunIsLoaded =
+    Boolean(selectedBuildRunId) && entryExitData.run?.run_id === selectedBuildRunId;
+  const selectedBuildSummary =
+    selectedBuildRunIsLoaded && entryExitData.build_summary?.run_id === selectedBuildRunId
+      ? entryExitData.build_summary
+      : selectedEntryExitModelDataset?.summary ?? null;
+  const selectedBuildHasStoredSummary = Boolean(selectedBuildSummary);
+  const selectedBuildYearLabel = selectedBuildSummary?.scan_year_label ?? '';
+  const selectedBuildPatternsScanned = selectedBuildSummary
+    ? formatNumber(selectedBuildSummary?.patterns_scanned)
+    : isEntryExitLoading
+      ? 'Loading'
+      : '';
+  const selectedBuildTestsBuilt = selectedBuildSummary
+    ? formatNumber(selectedBuildSummary?.templates_created)
+    : isEntryExitLoading
+      ? 'Loading'
+      : '';
+  const selectedBuildSourceLabel =
+    selectedBuildSummary?.source_scope
+      ? formatRouteMode(selectedBuildSummary.source_scope)
+      : '';
+  const selectedBuildTimeframeLabel =
+    selectedBuildSummary?.source_timeframe
+      ? selectedBuildSummary.source_timeframe
+      : '';
 
   useEffect(() => {
+    if (isEntryExitStandalone) {
+      setTestOverviewTab('entryExit');
+      setSelectedDataCollapseLevel(2);
+      setInspectorCollapsed(true);
+      setEntryExitProfileTab('model');
+    }
+  }, [isEntryExitStandalone]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitBuilds = async () => {
+      try {
+        setEntryExitBuildListLoading(true);
+        setEntryExitBuildListError('');
+        const builds = await fetchEntryExitBuilds({ limit: 25 });
+
+        if (!isCancelled) {
+          setEntryExitBuildSummaries(builds);
+          setSelectedEntryExitModelDatasetId((currentBuildId) =>
+            builds.some((build) => build.run_id === currentBuildId)
+              ? currentBuildId
+              : builds[0]?.run_id ?? null
+          );
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitBuildListError('Could not load stored Entry / Exit builds.');
+          setEntryExitBuildSummaries([]);
+          setSelectedEntryExitModelDatasetId(null);
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitBuildListLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitBuilds();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (inspectorDetailMode !== 'logic') {
+      setRouteLogicHover(null);
+    }
+  }, [inspectorDetailMode]);
+
+  useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setPatternStorageLoading(false);
+      setPatternStorageError('');
+      return undefined;
+    }
+
+    const shouldLoadPatternStorage =
+      testOverviewTab === 'patterns' || testOverviewTab === 'entryExit' || isEntryExitStandalone;
+    if (!shouldLoadPatternStorage || patternStorageData) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const loadPatternStorage = async () => {
+      try {
+        setPatternStorageLoading(true);
+        setPatternStorageError('');
+        const result = await fetchCandleStorageSummary({ includeStockSymbols: false });
+        if (!isCancelled) {
+          setPatternStorageData(result);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setPatternStorageError('Could not load pattern root symbols.');
+        }
+      } finally {
+        if (!isCancelled) {
+          setPatternStorageLoading(false);
+        }
+      }
+    };
+
+    void loadPatternStorage();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isEntryExitStandalone, patternStorageData, testOverviewTab]);
+
+  useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setFamilies([]);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
     let isCancelled = false;
 
     const loadFamilies = async () => {
@@ -717,6 +1447,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
           minSetupCount: 1,
           year: yearFilter === 'All' ? null : yearFilter,
           sourceScope,
+          sourceTimeframe: timeframeFilter === 'All' ? null : timeframeFilter,
         });
         if (!isCancelled) {
           setFamilies(rows);
@@ -741,11 +1472,226 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     return () => {
       isCancelled = true;
     };
-  }, [sourceScope, yearFilter]);
+  }, [isEntryExitStandalone, sourceScope, timeframeFilter, yearFilter]);
 
   const harmonicOptions = useMemo(
     () => ['All', ...uniqueValues(families, 'harmonic_type')],
     [families]
+  );
+
+  const patternCatalogProfiles = useMemo(() => {
+    const profileMap = (patternStorageData?.setup_contracts ?? []).reduce((map, row) => {
+      const source = getPatternCatalogSource(row);
+      const timeframe = row.source_timeframe || 'unknown';
+      const key = getPatternScanProfileKey({
+        source,
+        timeframe,
+        fitKey: DEFAULT_PATTERN_SCAN_FIT.key,
+      });
+      const current = map.get(key) ?? {
+        id: key,
+        source,
+        sourceKey: getPatternCatalogSourceKey(source),
+        timeframe,
+        fitKey: DEFAULT_PATTERN_SCAN_FIT.key,
+        fitLabel: DEFAULT_PATTERN_SCAN_FIT.label,
+        fitDetail: DEFAULT_PATTERN_SCAN_FIT.detail,
+        setup_count: 0,
+        rootSymbols: new Set(),
+        contractSymbols: new Set(),
+        exchangeNames: new Set(),
+        sourceTables: new Set(),
+        first_d_date: null,
+        last_d_date: null,
+      };
+      const rootSymbol = normalizeFuturesRootSymbol(row.root_symbol || row.contract_symbol || 'Unknown');
+      current.setup_count += Number(row.setup_count || 0);
+      if (rootSymbol) {
+        current.rootSymbols.add(rootSymbol);
+        current.exchangeNames.add(getFuturesExchange(rootSymbol) || (source === 'Stocks' ? 'Stocks' : 'Unknown'));
+      }
+      if (row.contract_symbol) {
+        current.contractSymbols.add(row.contract_symbol);
+      }
+      if (row.table_name) {
+        current.sourceTables.add(row.table_name);
+      }
+      current.first_d_date = minDateValue(current.first_d_date, row.first_d_date);
+      current.last_d_date = maxDateValue(current.last_d_date, row.last_d_date);
+      map.set(key, current);
+      return map;
+    }, new Map());
+
+    return [...profileMap.values()]
+      .sort((left, right) => {
+        const sourceOrder = { Futures: 0, Stocks: 1, Other: 2 };
+        return (
+          (sourceOrder[left.source] ?? 9) - (sourceOrder[right.source] ?? 9) ||
+          getTimeframeSortIndex(left.timeframe) - getTimeframeSortIndex(right.timeframe) ||
+          String(left.fitLabel).localeCompare(String(right.fitLabel))
+        );
+      })
+      .map((profile, index) => ({
+        ...profile,
+        displayId: `S${index + 1}`,
+        root_count: profile.rootSymbols.size,
+        contract_count: profile.contractSymbols.size,
+        exchange_count: profile.exchangeNames.size,
+        source_tables: [...profile.sourceTables].sort(),
+      }));
+  }, [patternStorageData]);
+
+  const patternCatalogSourceOptions = useMemo(() => {
+    const preferred = ['Futures', 'Stocks'];
+    const discovered = patternCatalogProfiles.map((profile) => profile.source);
+    return ['All', ...[...new Set([...preferred, ...discovered])].filter((source) => source !== 'Other'), ...(discovered.includes('Other') ? ['Other'] : [])];
+  }, [patternCatalogProfiles]);
+
+  const patternCatalogTimeframeOptions = useMemo(() => {
+    const discovered = [...new Set(patternCatalogProfiles.map((profile) => profile.timeframe).filter(Boolean))].sort(
+      (left, right) => getTimeframeSortIndex(left) - getTimeframeSortIndex(right) || String(left).localeCompare(String(right))
+    );
+    return ['All', ...discovered];
+  }, [patternCatalogProfiles]);
+
+  const patternCatalogFitOptions = useMemo(() => {
+    const discovered = [...new Map(patternCatalogProfiles.map((profile) => [profile.fitKey, profile.fitLabel])).entries()];
+    return [{ key: 'All', label: 'All Fits' }, ...discovered.map(([key, label]) => ({ key, label }))];
+  }, [patternCatalogProfiles]);
+
+  const filteredPatternCatalogProfiles = useMemo(
+    () =>
+      patternCatalogProfiles.filter((profile) => {
+        if (patternCatalogSource !== 'All' && profile.source !== patternCatalogSource) return false;
+        if (patternCatalogTimeframe !== 'All' && profile.timeframe !== patternCatalogTimeframe) return false;
+        if (patternCatalogFit !== 'All' && profile.fitKey !== patternCatalogFit) return false;
+        return true;
+      }),
+    [patternCatalogFit, patternCatalogProfiles, patternCatalogSource, patternCatalogTimeframe]
+  );
+
+  const selectedPatternCatalogProfile = useMemo(
+    () =>
+      filteredPatternCatalogProfiles.find((profile) => profile.id === selectedPatternCatalogProfileId) ??
+      filteredPatternCatalogProfiles[0] ??
+      null,
+    [filteredPatternCatalogProfiles, selectedPatternCatalogProfileId]
+  );
+
+  const selectedPatternCatalogRows = useMemo(() => {
+    if (!selectedPatternCatalogProfile) {
+      return [];
+    }
+
+    return (patternStorageData?.setup_contracts ?? []).filter(
+      (row) =>
+        getPatternCatalogSource(row) === selectedPatternCatalogProfile.source &&
+        (row.source_timeframe || 'unknown') === selectedPatternCatalogProfile.timeframe
+    );
+  }, [patternStorageData, selectedPatternCatalogProfile]);
+
+  const selectedPatternCatalogPatternRows = useMemo(() => {
+    if (!selectedPatternCatalogProfile) {
+      return [];
+    }
+
+    return (patternStorageData?.setup_patterns ?? []).filter(
+      (row) =>
+        getPatternCatalogSource(row) === selectedPatternCatalogProfile.source &&
+        (row.source_timeframe || 'unknown') === selectedPatternCatalogProfile.timeframe
+    );
+  }, [patternStorageData, selectedPatternCatalogProfile]);
+
+  const selectedPatternCatalogRootRows = useMemo(() => {
+    const rootMap = selectedPatternCatalogRows.reduce((map, row) => {
+      const rootSymbol = normalizeFuturesRootSymbol(row.root_symbol || row.contract_symbol || 'Unknown');
+      const current = map.get(rootSymbol) ?? {
+        root_symbol: rootSymbol,
+        exchange: getFuturesExchange(rootSymbol) || (selectedPatternCatalogProfile?.source === 'Stocks' ? 'Stocks' : 'Unknown'),
+        setup_count: 0,
+        contractSymbols: new Set(),
+        first_d_date: null,
+        last_d_date: null,
+      };
+      current.setup_count += Number(row.setup_count || 0);
+      if (row.contract_symbol) {
+        current.contractSymbols.add(row.contract_symbol);
+      }
+      current.first_d_date = minDateValue(current.first_d_date, row.first_d_date);
+      current.last_d_date = maxDateValue(current.last_d_date, row.last_d_date);
+      map.set(rootSymbol, current);
+      return map;
+    }, new Map());
+
+    return [...rootMap.values()]
+      .map((row) => ({
+        ...row,
+        contract_count: row.contractSymbols.size,
+      }))
+      .sort((left, right) =>
+        Number(right.setup_count || 0) - Number(left.setup_count || 0) ||
+        String(left.root_symbol).localeCompare(String(right.root_symbol))
+      );
+  }, [selectedPatternCatalogProfile?.source, selectedPatternCatalogRows]);
+
+  const selectedPatternCatalogExchangeSections = useMemo(() => {
+    const exchangeOrder = ['CME', 'CBOT', 'NYMEX', 'COMEX', 'Stocks', 'Unknown'];
+    const groups = selectedPatternCatalogRootRows.reduce((map, row) => {
+      const exchange = row.exchange || 'Unknown';
+      const current = map.get(exchange) ?? [];
+      current.push(row);
+      map.set(exchange, current);
+      return map;
+    }, new Map());
+
+    return [...groups.entries()]
+      .map(([exchange, rows]) => ({
+        exchange,
+        setupCount: rows.reduce((sum, row) => sum + Number(row.setup_count || 0), 0),
+        rows,
+      }))
+      .sort((left, right) => {
+        const leftIndex = exchangeOrder.indexOf(left.exchange);
+        const rightIndex = exchangeOrder.indexOf(right.exchange);
+        const normalizedLeftIndex = leftIndex === -1 ? exchangeOrder.length : leftIndex;
+        const normalizedRightIndex = rightIndex === -1 ? exchangeOrder.length : rightIndex;
+        return normalizedLeftIndex - normalizedRightIndex || left.exchange.localeCompare(right.exchange);
+      });
+  }, [selectedPatternCatalogRootRows]);
+
+  const selectedPatternCatalogHarmonicRows = useMemo(() => {
+    const harmonicMap = selectedPatternCatalogPatternRows.reduce((map, row) => {
+      const harmonicType = row.harmonic_type || 'Unknown';
+      const current = map.get(harmonicType) ?? { harmonic_type: harmonicType, setup_count: 0 };
+      current.setup_count += Number(row.setup_count || 0);
+      map.set(harmonicType, current);
+      return map;
+    }, new Map());
+    return [...harmonicMap.values()].sort(
+      (left, right) =>
+        Number(right.setup_count || 0) - Number(left.setup_count || 0) ||
+        String(left.harmonic_type).localeCompare(String(right.harmonic_type))
+    );
+  }, [selectedPatternCatalogPatternRows]);
+
+  const selectedPatternCatalogMarketRows = useMemo(() => {
+    const marketMap = selectedPatternCatalogPatternRows.reduce((map, row) => {
+      const market = row.market || 'Unknown';
+      const current = map.get(market) ?? { market, setup_count: 0 };
+      current.setup_count += Number(row.setup_count || 0);
+      map.set(market, current);
+      return map;
+    }, new Map());
+    return [...marketMap.values()].sort(
+      (left, right) =>
+        Number(right.setup_count || 0) - Number(left.setup_count || 0) ||
+        String(left.market).localeCompare(String(right.market))
+    );
+  }, [selectedPatternCatalogPatternRows]);
+
+  const patternCatalogTotalPatterns = patternCatalogProfiles.reduce(
+    (sum, profile) => sum + Number(profile.setup_count || 0),
+    0
   );
 
   const visibleFamilies = useMemo(() => {
@@ -760,11 +1706,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     });
   }, [families, harmonicType, minSetups, search]);
 
-  const visibleSetupCount = useMemo(
-    () => visibleFamilies.reduce((sum, family) => sum + Number(family.setup_count || 0), 0),
-    [visibleFamilies]
-  );
-  const largestFamily = visibleFamilies[0]?.setup_count ?? 0;
   const selectedFamily = useMemo(
     () => visibleFamilies.find((family) => family.family_key === selectedFamilyKey) ?? null,
     [selectedFamilyKey, visibleFamilies]
@@ -773,9 +1714,106 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     () => phase1Results.find((result) => getRouteKey(result) === selectedRouteKey) ?? null,
     [phase1Results, selectedRouteKey]
   );
+  const patternBrowseSymbolOptions = useMemo(() => {
+    const symbols = uniqueValues(patternBrowseRows.length ? patternBrowseRows : familyPatterns, 'symbol');
+    if (patternBrowseSymbol !== 'All' && !symbols.includes(patternBrowseSymbol)) {
+      symbols.unshift(patternBrowseSymbol);
+    }
+    return ['All', ...symbols];
+  }, [familyPatterns, patternBrowseRows, patternBrowseSymbol]);
+  const visiblePatternBrowseRows = useMemo(() => {
+    const query = patternBrowseSearch.trim().toLowerCase();
+    if (!query) {
+      return groupTwinPatternRows(patternBrowseRows);
+    }
+
+    return groupTwinPatternRows(patternBrowseRows.filter((pattern) => getPatternBrowseText(pattern).includes(query)));
+  }, [patternBrowseRows, patternBrowseSearch]);
+  const selectedFamilyPatternRows = useMemo(
+    () =>
+      groupTwinPatternRows(
+        familyPatterns.filter((pattern) => {
+          const patternFamilyKey = getPatternFamilyKey(pattern);
+          return !selectedFamilyKey || !patternFamilyKey || patternFamilyKey === selectedFamilyKey;
+        })
+      ),
+    [familyPatterns, selectedFamilyKey]
+  );
+  const patternBrowseFilterLabel = useMemo(() => {
+    const scopeLabel =
+      patternBrowseScope === 'all'
+        ? 'All families'
+        : `Family ${selectedFamily?.family_key ?? selectedFamilyKey ?? 'N/A'}`;
+    const timeframeLabel = timeframeFilter === 'All' ? 'All timeframes' : timeframeFilter;
+    const symbolLabel = patternBrowseSymbol === 'All' ? 'All symbols' : patternBrowseSymbol;
+    const searchLabel = patternBrowseSearch.trim()
+      ? `Search ${compactText(patternBrowseSearch.trim(), 18)}`
+      : null;
+
+    return [scopeLabel, timeframeLabel, symbolLabel, searchLabel].filter(Boolean).join(' | ');
+  }, [
+    patternBrowseScope,
+    patternBrowseSearch,
+    patternBrowseSymbol,
+    selectedFamily?.family_key,
+    selectedFamilyKey,
+    timeframeFilter,
+  ]);
+  const canApplyPatternNavigation = !isPatternBrowseLoading && visiblePatternBrowseRows.length > 0;
+  const applyPatternNavigationSet = useCallback(() => {
+    if (!visiblePatternBrowseRows.length) {
+      return;
+    }
+
+    const firstPattern = visiblePatternBrowseRows[0];
+    const firstPatternFamilyKey = getPatternFamilyKey(firstPattern);
+    const matchingTrade = routeTrades.find((trade) => patternMatchesTrade(firstPattern, trade));
+
+    setAppliedPatternNavigation({
+      familyKey: patternBrowseScope === 'selected' ? selectedFamilyKey : null,
+      label: patternBrowseFilterLabel,
+      rows: visiblePatternBrowseRows,
+      scope: patternBrowseScope,
+      search: patternBrowseSearch.trim(),
+      symbol: patternBrowseSymbol,
+      timeframe: timeframeFilter,
+    });
+    if (firstPatternFamilyKey && firstPatternFamilyKey !== selectedFamilyKey) {
+      setSelectedFamilyKey(firstPatternFamilyKey);
+    }
+    setSelectedFamilyPatternKey(getFamilyPatternKey(firstPattern));
+    setSelectedRouteTradeKey(matchingTrade ? getRouteTradeKey(matchingTrade) : null);
+  }, [
+    patternBrowseFilterLabel,
+    patternBrowseScope,
+    patternBrowseSearch,
+    patternBrowseSymbol,
+    routeTrades,
+    selectedFamilyKey,
+    timeframeFilter,
+    visiblePatternBrowseRows,
+  ]);
+  const clearPatternNavigationSet = useCallback(() => {
+    setAppliedPatternNavigation(null);
+    setPatternBrowseSymbol('All');
+    setPatternBrowseSearch('');
+  }, []);
+  const patternNavigationRows = appliedPatternNavigation?.rows?.length
+    ? appliedPatternNavigation.rows
+    : selectedFamilyPatternRows;
+  const activePatternNavigationLabel = appliedPatternNavigation
+    ? appliedPatternNavigation.label
+    : `Selected family | ${timeframeFilter === 'All' ? 'All timeframes' : timeframeFilter} | All symbols`;
   const selectedFamilyPattern = useMemo(
-    () => familyPatterns.find((pattern) => getFamilyPatternKey(pattern) === selectedFamilyPatternKey) ?? null,
-    [familyPatterns, selectedFamilyPatternKey]
+    () =>
+      [...familyPatterns, ...patternBrowseRows].find((pattern) => {
+        const patternFamilyKey = getPatternFamilyKey(pattern);
+        return (
+          getFamilyPatternKey(pattern) === selectedFamilyPatternKey &&
+          (!selectedFamilyKey || !patternFamilyKey || patternFamilyKey === selectedFamilyKey)
+        );
+      }) ?? null,
+    [familyPatterns, patternBrowseRows, selectedFamilyKey, selectedFamilyPatternKey]
   );
   const selectedRouteTrade = useMemo(() => {
     const routeTrade = routeTrades.find((trade) => getRouteTradeKey(trade) === selectedRouteTradeKey) ?? null;
@@ -815,8 +1853,43 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   }, [routeTrades, selectedFamilyPattern, selectedPatternRouteTrade]);
   const selectedRouteTradeMatchesSelectedPattern =
     Boolean(selectedRouteTrade && selectedFamilyPattern && patternMatchesTrade(selectedFamilyPattern, selectedRouteTrade));
+  const moveSelectedPattern = useCallback(
+    (direction) => {
+      if (!patternNavigationRows.length) {
+        return;
+      }
+
+      const currentIndex = patternNavigationRows.findIndex(
+        (pattern) => getFamilyPatternKey(pattern) === selectedFamilyPatternKey
+      );
+      if (currentIndex < 0) {
+        return;
+      }
+
+      const nextIndex = currentIndex + direction;
+      if (nextIndex < 0 || nextIndex >= patternNavigationRows.length) {
+        return;
+      }
+
+      const nextPattern = patternNavigationRows[nextIndex];
+      if (!nextPattern) {
+        return;
+      }
+
+      const nextFamilyKey = getPatternFamilyKey(nextPattern);
+      const matchingTrade = routeTrades.find((trade) => patternMatchesTrade(nextPattern, trade));
+      if (nextFamilyKey && nextFamilyKey !== selectedFamilyKey) {
+        setSelectedFamilyKey(nextFamilyKey);
+      }
+      setSelectedFamilyPatternKey(getFamilyPatternKey(nextPattern));
+      setSelectedRouteTradeKey(matchingTrade ? getRouteTradeKey(matchingTrade) : null);
+    },
+    [patternNavigationRows, routeTrades, selectedFamilyKey, selectedFamilyPatternKey]
+  );
   const selectedSourceLabel =
     SOURCE_OPTIONS.find((option) => option.value === sourceScope)?.label ?? 'All';
+  const selectedTimeframeLabel =
+    TIMEFRAME_OPTIONS.find((option) => option.value === timeframeFilter)?.label ?? 'All';
   const selectedSimAccountRules = SIM_ACCOUNT_RULES[simAccountSize] ?? SIM_ACCOUNT_RULES['50K'];
   const simContractsCount = Math.max(1, Number.parseInt(String(simContracts), 10) || 1);
   const simTestsCount = Math.max(1, Math.min(250, Number.parseInt(String(simTestsToChain), 10) || 1));
@@ -840,13 +1913,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
         .filter(Boolean)
         .join(' / ')
     : 'No family selected';
-  const topStats = [
-    { label: 'Families', value: formatNumber(visibleFamilies.length) },
-    { label: 'Setups', value: formatNumber(visibleSetupCount) },
-    { label: 'Largest', value: formatNumber(largestFamily) },
-    { label: 'Routes', value: formatNumber(phase1Results.length) },
-    { label: 'Patterns', value: formatNumber(familyPatterns.length) },
-  ];
   const selectedFamilyStats = [
     { label: 'Family Key', value: selectedFamily?.family_key ?? 'N/A', wide: true },
     { label: 'Setups', value: formatNumber(selectedFamily?.setup_count) },
@@ -861,6 +1927,59 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     { label: 'PF', value: selectedRoute ? formatDecimal(selectedRoute.profit_factor, 2) : 'N/A' },
     { label: 'DD', value: selectedRoute ? formatDecimal(selectedRoute.max_drawdown_r, 2) : 'N/A' },
   ];
+  const selectedTwinSource =
+    [canvasPattern, selectedFamilyPattern, selectedRouteTradeFamilyPattern, selectedRouteTrade].find(
+      (item) => {
+        const hasTwinRank = item?.event_rank !== null && item?.event_rank !== undefined;
+        const hasTwinCount = item?.event_sister_count !== null && item?.event_sister_count !== undefined;
+        const hasTwinScore = item?.event_similarity_score !== null && item?.event_similarity_score !== undefined;
+        return Boolean(item?.event_id || hasTwinRank || hasTwinCount || hasTwinScore);
+      }
+    ) ??
+    canvasPattern ??
+    selectedFamilyPattern ??
+    selectedRouteTradeFamilyPattern ??
+    selectedRouteTrade ??
+    null;
+  const selectedTwinId = selectedTwinSource?.event_id ?? null;
+  const selectedTwinRank = optionalNumber(selectedTwinSource?.event_rank);
+  const selectedTwinCount = optionalNumber(selectedTwinSource?.event_sister_count);
+  const selectedTwinScore = optionalNumber(selectedTwinSource?.event_similarity_score);
+  const selectedTwinPrimary =
+    selectedTwinSource?.is_event_primary === null || selectedTwinSource?.is_event_primary === undefined
+      ? null
+      : Boolean(selectedTwinSource.is_event_primary);
+  const selectedTwinStats = [
+    {
+      label: 'Twin Cluster',
+      value: selectedTwinId ?? 'Unassigned',
+      title: selectedTwinId ?? 'No twin cluster has been assigned to this pattern yet.',
+      wide: true,
+      tone: selectedTwinId ? 'twin' : 'skipped',
+    },
+    {
+      label: 'Twins',
+      value: selectedTwinCount ? formatNumber(selectedTwinCount) : 'N/A',
+      tone: selectedTwinCount && selectedTwinCount > 1 ? 'twin' : '',
+    },
+    {
+      label: 'Twin Rank',
+      value: selectedTwinRank
+        ? selectedTwinCount
+          ? `#${formatNumber(selectedTwinRank)} of ${formatNumber(selectedTwinCount)}`
+          : `#${formatNumber(selectedTwinRank)}`
+        : 'N/A',
+    },
+    {
+      label: 'Primary',
+      value: selectedTwinPrimary === null ? 'N/A' : selectedTwinPrimary ? 'Yes' : 'No',
+      tone: selectedTwinPrimary ? 'twin' : '',
+    },
+    {
+      label: 'Similarity',
+      value: selectedTwinScore === null ? 'N/A' : formatDecimal(selectedTwinScore, 2),
+    },
+  ];
   const selectedTradeDetailStats = [
     {
       label: 'Trade ID',
@@ -869,7 +1988,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       code: true,
     },
     {
-      label: 'Run ID',
+      label: 'Test Run ID',
       value: selectedRoute?.run_id ?? selectedRouteTrade?.run_id ?? 'N/A',
       wide: true,
       code: true,
@@ -883,6 +2002,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
         'N/A',
       wide: true,
     },
+    ...selectedTwinStats,
     { label: 'Symbol', value: selectedRouteTrade?.symbol ?? canvasPattern?.symbol ?? 'N/A' },
     {
       label: 'Direction',
@@ -1043,6 +2163,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   const selectedFamilyRowMetrics = [
     { label: 'Family', value: selectedFamily?.family_key ?? 'N/A', wide: true },
     { label: 'Type', value: selectedFamilyLabel, wide: true },
+    { label: 'TF', value: selectedTimeframeLabel },
     { label: 'Setups', value: formatNumber(selectedFamily?.setup_count) },
     { label: 'Symbols', value: formatNumber(selectedFamily?.symbol_count) },
     { label: 'Bin', value: selectedFamily?.bin ?? 'N/A' },
@@ -1082,12 +2203,206 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   ];
   const selectedPatternRowMetrics = [
     { label: 'Pattern', value: selectedFamilyPattern?.pattern_id ?? selectedFamilyPattern?.pattern_group_id ?? 'N/A', wide: true },
+    {
+      label: 'Nav Set',
+      value: activePatternNavigationLabel,
+      tone: appliedPatternNavigation ? 'win' : 'skipped',
+      wide: true,
+    },
+    { label: 'Nav Rows', value: formatNumber(patternNavigationRows.length), tone: appliedPatternNavigation ? 'win' : '' },
+    { label: 'TF', value: selectedTimeframeLabel },
     { label: 'Symbol', value: selectedFamilyPattern?.symbol ?? 'N/A' },
     { label: 'Market', value: selectedFamilyPattern?.market ?? selectedFamily?.market ?? 'N/A', tone: selectedPatternMarketTone },
     { label: 'Harmonic', value: selectedFamilyPattern?.harmonic_type ?? selectedFamily?.harmonic_type ?? 'N/A' },
     { label: 'D Date', value: formatDate(selectedFamilyPattern?.d_date) },
     { label: 'Confirm', value: formatDate(selectedFamilyPattern?.d_confirm_date) },
     { label: 'Trade', value: selectedPatternTrade ? `#${selectedPatternTrade.trade_index ?? '-'}` : 'No trade', tone: selectedPatternTrade ? 'win' : '' },
+  ];
+  const selectedPatternDetailSource =
+    canvasPattern ?? selectedFamilyPattern ?? selectedRouteTradeFamilyPattern ?? null;
+  const selectedPatternFamilyKey =
+    selectedPatternDetailSource ? getPatternFamilyKey(selectedPatternDetailSource) : selectedFamily?.family_key ?? null;
+  const selectedPatternDetailSymbol =
+    selectedPatternDetailSource?.symbol ??
+    selectedFamilyPattern?.symbol ??
+    selectedRouteTrade?.symbol ??
+    canvasChartData.rust_patterns?.symbol ??
+    'N/A';
+  const selectedPatternDetailFamily = [
+    selectedPatternDetailSource?.harmonic_type ?? selectedFamily?.harmonic_type,
+    selectedFamily?.bin,
+    selectedFamily?.size_bucket,
+  ].filter(Boolean).join(' / ') || 'N/A';
+  const selectedPatternThreeMonthTrend =
+    selectedPatternDetailSource?.three_month_trend ??
+    (selectedPatternDetailSource?.three_month === true
+      ? 'Bullish'
+      : selectedPatternDetailSource?.three_month === false
+        ? 'Bearish'
+        : 'N/A');
+  const selectedPatternSixMonthTrend =
+    selectedPatternDetailSource?.six_month_trend ??
+    (selectedPatternDetailSource?.six_month === true
+      ? 'Bullish'
+      : selectedPatternDetailSource?.six_month === false
+        ? 'Bearish'
+        : 'N/A');
+  const selectedPatternTwelveMonthTrend =
+    selectedPatternDetailSource?.twelve_month_trend ??
+    (selectedPatternDetailSource?.twelve_month === true
+      ? 'Bullish'
+      : selectedPatternDetailSource?.twelve_month === false
+        ? 'Bearish'
+        : 'N/A');
+  const selectedPatternPriceAccuracy = [
+    selectedPatternDetailSource?.bat_accuracy,
+    selectedPatternDetailSource?.butterfly_accuracy,
+    selectedPatternDetailSource?.gartley_accuracy,
+    selectedPatternDetailSource?.crab_accuracy,
+    selectedPatternDetailSource?.shark_accuracy,
+  ].find((value) => Number.isFinite(Number(value)));
+  const loadPatternDirectly = useCallback(
+    async (patternSummary, matchingTrade = null) => {
+      if (!patternSummary?.pattern_id && !patternSummary?.pattern_group_id) {
+        return;
+      }
+
+      try {
+        setCanvasLoading(true);
+        setCanvasError('');
+
+        const detail = await fetchPatternDetail({
+          ...patternSummary,
+          prop_outcome_mode: patternSummary.prop_outcome_mode ?? 'phase1-family',
+        });
+        if (!detail) {
+          setCanvasError('Could not load the selected twin pattern.');
+          return;
+        }
+
+        const chartPattern = mergeRouteTradeIntoPattern(detail, matchingTrade);
+        setCanvasPattern(chartPattern);
+
+        const [candles, snrLines] = await Promise.all([
+          chartPattern.symbol
+            ? getCandles(chartPattern.symbol, buildPatternCandleWindow(chartPattern)).then(normalizeCandles)
+            : Promise.resolve([]),
+          getSupportResistanceLines(chartPattern.symbol),
+        ]);
+
+        formatPattern(
+          clipCandlesAfterTradeExit(candles, chartPattern),
+          chartPattern,
+          snrLines,
+          setCanvasChartData
+        );
+      } catch (loadError) {
+        console.error(loadError);
+        setCanvasError('Could not load the selected twin pattern.');
+      } finally {
+        setCanvasLoading(false);
+      }
+    },
+    []
+  );
+  const handleTwinPatternClick = useCallback(
+    (patternId) => {
+      const nextPattern =
+        [...familyPatterns, ...patternBrowseRows].find((pattern) => pattern.pattern_id === patternId) ?? null;
+      const matchingTrade =
+        routeTrades.find(
+          (trade) => trade.pattern_id === patternId || trade.pattern_group_id === nextPattern?.pattern_group_id
+        ) ?? null;
+
+      setInspectorDetailMode('pattern');
+
+      if (nextPattern) {
+        const nextFamilyKey = getPatternFamilyKey(nextPattern);
+        if (nextFamilyKey && nextFamilyKey !== selectedFamilyKey) {
+          setSelectedFamilyKey(nextFamilyKey);
+        }
+        setSelectedFamilyPatternKey(getFamilyPatternKey(nextPattern));
+        setSelectedRouteTradeKey(matchingTrade ? getRouteTradeKey(matchingTrade) : null);
+        return;
+      }
+
+      setSelectedRouteTradeKey(matchingTrade ? getRouteTradeKey(matchingTrade) : null);
+      void loadPatternDirectly({ pattern_id: patternId, prop_outcome_mode: 'phase1-family' }, matchingTrade);
+    },
+    [familyPatterns, loadPatternDirectly, patternBrowseRows, routeTrades, selectedFamilyKey]
+  );
+  const selectedTwinPatternIds = Array.isArray(selectedPatternDetailSource?.twin_pattern_ids)
+    ? selectedPatternDetailSource.twin_pattern_ids
+    : [];
+  const selectedTwinPatternCards = selectedTwinPatternIds.map((patternId, index) => ({
+    label: `Twin Pattern ${index + 1}`,
+    value: patternId,
+    title: 'Click to load this twin pattern',
+    wide: true,
+    code: true,
+    tone: patternId === selectedPatternDetailSource?.pattern_id ? 'twin' : '',
+    onClick: () => handleTwinPatternClick(patternId),
+  }));
+  const selectedPatternDetailStats = [
+    { label: 'Symbol', value: selectedPatternDetailSymbol },
+    { label: 'Family', value: selectedPatternDetailFamily, wide: true },
+    {
+      label: 'Pattern ID',
+      value: selectedPatternDetailSource?.pattern_id ?? 'N/A',
+      wide: true,
+      code: true,
+    },
+    {
+      label: 'Pattern Group',
+      value: selectedPatternDetailSource?.pattern_group_id ?? 'N/A',
+      wide: true,
+      code: true,
+    },
+    ...selectedTwinStats,
+    ...selectedTwinPatternCards,
+    {
+      label: 'Market',
+      value: selectedPatternDetailSource?.market ?? selectedFamily?.market ?? 'N/A',
+      tone: selectedPatternMarketTone,
+    },
+    { label: 'Harmonic', value: selectedPatternDetailSource?.harmonic_type ?? selectedFamily?.harmonic_type ?? 'N/A' },
+    {
+      label: 'Family Key',
+      value: selectedPatternFamilyKey ?? 'N/A',
+      wide: true,
+      code: true,
+    },
+    { label: 'D Date', value: formatDate(selectedPatternDetailSource?.d_date) },
+    { label: 'Confirm', value: formatDate(selectedPatternDetailSource?.d_confirm_date) },
+    { label: 'X Len', value: formatOptionalNumber(selectedPatternDetailSource?.x_length) },
+    { label: 'A Len', value: formatOptionalNumber(selectedPatternDetailSource?.a_length) },
+    { label: 'B Len', value: formatOptionalNumber(selectedPatternDetailSource?.b_length) },
+    { label: 'C Len', value: formatOptionalNumber(selectedPatternDetailSource?.c_length) },
+    { label: 'D Len', value: formatOptionalNumber(selectedPatternDetailSource?.d_length) },
+    { label: 'Full Len', value: formatOptionalNumber(selectedPatternDetailSource?.full_pattern_length) },
+    {
+      label: 'Price Acc',
+      value: Number.isFinite(Number(selectedPatternPriceAccuracy))
+        ? `${formatDecimal(selectedPatternPriceAccuracy, 1)}%`
+        : 'N/A',
+    },
+    {
+      label: 'Time Acc',
+      value: Number.isFinite(Number(selectedPatternDetailSource?.time_accuracy))
+        ? `${formatDecimal(selectedPatternDetailSource?.time_accuracy, 1)}%`
+        : 'N/A',
+    },
+    { label: '3M Trend', value: selectedPatternThreeMonthTrend, tone: selectedPatternThreeMonthTrend === 'Bearish' ? 'loss' : selectedPatternThreeMonthTrend === 'Bullish' ? 'win' : '' },
+    { label: '6M Trend', value: selectedPatternSixMonthTrend, tone: selectedPatternSixMonthTrend === 'Bearish' ? 'loss' : selectedPatternSixMonthTrend === 'Bullish' ? 'win' : '' },
+    { label: '12M Trend', value: selectedPatternTwelveMonthTrend, tone: selectedPatternTwelveMonthTrend === 'Bearish' ? 'loss' : selectedPatternTwelveMonthTrend === 'Bullish' ? 'win' : '' },
+    {
+      label: 'Nav Set',
+      value: activePatternNavigationLabel,
+      tone: appliedPatternNavigation ? 'win' : 'skipped',
+      wide: true,
+    },
+    { label: 'Nav Rows', value: formatNumber(patternNavigationRows.length), tone: appliedPatternNavigation ? 'win' : '' },
+    { label: 'Trade Link', value: selectedPatternTrade ? `Trade #${selectedPatternTrade.trade_index ?? '-'}` : 'No trade', tone: selectedPatternTrade ? 'win' : '' },
   ];
   const selectedTradeRowMetrics = [
     {
@@ -1120,61 +2435,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     },
     { label: 'Pattern', value: selectedRouteTrade?.pattern_id ?? selectedRouteTrade?.pattern_group_id ?? 'N/A', wide: true },
   ];
-  const selectedTestOverviewSections = selectedRoute
-    ? [
-        {
-          title: 'Performance',
-          items: [
-            { label: 'Score', value: formatDecimal(selectedRoute.score, 1), tone: 'win' },
-            { label: 'Rank', value: `#${selectedRoute.result_rank}` },
-            {
-              label: 'Avg R',
-              value: formatDecimal(selectedRoute.avg_r, 3),
-              tone: Number(selectedRoute.avg_r) < 0 ? 'loss' : 'win',
-            },
-            {
-              label: 'Win Rate',
-              value: `${formatDecimal(selectedRoute.win_rate, 1)}%`,
-              tone: Number(selectedRoute.win_rate) >= 50 ? 'win' : 'loss',
-            },
-            {
-              label: 'Profit Factor',
-              value: formatDecimal(selectedRoute.profit_factor, 2),
-              tone: Number(selectedRoute.profit_factor) >= 1 ? 'win' : 'loss',
-            },
-            { label: 'Max DD', value: `${formatDecimal(selectedRoute.max_drawdown_r, 2)}R`, tone: 'loss' },
-            {
-              label: 'Worst Year',
-              value: `${formatDecimal(selectedRoute.worst_year_avg_r, 3)}R`,
-              tone: Number(selectedRoute.worst_year_avg_r) < 0 ? 'loss' : 'win',
-            },
-            { label: 'Trades', value: formatNumber(selectedRoute.trade_count) },
-          ],
-        },
-        {
-          title: 'Coverage',
-          items: [
-            { label: 'Setups', value: formatNumber(selectedRoute.setup_count) },
-            { label: 'No Entry', value: formatNumber(selectedRoute.no_entry_count), tone: 'skipped' },
-            { label: 'Wins', value: formatNumber(selectedRoute.win_count), tone: 'win' },
-            { label: 'Losses', value: formatNumber(selectedRoute.loss_count), tone: 'loss' },
-            { label: 'Source', value: selectedSourceLabel },
-            { label: 'Year', value: yearFilter === 'All' ? 'All Years' : yearFilter },
-          ],
-        },
-        {
-          title: 'Route Logic',
-          items: [
-            { label: 'Direction', value: selectedRouteDisplayedSide, tone: selectedRouteDisplayedSide === 'SHORT' ? 'loss' : 'win' },
-            { label: 'Entry', value: selectedRouteEntryAction, wide: true },
-            { label: 'Stop', value: getDirectionalStopAction(selectedRoute.stop_mode, selectedRouteMarket), tone: 'loss' },
-            { label: 'Target', value: `${formatDecimal(selectedRoute.target_r, 2)}R`, tone: 'win' },
-            { label: 'Hold', value: `${selectedRoute.max_hold_multiple || '-'}x pattern` },
-            { label: 'Test ID', value: selectedRoute.route_id, wide: true },
-          ],
-        },
-      ]
-    : [];
   const testTradeAnalytics = useMemo(() => {
     const createGroup = (key) => ({
       key,
@@ -1290,92 +2550,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       resultMix,
     };
   }, [routeTrades]);
-  const selectedRouteWinProfile = useMemo(() => {
-    const isWinningTrade = (trade) => {
-      const resultR = Number(trade.result_r);
-      const pnl = Number(trade.pnl);
-      return (
-        !trade.skipped_for_overlap &&
-        (Number(trade.trade_result) === 1 ||
-          (Number.isFinite(resultR) && resultR > 0) ||
-          (Number.isFinite(pnl) && pnl > 0))
-      );
-    };
-    const createWinGroup = (key) => ({
-      key,
-      wins: 0,
-      totalR: 0,
-      bestR: Number.NEGATIVE_INFINITY,
-    });
-    const addWin = (map, key, trade) => {
-      const group = map.get(key) ?? createWinGroup(key);
-      const resultR = Number(trade.result_r);
-      group.wins += 1;
-      if (Number.isFinite(resultR)) {
-        group.totalR += resultR;
-        group.bestR = Math.max(group.bestR, resultR);
-      }
-      map.set(key, group);
-    };
-    const finishGroup = (group) => ({
-      ...group,
-      avgR: group.wins ? group.totalR / group.wins : 0,
-      bestR: Number.isFinite(group.bestR) ? group.bestR : 0,
-    });
-    const wins = routeTrades.filter(isWinningTrade);
-    const symbolMap = new Map();
-    const directionMap = new Map();
-    const exitMap = new Map();
-
-    wins.forEach((trade) => {
-      addWin(symbolMap, trade.symbol || 'N/A', trade);
-      addWin(directionMap, getTradeSide(trade) ?? formatRouteMode(trade.trade_direction || 'Unknown'), trade);
-      addWin(exitMap, trade.exit_reason ? formatRouteMode(trade.exit_reason) : 'Unknown', trade);
-    });
-
-    const totalWinR = wins.reduce((sum, trade) => {
-      const resultR = Number(trade.result_r);
-      return Number.isFinite(resultR) ? sum + resultR : sum;
-    }, 0);
-    const familyWins = routeFamilyRows
-      .map((row) => {
-        const tradeCount = Number(row.trade_count || 0);
-        const directWins = Number(row.win_count);
-        const inferredWins = Number.isFinite(directWins)
-          ? directWins
-          : Math.round((tradeCount * Number(row.win_rate || 0)) / 100);
-        return {
-          ...row,
-          inferredWins,
-        };
-      })
-      .filter((row) => row.inferredWins > 0)
-      .sort((left, right) =>
-        Number(right.avg_r || 0) - Number(left.avg_r || 0) ||
-        right.inferredWins - left.inferredWins ||
-        Number(right.score || 0) - Number(left.score || 0)
-      );
-
-    return {
-      wins,
-      winCount: wins.length,
-      avgWinR: wins.length ? totalWinR / wins.length : 0,
-      bestWinR: wins.reduce((best, trade) => {
-        const resultR = Number(trade.result_r);
-        return Number.isFinite(resultR) ? Math.max(best, resultR) : best;
-      }, 0),
-      symbols: Array.from(symbolMap.values())
-        .map(finishGroup)
-        .sort((left, right) => right.wins - left.wins || right.avgR - left.avgR),
-      directions: Array.from(directionMap.values())
-        .map(finishGroup)
-        .sort((left, right) => right.wins - left.wins || right.avgR - left.avgR),
-      exits: Array.from(exitMap.values())
-        .map(finishGroup)
-        .sort((left, right) => right.wins - left.wins || right.avgR - left.avgR),
-      families: familyWins,
-    };
-  }, [routeFamilyRows, routeTrades]);
   const worstAvgSymbol =
     testTradeAnalytics.symbolsByAvgR[testTradeAnalytics.symbolsByAvgR.length - 1] ?? null;
   const bestPnlSymbol =
@@ -1435,55 +2609,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
             { label: 'Best P/L', value: bestPnlSymbol ? `${bestPnlSymbol.key} / ${formatMoney(bestPnlSymbol.pnl)}` : 'N/A', tone: bestPnlSymbol && bestPnlSymbol.pnl < 0 ? 'loss' : 'win' },
             { label: 'Use Next', value: 'Add session/day filters', wide: true },
           ],
-        },
-      ]
-    : [];
-  const selectedTestOutcomeSections = selectedRoute
-    ? [
-        {
-          title: 'Result Mix',
-          items: [
-            { label: 'Wins', value: formatNumber(testTradeAnalytics.resultMix.wins), tone: 'win' },
-            { label: 'Losses', value: formatNumber(testTradeAnalytics.resultMix.losses), tone: 'loss' },
-            { label: 'Skipped', value: formatNumber(testTradeAnalytics.resultMix.skipped), tone: 'skipped' },
-            {
-              label: 'Total R',
-              value: `${formatDecimal(testTradeAnalytics.resultMix.totalR, 2)}R`,
-              tone: testTradeAnalytics.resultMix.totalR < 0 ? 'loss' : 'win',
-            },
-            {
-              label: 'Avg Win',
-              value: testTradeAnalytics.resultMix.winCount
-                ? `${formatDecimal(testTradeAnalytics.resultMix.winR / testTradeAnalytics.resultMix.winCount, 2)}R`
-                : 'N/A',
-              tone: 'win',
-            },
-            {
-              label: 'Avg Loss',
-              value: testTradeAnalytics.resultMix.lossCount
-                ? `${formatDecimal(testTradeAnalytics.resultMix.lossR / testTradeAnalytics.resultMix.lossCount, 2)}R`
-                : 'N/A',
-              tone: 'loss',
-            },
-          ],
-        },
-        {
-          title: 'Exit Reasons',
-          items: testTradeAnalytics.exits.map((item) => ({
-            label: item.key,
-            value: `${formatNumber(item.trades)} trades / ${formatDecimal(item.avgR, 2)}R avg`,
-            tone: item.key.toLowerCase().includes('stop') || item.avgR < 0 ? 'loss' : item.key.toLowerCase().includes('target') ? 'win' : '',
-            wide: true,
-          })),
-        },
-        {
-          title: 'Direction Split',
-          items: testTradeAnalytics.directions.map((item) => ({
-            label: item.key,
-            value: `${formatNumber(item.trades)} trades / ${formatDecimal(item.winRate, 0)}% / ${formatDecimal(item.totalR, 2)}R`,
-            tone: item.key === 'SHORT' ? 'loss' : item.key === 'LONG' ? 'win' : '',
-            wide: true,
-          })),
         },
       ]
     : [];
@@ -1774,6 +2899,102 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   ];
   const entryExitRun = entryExitData.run;
   const entryExitTemplates = entryExitData.templates ?? [];
+  const entryExitBuildCoverageRows = useMemo(() => entryExitData.coverage ?? [], [entryExitData.coverage]);
+  const entryExitBuildCoverageSymbolRows = useMemo(() => {
+    return entryExitBuildCoverageRows
+      .map((row) => {
+        const rootSymbol = normalizeFuturesRootSymbol(row.root_symbol || row.contract_symbol || 'Unknown');
+        const scannedCount = Number(row.scanned_pattern_count ?? row.pattern_count ?? 0);
+        const status = row.status || (scannedCount > 0 ? 'Scanned' : 'Not scanned');
+        return {
+          root_symbol: rootSymbol,
+          exchange: row.exchange_name || row.exchange || getFuturesExchange(rootSymbol) || 'Unknown',
+          pattern_count: scannedCount,
+          contract_count: Number(row.contract_count || 0),
+          universe_pattern_count: Number(row.universe_pattern_count || 0),
+          timeframe_label: row.source_timeframe || selectedBuildTimeframeLabel || 'unknown',
+          is_scanned: status === 'Scanned',
+          sort_order: Number.isFinite(Number(row.sort_order)) ? Number(row.sort_order) : null,
+          status,
+        };
+      })
+      .sort((left, right) =>
+        (Number.isFinite(Number(left.sort_order)) ? Number(left.sort_order) : Number.MAX_SAFE_INTEGER) -
+          (Number.isFinite(Number(right.sort_order)) ? Number(right.sort_order) : Number.MAX_SAFE_INTEGER) ||
+          Number(right.pattern_count || 0) - Number(left.pattern_count || 0) ||
+          String(left.root_symbol).localeCompare(String(right.root_symbol))
+      );
+  }, [entryExitBuildCoverageRows, selectedBuildTimeframeLabel]);
+  const entryExitBuildExchangeSections = useMemo(() => {
+    const exchangeOrder = ['CME', 'CBOT', 'NYMEX', 'COMEX', 'Unknown'];
+    const groups = entryExitBuildCoverageSymbolRows.reduce((map, row) => {
+      const exchange = row.exchange || 'Unknown';
+      const current = map.get(exchange) ?? [];
+      current.push(row);
+      map.set(exchange, current);
+      return map;
+    }, new Map());
+
+    return [...groups.entries()]
+      .map(([exchange, rows]) => ({
+        exchange,
+        pattern_count: rows.reduce((sum, row) => sum + Number(row.pattern_count || 0), 0),
+        scanned_count: rows.filter((row) => row.is_scanned).length,
+        rows: rows.sort((left, right) =>
+          (Number.isFinite(Number(left.sort_order)) ? Number(left.sort_order) : Number.MAX_SAFE_INTEGER) -
+            (Number.isFinite(Number(right.sort_order)) ? Number(right.sort_order) : Number.MAX_SAFE_INTEGER) ||
+          Number(right.is_scanned) - Number(left.is_scanned) ||
+          Number(right.pattern_count || 0) - Number(left.pattern_count || 0) ||
+          String(left.root_symbol).localeCompare(String(right.root_symbol))
+        ),
+      }))
+      .sort((left, right) => {
+        const leftIndex = exchangeOrder.indexOf(left.exchange);
+        const rightIndex = exchangeOrder.indexOf(right.exchange);
+        const normalizedLeftIndex = leftIndex === -1 ? exchangeOrder.length : leftIndex;
+        const normalizedRightIndex = rightIndex === -1 ? exchangeOrder.length : rightIndex;
+        return (
+          normalizedLeftIndex - normalizedRightIndex ||
+          Number(right.pattern_count || 0) - Number(left.pattern_count || 0) ||
+          left.exchange.localeCompare(right.exchange)
+        );
+      });
+  }, [entryExitBuildCoverageSymbolRows]);
+  const selectedBuildCoverageExchangeSection =
+    entryExitBuildExchangeSections.find(
+      (section) => getExchangeClassSuffix(section.exchange) === selectedBuildCoverageExchangeKey
+    ) ??
+    entryExitBuildExchangeSections[0] ??
+    null;
+  const selectedBuildCoveragePatternCount = selectedBuildSummary
+    ? Number(selectedBuildSummary.coverage_patterns || 0)
+    : null;
+  const selectedBuildRootCount = selectedBuildSummary
+    ? Number(selectedBuildSummary.root_count || 0)
+    : null;
+  const selectedBuildUniverseRootCount = selectedBuildSummary
+    ? entryExitBuildCoverageSymbolRows.length || selectedBuildRootCount || 0
+    : null;
+  const selectedBuildExchangeCount = selectedBuildSummary
+    ? Number(selectedBuildSummary.exchange_count || 0)
+    : null;
+  const selectedBuildRootCardValue = selectedBuildSummary
+    ? `${formatNumber(selectedBuildRootCount)} / ${formatNumber(selectedBuildUniverseRootCount)}`
+    : '';
+
+  useEffect(() => {
+    if (!entryExitBuildExchangeSections.length) {
+      if (selectedBuildCoverageExchangeKey) setSelectedBuildCoverageExchangeKey('');
+      return;
+    }
+    const hasSelectedExchange = entryExitBuildExchangeSections.some(
+      (section) => getExchangeClassSuffix(section.exchange) === selectedBuildCoverageExchangeKey
+    );
+    if (!hasSelectedExchange) {
+      setSelectedBuildCoverageExchangeKey(getExchangeClassSuffix(entryExitBuildExchangeSections[0].exchange));
+    }
+  }, [entryExitBuildExchangeSections, selectedBuildCoverageExchangeKey]);
+
   const displayedEntryExitTemplates = Array.from(
     new Map(
       entryExitTemplates.map((template) => [
@@ -2034,130 +3255,1131 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     };
   });
   const entryExitRouterCurrentRun = entryExitRouterData.current_run;
-  const entryExitRouterRuns = entryExitRouterData.runs ?? [];
+  const entryExitRouterRuns = useMemo(() => entryExitRouterData.runs ?? [], [entryExitRouterData.runs]);
   const entryExitRouterSymbols = entryExitRouterData.symbols ?? [];
+  const entryExitRouterFamilyRoutes = entryExitRouterData.family_routes ?? [];
+  const entryExitManualFamilyBans = entryExitRouterData.manual_family_bans ?? [];
+  const entryExitManualSymbolBans = entryExitRouterData.manual_symbol_bans ?? [];
+  const selectedEntryExitRouterRun =
+    entryExitRouterRuns.find((run) => run.router_run_id === selectedEntryExitRouterRunId) ??
+    entryExitRouterCurrentRun ??
+    entryExitRouterRuns[0] ??
+    null;
   const getEntryExitRouterTradeCount = (run = {}) =>
     Number(run.win_count || 0) + Number(run.loss_count || 0) + Number(run.no_entry_count || 0);
   const getEntryExitRouterWinRate = (run = {}) => {
     const tradeCount = getEntryExitRouterTradeCount(run);
     return tradeCount ? (Number(run.win_count || 0) / tradeCount) * 100 : 0;
   };
-  const generatedEntryExitRouterRunRows = entryExitRouterRuns.map((run) => ({
-    run,
-    tradeCount: getEntryExitRouterTradeCount(run),
-    winRate: getEntryExitRouterWinRate(run),
-    propClosedPassRate: Number(run.prop?.closed_pass_rate || 0),
-    isSelected: run.router_run_id === entryExitRouterCurrentRun?.router_run_id,
-  }));
-  const entryExitRouterSkippedSymbols = entryExitRouterSymbols.filter(
+  const isEntryExitSimulationRun = (run = {}) =>
+    Number(run.test_year || 0) > 0 ||
+    Number(run.patterns_scanned || 0) > 0 ||
+    getEntryExitRouterTradeCount(run) > 0;
+  const entryExitPlaybookLabelByName = useMemo(() => {
+    const playbookRows = entryExitRouterRuns.map((run) => {
+      const manualFamilyBansApplied = Number(run.manual_family_bans_applied || 0);
+      const name = getEntryExitPlaybookName(run, manualFamilyBansApplied);
+      return {
+        name,
+        rank: getEntryExitPlaybookRank(run, manualFamilyBansApplied),
+      };
+    });
+    const orderedNames = [...new Map(
+      playbookRows
+        .sort((left, right) => left.rank - right.rank || left.name.localeCompare(right.name))
+        .map((row) => [row.name, row])
+    ).values()];
+
+    return new Map(orderedNames.map((row, index) => [row.name, `P${index + 1}`]));
+  }, [entryExitRouterRuns]);
+  const generatedEntryExitRouterRunRows = entryExitRouterRuns.map((run, index) => {
+    const propPassed = Number(run.prop?.passed || 0);
+    const propDailyFails = Number(run.prop?.daily_fails || 0);
+    const propDrawdownFails = Number(run.prop?.drawdown_fails || 0);
+    const propFailed = propDailyFails + propDrawdownFails;
+    const propClosedTotal = propPassed + propFailed;
+    const propTotal = Number(run.prop?.cycles || 0);
+    const manualFamilyBansApplied = Number(run.manual_family_bans_applied || 0);
+    const playbookName = getEntryExitPlaybookName(run, manualFamilyBansApplied);
+    return {
+      run,
+      tradeCount: getEntryExitRouterTradeCount(run),
+      winRate: getEntryExitRouterWinRate(run),
+      propTotal,
+      propClosedTotal,
+      propPassed,
+      propFailed,
+      propDailyFails,
+      propDrawdownFails,
+      propIncomplete: Number(run.prop?.incomplete || 0),
+      propClosedPassRate: Number(run.prop?.closed_pass_rate || 0),
+      manualFamilyBansApplied,
+      playbookLabel: entryExitPlaybookLabelByName.get(playbookName) ?? `P${index + 1}`,
+      playbookName,
+      isSelected: run.router_run_id === selectedEntryExitRouterRun?.router_run_id,
+    };
+  });
+  const generatedEntryExitPlaybookTabRows = [...new Map(
+    generatedEntryExitRouterRunRows.map((row) => [row.playbookName, row])
+  ).values()];
+  const selectedEntryExitRouterRunRow =
+    generatedEntryExitRouterRunRows.find(
+      (row) => row.run.router_run_id === selectedEntryExitRouterRun?.router_run_id
+    ) ??
+    generatedEntryExitRouterRunRows[0] ??
+    null;
+  const hasSelectedEntryExitRouterRun = Boolean(selectedEntryExitRouterRunRow);
+  const selectedPlaybookTestRows = generatedEntryExitRouterRunRows.filter(
+    (row) =>
+      row.playbookName === selectedEntryExitRouterRunRow?.playbookName &&
+      isEntryExitSimulationRun(row.run)
+  );
+  const selectedEntryExitPlaybookName = selectedEntryExitRouterRunRow?.playbookName ?? '';
+  const selectedEntryExitSimulationRunRow =
+    selectedPlaybookTestRows.find(
+      (row) => row.run.router_run_id === selectedEntryExitRouterRunRow?.run.router_run_id
+    ) ??
+    selectedPlaybookTestRows[0] ??
+    null;
+  const selectedEntryExitLogicRunRow =
+    selectedEntryExitSimulationRunRow ?? selectedEntryExitRouterRunRow;
+  const hasSelectedEntryExitLogicRun = Boolean(selectedEntryExitLogicRunRow);
+  const selectedEntryExitSimulationTestId =
+    selectedEntryExitSimulationRunRow?.run.router_run_id ?? '';
+  const selectedEntryExitPlaybookRunRow =
+    generatedEntryExitRouterRunRows.find(
+      (row) => row.playbookName === selectedEntryExitPlaybookName && !isEntryExitSimulationRun(row.run)
+    ) ??
+    selectedEntryExitRouterRunRow ??
+    null;
+  const selectedEntryExitPlaybookRuleRun =
+    selectedEntryExitLogicRunRow?.run ?? selectedEntryExitPlaybookRunRow?.run ?? null;
+  const selectedEntryExitPlaybookRuleOptions = selectedEntryExitPlaybookRunRow
+    ? {
+        run: selectedEntryExitPlaybookRuleRun,
+        playbookLabel: selectedEntryExitPlaybookRunRow.playbookLabel,
+        playbookName: selectedEntryExitPlaybookRunRow.playbookName,
+        manualFamilyBansApplied: selectedEntryExitPlaybookRunRow.manualFamilyBansApplied,
+      }
+    : null;
+  const selectedEntryExitPlaybookRuleSections = selectedEntryExitPlaybookRuleOptions
+    ? buildEntryExitPlaybookRuleSections(selectedEntryExitPlaybookRuleOptions)
+    : [];
+  const selectedEntryExitPlaybookDescription = selectedEntryExitPlaybookRuleOptions
+    ? buildEntryExitPlaybookDescription(selectedEntryExitPlaybookRuleOptions)
+    : '';
+  const selectedEntryExitFamilyRoutes = entryExitRouterFamilyRoutes.filter(
+    (route) => route.router_run_id === selectedEntryExitRouterRun?.router_run_id
+  );
+  const selectedEntryExitSimulationFamilyRoutes = selectedEntryExitSimulationRunRow
+    ? entryExitRouterFamilyRoutes.filter(
+        (route) => route.router_run_id === selectedEntryExitSimulationRunRow.run.router_run_id
+      )
+    : [];
+  const selectedPlaybookTradeCount = Number(selectedEntryExitRouterRunRow?.run.trade_choices || 0);
+  const selectedPlaybookWatchCount = Number(selectedEntryExitRouterRunRow?.run.watchlist_choices || 0);
+  const selectedPlaybookSkipCount = Number(selectedEntryExitRouterRunRow?.run.skip_choices || 0);
+  const selectedPlaybookRowCount =
+    selectedPlaybookTradeCount + selectedPlaybookWatchCount + selectedPlaybookSkipCount ||
+    selectedEntryExitFamilyRoutes.length;
+  const selectedPlaybookPlaysCount = new Set(
+    selectedEntryExitFamilyRoutes
+      .filter((route) => route.route_status === 'TRADE')
+      .map((route) => route.template_uid)
+      .filter(Boolean)
+  ).size;
+  const selectedPlaybookUsedPlayRows = [
+    ...selectedEntryExitFamilyRoutes
+      .filter((route) => route.route_status === 'TRADE')
+      .reduce((usedPlays, route) => {
+        const playKey = route.template_uid || route.template_label || route.template_name;
+        if (!playKey) {
+          return usedPlays;
+        }
+
+        const current = usedPlays.get(playKey) ?? {
+          familyKeys: new Set(),
+          label: route.template_label || compactText(playKey, 10),
+          name: route.template_name || 'Entry / exit test',
+          templateUid: route.template_uid || playKey,
+        };
+        current.familyKeys.add(route.family_key || `${route.router_run_id}-${route.template_rank}`);
+        usedPlays.set(playKey, current);
+        return usedPlays;
+      }, new Map())
+      .values(),
+  ]
+    .map((row) => ({
+      ...row,
+      familyCount: row.familyKeys.size,
+    }))
+    .sort((left, right) => right.familyCount - left.familyCount || left.label.localeCompare(right.label));
+  const selectedPlaybookTemplateTotal = selectedBuildSummary
+    ? Number(selectedBuildSummary.templates_created || 0)
+    : 0;
+  const selectedPlaybookAssignedTemplateCount = selectedPlaybookUsedPlayRows.length;
+  const selectedPlaybookUnassignedTemplateCount = Math.max(
+    selectedPlaybookTemplateTotal - selectedPlaybookAssignedTemplateCount,
+    0
+  );
+  const selectedPlaybookAssignmentRate =
+    selectedPlaybookTemplateTotal > 0
+      ? (selectedPlaybookAssignedTemplateCount / selectedPlaybookTemplateTotal) * 100
+      : 0;
+  const selectedPlaybookAssignmentMaxFamilyCount = Math.max(
+    1,
+    ...selectedPlaybookUsedPlayRows.map((row) => Number(row.familyCount || 0))
+  );
+  const selectedPlaybookAssignmentChartRows = selectedPlaybookUsedPlayRows.slice(0, 12);
+  const selectedSimulationUsedPlayRows = [
+    ...selectedEntryExitSimulationFamilyRoutes
+      .filter((route) => route.route_status === 'TRADE' && Number(route.test_eval_count || 0) > 0)
+      .reduce((usedPlays, route) => {
+        const playKey = route.template_uid || route.template_label || route.template_name;
+        if (!playKey) {
+          return usedPlays;
+        }
+
+        const current = usedPlays.get(playKey) ?? {
+          evalCount: 0,
+          failCount: 0,
+          familyKeys: new Set(),
+          label: route.template_label || compactText(playKey, 10),
+          name: route.template_name || 'Entry / exit test',
+          noEntryCount: 0,
+          passCount: 0,
+          sumR: 0,
+          templateUid: route.template_uid || playKey,
+        };
+        current.evalCount += Number(route.test_eval_count || 0);
+        current.passCount += Number(route.test_pass_count || 0);
+        current.failCount += Number(route.test_fail_count || 0);
+        current.noEntryCount += Number(route.test_no_entry_count || 0);
+        current.sumR += Number(route.test_sum_r || 0);
+        current.familyKeys.add(route.family_key || `${route.router_run_id}-${route.template_rank}`);
+        usedPlays.set(playKey, current);
+        return usedPlays;
+      }, new Map())
+      .values(),
+  ]
+    .map((row) => ({
+      ...row,
+      avgR: row.evalCount ? row.sumR / row.evalCount : 0,
+      familyCount: row.familyKeys.size,
+      winRate: row.evalCount ? (row.passCount / row.evalCount) * 100 : 0,
+    }))
+    .sort((left, right) => right.evalCount - left.evalCount || left.label.localeCompare(right.label));
+  const selectedSimulationTemplatePerformanceRows = [...selectedSimulationUsedPlayRows].sort(
+    (left, right) =>
+      Number(right.sumR || 0) - Number(left.sumR || 0) ||
+      Number(right.avgR || 0) - Number(left.avgR || 0) ||
+      Number(right.evalCount || 0) - Number(left.evalCount || 0) ||
+      left.label.localeCompare(right.label)
+  );
+  const generatedEntryExitFamilyRouterRows = selectedEntryExitFamilyRoutes.map((route, index) => {
+    const testEvalCount = Number(route.test_eval_count || 0);
+    const testPassRate = testEvalCount
+      ? (Number(route.test_pass_count || 0) / testEvalCount) * 100
+      : 0;
+    return {
+      route,
+      index: index + 1,
+      testEvalCount,
+      testPassRate,
+      isSelected: route.template_uid === selectedEntryExitTemplate?.template_uid,
+    };
+  });
+  const selectedEntryExitRouterSymbols = entryExitRouterSymbols.filter(
+    (symbol) => symbol.router_run_id === selectedEntryExitRouterRun?.router_run_id
+  );
+  const selectedPlaybookSymbolRows = entryExitRouterSymbols.filter(
+    (symbol) => symbol.router_run_id === selectedEntryExitPlaybookRunRow?.run.router_run_id
+  );
+  const selectedPlaybookTradeSymbolCount = selectedPlaybookSymbolRows.filter(
+    (symbol) => symbol.route_status === 'TRADE'
+  ).length;
+  const selectedPlaybookSkippedSymbolCount = selectedPlaybookSymbolRows.filter(
+    (symbol) => symbol.route_status !== 'TRADE'
+  ).length;
+  const entryExitRouterSkippedSymbols = selectedEntryExitRouterSymbols.filter(
     (symbol) => symbol.route_status === 'SKIP'
   );
-  const entryExitRouterTradeSymbols = entryExitRouterSymbols.filter(
+  const entryExitRouterTradeSymbols = selectedEntryExitRouterSymbols.filter(
     (symbol) => symbol.route_status === 'TRADE'
   );
   const entryExitRouterSymbolGateRows = [
     ...entryExitRouterSkippedSymbols.slice(0, 10),
     ...entryExitRouterTradeSymbols.slice(0, 5),
   ];
-  const entryExitRouterSections = [
+  const selectedEntryExitManualSkipRows = generatedEntryExitFamilyRouterRows
+    .filter((row) => row.route.router_run_id === selectedEntryExitRouterRun?.router_run_id)
+    .filter((row) => row.route.route_status === 'SKIP')
+    .filter((row) => String(row.route.status_reason || '').toLowerCase().includes('manual'));
+  const selectedEntryExitManualFamilyBansApplied = selectedEntryExitRouterRunRow
+    ? Number(
+        selectedEntryExitRouterRunRow.run.manual_family_bans_applied ??
+          selectedEntryExitRouterRunRow.manualFamilyBansApplied ??
+          0
+      )
+    : 0;
+  const currentManualBanTotal =
+    entryExitManualFamilyBans.length + entryExitManualSymbolBans.length;
+  const entryExitManualBanItems = [
+    ...entryExitManualFamilyBans.map((ban) => ({
+      label: `Family ${compactText(ban.family_key, 16)}`,
+      value: ban.reason || 'Manual family ban',
+      title: `${ban.family_key} | ${ban.reason || 'Manual family ban'}`,
+      tone: 'loss',
+      wide: true,
+    })),
+    ...entryExitManualSymbolBans.map((ban) => ({
+      label: `Symbol ${ban.root_symbol}`,
+      value: ban.reason || 'Manual symbol ban',
+      title: `${ban.root_symbol} | ${ban.reason || 'Manual symbol ban'}`,
+      tone: 'loss',
+      wide: true,
+    })),
+  ];
+  const selectedEntryExitOverlapRules = selectedEntryExitLogicRunRow
+    ? [
+        selectedEntryExitLogicRunRow.run.one_trade_at_a_time ? 'One active trade total' : null,
+        !selectedEntryExitLogicRunRow.run.one_trade_at_a_time &&
+        selectedEntryExitLogicRunRow.run.one_trade_per_root_symbol
+          ? 'One active trade per root symbol'
+          : null,
+        Number(selectedEntryExitLogicRunRow.run.trade_cooldown_minutes || 0) > 0
+          ? `One entry every ${formatNumber(selectedEntryExitLogicRunRow.run.trade_cooldown_minutes)} rolling minutes`
+          : selectedEntryExitLogicRunRow.run.one_trade_per_minute ? 'One entry per minute' : null,
+      ].filter(Boolean)
+    : [];
+  const selectedEntryExitOverlapRule = selectedEntryExitOverlapRules.length
+    ? selectedEntryExitOverlapRules.join(' + ')
+    : 'No active-trade overlap gate';
+  const selectedPlaybookSymbolGateLabel = selectedEntryExitLogicRunRow
+    ? selectedEntryExitLogicRunRow.run.symbol_filter_enabled ? 'On' : 'Off'
+    : '';
+  const selectedPlaybookSymbolGateDetail = selectedEntryExitLogicRunRow?.run.symbol_filter_enabled
+    ? `${formatNumber(selectedEntryExitLogicRunRow.run.symbol_trade_roots)} allowed | ${formatNumber(
+        selectedEntryExitLogicRunRow.run.symbol_skip_roots
+      )} skipped`
+    : selectedEntryExitLogicRunRow
+      ? 'No symbol gate'
+      : '';
+  const selectedSimulationRunOverviewSections = selectedEntryExitSimulationRunRow
+    ? [
+        {
+          title: 'Run',
+          items: [
+            { label: 'Sim ID', value: selectedEntryExitSimulationRunRow.run.router_run_id || 'N/A', wide: true },
+            { label: 'Playbook', value: selectedEntryExitSimulationRunRow.run.playbook_id || 'N/A', wide: true },
+            { label: 'Build', value: selectedEntryExitSimulationRunRow.run.train_run_id || 'N/A', wide: true },
+            { label: 'Source', value: selectedEntryExitSimulationRunRow.run.source_scope || 'N/A' },
+            { label: 'TF', value: selectedEntryExitSimulationRunRow.run.source_timeframe || 'N/A' },
+            { label: 'Year', value: formatNumber(selectedEntryExitSimulationRunRow.run.test_year) },
+            { label: 'Created', value: String(selectedEntryExitSimulationRunRow.run.created_at || 'N/A'), wide: true },
+            { label: 'Elapsed', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.elapsed_ms)} ms` },
+          ],
+        },
+        {
+          title: 'Scan Flow',
+          items: [
+            { label: 'Patterns', value: formatNumber(selectedEntryExitSimulationRunRow.run.patterns_scanned) },
+            { label: 'Routed', value: formatNumber(selectedEntryExitSimulationRunRow.run.routed_patterns), tone: 'win' },
+            { label: 'No Route', value: formatNumber(selectedEntryExitSimulationRunRow.run.no_route_patterns) },
+            { label: 'Non-Trade Skip', value: formatNumber(selectedEntryExitSimulationRunRow.run.skipped_non_trade_patterns) },
+            { label: 'Symbol Skip', value: formatNumber(selectedEntryExitSimulationRunRow.run.skipped_symbol_patterns), tone: 'skipped' },
+            { label: 'Overlap Skip', value: formatNumber(selectedEntryExitSimulationRunRow.run.skipped_overlap_patterns), tone: 'skipped' },
+          ],
+        },
+        {
+          title: 'Selection',
+          items: [
+            { label: 'Families', value: formatNumber(selectedEntryExitSimulationRunRow.run.families_selected) },
+            { label: 'Trade', value: formatNumber(selectedEntryExitSimulationRunRow.run.trade_choices), tone: 'win' },
+            { label: 'Watchlist', value: formatNumber(selectedEntryExitSimulationRunRow.run.watchlist_choices), tone: 'skipped' },
+            { label: 'Skip', value: formatNumber(selectedEntryExitSimulationRunRow.run.skip_choices), tone: 'loss' },
+            { label: 'Manual Bans', value: formatNumber(selectedEntryExitSimulationRunRow.run.manual_family_bans_applied) },
+            { label: 'Trade Roots', value: formatNumber(selectedEntryExitSimulationRunRow.run.symbol_trade_roots), tone: 'win' },
+            { label: 'Skip Roots', value: formatNumber(selectedEntryExitSimulationRunRow.run.symbol_skip_roots), tone: 'skipped' },
+          ],
+        },
+        {
+          title: 'Gates',
+          items: [
+            { label: 'Min Train Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.min_train_tests) },
+            { label: 'Prop Filter', value: selectedEntryExitSimulationRunRow.run.prop_filter_enabled ? 'On' : 'Off' },
+            { label: 'Trade Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.trade_min_tests) },
+            { label: 'Trade WR', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.trade_min_win_rate, 2)}%` },
+            { label: 'Trade Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.trade_min_avg_r, 3)}R` },
+            { label: 'Watch Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.watchlist_min_tests) },
+            { label: 'Watch WR', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.watchlist_min_win_rate, 2)}%` },
+            { label: 'Watch Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.watchlist_min_avg_r, 3)}R` },
+            { label: 'Symbol Filter', value: selectedEntryExitSimulationRunRow.run.symbol_filter_enabled ? 'On' : 'Off' },
+            { label: 'Symbol Tests', value: formatNumber(selectedEntryExitSimulationRunRow.run.symbol_min_tests) },
+            { label: 'Symbol WR', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.symbol_min_win_rate, 2)}%` },
+            { label: 'Symbol Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.symbol_min_avg_r, 3)}R` },
+          ],
+        },
+        {
+          title: 'Execution',
+          items: [
+            { label: 'Sister Window', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.sister_window_minutes)}m` },
+            { label: 'One Account', value: selectedEntryExitSimulationRunRow.run.one_trade_at_a_time ? 'On' : 'Off' },
+            { label: 'One Root', value: selectedEntryExitSimulationRunRow.run.one_trade_per_root_symbol ? 'On' : 'Off' },
+            { label: 'One Minute', value: selectedEntryExitSimulationRunRow.run.one_trade_per_minute ? 'On' : 'Off' },
+            { label: 'Cooldown', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.trade_cooldown_minutes)}m` },
+            { label: 'Daily Lockout', value: selectedEntryExitSimulationRunRow.run.daily_loss_lockout ? 'On' : 'Off' },
+            { label: 'Near Pass', value: selectedEntryExitSimulationRunRow.run.near_pass_protection ? 'On' : 'Off' },
+            { label: 'Near Within', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.near_pass_within_r, 2)}R` },
+            { label: 'Near Daily', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.near_pass_daily_loss_r, 2)}R` },
+            { label: 'Loss Cluster', value: selectedEntryExitSimulationRunRow.run.loss_cluster_day_lockout ? 'On' : 'Off' },
+            { label: 'Cluster Count', value: formatNumber(selectedEntryExitSimulationRunRow.run.loss_cluster_loss_count) },
+            { label: 'Cluster Window', value: `${formatNumber(selectedEntryExitSimulationRunRow.run.loss_cluster_window_minutes)}m` },
+          ],
+        },
+        {
+          title: 'Result',
+          items: [
+            { label: 'Wins', value: formatNumber(selectedEntryExitSimulationRunRow.run.win_count), tone: 'win' },
+            { label: 'Losses', value: formatNumber(selectedEntryExitSimulationRunRow.run.loss_count), tone: 'loss' },
+            { label: 'No Entry', value: formatNumber(selectedEntryExitSimulationRunRow.run.no_entry_count) },
+            {
+              label: 'Trade Win Rate',
+              value: optionalNumber(selectedEntryExitSimulationRunRow.run.trade_win_rate) === null
+                ? ''
+                : `${formatDecimal(selectedEntryExitSimulationRunRow.run.trade_win_rate, 2)}%`,
+            },
+            { label: 'Avg R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.avg_r, 4)}R`, tone: Number(selectedEntryExitSimulationRunRow.run.avg_r) < 0 ? 'loss' : 'win' },
+            { label: 'Sum R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.sum_r, 2)}R`, tone: Number(selectedEntryExitSimulationRunRow.run.sum_r) < 0 ? 'loss' : 'win' },
+            { label: 'Best R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.best_r, 2)}R`, tone: 'win' },
+            { label: 'Worst R', value: `${formatDecimal(selectedEntryExitSimulationRunRow.run.worst_r, 2)}R`, tone: 'loss' },
+          ],
+        },
+      ]
+    : [];
+  const selectedPropSimulationSummary = selectedEntryExitSimulationRunRow?.run?.prop ?? {};
+  const selectedPropSimulationOverviewSections = selectedEntryExitSimulationRunRow
+    ? [
+        {
+          title: 'Rules',
+          items: [
+            { label: 'Profit Target', value: `${formatDecimal(selectedPropSimulationSummary.profit_target_r, 0)}R`, tone: 'win' },
+            { label: 'Max Drawdown', value: `${formatDecimal(selectedPropSimulationSummary.max_drawdown_r_limit, 0)}R`, tone: 'loss' },
+            { label: 'Daily Loss', value: `${formatDecimal(selectedPropSimulationSummary.daily_loss_r_limit, 0)}R`, tone: 'skipped' },
+          ],
+        },
+        {
+          title: 'Cycles',
+          items: [
+            { label: 'Cycles', value: formatNumber(selectedPropSimulationSummary.cycles) },
+            { label: 'Passed', value: formatNumber(selectedPropSimulationSummary.passed), tone: 'win' },
+            { label: 'Daily Fails', value: formatNumber(selectedPropSimulationSummary.daily_fails), tone: 'skipped' },
+            { label: 'Drawdown Fails', value: formatNumber(selectedPropSimulationSummary.drawdown_fails), tone: 'loss' },
+            { label: 'Incomplete', value: formatNumber(selectedPropSimulationSummary.incomplete) },
+          ],
+        },
+        {
+          title: 'Summary',
+          items: [
+            {
+              label: 'Sim Plays Used',
+              value: selectedPropSimulationSummary.sim_plays_used === null || selectedPropSimulationSummary.sim_plays_used === undefined
+                ? ''
+                : formatNumber(selectedPropSimulationSummary.sim_plays_used),
+            },
+            { label: 'Pass Rate', value: `${formatDecimal(selectedPropSimulationSummary.pass_rate, 2)}%`, tone: selectedPropSimulationSummary.pass_rate >= 80 ? 'win' : 'loss' },
+            { label: 'Closed Pass Rate', value: `${formatDecimal(selectedPropSimulationSummary.closed_pass_rate, 2)}%`, tone: selectedPropSimulationSummary.closed_pass_rate >= 80 ? 'win' : 'loss' },
+            { label: 'Max Drawdown', value: `${formatDecimal(selectedPropSimulationSummary.max_drawdown_r, 2)}R`, tone: 'loss' },
+            { label: 'Max Loss Streak', value: formatNumber(selectedPropSimulationSummary.max_loss_streak), tone: 'loss' },
+          ],
+        },
+      ]
+    : [];
+  const selectedSimulationOverviewCards = selectedEntryExitSimulationRunRow
+    ? [
+        {
+          label: 'Sim Plays',
+          value: formatNumber(selectedSimulationUsedPlayRows.length),
+          detail: 'templates used',
+          tone: 'win',
+        },
+      ]
+    : [];
+  const selectedSimulationOutcomeTotal = selectedEntryExitSimulationRunRow?.propTotal ?? 0;
+  const selectedSimulationOutcomeSegments = selectedEntryExitSimulationRunRow
+    ? [
+        {
+          label: 'Passed',
+          value: selectedEntryExitSimulationRunRow.propPassed,
+          tone: 'win',
+        },
+        {
+          label: 'Daily Loss',
+          value: selectedEntryExitSimulationRunRow.propDailyFails,
+          tone: 'warning',
+        },
+        {
+          label: 'Drawdown',
+          value: selectedEntryExitSimulationRunRow.propDrawdownFails,
+          tone: 'loss',
+        },
+        {
+          label: 'Incomplete',
+          value: selectedEntryExitSimulationRunRow.propIncomplete,
+          tone: 'neutral',
+        },
+      ].map((segment) => ({
+        ...segment,
+        percent: selectedSimulationOutcomeTotal
+          ? (Number(segment.value || 0) / selectedSimulationOutcomeTotal) * 100
+          : 0,
+      }))
+    : [];
+  const selectedSimulationEquityPoints =
+    entryExitSimEquityCurve.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimEquityCurve.points ?? []
+      : [];
+  const selectedSimulationEquityWidth = 760;
+  const selectedSimulationEquityHeight = 220;
+  const selectedSimulationEquityPadding = { top: 22, right: 24, bottom: 34, left: 72 };
+  const selectedSimulationEquityValues = selectedSimulationEquityPoints.map((point) => Number(point.cumulative_r || 0));
+  const selectedSimulationEquityMin = Math.min(0, ...selectedSimulationEquityValues);
+  const selectedSimulationEquityMax = Math.max(0, ...selectedSimulationEquityValues);
+  const selectedSimulationEquitySpan = Math.max(1, selectedSimulationEquityMax - selectedSimulationEquityMin);
+  const selectedSimulationEquityPlotWidth =
+    selectedSimulationEquityWidth - selectedSimulationEquityPadding.left - selectedSimulationEquityPadding.right;
+  const selectedSimulationEquityPlotHeight =
+    selectedSimulationEquityHeight - selectedSimulationEquityPadding.top - selectedSimulationEquityPadding.bottom;
+  const getSelectedSimulationEquityX = (index) =>
+    selectedSimulationEquityPadding.left +
+    (selectedSimulationEquityPoints.length > 1
+      ? (index / (selectedSimulationEquityPoints.length - 1)) * selectedSimulationEquityPlotWidth
+      : 0);
+  const getSelectedSimulationEquityY = (value) =>
+    selectedSimulationEquityPadding.top +
+    ((selectedSimulationEquityMax - Number(value || 0)) / selectedSimulationEquitySpan) *
+      selectedSimulationEquityPlotHeight;
+  const selectedSimulationEquityPath = selectedSimulationEquityPoints
+    .map((point, index) => {
+      const command = index === 0 ? 'M' : 'L';
+      return `${command}${getSelectedSimulationEquityX(index).toFixed(2)},${getSelectedSimulationEquityY(point.cumulative_r).toFixed(2)}`;
+    })
+    .join(' ');
+  const selectedSimulationEquityZeroY = getSelectedSimulationEquityY(0);
+  const selectedSimulationEquityLast =
+    selectedSimulationEquityPoints[selectedSimulationEquityPoints.length - 1] ?? null;
+  const selectedSimulationEquityPeak = selectedSimulationEquityValues.length
+    ? Math.max(...selectedSimulationEquityValues)
+    : 0;
+  const selectedSimulationEquityWorstDrawdown = selectedSimulationEquityPoints.length
+    ? Math.max(...selectedSimulationEquityPoints.map((point) => Number(point.drawdown_r || 0)))
+    : 0;
+  const selectedSimulationEquityStartLabel =
+    selectedSimulationEquityPoints[0]?.event_date?.slice?.(0, 10) ?? '';
+  const selectedSimulationEquityEndLabel =
+    selectedSimulationEquityLast?.event_date?.slice?.(0, 10) ?? '';
+  const selectedSimulationDrawdownLimit = ENTRY_EXIT_PROP_RULES.maxDrawdownR;
+  const selectedSimulationDrawdownCurrent = Number(selectedSimulationEquityLast?.drawdown_r || 0);
+  const selectedSimulationDailyDrawdownValues = selectedSimulationEquityPoints.map((point) =>
+    Math.max(0, -Number(point.daily_r || 0))
+  );
+  const selectedSimulationWorstDailyDrawdown = selectedSimulationDailyDrawdownValues.length
+    ? Math.max(...selectedSimulationDailyDrawdownValues)
+    : 0;
+  const selectedSimulationDailyDrawdownLimit = ENTRY_EXIT_PROP_RULES.dailyLossR;
+  const selectedSimulationDrawdownMax = Math.max(
+    selectedSimulationDrawdownLimit,
+    selectedSimulationDailyDrawdownLimit,
+    selectedSimulationEquityWorstDrawdown,
+    selectedSimulationWorstDailyDrawdown,
+    1
+  );
+  const selectedSimulationDrawdownChartMax = selectedSimulationDrawdownMax * 1.12;
+  const getSelectedSimulationDrawdownY = (value) =>
+    selectedSimulationEquityPadding.top +
+    (Number(value || 0) / selectedSimulationDrawdownChartMax) * selectedSimulationEquityPlotHeight;
+  const selectedSimulationDrawdownBars = selectedSimulationEquityPoints
+    .map((point, index) => {
+      const drawdown = Number(point.drawdown_r || 0);
+      const dailyDrawdown = Math.max(0, -Number(point.daily_r || 0));
+      const tone =
+        drawdown >= selectedSimulationDrawdownLimit
+          ? 'max-drawdown'
+          : dailyDrawdown >= selectedSimulationDailyDrawdownLimit
+            ? 'daily-loss'
+            : 'drawdown';
+      return {
+        drawdown,
+        index,
+        point,
+        tone,
+        x: getSelectedSimulationEquityX(index),
+        y: getSelectedSimulationDrawdownY(drawdown),
+      };
+    })
+    .filter((bar) => bar.drawdown > 0);
+  const selectedSimulationDrawdownBreachPoints = selectedSimulationEquityPoints
+    .map((point, index) => ({ point, index }))
+    .filter(({ point }) => Number(point.drawdown_r || 0) >= selectedSimulationDrawdownLimit);
+  const selectedSimulationFirstDrawdownBreach = selectedSimulationDrawdownBreachPoints[0] ?? null;
+  const selectedSimulationDrawdownLimitY = getSelectedSimulationDrawdownY(selectedSimulationDrawdownLimit);
+  const selectedSimulationDailyDrawdownLimitY = getSelectedSimulationDrawdownY(selectedSimulationDailyDrawdownLimit);
+  const selectedSimulationDailyRows =
+    entryExitSimDailyRData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimDailyRData.days ?? []
+      : [];
+  const selectedSimulationDailyLossLimit = ENTRY_EXIT_PROP_RULES.dailyLossR;
+  const selectedSimulationDailyValues = selectedSimulationDailyRows.map((row) => Number(row.total_r || 0));
+  const selectedSimulationBestDay = selectedSimulationDailyRows.reduce(
+    (best, row) => (Number(row.total_r || 0) > Number(best?.total_r ?? Number.NEGATIVE_INFINITY) ? row : best),
+    null
+  );
+  const selectedSimulationWorstDay = selectedSimulationDailyRows.reduce(
+    (worst, row) => (Number(row.total_r || 0) < Number(worst?.total_r ?? Number.POSITIVE_INFINITY) ? row : worst),
+    null
+  );
+  const selectedSimulationDailyLossHitRows = selectedSimulationDailyRows.filter(
+    (row) => row.hit_daily_loss || Number(row.worst_intraday_r || 0) <= -selectedSimulationDailyLossLimit
+  );
+  const selectedSimulationDailyMin = Math.min(
+    -selectedSimulationDailyLossLimit,
+    0,
+    ...selectedSimulationDailyRows.map((row) => Number(row.total_r || 0)),
+    ...selectedSimulationDailyRows.map((row) => Number(row.worst_intraday_r || 0))
+  );
+  const selectedSimulationDailyMax = Math.max(0, ...selectedSimulationDailyValues);
+  const selectedSimulationDailySpan = Math.max(1, selectedSimulationDailyMax - selectedSimulationDailyMin);
+  const selectedSimulationDailySlotWidth =
+    selectedSimulationEquityPlotWidth / Math.max(1, selectedSimulationDailyRows.length);
+  const selectedSimulationDailyBarWidth = Math.max(
+    2,
+    Math.min(14, selectedSimulationDailySlotWidth * 0.64)
+  );
+  const getSelectedSimulationDailyY = (value) =>
+    selectedSimulationEquityPadding.top +
+    ((selectedSimulationDailyMax - Number(value || 0)) / selectedSimulationDailySpan) *
+      selectedSimulationEquityPlotHeight;
+  const getSelectedSimulationDailyX = (index) =>
+    selectedSimulationEquityPadding.left +
+    index * selectedSimulationDailySlotWidth +
+    Math.max(0, (selectedSimulationDailySlotWidth - selectedSimulationDailyBarWidth) / 2);
+  const selectedSimulationDailyZeroY = getSelectedSimulationDailyY(0);
+  const selectedSimulationDailyLossLimitY = getSelectedSimulationDailyY(-selectedSimulationDailyLossLimit);
+  const selectedSimulationDailyStartLabel =
+    selectedSimulationDailyRows[0]?.trade_date?.slice?.(0, 10) ?? '';
+  const selectedSimulationDailyEndLabel =
+    selectedSimulationDailyRows[selectedSimulationDailyRows.length - 1]?.trade_date?.slice?.(0, 10) ?? '';
+  const selectedSimulationDailyRow =
+    selectedSimulationDailyRows.find((row) => String(row.trade_date || '').slice(0, 10) === selectedSimulationDailyDate) ??
+    null;
+  const selectedSimulationDailyTradeRows =
+    entryExitSimDailyTradesData.sim_run_id === selectedEntryExitSimulationTestId &&
+    entryExitSimDailyTradesData.trade_date === selectedSimulationDailyDate
+      ? entryExitSimDailyTradesData.trades ?? []
+      : [];
+  const selectedSimulationDailyTradeNetR = selectedSimulationDailyTradeRows.reduce(
+    (sum, trade) => sum + Number(trade.result_r || 0),
+    0
+  );
+  const selectedSimulationHourlyRows =
+    entryExitSimHourlyData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimHourlyData.hours ?? []
+      : [];
+  const selectedSimulationBestHour = selectedSimulationHourlyRows.reduce(
+    (best, row) => (Number(row.sum_r || 0) > Number(best?.sum_r ?? Number.NEGATIVE_INFINITY) ? row : best),
+    null
+  );
+  const selectedSimulationWorstHour = selectedSimulationHourlyRows.reduce(
+    (worst, row) => (Number(row.sum_r || 0) < Number(worst?.sum_r ?? Number.POSITIVE_INFINITY) ? row : worst),
+    null
+  );
+  const selectedSimulationMostDangerHour = selectedSimulationHourlyRows.reduce(
+    (worst, row) =>
+      Number(row.daily_loss_day_trades || 0) > Number(worst?.daily_loss_day_trades || 0) ? row : worst,
+    null
+  );
+  const selectedSimulationTradeCadence =
+    entryExitSimTradeCadenceData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimTradeCadenceData.cadence
+      : null;
+  const selectedSimulationTradeCadenceGapCount = Number(
+    selectedSimulationTradeCadence?.gap_count ?? 0
+  );
+  const selectedSimulationTradeCadenceBuckets = selectedSimulationTradeCadence
+    ? [
+        { label: '0-1m', count: selectedSimulationTradeCadence.gap_0_1m },
+        { label: '1-5m', count: selectedSimulationTradeCadence.gap_1_5m },
+        { label: '5-15m', count: selectedSimulationTradeCadence.gap_5_15m },
+        { label: '15-30m', count: selectedSimulationTradeCadence.gap_15_30m },
+        { label: '30-60m', count: selectedSimulationTradeCadence.gap_30_60m },
+        { label: '60m+', count: selectedSimulationTradeCadence.gap_over_60m },
+      ].map((bucket) => ({
+        ...bucket,
+        count: Number(bucket.count || 0),
+        percent: selectedSimulationTradeCadenceGapCount
+          ? (Number(bucket.count || 0) / selectedSimulationTradeCadenceGapCount) * 100
+          : 0,
+      }))
+    : [];
+  const selectedSimulationLossCluster =
+    entryExitSimLossClusterData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimLossClusterData
+      : { summary: null, buckets: [], windows: [] };
+  const selectedSimulationLossSummary = selectedSimulationLossCluster.summary ?? null;
+  const selectedSimulationLossBuckets = selectedSimulationLossCluster.buckets ?? [];
+  const selectedSimulationLossWindows = selectedSimulationLossCluster.windows ?? [];
+  const selectedSimulationSymbolContributionRows =
+    entryExitSimSymbolContributionData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimSymbolContributionData.symbols ?? []
+      : [];
+  const selectedSimulationFamilyContributionRows =
+    entryExitSimFamilyContributionData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimFamilyContributionData.families ?? []
+      : [];
+  const selectedSimulationFamilyRouteByKey = new Map(
+    selectedEntryExitSimulationFamilyRoutes.map((route) => [route.family_key, route])
+  );
+  const selectedSimulationFamilyPerformanceRows = (
+    selectedSimulationFamilyContributionRows.filter((row) => Number(row.sum_r || 0) > 0).length
+      ? selectedSimulationFamilyContributionRows.filter((row) => Number(row.sum_r || 0) > 0)
+      : selectedSimulationFamilyContributionRows
+  )
+    .slice(0, 10)
+    .map((row, index) => {
+      const route = selectedSimulationFamilyRouteByKey.get(row.family_key) ?? null;
+      return {
+        ...row,
+        avgR: Number(row.avg_r || 0),
+        label: formatEntryExitFamilyRouteLabel(route, row.family_key),
+        netR: Number(row.sum_r || 0),
+        rank: index + 1,
+        route,
+        winRate: Number(row.win_rate || 0),
+      };
+    });
+  const selectedSimulationFamilyPerformanceMaxR = Math.max(
+    1,
+    ...selectedSimulationFamilyPerformanceRows.map((row) => Math.max(0, Number(row.netR || 0)))
+  );
+  const selectedSimulationTopSymbol = selectedSimulationSymbolContributionRows[0] ?? null;
+  const selectedSimulationWorstSymbol = selectedSimulationSymbolContributionRows.reduce(
+    (worst, row) => (Number(row.sum_r || 0) < Number(worst?.sum_r ?? Number.POSITIVE_INFINITY) ? row : worst),
+    null
+  );
+  const selectedSimulationMostDangerSymbol = selectedSimulationSymbolContributionRows.reduce(
+    (worst, row) =>
+      Number(row.daily_loss_day_trades || 0) > Number(worst?.daily_loss_day_trades || 0) ? row : worst,
+    null
+  );
+  const selectedSimulationTopFamily = selectedSimulationFamilyContributionRows[0] ?? null;
+  const selectedSimulationWorstFamily = selectedSimulationFamilyContributionRows.reduce(
+    (worst, row) => (Number(row.sum_r || 0) < Number(worst?.sum_r ?? Number.POSITIVE_INFINITY) ? row : worst),
+    null
+  );
+  const selectedSimulationMostDangerFamily = selectedSimulationFamilyContributionRows.reduce(
+    (worst, row) =>
+      Number(row.daily_loss_day_trades || 0) > Number(worst?.daily_loss_day_trades || 0) ? row : worst,
+    null
+  );
+  const selectedSimulationStreakRows =
+    entryExitSimStreakData.sim_run_id === selectedEntryExitSimulationTestId
+      ? entryExitSimStreakData.streaks ?? []
+      : [];
+  const selectedSimulationWinStreakRows = selectedSimulationStreakRows.filter(
+    (row) => row.streak_type === 'win'
+  );
+  const selectedSimulationLossStreakRows = selectedSimulationStreakRows.filter(
+    (row) => row.streak_type === 'loss'
+  );
+  const selectedSimulationLargestWinStreak = selectedSimulationWinStreakRows.reduce(
+    (best, row) => (Number(row.streak_length || 0) > Number(best?.streak_length || 0) ? row : best),
+    null
+  );
+  const selectedSimulationLargestLossStreak = selectedSimulationLossStreakRows.reduce(
+    (best, row) => (Number(row.streak_length || 0) > Number(best?.streak_length || 0) ? row : best),
+    null
+  );
+  const selectedSimulationMaxStreakLength = Math.max(
+    1,
+    ...selectedSimulationStreakRows.map((row) => Number(row.streak_length || 0))
+  );
+  const selectedSimulationStreakDistribution = Array.from(
+    { length: selectedSimulationMaxStreakLength },
+    (_, index) => {
+      const length = index + 1;
+      return {
+        length,
+        wins: selectedSimulationWinStreakRows.filter((row) => Number(row.streak_length || 0) === length).length,
+        losses: selectedSimulationLossStreakRows.filter((row) => Number(row.streak_length || 0) === length).length,
+      };
+    }
+  ).filter((row) => row.wins || row.losses);
+  const selectedSimulationMaxStreakBucketCount = Math.max(
+    1,
+    ...selectedSimulationStreakDistribution.flatMap((row) => [row.wins, row.losses])
+  );
+  const selectedEntryExitRouterPropSections = [
     {
-      title: 'Current Prop Router Setup',
-      items: entryExitRouterCurrentRun
+      title: 'Prop Firm Rule Logic',
+      items: selectedEntryExitRouterRunRow
         ? [
             {
-              label: 'Router Run',
-              value: compactText(entryExitRouterCurrentRun.router_run_id, 28),
-              title: entryExitRouterCurrentRun.router_run_id,
-              compact: true,
+              label: 'Pass Target',
+              value: `+${formatDecimal(ENTRY_EXIT_PROP_RULES.profitTargetR, 0)}R`,
+              tone: 'win',
+            },
+            {
+              label: selectedEntryExitLogicRunRow?.run.daily_loss_lockout ? 'Daily Lockout' : 'Daily Loss Fail',
+              value: `-${formatDecimal(ENTRY_EXIT_PROP_RULES.dailyLossR, 0)}R`,
+              tone: selectedEntryExitLogicRunRow?.run.daily_loss_lockout ? 'skipped' : 'loss',
+            },
+            {
+              label: 'Max Drawdown Fail',
+              value: `${formatDecimal(ENTRY_EXIT_PROP_RULES.maxDrawdownR, 0)}R from peak`,
+              tone: 'loss',
+            },
+            {
+              label: 'Cycle Logic',
+              value: selectedEntryExitLogicRunRow?.run.daily_loss_lockout
+                ? 'Chronological routed trades reset after pass or max drawdown'
+                : 'Chronological routed trades reset after pass or fail',
               wide: true,
             },
             {
-              label: 'Template Run',
-              value: compactText(entryExitRouterCurrentRun.train_run_id, 28),
-              title: entryExitRouterCurrentRun.train_run_id,
-              compact: true,
+              label: selectedEntryExitLogicRunRow?.run.daily_loss_lockout ? 'Daily Trade Lock' : 'Daily Reset',
+              value: selectedEntryExitLogicRunRow?.run.daily_loss_lockout
+                ? 'After daily limit, the playbook skips the rest of that trade date'
+                : 'Daily R resets when the trade date changes',
               wide: true,
             },
-            { label: 'Test Year', value: entryExitRouterCurrentRun.test_year || 'N/A' },
             {
-              label: 'Trades',
-              value: formatNumber(getEntryExitRouterTradeCount(entryExitRouterCurrentRun)),
-            },
-            {
-              label: 'Trade WR',
-              value: `${formatDecimal(getEntryExitRouterWinRate(entryExitRouterCurrentRun), 2)}%`,
-              tone: Number(entryExitRouterCurrentRun.avg_r) >= 0 ? 'win' : 'loss',
-            },
-            {
-              label: 'Avg R',
-              value: `${formatDecimal(entryExitRouterCurrentRun.avg_r, 4)}R`,
-              tone: Number(entryExitRouterCurrentRun.avg_r) >= 0 ? 'win' : 'loss',
-            },
-            {
-              label: 'Prop Pass WR',
-              value: `${formatDecimal(entryExitRouterCurrentRun.prop?.closed_pass_rate || 0, 2)}%`,
-              tone: Number(entryExitRouterCurrentRun.prop?.closed_pass_rate || 0) >= 80 ? 'win' : 'skipped',
-            },
-            {
-              label: 'Prop Cycles',
-              value: `${formatNumber(entryExitRouterCurrentRun.prop?.passed || 0)} passed / ${formatNumber(entryExitRouterCurrentRun.prop?.daily_fails || 0)} daily / ${formatNumber(entryExitRouterCurrentRun.prop?.drawdown_fails || 0)} DD`,
+              label: 'Near Pass Protect',
+              value: selectedEntryExitLogicRunRow?.run.near_pass_protection
+                ? `After the cycle gets within ${formatDecimal(selectedEntryExitLogicRunRow.run.near_pass_within_r, 0)}R of target, daily lockout tightens to -${formatDecimal(selectedEntryExitLogicRunRow.run.near_pass_daily_loss_r, 0)}R`
+                : 'Off',
+              tone: selectedEntryExitLogicRunRow?.run.near_pass_protection ? 'skipped' : '',
               wide: true,
+            },
+            {
+              label: 'Loss Cluster Guard',
+              value: selectedEntryExitLogicRunRow?.run.loss_cluster_day_lockout
+                ? `${formatNumber(selectedEntryExitLogicRunRow.run.loss_cluster_loss_count || 3)} losses inside ${formatNumber(selectedEntryExitLogicRunRow.run.loss_cluster_window_minutes || 60)} minutes locks the rest of that trade date`
+                : 'Off',
+              tone: selectedEntryExitLogicRunRow?.run.loss_cluster_day_lockout ? 'skipped' : '',
+              wide: true,
+            },
+            {
+              label: 'Trade Feed',
+              value: 'Only routed playbook trades are replayed into prop cycles',
+              wide: true,
+            },
+          ]
+        : [],
+    },
+    {
+      title: 'Current Manual Ban List',
+      items: [
+        {
+          label: 'Current Families',
+          value: entryExitManualFamilyBans.length
+            ? `${formatNumber(entryExitManualFamilyBans.length)} banned`
+            : 'None',
+          tone: entryExitManualFamilyBans.length ? 'loss' : 'win',
+        },
+        {
+          label: 'Current Symbols',
+          value: entryExitManualSymbolBans.length
+            ? `${formatNumber(entryExitManualSymbolBans.length)} banned`
+            : 'None',
+          tone: entryExitManualSymbolBans.length ? 'loss' : 'win',
+        },
+        {
+          label: 'Applied To Selected Run',
+          value: selectedEntryExitManualFamilyBansApplied
+            ? `${formatNumber(selectedEntryExitManualFamilyBansApplied)} family ban applied`
+            : '0 applied',
+          tone: selectedEntryExitManualFamilyBansApplied ? 'skipped' : currentManualBanTotal ? 'loss' : 'win',
+          wide: true,
+        },
+        {
+          label: 'Run Note',
+          value: currentManualBanTotal
+            ? selectedEntryExitManualFamilyBansApplied
+              ? 'This selected run used the manual family ban list'
+              : 'This selected run did not use the current manual family bans'
+            : 'No current manual bans configured',
+          wide: true,
+        },
+        {
+          label: 'Purpose',
+          value: 'Current bans are user decisions; selected-run applied count is historical',
+          wide: true,
+        },
+        ...entryExitManualBanItems.slice(0, 8),
+      ],
+    },
+    {
+      title: 'Playbook Decision Logic',
+      items: selectedEntryExitRouterRunRow
+        ? [
+            {
+              label: 'Selected Playbook',
+              value: `${selectedEntryExitRouterRunRow.playbookLabel} | ${selectedEntryExitRouterRunRow.playbookName}`,
+              wide: true,
+            },
+            {
+              label: 'Strategy Description',
+              value: selectedEntryExitPlaybookDescription,
+              title: selectedEntryExitPlaybookDescription,
+              wide: true,
+              narrative: true,
             },
             {
               label: 'Family Gate',
-              value: `${formatNumber(entryExitRouterCurrentRun.trade_choices)} trade / ${formatNumber(entryExitRouterCurrentRun.watchlist_choices)} watch / ${formatNumber(entryExitRouterCurrentRun.skip_choices)} skip`,
+              value: `${formatNumber(selectedEntryExitRouterRunRow.run.trade_choices)} trade | ${formatNumber(selectedEntryExitRouterRunRow.run.watchlist_choices)} watch | ${formatNumber(selectedEntryExitRouterRunRow.run.skip_choices)} skip`,
+              wide: true,
+            },
+            {
+              label: 'Manual Ban Status',
+              value: `${formatNumber(entryExitManualFamilyBans.length)} current | ${formatNumber(selectedEntryExitManualFamilyBansApplied)} applied to this run`,
+              tone: entryExitManualFamilyBans.length || selectedEntryExitManualFamilyBansApplied ? 'skipped' : 'win',
               wide: true,
             },
             {
               label: 'Symbol Gate',
-              value: entryExitRouterCurrentRun.symbol_filter_enabled
-                ? `${formatNumber(entryExitRouterCurrentRun.symbol_trade_roots)} trade / ${formatNumber(entryExitRouterCurrentRun.symbol_skip_roots)} skip`
+              value: selectedEntryExitRouterRunRow.run.symbol_filter_enabled
+                ? `${formatNumber(selectedEntryExitRouterRunRow.run.symbol_trade_roots)} roots allowed | ${formatNumber(selectedEntryExitRouterRunRow.run.symbol_skip_roots)} roots skipped`
                 : 'Off',
-              tone: entryExitRouterCurrentRun.symbol_filter_enabled ? 'win' : 'skipped',
+              tone: selectedEntryExitRouterRunRow.run.symbol_filter_enabled ? 'win' : 'skipped',
               wide: true,
             },
             {
-              label: 'Skipped Patterns',
-              value: `${formatNumber(entryExitRouterCurrentRun.skipped_symbol_patterns)} symbol / ${formatNumber(entryExitRouterCurrentRun.skipped_non_trade_patterns)} family`,
+              label: 'Skipped By Symbol',
+              value: `${formatNumber(selectedEntryExitRouterRunRow.run.skipped_symbol_patterns)} patterns`,
+              tone: selectedEntryExitRouterRunRow.run.skipped_symbol_patterns ? 'skipped' : 'win',
+            },
+            {
+              label: 'Twin Rule',
+              value: `One chosen candidate per twin event | ${formatNumber(selectedEntryExitRouterRunRow.run.sister_window_minutes)} min window`,
+              wide: true,
+            },
+            {
+              label: 'Overlap Rule',
+              value: selectedEntryExitOverlapRule,
+              tone: selectedEntryExitRouterRunRow.run.one_trade_at_a_time ||
+                selectedEntryExitRouterRunRow.run.one_trade_per_root_symbol ||
+                selectedEntryExitRouterRunRow.run.one_trade_per_minute ||
+                Number(selectedEntryExitRouterRunRow.run.trade_cooldown_minutes || 0) > 0
+                ? 'skipped'
+                : 'win',
+              wide: true,
+            },
+            {
+              label: 'Near Pass Rule',
+              value: selectedEntryExitRouterRunRow.run.near_pass_protection
+                ? `Within ${formatDecimal(selectedEntryExitRouterRunRow.run.near_pass_within_r, 0)}R | -${formatDecimal(selectedEntryExitRouterRunRow.run.near_pass_daily_loss_r, 0)}R daily lock`
+                : 'Off',
+              tone: selectedEntryExitRouterRunRow.run.near_pass_protection ? 'skipped' : 'win',
+              wide: true,
+            },
+            {
+              label: 'Loss Cluster Guard',
+              value: selectedEntryExitRouterRunRow.run.loss_cluster_day_lockout
+                ? `${formatNumber(selectedEntryExitRouterRunRow.run.loss_cluster_loss_count || 3)} losses inside ${formatNumber(selectedEntryExitRouterRunRow.run.loss_cluster_window_minutes || 60)}m = stop that day`
+                : 'Off',
+              tone: selectedEntryExitRouterRunRow.run.loss_cluster_day_lockout ? 'skipped' : 'win',
+              wide: true,
+            },
+            {
+              label: 'Skipped By Overlap',
+              value: `${formatNumber(selectedEntryExitRouterRunRow.run.skipped_overlap_patterns)} patterns`,
+              tone: selectedEntryExitRouterRunRow.run.skipped_overlap_patterns ? 'skipped' : 'win',
+            },
+            {
+              label: 'Watch / Skip Behavior',
+              value: 'WATCHLIST and SKIP family rows are not eligible for replay trades',
+              wide: true,
+            },
+            ...selectedEntryExitManualSkipRows.slice(0, 3).map((row) => ({
+              label: `${row.route.harmonic_type} ${row.route.market}`,
+              value: `${row.route.family_bin} | ${row.route.family_size_bucket} | ${row.route.family_time_bin} | ${row.route.family_x_strictness}`,
+              title: `${row.route.family_key} | ${row.route.status_reason}`,
               tone: 'skipped',
               wide: true,
+            })),
+          ]
+        : [],
+    },
+    {
+      title: 'Selected Simulation Test',
+      items: selectedEntryExitRouterRunRow
+        ? [
+            {
+              label: 'Playbook',
+              value: selectedEntryExitRouterRunRow.playbookLabel,
+              tone: 'win',
             },
             {
-              label: 'Rules',
-              value: `Family >= ${formatNumber(entryExitRouterCurrentRun.trade_min_tests)} tests, ${formatDecimal(entryExitRouterCurrentRun.trade_min_win_rate, 1)}% WR, ${formatDecimal(entryExitRouterCurrentRun.trade_min_avg_r, 3)}R / Symbol >= ${formatNumber(entryExitRouterCurrentRun.symbol_min_tests)} tests, ${formatDecimal(entryExitRouterCurrentRun.symbol_min_win_rate, 1)}% WR, ${formatDecimal(entryExitRouterCurrentRun.symbol_min_avg_r, 3)}R`,
+              label: 'Playbook Setup',
+              value: selectedEntryExitRouterRunRow.playbookName,
+              wide: true,
+            },
+            {
+              label: 'Simulation Test ID',
+              value: compactText(selectedEntryExitRouterRunRow.run.router_run_id, 28),
+              title: selectedEntryExitRouterRunRow.run.router_run_id,
+              wide: true,
+            },
+            { label: 'Test Year', value: selectedEntryExitRouterRunRow.run.test_year || 'All' },
+            { label: 'Prop Total', value: formatNumber(selectedEntryExitRouterRunRow.propTotal) },
+            { label: 'Closed Tests', value: formatNumber(selectedEntryExitRouterRunRow.propClosedTotal) },
+            { label: 'Passed', value: formatNumber(selectedEntryExitRouterRunRow.propPassed), tone: 'win' },
+            { label: 'Failed', value: formatNumber(selectedEntryExitRouterRunRow.propFailed), tone: 'loss' },
+            {
+              label: 'Closed Pass WR',
+              value: `${formatDecimal(selectedEntryExitRouterRunRow.propClosedPassRate, 2)}%`,
+              tone: Number(selectedEntryExitRouterRunRow.propClosedPassRate) >= 80 ? 'win' : 'skipped',
+            },
+            {
+              label: 'All-Cycle Pass WR',
+              value: `${formatDecimal(selectedEntryExitRouterRunRow.run.prop?.pass_rate || 0, 2)}%`,
+            },
+            {
+              label: 'Daily Loss Fails',
+              value: formatNumber(selectedEntryExitRouterRunRow.propDailyFails),
+              tone: 'loss',
+            },
+            {
+              label: 'Drawdown Fails',
+              value: formatNumber(selectedEntryExitRouterRunRow.propDrawdownFails),
+              tone: 'loss',
+            },
+            { label: 'Open / Incomplete', value: formatNumber(selectedEntryExitRouterRunRow.propIncomplete) },
+            {
+              label: 'Manual Bans Applied',
+              value: `${formatNumber(selectedEntryExitManualFamilyBansApplied)} family`,
+              tone: selectedEntryExitManualFamilyBansApplied ? 'skipped' : 'win',
+            },
+            {
+              label: 'Max Loss Streak',
+              value: formatNumber(selectedEntryExitRouterRunRow.run.prop?.max_loss_streak || 0),
+              tone: 'skipped',
+            },
+            {
+              label: 'Max Drawdown Seen',
+              value: `${formatDecimal(selectedEntryExitRouterRunRow.run.prop?.max_drawdown_r || 0, 2)}R`,
+              tone: 'loss',
+            },
+          ]
+        : [],
+    },
+    {
+      title: 'Simulation Filters',
+      items: selectedEntryExitRouterRunRow
+        ? [
+            {
+              label: 'Prop Filter',
+              value: selectedEntryExitRouterRunRow.run.prop_filter_enabled ? 'On' : 'Off',
+              tone: selectedEntryExitRouterRunRow.run.prop_filter_enabled ? 'win' : 'skipped',
+            },
+            {
+              label: 'Trade Bar',
+              value: `${formatNumber(selectedEntryExitRouterRunRow.run.trade_min_tests)} tests | ${formatDecimal(Number(selectedEntryExitRouterRunRow.run.trade_min_win_rate || 0) * 100, 1)}% WR | ${formatDecimal(selectedEntryExitRouterRunRow.run.trade_min_avg_r, 3)}R`,
+              wide: true,
+            },
+            {
+              label: 'Watchlist Bar',
+              value: `${formatNumber(selectedEntryExitRouterRunRow.run.watchlist_min_tests)} tests | ${formatDecimal(Number(selectedEntryExitRouterRunRow.run.watchlist_min_win_rate || 0) * 100, 1)}% WR | ${formatDecimal(selectedEntryExitRouterRunRow.run.watchlist_min_avg_r, 3)}R`,
+              wide: true,
+            },
+            {
+              label: 'Symbol Filter',
+              value: selectedEntryExitRouterRunRow.run.symbol_filter_enabled ? 'On' : 'Off',
+              tone: selectedEntryExitRouterRunRow.run.symbol_filter_enabled ? 'win' : 'skipped',
+            },
+            {
+              label: 'Symbol Gate',
+              value: `${formatNumber(selectedEntryExitRouterRunRow.run.symbol_min_tests)} tests | ${formatDecimal(Number(selectedEntryExitRouterRunRow.run.symbol_min_win_rate || 0) * 100, 1)}% WR | ${formatDecimal(selectedEntryExitRouterRunRow.run.symbol_min_avg_r, 3)}R`,
+              wide: true,
+            },
+            {
+              label: 'Twin Window',
+              value: `${formatNumber(selectedEntryExitRouterRunRow.run.sister_window_minutes)} min`,
+            },
+          ]
+        : [],
+    },
+    {
+      title: 'Replay Scope',
+      items: selectedEntryExitRouterRunRow
+        ? [
+            {
+              label: 'Train Run',
+              value: compactText(selectedEntryExitRouterRunRow.run.train_run_id, 28),
+              title: selectedEntryExitRouterRunRow.run.train_run_id,
+              wide: true,
+            },
+            { label: 'Patterns Scanned', value: formatNumber(selectedEntryExitRouterRunRow.run.patterns_scanned) },
+            { label: 'Routed Trades', value: formatNumber(selectedEntryExitRouterRunRow.tradeCount), tone: 'win' },
+            { label: 'Trade WR', value: `${formatDecimal(selectedEntryExitRouterRunRow.winRate, 2)}%` },
+            {
+              label: 'Avg R',
+              value: `${formatDecimal(selectedEntryExitRouterRunRow.run.avg_r, 4)}R`,
+              tone: Number(selectedEntryExitRouterRunRow.run.avg_r) < 0 ? 'loss' : 'win',
+            },
+            {
+              label: 'Total R',
+              value: `${formatDecimal(selectedEntryExitRouterRunRow.run.sum_r, 2)}R`,
+              tone: Number(selectedEntryExitRouterRunRow.run.sum_r) < 0 ? 'loss' : 'win',
+            },
+            { label: 'No Route', value: formatNumber(selectedEntryExitRouterRunRow.run.no_route_patterns) },
+            { label: 'Skipped Non-Trade', value: formatNumber(selectedEntryExitRouterRunRow.run.skipped_non_trade_patterns) },
+            { label: 'Skipped Symbol', value: formatNumber(selectedEntryExitRouterRunRow.run.skipped_symbol_patterns), tone: 'skipped' },
+            { label: 'Skipped Overlap', value: formatNumber(selectedEntryExitRouterRunRow.run.skipped_overlap_patterns), tone: selectedEntryExitRouterRunRow.run.skipped_overlap_patterns ? 'skipped' : 'win' },
+            {
+              label: 'Family Choices',
+              value: `${formatNumber(selectedEntryExitRouterRunRow.run.trade_choices)} trade | ${formatNumber(selectedEntryExitRouterRunRow.run.watchlist_choices)} watch | ${formatNumber(selectedEntryExitRouterRunRow.run.skip_choices)} skip`,
+              wide: true,
+            },
+            {
+              label: 'Symbol Choices',
+              value: `${formatNumber(selectedEntryExitRouterRunRow.run.symbol_trade_roots)} trade | ${formatNumber(selectedEntryExitRouterRunRow.run.symbol_skip_roots)} skip`,
               wide: true,
             },
           ]
-        : isEntryExitRouterLoading
-        ? [{ label: 'Loading', value: 'Loading current prop router setup...', wide: true }]
-        : entryExitRouterError
-          ? [{ label: 'Error', value: entryExitRouterError, tone: 'loss', wide: true }]
-          : [{ label: 'No Router Run', value: 'Run the family-template router to populate this setup.', wide: true }],
+        : [],
     },
     {
-      title: 'Router Year Tests',
-      items: [],
-      tableRows: generatedEntryExitRouterRunRows,
-      variant: 'routerRunTable',
-      wide: true,
-    },
-    {
-      title: 'Symbol Gate Preview',
-      items: entryExitRouterSymbolGateRows.map((symbol) => ({
-        label: `${symbol.root_symbol} / ${symbol.route_status}`,
-        value: `${formatNumber(symbol.train_eval_count)} tests / ${formatDecimal(symbol.train_win_rate, 1)}% WR / ${formatDecimal(symbol.train_avg_r, 3)}R`,
-        title: symbol.status_reason,
-        tone: symbol.route_status === 'SKIP' ? 'loss' : 'win',
-        wide: true,
-      })),
+      title: 'Symbol Filter',
+      items: selectedEntryExitRouterRunRow
+        ? [
+            {
+              label: 'Allowed Roots',
+              value: formatNumber(selectedEntryExitRouterRunRow.run.symbol_trade_roots),
+              tone: 'win',
+            },
+            {
+              label: 'Skipped Roots',
+              value: formatNumber(selectedEntryExitRouterRunRow.run.symbol_skip_roots),
+              tone: selectedEntryExitRouterRunRow.run.symbol_skip_roots ? 'loss' : 'win',
+            },
+            ...entryExitRouterSymbolGateRows.map((symbol) => ({
+              label: `${symbol.root_symbol} / ${symbol.route_status}`,
+              value: `${formatNumber(symbol.train_eval_count)} tests | ${formatRatePercent(symbol.train_win_rate, 1)}% WR | ${formatDecimal(symbol.train_avg_r, 3)}R`,
+              title: symbol.status_reason,
+              tone: symbol.route_status === 'SKIP' ? 'loss' : 'win',
+              wide: true,
+            })),
+          ]
+        : [],
     },
   ];
   const entryExitTemplateSections = [
     {
-      title: 'Template Creator Run',
+      title: 'Template Library Source',
       items: entryExitRun
         ? [
-            { label: 'Run ID', value: compactText(entryExitRun.run_id, 24), title: entryExitRun.run_id, compact: true, wide: true },
+            { label: 'Template Build ID', value: compactText(entryExitRun.run_id, 24), title: entryExitRun.run_id, compact: true, wide: true },
             { label: 'Patterns', value: formatNumber(entryExitRun.scanned_patterns) },
             { label: 'Templates', value: formatNumber(entryExitRun.templates_created), tone: 'win' },
             { label: 'Prior Passes', value: formatNumber(entryExitRun.existing_template_passes), tone: 'win' },
@@ -2606,45 +4828,94 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     },
   ].filter((section) => section.items.length);
   const entryExitTemplateDetailSections = entryExitTemplateSections.filter(
-    (section) => section.title !== 'Template Creator Run' && section.variant !== 'templateTable'
+    (section) => section.title !== 'Template Library Source' && section.variant !== 'templateTable'
   );
-  const entryExitTemplateTableSections = entryExitTemplateSections.filter(
-    (section) => section.title === 'Template Creator Run' || section.variant === 'templateTable'
-  );
-  const entryExitWorkspaceTableSections = [
-    ...entryExitRouterSections,
-    ...entryExitTemplateTableSections,
+  // Dormant while the data dashboard is rebuilt from a blank slate.
+  void entryExitProfileTab;
+  void entryExitConditionSectionsForMode;
+  void selectedEntryExitRouterPropSections;
+  void entryExitTemplateWinSections;
+  void entryExitTemplateLossSections;
+  void entryExitTemplateFamilySections;
+  void entryExitTemplateEdgeSections;
+  void entryExitTemplateDetailSections;
+  const patternLibrarySections = [
+    {
+      title: 'Pattern Library',
+      variant: 'emptyPanel',
+      wide: true,
+      emptyText: 'Pattern data will live here.',
+    },
   ];
-  const entryExitTemplateProfileSections =
-    entryExitProfileTab === 'families'
-      ? entryExitTemplateFamilySections
-      : entryExitProfileTab === 'edge'
-      ? entryExitTemplateEdgeSections
-      : entryExitProfileTab === 'wins'
-      ? [...entryExitTemplateWinSections, ...entryExitConditionSectionsForMode('wins')]
-      : entryExitProfileTab === 'losses'
-        ? [...entryExitTemplateLossSections, ...entryExitConditionSectionsForMode('losses')]
-        : [...entryExitTemplateDetailSections, ...entryExitConditionSectionsForMode('all')];
   const activeTestOverviewSections =
-    testOverviewTab === 'supply'
+    testOverviewTab === 'patterns'
+      ? patternLibrarySections
+      : testOverviewTab === 'supply'
       ? supplyOverviewSections
       : testOverviewTab === 'entryExit'
-      ? entryExitWorkspaceTableSections
+      ? []
       : testOverviewTab === 'families'
       ? selectedRouteFamiliesSections
       : testOverviewTab === 'family'
       ? selectedFamilyOverviewSections
       : testOverviewTab === 'symbols'
       ? selectedTestSymbolSections
-      : testOverviewTab === 'outcomes'
-        ? selectedTestOutcomeSections
-        : selectedTestOverviewSections;
+      : patternLibrarySections;
+
+  useEffect(() => {
+    const isStandaloneEntryExit = isEntryExitStandalone && testOverviewTab === 'entryExit';
+    if (
+      ['overview', 'outcomes'].includes(testOverviewTab) ||
+      (!selectedRoute && testOverviewTab !== 'patterns' && !isStandaloneEntryExit)
+    ) {
+      setTestOverviewTab('patterns');
+    }
+  }, [isEntryExitStandalone, selectedRoute, testOverviewTab]);
 
   useEffect(() => {
     if (initialFamilyKey) {
       setSelectedFamilyKey(initialFamilyKey);
     }
   }, [initialFamilyKey]);
+
+  useEffect(() => {
+    if (!isPatternCardHovered) {
+      return undefined;
+    }
+
+    const handlePatternCardKeyDown = (event) => {
+      if (
+        browsePanel ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      const tagName = target?.tagName?.toLowerCase();
+      if (target?.isContentEditable || ['input', 'select', 'textarea'].includes(tagName)) {
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        moveSelectedPattern(1);
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveSelectedPattern(-1);
+      }
+    };
+
+    window.addEventListener('keydown', handlePatternCardKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handlePatternCardKeyDown);
+    };
+  }, [browsePanel, isPatternCardHovered, moveSelectedPattern]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -2658,6 +4929,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   }, [isLoading, selectedFamilyKey, visibleFamilies]);
 
   useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setFamilyPatterns([]);
+      setFamilyPatternsError('');
+      setFamilyPatternsLoading(false);
+      return undefined;
+    }
+
     let isCancelled = false;
 
     const loadFamilyPatterns = async () => {
@@ -2675,9 +4953,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
           {
             familyKey: selectedFamilyKey,
             sourceScope,
+            sourceTimeframe: timeframeFilter === 'All' ? null : timeframeFilter,
             year: yearFilter === 'All' ? null : yearFilter,
           },
-          { limit: 500, offset: 0, includeCount: true }
+          { limit: 10000, offset: 0, includeCount: true }
         );
 
         if (!isCancelled) {
@@ -2701,17 +4980,99 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     return () => {
       isCancelled = true;
     };
-  }, [selectedFamilyKey, sourceScope, yearFilter]);
+  }, [isEntryExitStandalone, selectedFamilyKey, sourceScope, timeframeFilter, yearFilter]);
 
   useEffect(() => {
-    const selectedPatternStillVisible = familyPatterns.some(
-      (pattern) => getFamilyPatternKey(pattern) === selectedFamilyPatternKey
-    );
+    setPatternBrowseSymbol('All');
+    setPatternBrowseSearch('');
+    setPatternBrowseRows([]);
+    setPatternBrowseMeta({ totalCount: 0, hasMore: false });
+    setAppliedPatternNavigation(null);
+  }, [patternBrowseScope, sourceScope, timeframeFilter, yearFilter]);
+
+  useEffect(() => {
+    if (browsePanel !== 'patterns') {
+      return undefined;
+    }
+
+    if (patternBrowseScope === 'selected' && !selectedFamilyKey) {
+      setPatternBrowseRows([]);
+      setPatternBrowseMeta({ totalCount: 0, hasMore: false });
+      setPatternBrowseError('');
+      setPatternBrowseLoading(false);
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const loadBrowsePatterns = async () => {
+      try {
+        setPatternBrowseLoading(true);
+        setPatternBrowseError('');
+        const isSelectedFamilyScope = patternBrowseScope === 'selected';
+        const result = await fetchPhase1FamilyPatterns(
+          {
+            familyKey: isSelectedFamilyScope ? selectedFamilyKey : null,
+            allFamilies: !isSelectedFamilyScope,
+            sourceScope,
+            sourceTimeframe: timeframeFilter === 'All' ? null : timeframeFilter,
+            symbol: patternBrowseSymbol === 'All' ? null : patternBrowseSymbol,
+            year: yearFilter === 'All' ? null : yearFilter,
+          },
+          {
+            limit: isSelectedFamilyScope ? 10000 : 5000,
+            offset: 0,
+            includeCount: true,
+          }
+        );
+
+        if (!isCancelled) {
+          setPatternBrowseRows(result.patterns ?? []);
+          setPatternBrowseMeta({
+            totalCount: result.total_count ?? result.patterns?.length ?? 0,
+            hasMore: Boolean(result.has_more),
+          });
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setPatternBrowseError('Could not load browse patterns.');
+          setPatternBrowseRows([]);
+          setPatternBrowseMeta({ totalCount: 0, hasMore: false });
+        }
+      } finally {
+        if (!isCancelled) {
+          setPatternBrowseLoading(false);
+        }
+      }
+    };
+
+    void loadBrowsePatterns();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [browsePanel, patternBrowseScope, patternBrowseSymbol, selectedFamilyKey, sourceScope, timeframeFilter, yearFilter]);
+
+  useEffect(() => {
+    const patternsForSelectedFamily = familyPatterns.filter((pattern) => {
+      const patternFamilyKey = getPatternFamilyKey(pattern);
+      return !selectedFamilyKey || !patternFamilyKey || patternFamilyKey === selectedFamilyKey;
+    });
+    const selectedPatternStillVisible = [...patternsForSelectedFamily, ...patternBrowseRows].some((pattern) => {
+      const patternFamilyKey = getPatternFamilyKey(pattern);
+      return (
+        getFamilyPatternKey(pattern) === selectedFamilyPatternKey &&
+        (!selectedFamilyKey || !patternFamilyKey || patternFamilyKey === selectedFamilyKey)
+      );
+    });
 
     if (!selectedPatternStillVisible) {
-      setSelectedFamilyPatternKey(familyPatterns[0] ? getFamilyPatternKey(familyPatterns[0]) : null);
+      setSelectedFamilyPatternKey(
+        patternsForSelectedFamily[0] ? getFamilyPatternKey(patternsForSelectedFamily[0]) : null
+      );
     }
-  }, [familyPatterns, selectedFamilyPatternKey]);
+  }, [familyPatterns, patternBrowseRows, selectedFamilyKey, selectedFamilyPatternKey]);
 
   useEffect(() => {
     if (!selectedRouteTradeFamilyPattern) {
@@ -2725,6 +5086,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   }, [selectedFamilyPatternKey, selectedRouteTradeFamilyPattern]);
 
   useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setPhase1Results([]);
+      setPhase1Error('');
+      setPhase1Loading(false);
+      return undefined;
+    }
+
     let isCancelled = false;
 
     const loadPhase1Results = async () => {
@@ -2763,7 +5131,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     return () => {
       isCancelled = true;
     };
-  }, [selectedFamilyKey, sourceScope, yearFilter]);
+  }, [isEntryExitStandalone, selectedFamilyKey, sourceScope, yearFilter]);
 
   useEffect(() => {
     const selectedRouteStillVisible = phase1Results.some(
@@ -2776,6 +5144,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   }, [phase1Results, selectedRouteKey]);
 
   useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setSupplyData({ symbols: [], families: [] });
+      setSupplyError('');
+      setSupplyLoading(false);
+      return undefined;
+    }
+
     let isCancelled = false;
 
     const loadSupplyData = async () => {
@@ -2809,20 +5184,52 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     return () => {
       isCancelled = true;
     };
-  }, [sourceScope, yearFilter]);
+  }, [isEntryExitStandalone, sourceScope, yearFilter]);
 
   useEffect(() => {
     let isCancelled = false;
 
     const loadEntryExitTemplates = async () => {
+      if (!selectedBuildRunId) {
+        setEntryExitLoading(false);
+        setEntryExitError('');
+        setEntryExitData({ run: null, build_summary: null, templates: [], coverage: [] });
+        setEntryExitRouterData({
+          current_run: null,
+          runs: [],
+          symbols: [],
+          family_routes: [],
+          manual_family_bans: [],
+          manual_symbol_bans: [],
+        });
+        setSelectedEntryExitRouterRunId(null);
+        return;
+      }
+
       try {
         setEntryExitLoading(true);
         setEntryExitError('');
-        const data = await fetchEntryExitTemplates({
-          sourceScope,
-          year: yearFilter === 'All' ? null : yearFilter,
-          limit: 250,
+        setEntryExitData({ run: null, build_summary: null, templates: [], coverage: [] });
+        setEntryExitRouterData({
+          current_run: null,
+          runs: [],
+          symbols: [],
+          family_routes: [],
+          manual_family_bans: [],
+          manual_symbol_bans: [],
         });
+        setSelectedEntryExitRouterRunId(null);
+        const data =
+          ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone
+            ? await fetchEntryExitBuildDashboard({
+                runId: selectedBuildRunId,
+              })
+            : await fetchEntryExitTemplates({
+                runId: selectedBuildRunId,
+                sourceScope,
+                year: yearFilter === 'All' ? null : yearFilter,
+                limit: 250,
+              });
 
         if (!isCancelled) {
           setEntryExitData(data);
@@ -2830,8 +5237,8 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       } catch (loadError) {
         console.error(loadError);
         if (!isCancelled) {
-          setEntryExitError('Could not load Entry / Exit templates.');
-          setEntryExitData({ run: null, templates: [] });
+          setEntryExitError('Could not load Entry / Exit build dashboard.');
+          setEntryExitData({ run: null, build_summary: null, templates: [], coverage: [] });
         }
       } finally {
         if (!isCancelled) {
@@ -2845,14 +5252,27 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     return () => {
       isCancelled = true;
     };
-  }, [sourceScope, yearFilter]);
+  }, [
+    isEntryExitStandalone,
+    selectedBuildRunId,
+    sourceScope,
+    yearFilter,
+  ]);
 
   useEffect(() => {
     let isCancelled = false;
 
     const loadEntryExitRouterRuns = async () => {
       if (!entryExitData.run?.run_id) {
-        setEntryExitRouterData({ current_run: null, runs: [], symbols: [] });
+        setEntryExitRouterData({
+          current_run: null,
+          runs: [],
+          symbols: [],
+          family_routes: [],
+          manual_family_bans: [],
+          manual_symbol_bans: [],
+        });
+        setSelectedEntryExitRouterRunId(null);
         setEntryExitRouterError('');
         setEntryExitRouterLoading(false);
         return;
@@ -2868,12 +5288,28 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
 
         if (!isCancelled) {
           setEntryExitRouterData(data);
+          setSelectedEntryExitRouterRunId((currentRunId) => {
+            const loadedRuns = data?.runs ?? [];
+            const stillLoaded = currentRunId && loadedRuns.some((run) => run.router_run_id === currentRunId);
+            if (stillLoaded) {
+              return currentRunId;
+            }
+
+            return data?.current_run?.router_run_id ?? loadedRuns[0]?.router_run_id ?? null;
+          });
         }
       } catch (loadError) {
         console.error(loadError);
         if (!isCancelled) {
-          setEntryExitRouterError('Could not load current prop router setup.');
-          setEntryExitRouterData({ current_run: null, runs: [], symbols: [] });
+          setEntryExitRouterError('Could not load stored playbooks.');
+          setEntryExitRouterData({
+            current_run: null,
+            runs: [],
+            symbols: [],
+            family_routes: [],
+            manual_family_bans: [],
+            manual_symbol_bans: [],
+          });
         }
       } finally {
         if (!isCancelled) {
@@ -2890,6 +5326,376 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   }, [entryExitData.run?.run_id]);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimEquityCurve = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimEquityCurve({ sim_run_id: '', points: [] });
+        setEntryExitSimEquityError('');
+        setEntryExitSimEquityLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimEquityLoading(true);
+        setEntryExitSimEquityError('');
+        const data = await fetchEntryExitSimEquityCurve({
+          simRunId: selectedEntryExitSimulationTestId,
+          pointLimit: 5000,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimEquityCurve(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimEquityError('Could not load equity curve.');
+          setEntryExitSimEquityCurve({ sim_run_id: selectedEntryExitSimulationTestId, points: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimEquityLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimEquityCurve();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimContributions = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimSymbolContributionData({ sim_run_id: '', symbols: [] });
+        setEntryExitSimFamilyContributionData({ sim_run_id: '', families: [] });
+        setEntryExitSimSymbolContributionError('');
+        setEntryExitSimFamilyContributionError('');
+        setEntryExitSimSymbolContributionLoading(false);
+        setEntryExitSimFamilyContributionLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimSymbolContributionLoading(true);
+        setEntryExitSimFamilyContributionLoading(true);
+        setEntryExitSimSymbolContributionError('');
+        setEntryExitSimFamilyContributionError('');
+        const [symbolData, familyData] = await Promise.all([
+          fetchEntryExitSimSymbolContribution({
+            simRunId: selectedEntryExitSimulationTestId,
+            limit: 160,
+          }),
+          fetchEntryExitSimFamilyContribution({
+            simRunId: selectedEntryExitSimulationTestId,
+            limit: 160,
+          }),
+        ]);
+
+        if (!isCancelled) {
+          setEntryExitSimSymbolContributionData(symbolData);
+          setEntryExitSimFamilyContributionData(familyData);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimSymbolContributionError('Could not load symbol contribution.');
+          setEntryExitSimFamilyContributionError('Could not load family contribution.');
+          setEntryExitSimSymbolContributionData({ sim_run_id: selectedEntryExitSimulationTestId, symbols: [] });
+          setEntryExitSimFamilyContributionData({ sim_run_id: selectedEntryExitSimulationTestId, families: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimSymbolContributionLoading(false);
+          setEntryExitSimFamilyContributionLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimContributions();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimDailyR = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimDailyRData({ sim_run_id: '', days: [] });
+        setEntryExitSimDailyRError('');
+        setEntryExitSimDailyRLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimDailyRLoading(true);
+        setEntryExitSimDailyRError('');
+        const data = await fetchEntryExitSimDailyR({
+          simRunId: selectedEntryExitSimulationTestId,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimDailyRData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimDailyRError('Could not load daily R bars.');
+          setEntryExitSimDailyRData({ sim_run_id: selectedEntryExitSimulationTestId, days: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimDailyRLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimDailyR();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId]);
+
+  useEffect(() => {
+    setSelectedSimulationDailyDate('');
+    setEntryExitSimDailyTradesData({ sim_run_id: '', trade_date: '', trades: [] });
+    setEntryExitSimDailyTradesError('');
+    setEntryExitSimDailyTradesLoading(false);
+  }, [selectedEntryExitSimulationTestId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimDailyTrades = async () => {
+      if (!selectedEntryExitSimulationTestId || !selectedSimulationDailyDate) {
+        setEntryExitSimDailyTradesData({ sim_run_id: '', trade_date: '', trades: [] });
+        setEntryExitSimDailyTradesError('');
+        setEntryExitSimDailyTradesLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimDailyTradesLoading(true);
+        setEntryExitSimDailyTradesError('');
+        const data = await fetchEntryExitSimDailyTrades({
+          simRunId: selectedEntryExitSimulationTestId,
+          tradeDate: selectedSimulationDailyDate,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimDailyTradesData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimDailyTradesError('Could not load daily trades.');
+          setEntryExitSimDailyTradesData({
+            sim_run_id: selectedEntryExitSimulationTestId,
+            trade_date: selectedSimulationDailyDate,
+            trades: [],
+          });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimDailyTradesLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimDailyTrades();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId, selectedSimulationDailyDate]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimHourly = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimHourlyData({ sim_run_id: '', hours: [] });
+        setEntryExitSimHourlyError('');
+        setEntryExitSimHourlyLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimHourlyLoading(true);
+        setEntryExitSimHourlyError('');
+        const data = await fetchEntryExitSimHourly({
+          simRunId: selectedEntryExitSimulationTestId,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimHourlyData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimHourlyError('Could not load time-of-day performance.');
+          setEntryExitSimHourlyData({ sim_run_id: selectedEntryExitSimulationTestId, hours: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimHourlyLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimHourly();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimTradeCadence = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimTradeCadenceData({ sim_run_id: '', cadence: null });
+        setEntryExitSimTradeCadenceError('');
+        setEntryExitSimTradeCadenceLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimTradeCadenceLoading(true);
+        setEntryExitSimTradeCadenceError('');
+        const data = await fetchEntryExitSimTradeCadence({
+          simRunId: selectedEntryExitSimulationTestId,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimTradeCadenceData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimTradeCadenceError('Could not load trade cadence.');
+          setEntryExitSimTradeCadenceData({ sim_run_id: selectedEntryExitSimulationTestId, cadence: null });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimTradeCadenceLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimTradeCadence();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimLossClustering = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimLossClusterData({ sim_run_id: '', summary: null, buckets: [], windows: [] });
+        setEntryExitSimLossClusterError('');
+        setEntryExitSimLossClusterLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimLossClusterLoading(true);
+        setEntryExitSimLossClusterError('');
+        const data = await fetchEntryExitSimLossClustering({
+          simRunId: selectedEntryExitSimulationTestId,
+          windowLimit: 60,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimLossClusterData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimLossClusterError('Could not load loss behavior.');
+          setEntryExitSimLossClusterData({
+            sim_run_id: selectedEntryExitSimulationTestId,
+            summary: null,
+            buckets: [],
+            windows: [],
+          });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimLossClusterLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimLossClustering();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadEntryExitSimStreaks = async () => {
+      if (!selectedEntryExitSimulationTestId) {
+        setEntryExitSimStreakData({ sim_run_id: '', streaks: [] });
+        setEntryExitSimStreakError('');
+        setEntryExitSimStreakLoading(false);
+        return;
+      }
+
+      try {
+        setEntryExitSimStreakLoading(true);
+        setEntryExitSimStreakError('');
+        const data = await fetchEntryExitSimStreaks({
+          simRunId: selectedEntryExitSimulationTestId,
+        });
+
+        if (!isCancelled) {
+          setEntryExitSimStreakData(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!isCancelled) {
+          setEntryExitSimStreakError('Could not load streak chart.');
+          setEntryExitSimStreakData({ sim_run_id: selectedEntryExitSimulationTestId, streaks: [] });
+        }
+      } finally {
+        if (!isCancelled) {
+          setEntryExitSimStreakLoading(false);
+        }
+      }
+    };
+
+    void loadEntryExitSimStreaks();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEntryExitSimulationTestId]);
+
+  useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setEntryExitTemplateBreakdown({ market: [], harmonic_type: [], conditions: [], family_results: [], combos: [] });
+      setEntryExitTemplateBreakdownError('');
+      setEntryExitTemplateBreakdownLoading(false);
+      return undefined;
+    }
+
     let isCancelled = false;
 
     const loadEntryExitTemplateBreakdown = async () => {
@@ -2929,9 +5735,16 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     return () => {
       isCancelled = true;
     };
-  }, [selectedEntryExitTemplate?.origin_run_id, selectedEntryExitTemplate?.template_uid]);
+  }, [isEntryExitStandalone, selectedEntryExitTemplate?.origin_run_id, selectedEntryExitTemplate?.template_uid]);
 
   useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setRouteFamilyRows([]);
+      setRouteFamiliesError('');
+      setRouteFamiliesLoading(false);
+      return undefined;
+    }
+
     let isCancelled = false;
 
     const loadRouteFamilies = async () => {
@@ -2976,9 +5789,16 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     return () => {
       isCancelled = true;
     };
-  }, [selectedRoute?.route_id, sourceScope, yearFilter]);
+  }, [isEntryExitStandalone, selectedRoute?.route_id, sourceScope, yearFilter]);
 
   useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setRouteTrades([]);
+      setRouteTradesError('');
+      setRouteTradesLoading(false);
+      return undefined;
+    }
+
     let isCancelled = false;
 
     const loadRouteTrades = async () => {
@@ -3029,6 +5849,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       isCancelled = true;
     };
   }, [
+    isEntryExitStandalone,
     selectedFamily?.first_d_date,
     selectedFamilyKey,
     selectedRoute,
@@ -3041,6 +5862,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   ]);
 
   useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setSelectedPatternRouteTrade(null);
+      setPatternRouteTradeError('');
+      setPatternRouteTradeLoading(false);
+      return undefined;
+    }
+
     let isCancelled = false;
 
     const loadSelectedPatternRouteTrade = async () => {
@@ -3099,7 +5927,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     return () => {
       isCancelled = true;
     };
-  }, [selectedFamilyKey, selectedFamilyPattern, selectedRoute, selectedRouteTradeMatchesSelectedPattern, simContractsCount]);
+  }, [
+    isEntryExitStandalone,
+    selectedFamilyKey,
+    selectedFamilyPattern,
+    selectedRoute,
+    selectedRouteTradeMatchesSelectedPattern,
+    simContractsCount,
+  ]);
 
   useEffect(() => {
     const selectedTradeStillVisible = routeTrades.some(
@@ -3120,6 +5955,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
   }, [routeTrades, selectedFamilyPattern, selectedPatternTrade, selectedRouteTradeKey]);
 
   useEffect(() => {
+    if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
+      setCanvasChartData({ candles: [], rust_patterns: null });
+      setCanvasPattern(null);
+      setCanvasError('');
+      setCanvasLoading(false);
+      return undefined;
+    }
+
     let isCancelled = false;
 
     const loadCanvasPreview = async () => {
@@ -3134,8 +5977,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
       try {
         setCanvasLoading(true);
         setCanvasError('');
-        setCanvasChartData({ candles: [], rust_patterns: null });
-        setCanvasPattern(null);
 
         const routeTradeForPattern =
           selectedPatternTrade &&
@@ -3160,6 +6001,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
             {
               familyKey: selectedFamilyKey,
               sourceScope,
+              sourceTimeframe: timeframeFilter === 'All' ? null : timeframeFilter,
               year: yearFilter === 'All' ? null : yearFilter,
             },
             { limit: 1, offset: 0, includeCount: false }
@@ -3207,8 +6049,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
         console.error(loadError);
         if (!isCancelled) {
           setCanvasError('Could not load the family canvas.');
-          setCanvasChartData({ candles: [], rust_patterns: null });
-          setCanvasPattern(null);
         }
       } finally {
         if (!isCancelled) {
@@ -3222,7 +6062,54 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
     return () => {
       isCancelled = true;
     };
-  }, [selectedFamilyKey, selectedFamilyPattern, selectedPatternTrade, selectedRouteTrade, sourceScope, yearFilter]);
+  }, [
+    isEntryExitStandalone,
+    selectedFamilyKey,
+    selectedFamilyPattern,
+    selectedPatternTrade,
+    selectedRouteTrade,
+    sourceScope,
+    timeframeFilter,
+    yearFilter,
+  ]);
+
+  const inspectorDetailTitle =
+    inspectorDetailMode === 'trade'
+      ? 'Current Trade'
+      : inspectorDetailMode === 'pattern'
+        ? 'Pattern Details'
+        : inspectorDetailMode === 'family'
+          ? 'Family Details'
+          : 'Entry / Exit Logic';
+  const inspectorDetailHeading =
+    inspectorDetailMode === 'trade'
+      ? selectedRouteTrade?.symbol ?? 'No trade'
+      : inspectorDetailMode === 'pattern'
+        ? ''
+        : inspectorDetailMode === 'family'
+          ? selectedFamily?.harmonic_type ?? 'No family'
+          : selectedRoute
+            ? `Route #${selectedRoute.result_rank}`
+            : 'No route';
+  const inspectorDetailSubheading =
+    inspectorDetailMode === 'trade'
+      ? selectedRouteTrade
+        ? `${formatDate(selectedRouteTrade.entry_date)} to ${formatDate(selectedRouteTrade.target_date)}`
+        : 'Select a trade'
+      : inspectorDetailMode === 'pattern'
+        ? ''
+        : inspectorDetailMode === 'family'
+          ? selectedFamily?.family_key ?? 'Select a family'
+          : selectedRoute?.route_label ?? 'Select a route';
+  const inspectorDetailStats =
+    inspectorDetailMode === 'trade'
+      ? selectedTradeDetailStats
+      : inspectorDetailMode === 'pattern'
+        ? selectedPatternDetailStats
+        : inspectorDetailMode === 'family'
+          ? selectedFamilyDetailStats
+          : selectedRouteLogicStats;
+  const showRouteLogicPanel = inspectorDetailMode === 'logic' && Boolean(selectedRoute);
 
   return (
     <div className="pattern-family-page pattern-family-terminal">
@@ -3234,31 +6121,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
         </div>
         <div className="pattern-family-terminal-title">
           <span>Monitor</span>
-          <strong>Family Universe</strong>
+          <strong>{isEntryExitStandalone ? 'Entry / Exit' : 'Family Universe'}</strong>
         </div>
         <div className="pattern-family-terminal-clock">
-          <span>{selectedSourceLabel}</span>
+          <span>{selectedSourceLabel} / {selectedTimeframeLabel}</span>
           <strong>{yearFilter === 'All' ? 'ALL YEARS' : yearFilter}</strong>
         </div>
       </header>
-
-      <section className="pattern-family-command-deck">
-        <div className="pattern-family-command-copy">
-          <span>Pattern Families</span>
-          <strong>{selectedFamilyLabel}</strong>
-          <small>
-            {formatNumber(families.length)} loaded groups / {formatNumber(visibleFamilies.length)} visible
-          </small>
-        </div>
-        <div className="pattern-family-top-stats">
-          {topStats.map((item) => (
-            <div className="pattern-family-top-stat" key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
 
       {error ? <div className="pattern-family-error">{error}</div> : null}
 
@@ -3266,6 +6135,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
         className={[
           'pattern-family-workspace',
           'pattern-family-one-page',
+          isEntryExitStandalone ? 'pattern-family-workspace--entry-exit-only' : '',
           isInspectorCollapsed ? 'pattern-family-one-page--inspector-collapsed' : '',
         ].filter(Boolean).join(' ')}
       >
@@ -3279,58 +6149,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                 : '',
           ].filter(Boolean).join(' ')}
         >
-          <section className="pattern-family-controls">
-            <label className="pattern-family-search-field">
-              <span>Search</span>
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="family key, harmonic, bin, size..."
-              />
-            </label>
-            <label>
-              <span>Harmonic</span>
-              <select value={harmonicType} onChange={(event) => setHarmonicType(event.target.value)}>
-                {harmonicOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Source</span>
-              <select
-                value={sourceScope}
-                onChange={(event) => {
-                  setSourceScope(event.target.value);
-                  setYearFilter('All');
-                }}
-              >
-                {SOURCE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Year</span>
-              <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)}>
-                <option value="All">All</option>
-                {yearOptions.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Min Setups</span>
-              <input value={minSetups} onChange={(event) => setMinSetups(event.target.value)} />
-            </label>
-          </section>
-
           <section
             className={[
               'pattern-family-selected-shell',
@@ -3375,14 +6193,29 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
               <SelectedSummaryRow
                 actionDisabled={isFamilyPatternsLoading}
                 actionLabel="Browse Patterns"
+                className={isPatternCardHovered ? 'pattern-family-selected-card--keyboard-hover' : ''}
                 emptyText={familyPatternsError || (selectedFamily ? 'No family patterns loaded.' : 'Select a family before choosing a pattern.')}
                 index={2}
                 isLoading={isFamilyPatternsLoading}
                 label="Pattern"
                 loadingText="Loading family patterns..."
                 metrics={selectedPatternRowMetrics}
-                onAction={() => setBrowsePanel('patterns')}
-                status={familyPatternsError || `${formatNumber(familyPatterns.length)} patterns`}
+                onMouseEnter={() => setPatternCardHovered(true)}
+                onMouseLeave={() => setPatternCardHovered(false)}
+                onAction={() => {
+                  if (patternBrowseScope === 'selected') {
+                    setPatternBrowseRows(familyPatterns);
+                    setPatternBrowseMeta({ totalCount: familyPatterns.length, hasMore: false });
+                  }
+                  setPatternBrowseError('');
+                  setBrowsePanel('patterns');
+                }}
+                status={
+                  familyPatternsError ||
+                  (appliedPatternNavigation
+                    ? `Nav ${formatNumber(patternNavigationRows.length)} patterns`
+                    : `${formatNumber(familyPatterns.length)} patterns`)
+                }
                 subtitle={
                   selectedFamilyPattern
                     ? `${selectedFamilyPattern.market ?? 'Market N/A'} / ${selectedFamilyPattern.harmonic_type ?? selectedFamily?.harmonic_type ?? 'Harmonic N/A'}`
@@ -3436,23 +6269,27 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
               <span className="pattern-family-section-bar-line" aria-hidden="true" />
               <strong
                 className="pattern-family-section-bar-context"
-                title={selectedRoute ? selectedRoute.route_label : 'Select an Entry / Exit Test'}
+                title={
+                  testOverviewTab === 'patterns'
+                    ? 'Pattern Library'
+                    : selectedRoute
+                      ? selectedRoute.route_label
+                      : 'Select an Entry / Exit Test'
+                }
               >
-                {selectedRoute ? 'Test Overview' : 'No test selected'}
+                {testOverviewTab === 'patterns' ? 'Pattern Library' : selectedRoute ? 'Test Overview' : 'No test selected'}
               </strong>
             </div>
             <div className="pattern-family-sim-body">
-              {selectedRoute ? (
+              {selectedRoute || testOverviewTab === 'patterns' || testOverviewTab === 'entryExit' ? (
                 <div className="pattern-family-test-overview">
                   <div className="pattern-family-test-overview-tabs" aria-label="Test overview sections">
                     {[
-                      { id: 'overview', label: 'Overview' },
-                      { id: 'entryExit', label: 'Entry / Exit' },
-                      { id: 'supply', label: 'Supply' },
-                      { id: 'family', label: 'Family' },
-                      { id: 'families', label: 'Families' },
-                      { id: 'symbols', label: 'Symbols' },
-                      { id: 'outcomes', label: 'Outcomes' },
+                      { id: 'patterns', label: 'Patterns' },
+                      { id: 'supply', label: 'Supply', disabled: !selectedRoute },
+                      { id: 'family', label: 'Family', disabled: !selectedRoute },
+                      { id: 'families', label: 'Families', disabled: !selectedRoute },
+                      { id: 'symbols', label: 'Symbols', disabled: !selectedRoute },
                       { id: 'simulator', label: 'Simulator', disabled: true },
                     ].map((tab) => (
                       <button
@@ -3465,9 +6302,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                         key={tab.id}
                         onClick={() => {
                           setTestOverviewTab(tab.id);
-                          if (tab.id === 'entryExit') {
+                          if (tab.id === 'entryExit' || tab.id === 'patterns') {
                             setSelectedDataCollapseLevel(2);
                             setInspectorCollapsed(true);
+                          }
+                          if (tab.id === 'entryExit') {
                             setEntryExitProfileTab('all');
                           }
                         }}
@@ -3482,10 +6321,8 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                       'pattern-family-test-overview-loading',
                       testOverviewTab === 'families' && routeFamiliesError ? 'pattern-family-test-overview-loading--error' : '',
                       testOverviewTab === 'supply' && supplyError ? 'pattern-family-test-overview-loading--error' : '',
-                      testOverviewTab === 'entryExit' && (entryExitError || entryExitRouterError) ? 'pattern-family-test-overview-loading--error' : '',
                       (testOverviewTab === 'families' && (isRouteFamiliesLoading || routeFamiliesError)) ||
-                      (testOverviewTab === 'supply' && (isSupplyLoading || supplyError)) ||
-                      (testOverviewTab === 'entryExit' && (isEntryExitLoading || isEntryExitRouterLoading || entryExitError || entryExitRouterError))
+                      (testOverviewTab === 'supply' && (isSupplyLoading || supplyError))
                         ? ''
                         : 'pattern-family-test-overview-loading--empty',
                     ].filter(Boolean).join(' ')}
@@ -3494,34 +6331,104 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                       ? supplyError
                       : testOverviewTab === 'supply' && isSupplyLoading
                         ? 'Loading supply data...'
-                      : testOverviewTab === 'entryExit' && entryExitError
-                      ? entryExitError
-                      : testOverviewTab === 'entryExit' && entryExitRouterError
-                        ? entryExitRouterError
-                      : testOverviewTab === 'entryExit' && isEntryExitLoading
-                        ? 'Loading Entry / Exit templates...'
-                        : testOverviewTab === 'entryExit' && isEntryExitRouterLoading
-                          ? 'Loading current prop router setup...'
                         : testOverviewTab === 'families' && routeFamiliesError
                       ? routeFamiliesError
                       : testOverviewTab === 'families' && isRouteFamiliesLoading
                         ? 'Loading families for this test...'
                         : null}
                   </div>
-                  <div className="pattern-family-test-overview-grid">
+                  <div
+                    className={[
+                      'pattern-family-test-overview-grid',
+                      testOverviewTab === 'entryExit' ? 'pattern-family-test-overview-grid--entry-exit' : '',
+                    ].filter(Boolean).join(' ')}
+                  >
+                    {testOverviewTab === 'entryExit' && (isEntryExitLoading || isEntryExitRouterLoading) ? (
+                      <div className="pattern-family-data-loading-popover">
+                        {isEntryExitLoading
+                          ? 'Loading build data...'
+                          : 'Loading playbook data...'}
+                      </div>
+                    ) : null}
                     {activeTestOverviewSections.map((section) => (
                       <section
                         className={[
                           'pattern-family-test-overview-section',
                           section.wide ? 'pattern-family-test-overview-section--wide' : '',
-                          ['templateTable', 'routerRunTable'].includes(section.variant) ? 'pattern-family-test-overview-section--table' : '',
+                          ['templateTable', 'routerRunTable', 'familyRouterTable'].includes(section.variant) ? 'pattern-family-test-overview-section--table' : '',
+                          section.variant === 'templateTable' ? 'pattern-family-test-overview-section--scan' : '',
+                          section.variant === 'familyRouterTable' ? 'pattern-family-test-overview-section--playbook' : '',
                         ].filter(Boolean).join(' ')}
                         key={section.title}
                       >
                         <header>
                           <span>{section.title}</span>
+                          {section.variant === 'templateTable' ? (
+                            <div className="pattern-family-model-dataset-tabs pattern-family-build-header-tabs" aria-label="Entry / Exit builds">
+                              {entryExitModelDatasets.length ? (
+                                entryExitModelDatasets.map((dataset) => {
+                                  const isDatasetSelected = dataset.id === selectedBuildRunId;
+                                  return (
+                                    <button
+                                      className={[
+                                        'pattern-family-model-dataset-tab',
+                                        isDatasetSelected ? 'pattern-family-model-dataset-tab--active' : '',
+                                      ].filter(Boolean).join(' ')}
+                                      key={dataset.id}
+                                      title={`${dataset.buildLabel} | ${dataset.label} | ${dataset.detail}`}
+                                      onClick={() => {
+                                        setSelectedEntryExitModelDatasetId(dataset.id);
+                                        setSelectedEntryExitTemplateUid(null);
+                                        setSelectedEntryExitRouterRunId(null);
+                                        setEntryExitProfileTab('model');
+                                      }}
+                                      type="button"
+                                    >
+                                      <strong>{dataset.buildLabel}</strong>
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                <span>
+                                  {entryExitBuildListError ||
+                                    (isEntryExitBuildListLoading ? 'Loading builds' : 'No stored builds')}
+                                </span>
+                              )}
+                            </div>
+                          ) : null}
+                          {section.variant === 'familyRouterTable' ? (
+                            <div className="pattern-family-playbook-tabs pattern-family-playbook-header-tabs" aria-label="Playbooks used">
+                              {generatedEntryExitPlaybookTabRows.length ? (
+                                generatedEntryExitPlaybookTabRows.map((row) => (
+                                  <button
+                                    className={[
+                                      'pattern-family-playbook-tab',
+                                      row.playbookName === selectedEntryExitRouterRunRow?.playbookName ? 'pattern-family-playbook-tab--active' : '',
+                                    ].filter(Boolean).join(' ')}
+                                    key={row.playbookName}
+                                    onClick={() => {
+                                      setSelectedEntryExitRouterRunId(row.run.router_run_id);
+                                      setEntryExitProfileTab('model');
+                                      setSelectedDataCollapseLevel(2);
+                                      setInspectorCollapsed(true);
+                                    }}
+                                    title={`${row.playbookLabel} | ${row.playbookName} | ${row.run.router_run_id}`}
+                                    type="button"
+                                  >
+                                    <strong>{row.playbookLabel}</strong>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="pattern-family-playbook-tabs-empty">No playbooks loaded</div>
+                              )}
+                            </div>
+                          ) : null}
                         </header>
-                        {section.variant === 'templateTable' ? (
+                        {section.variant === 'emptyPanel' ? (
+                          <div className="pattern-family-test-overview-empty">
+                            {section.emptyText ?? 'No data loaded yet.'}
+                          </div>
+                        ) : section.variant === 'templateTable' ? (
                           <div className="pattern-family-template-table-wrap">
                             {section.tableRows?.length ? (
                               <table className="pattern-family-template-table">
@@ -3546,7 +6453,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                                     <tr
                                       className={row.isSelected ? 'pattern-family-template-table-row--selected' : ''}
                                       key={row.template.template_uid}
-                                      onClick={() => setSelectedEntryExitTemplateUid(row.template.template_uid)}
+                                      onClick={() => {
+                                        setSelectedEntryExitTemplateUid(row.template.template_uid);
+                                        setEntryExitProfileTab('all');
+                                      }}
                                       title={`${row.template.template_uid} | ${row.template.template_name}`}
                                     >
                                       <td className="pattern-family-template-table-id">{row.label}</td>
@@ -3573,9 +6483,105 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                                   ))}
                                 </tbody>
                               </table>
+                            ) : isEntryExitLoading ? (
+                              <div className="pattern-family-test-overview-empty">
+                                Loading Entry / Exit templates...
+                              </div>
+                            ) : entryExitError ? (
+                              <div className="pattern-family-test-overview-empty pattern-family-test-overview-empty--error">
+                                {entryExitError}
+                              </div>
                             ) : (
                               <div className="pattern-family-test-overview-empty">
                                 No generated templates loaded yet.
+                              </div>
+                            )}
+                          </div>
+                        ) : section.variant === 'familyRouterTable' ? (
+                          <div className="pattern-family-template-table-wrap">
+                            {section.tableRows?.length ? (
+                              <table className="pattern-family-template-table pattern-family-template-table--family-router">
+                                <thead>
+                                  <tr>
+                                    <th>#</th>
+                                    <th>Family ID</th>
+                                    <th>Family</th>
+                                    <th>Template</th>
+                                    <th>Status</th>
+                                    <th>Train Tests</th>
+                                    <th>Train WR</th>
+                                    <th>Train Avg R</th>
+                                    <th>Test Trades</th>
+                                    <th>Test WR</th>
+                                    <th>Test Avg R</th>
+                                    <th>Total R</th>
+                                    <th>Score</th>
+                                    <th>Reason</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {section.tableRows.map((row) => {
+                                    const route = row.route;
+                                    const statusClass =
+                                      route.route_status === 'TRADE'
+                                        ? 'pattern-family-template-table-win'
+                                        : route.route_status === 'WATCHLIST'
+                                          ? 'pattern-family-template-table-skipped'
+                                          : 'pattern-family-template-table-loss';
+
+                                    return (
+                                      <tr
+                                        className={row.isSelected ? 'pattern-family-template-table-row--selected' : ''}
+                                        key={`${route.family_key}-${route.template_uid}-${route.template_rank}`}
+                                        onClick={() => {
+                                          setSelectedEntryExitTemplateUid(route.template_uid);
+                                          setEntryExitProfileTab('all');
+                                        }}
+                                        title={`${route.family_key} | ${route.template_uid} | ${route.status_reason}`}
+                                      >
+                                        <td>{formatNumber(row.index)}</td>
+                                        <td>{compactText(route.family_key, 16)}</td>
+                                        <td>
+                                          {route.harmonic_type || 'Unknown'} | {route.market || 'N/A'} | {route.family_bin || 'Bin'} | {route.family_size_bucket || 'Size'} | {route.family_time_bin || 'Time'}
+                                        </td>
+                                        <td className="pattern-family-template-table-id">
+                                          {route.template_label || compactText(route.template_uid, 8)}
+                                          <span className="pattern-family-template-table-subtext">
+                                            {route.template_name || 'Template'}
+                                          </span>
+                                        </td>
+                                        <td className={statusClass}>{route.route_status || 'N/A'}</td>
+                                        <td>{formatNumber(route.train_eval_count)}</td>
+                                        <td>{formatRatePercent(route.train_win_rate, 2)}%</td>
+                                        <td className={Number(route.train_avg_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                          {formatDecimal(route.train_avg_r, 4)}R
+                                        </td>
+                                        <td>{formatNumber(row.testEvalCount)}</td>
+                                        <td>{formatDecimal(row.testPassRate, 2)}%</td>
+                                        <td className={Number(route.test_avg_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                          {formatDecimal(route.test_avg_r, 4)}R
+                                        </td>
+                                        <td className={Number(route.test_sum_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                          {formatDecimal(route.test_sum_r, 2)}R
+                                        </td>
+                                        <td>{formatDecimal(route.score, 2)}</td>
+                                        <td className="pattern-family-template-table-reason">{route.status_reason || 'Selected by family playbook'}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            ) : isEntryExitRouterLoading ? (
+                              <div className="pattern-family-test-overview-empty">
+                                Loading family playbook...
+                              </div>
+                            ) : entryExitRouterError ? (
+                              <div className="pattern-family-test-overview-empty pattern-family-test-overview-empty--error">
+                                {entryExitRouterError}
+                              </div>
+                            ) : (
+                              <div className="pattern-family-test-overview-empty">
+                                No family playbook rows loaded yet.
                               </div>
                             )}
                           </div>
@@ -3585,19 +6591,26 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                               <table className="pattern-family-template-table pattern-family-template-table--router">
                                 <thead>
                                   <tr>
-                                    <th>Run</th>
+                                    <th>Playbook</th>
                                     <th>Year</th>
+                                    <th>TF</th>
                                     <th>Patterns</th>
                                     <th>Trades</th>
                                     <th>Trade WR</th>
                                     <th>Avg R</th>
                                     <th>Total R</th>
                                     <th>Prop WR</th>
+                                    <th>Prop Total</th>
                                     <th>Passed</th>
-                                    <th>Daily Fails</th>
-                                    <th>DD Fails</th>
+                                    <th>Failed</th>
+                                    <th>Daily Loss</th>
+                                    <th>Drawdown</th>
+                                    <th>Open</th>
                                     <th>Families</th>
+                                    <th>Manual</th>
                                     <th>Symbols</th>
+                                    <th>Overlap</th>
+                                    <th>Simulation Test ID</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -3605,10 +6618,17 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                                     <tr
                                       className={row.isSelected ? 'pattern-family-template-table-row--selected' : ''}
                                       key={row.run.router_run_id}
-                                      title={row.run.router_run_id}
+                                      onClick={() => {
+                                        setSelectedEntryExitRouterRunId(row.run.router_run_id);
+                                        setEntryExitProfileTab('model');
+                                        setSelectedDataCollapseLevel(2);
+                                        setInspectorCollapsed(true);
+                                      }}
+                                      title={`${row.playbookLabel} | ${row.playbookName} | ${row.run.router_run_id}`}
                                     >
-                                      <td className="pattern-family-template-table-id">{compactText(row.run.router_run_id, 16)}</td>
+                                      <td className="pattern-family-template-table-id">{row.playbookLabel}</td>
                                       <td>{row.run.test_year || 'All'}</td>
+                                      <td>{row.run.source_timeframe ?? row.run.test_timeframe ?? ''}</td>
                                       <td>{formatNumber(row.run.patterns_scanned)}</td>
                                       <td>{formatNumber(row.tradeCount)}</td>
                                       <td>{formatDecimal(row.winRate, 2)}%</td>
@@ -3621,18 +6641,45 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                                       <td className={Number(row.propClosedPassRate) >= 80 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-skipped'}>
                                         {formatDecimal(row.propClosedPassRate, 2)}%
                                       </td>
-                                      <td>{formatNumber(row.run.prop?.passed || 0)}</td>
-                                      <td className="pattern-family-template-table-skipped">{formatNumber(row.run.prop?.daily_fails || 0)}</td>
-                                      <td className="pattern-family-template-table-loss">{formatNumber(row.run.prop?.drawdown_fails || 0)}</td>
+                                      <td title={`${formatNumber(row.propClosedTotal)} closed / ${formatNumber(row.propTotal)} total cycles`}>
+                                        {formatNumber(row.propTotal)}
+                                      </td>
+                                      <td className="pattern-family-template-table-win">{formatNumber(row.propPassed)}</td>
+                                      <td className="pattern-family-template-table-loss">{formatNumber(row.propFailed)}</td>
+                                      <td className="pattern-family-template-table-skipped">{formatNumber(row.propDailyFails)}</td>
+                                      <td className="pattern-family-template-table-loss">{formatNumber(row.propDrawdownFails)}</td>
+                                      <td>{formatNumber(row.propIncomplete)}</td>
                                       <td>{formatNumber(row.run.trade_choices)}T / {formatNumber(row.run.watchlist_choices)}W / {formatNumber(row.run.skip_choices)}S</td>
+                                      <td className={row.manualFamilyBansApplied ? 'pattern-family-template-table-skipped' : ''}>
+                                        {formatNumber(row.manualFamilyBansApplied)} applied
+                                      </td>
                                       <td>{formatNumber(row.run.symbol_trade_roots)}T / {formatNumber(row.run.symbol_skip_roots)}S</td>
+                                      <td>
+                                        {[
+                                          row.run.one_trade_at_a_time
+                                            ? '1 total'
+                                            : row.run.one_trade_per_root_symbol
+                                              ? '1/root'
+                                              : null,
+                                          getEntryExitCooldownShortLabel(row.run),
+                                        ].filter(Boolean).join(' + ') || 'Off'} / {formatNumber(row.run.skipped_overlap_patterns)}
+                                      </td>
+                                      <td className="pattern-family-template-table-run-id">{row.run.router_run_id}</td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
+                            ) : isEntryExitRouterLoading ? (
+                              <div className="pattern-family-test-overview-empty">
+                                Loading simulation tests...
+                              </div>
+                            ) : entryExitRouterError ? (
+                              <div className="pattern-family-test-overview-empty pattern-family-test-overview-empty--error">
+                                {entryExitRouterError}
+                              </div>
                             ) : (
                               <div className="pattern-family-test-overview-empty">
-                                No router test runs loaded yet.
+                                No simulation test runs loaded yet.
                               </div>
                             )}
                           </div>
@@ -3644,6 +6691,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                                 'pattern-family-test-overview-cell',
                                 item.wide ? 'pattern-family-test-overview-cell--wide' : '',
                                 item.compact ? 'pattern-family-test-overview-cell--compact' : '',
+                                item.narrative ? 'pattern-family-test-overview-cell--narrative' : '',
                                 item.onClick ? 'pattern-family-test-overview-cell--clickable' : '',
                                 item.selected ? 'pattern-family-test-overview-cell--selected' : '',
                                 item.tone ? `pattern-family-test-overview-cell--${item.tone}` : '',
@@ -3697,158 +6745,2257 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
 
         <section className="pattern-family-canvas-collapse-workspace" aria-hidden={!isInspectorCollapsed}>
           {testOverviewTab === 'entryExit' ? (
-            <section className="pattern-family-side-data-profile">
-              <header>
-                <div>
-                  <span>Entry / Exit Profile</span>
-                  <strong title={selectedEntryExitTemplate?.template_name ?? ''}>
-                    {selectedEntryExitTemplate
-                      ? `${selectedEntryExitTemplateLabel} / ${formatEntryExitTemplateRule(selectedEntryExitTemplate)}`
-                      : 'No template selected'}
-                  </strong>
-                </div>
-                <small>
-                  {isEntryExitLoading
-                    ? 'Loading templates...'
-                    : selectedEntryExitTemplate
-                      ? `${formatNumber(selectedEntryExitTemplate.eval_count)} tests`
-                      : 'Select a template'}
-                </small>
-              </header>
-
-              <div className="pattern-family-side-data-tabs" role="tablist" aria-label="Entry / Exit profile data">
-                {[
-                  { id: 'all', label: 'All Data' },
-                  { id: 'families', label: 'Families' },
-                  { id: 'wins', label: 'Wins Only' },
-                  { id: 'losses', label: 'Losses Only' },
-                ].map((tab) => (
-                  <button
-                    className={
-                      entryExitProfileTab === tab.id
-                        ? 'pattern-family-side-data-tab pattern-family-side-data-tab--active'
-                        : 'pattern-family-side-data-tab'
-                    }
-                    key={tab.id}
-                    onClick={() => setEntryExitProfileTab(tab.id)}
-                    type="button"
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="pattern-family-side-data-sections">
-                {entryExitTemplateProfileSections.map((section) => (
-                  <section className="pattern-family-side-data-section" key={section.title}>
-                    <header>
-                      <span>{section.title}</span>
-                    </header>
-                    <div className="pattern-family-side-data-cells">
-                      {section.items.length ? (
-                        section.items.map((item) => (
-                          <div
-                            className={[
-                              'pattern-family-side-data-cell',
-                              item.wide ? 'pattern-family-side-data-cell--wide' : '',
-                              item.compact ? 'pattern-family-side-data-cell--compact' : '',
-                              item.tone ? `pattern-family-side-data-cell--${item.tone}` : '',
-                            ].filter(Boolean).join(' ')}
-                            key={`${section.title}-${item.label}`}
-                          >
-                            <span>{item.label}</span>
-                            <strong title={item.title ?? item.value}>{item.value}</strong>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="pattern-family-side-data-empty">No Entry / Exit profile data loaded yet.</div>
-                      )}
+            <section className="pattern-family-side-data-profile pattern-family-side-data-profile--blank">
+              <div className="pattern-family-side-data-blank pattern-family-entry-dashboard-page" aria-label="Data dashboard">
+                <section className="pattern-family-entry-dashboard-stage">
+                  {(isEntryExitLoading || isEntryExitRouterLoading) && !selectedBuildRunIsLoaded ? (
+                    <div className="pattern-family-entry-dashboard-loading">
+                      <span>Loading Dashboard</span>
+                      <strong>{selectedBuildLabel}</strong>
+                      <small>Loading stored build summary and coverage rows...</small>
                     </div>
-                  </section>
-                ))}
+                  ) : null}
+
+                  {!((isEntryExitLoading || isEntryExitRouterLoading) && !selectedBuildRunIsLoaded) ? (
+                    <section className="pattern-family-entry-dashboard-static-context" aria-label="Selected build and coverage summary">
+                      <div className="pattern-family-entry-dashboard-context-grid">
+                        <section className="pattern-family-selected-build-panel">
+                          <section className="pattern-family-entry-dashboard-build-strip">
+                            <div className="pattern-family-entry-dashboard-build-title">
+                              <span>Selected Build</span>
+                              <div className="pattern-family-entry-dashboard-build-switch" aria-label="Select build">
+                                {entryExitModelDatasets.length ? (
+                                  entryExitModelDatasets.map((dataset) => (
+                                    <button
+                                      className={
+                                        dataset.id === selectedBuildRunId
+                                          ? 'pattern-family-entry-dashboard-build-button pattern-family-entry-dashboard-build-button--active'
+                                          : 'pattern-family-entry-dashboard-build-button'
+                                      }
+                                      key={dataset.id}
+                                      onClick={() => {
+                                        setSelectedEntryExitModelDatasetId(dataset.id);
+                                        setSelectedEntryExitTemplateUid(null);
+                                        setSelectedEntryExitRouterRunId(null);
+                                        setSelectedBuildCoverageExchangeKey('');
+                                        setEntryExitProfileTab('model');
+                                      }}
+                                      title={`${dataset.buildLabel} | ${dataset.label}`}
+                                      type="button"
+                                    >
+                                      {dataset.buildLabel}
+                                    </button>
+                                  ))
+                                ) : (
+                                  <span>
+                                    {entryExitBuildListError ||
+                                      (isEntryExitBuildListLoading ? 'Loading builds' : 'No stored builds')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {[
+                              { label: 'Years', value: selectedBuildYearLabel },
+                              { label: 'Source', value: selectedBuildSourceLabel },
+                              { label: 'TF', value: selectedBuildTimeframeLabel },
+                              { label: 'Build Patterns', value: selectedBuildPatternsScanned },
+                              { label: 'Tests', value: selectedBuildTestsBuilt },
+                              {
+                                label: 'Coverage',
+                                value: selectedBuildHasStoredSummary
+                                  ? formatNumber(selectedBuildCoveragePatternCount)
+                                  : '',
+                              },
+                              { label: 'Roots', value: selectedBuildRootCardValue },
+                              {
+                                label: 'Exchanges',
+                                value: selectedBuildHasStoredSummary
+                                  ? formatNumber(selectedBuildExchangeCount)
+                                  : '',
+                              },
+                            ].map((item) => (
+                              <div className="pattern-family-entry-dashboard-build-chip" key={item.label}>
+                                <span>{item.label}</span>
+                                <strong>{item.value}</strong>
+                              </div>
+                            ))}
+                          </section>
+
+                        <section className="pattern-family-build-coverage-board pattern-family-build-coverage-board--static">
+                          <header className="pattern-family-build-coverage-head">
+                            <div>
+                              <span>Build Coverage</span>
+                              <strong>Exchange / symbol rows</strong>
+                            </div>
+                            <small>
+                              {selectedBuildHasStoredSummary
+                                ? `${formatNumber(selectedBuildCoveragePatternCount)} patterns | ${formatNumber(selectedBuildRootCount)} roots`
+                                : ''}
+                            </small>
+                          </header>
+                          {entryExitBuildExchangeSections.length ? (
+                            <>
+                              <div className="pattern-family-build-coverage-exchange-togglebar" role="tablist" aria-label="Build coverage exchange">
+                                {entryExitBuildExchangeSections.map((section) => {
+                                  const exchangeKey = getExchangeClassSuffix(section.exchange);
+                                  const isActive =
+                                    selectedBuildCoverageExchangeSection?.exchange === section.exchange;
+                                  return (
+                                    <button
+                                      className={[
+                                        'pattern-family-build-coverage-exchange-toggle',
+                                        `pattern-family-build-coverage-exchange-toggle--${exchangeKey}`,
+                                        isActive ? 'pattern-family-build-coverage-exchange-toggle--active' : '',
+                                      ].join(' ')}
+                                      key={section.exchange}
+                                      onClick={() => setSelectedBuildCoverageExchangeKey(exchangeKey)}
+                                      role="tab"
+                                      aria-selected={isActive}
+                                      type="button"
+                                    >
+                                      <span>{section.exchange}</span>
+                                      <strong>{formatNumber(section.pattern_count)}</strong>
+                                      <small>{formatNumber(section.scanned_count)} / {formatNumber(section.rows.length)}</small>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {selectedBuildCoverageExchangeSection ? (
+                                <div
+                                  className={[
+                                    'pattern-family-build-coverage-table-wrap',
+                                    `pattern-family-build-coverage-table-wrap--${getExchangeClassSuffix(
+                                      selectedBuildCoverageExchangeSection.exchange
+                                    )}`,
+                                  ].join(' ')}
+                                >
+                                  <table className="pattern-family-build-coverage-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Root</th>
+                                        <th>Scanned</th>
+                                        <th>Universe</th>
+                                        <th>Contracts</th>
+                                        <th>TF</th>
+                                        <th>Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody
+                                      className={[
+                                        'pattern-family-build-coverage-table-section',
+                                        `pattern-family-build-coverage-table-section--${getExchangeClassSuffix(
+                                          selectedBuildCoverageExchangeSection.exchange
+                                        )}`,
+                                      ].join(' ')}
+                                    >
+                                      {selectedBuildCoverageExchangeSection.rows.map((row) => (
+                                        <tr
+                                          className={[
+                                            `pattern-family-build-coverage-table-row--${getExchangeClassSuffix(
+                                              selectedBuildCoverageExchangeSection.exchange
+                                            )}`,
+                                            row.is_scanned ? '' : 'pattern-family-build-coverage-table-row--empty',
+                                          ].join(' ')}
+                                          key={`${selectedBuildCoverageExchangeSection.exchange}-${row.root_symbol}`}
+                                          title={`${row.root_symbol} | ${formatNumber(row.pattern_count)} scanned patterns | ${formatNumber(row.universe_pattern_count)} universe patterns | ${formatNumber(row.contract_count)} contracts | ${row.timeframe_label}`}
+                                        >
+                                          <td className="pattern-family-build-coverage-table-root">{row.root_symbol}</td>
+                                          <td>{formatNumber(row.pattern_count)}</td>
+                                          <td>{formatNumber(row.universe_pattern_count)}</td>
+                                          <td>{formatNumber(row.contract_count)}</td>
+                                          <td>{row.timeframe_label}</td>
+                                          <td>{row.is_scanned ? 'Scanned' : 'Not scanned'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : null}
+                            </>
+                          ) : (
+                            <div className="pattern-family-build-coverage-empty">
+                              {isEntryExitLoading
+                                ? 'Loading stored build coverage rows...'
+                                : ''}
+                            </div>
+                          )}
+                        </section>
+                        </section>
+
+                        <aside
+                          className={[
+                            'pattern-family-selected-playbook-panel',
+                            selectedPlaybookView !== 'dashboard' ? 'pattern-family-selected-playbook-panel--raw' : '',
+                          ].filter(Boolean).join(' ')}
+                        >
+                          <header className="pattern-family-selected-playbook-head">
+                            <span>Selected Playbook</span>
+                            <div className="pattern-family-selected-playbook-head-actions">
+                              <div className="pattern-family-entry-dashboard-header-switch" aria-label="Select playbook">
+                                {generatedEntryExitPlaybookTabRows.length ? (
+                                  generatedEntryExitPlaybookTabRows.map((row) => (
+                                    <button
+                                      className={
+                                        row.playbookName === selectedEntryExitPlaybookName
+                                          ? 'pattern-family-entry-dashboard-header-button pattern-family-entry-dashboard-header-button--active'
+                                          : 'pattern-family-entry-dashboard-header-button'
+                                      }
+                                      key={row.playbookName}
+                                      onClick={() => {
+                                        setSelectedEntryExitRouterRunId(row.run.router_run_id);
+                                        setEntryExitProfileTab('model');
+                                      }}
+                                      title={`${row.playbookLabel} | ${row.playbookName}`}
+                                      type="button"
+                                    >
+                                      {row.playbookLabel}
+                                    </button>
+                                  ))
+                                ) : (
+                                  <strong />
+                                )}
+                              </div>
+                              <div className="pattern-family-selected-simulation-tabs pattern-family-selected-playbook-view-tabs" aria-label="Selected playbook view">
+                                {[
+                                  { id: 'dashboard', label: 'Dashboard' },
+                                  { id: 'used', label: 'Used Plays' },
+                                  { id: 'symbols', label: 'Symbols' },
+                                  { id: 'raw', label: 'Raw Rows' },
+                                ].map((tab) => {
+                                  const isActive = selectedPlaybookView === tab.id;
+                                  return (
+                                    <button
+                                      className={
+                                        isActive
+                                          ? 'pattern-family-selected-simulation-tab pattern-family-selected-simulation-tab--active'
+                                          : 'pattern-family-selected-simulation-tab'
+                                      }
+                                      key={tab.id}
+                                      onClick={() => setSelectedPlaybookView(tab.id)}
+                                      type="button"
+                                    >
+                                      {tab.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </header>
+                          {selectedPlaybookView === 'raw' ? (
+                            <section className="pattern-family-selected-playbook-used pattern-family-selected-playbook-raw">
+                              <header>
+                                <span>Raw Playbook Rows</span>
+                                <small>{formatNumber(generatedEntryExitFamilyRouterRows.length)} family/template rows</small>
+                              </header>
+                              <div className="pattern-family-entry-dashboard-raw-table">
+                                {generatedEntryExitFamilyRouterRows.length ? (
+                                  <table>
+                                    <thead>
+                                      <tr>
+                                        <th>#</th>
+                                        <th>Family</th>
+                                        <th>Template</th>
+                                        <th>Status</th>
+                                        <th>Train</th>
+                                        <th>Train WR</th>
+                                        <th>Train R</th>
+                                        <th>Test</th>
+                                        <th>Test WR</th>
+                                        <th>Total R</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {generatedEntryExitFamilyRouterRows.map((row) => {
+                                        const route = row.route;
+                                        return (
+                                          <tr key={`${route.family_key}-${route.template_uid}-${route.template_rank}`}>
+                                            <td>{formatNumber(row.index)}</td>
+                                            <td title={route.family_key}>
+                                              {route.harmonic_type || 'Unknown'} | {route.market || 'N/A'} | {route.family_bin || 'Bin'}
+                                            </td>
+                                            <td title={route.template_name}>{route.template_label || compactText(route.template_uid, 8)}</td>
+                                            <td>{route.route_status || 'N/A'}</td>
+                                            <td>{formatNumber(route.train_eval_count)}</td>
+                                            <td>{formatRatePercent(route.train_win_rate, 2)}%</td>
+                                            <td className={Number(route.train_avg_r) < 0 ? 'is-loss' : 'is-win'}>{formatDecimal(route.train_avg_r, 4)}R</td>
+                                            <td>{formatNumber(row.testEvalCount)}</td>
+                                            <td>{formatDecimal(row.testPassRate, 2)}%</td>
+                                            <td className={Number(route.test_sum_r) < 0 ? 'is-loss' : 'is-win'}>{formatDecimal(route.test_sum_r, 2)}R</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                ) : (
+                                  <div className="pattern-family-selected-playbook-empty">No playbook rows loaded.</div>
+                                )}
+                              </div>
+                            </section>
+                          ) : selectedPlaybookView === 'used' ? (
+                            <section className="pattern-family-selected-playbook-used pattern-family-selected-playbook-used--view">
+                              <header>
+                                <span>Used Plays</span>
+                                <small>
+                                  {hasSelectedEntryExitRouterRun
+                                    ? `${formatNumber(selectedPlaybookUsedPlayRows.length)} entry/exit templates`
+                                    : ''}
+                                </small>
+                              </header>
+                              <div className="pattern-family-selected-playbook-used-scroll">
+                                <div className="pattern-family-selected-playbook-list">
+                                  {selectedPlaybookUsedPlayRows.length ? (
+                                    selectedPlaybookUsedPlayRows.map((play) => (
+                                      <div
+                                        className="pattern-family-selected-playbook-row"
+                                        key={play.templateUid}
+                                        title={`${play.templateUid} | ${play.name}`}
+                                      >
+                                        <span>{play.label}</span>
+                                        <small>{play.name}</small>
+                                        <strong>{formatNumber(play.familyCount)} families</strong>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">No used plays loaded.</div>
+                                  )}
+                                </div>
+                              </div>
+                            </section>
+                          ) : selectedPlaybookView === 'symbols' ? (
+                            <section className="pattern-family-selected-playbook-used pattern-family-selected-playbook-symbols">
+                              <header>
+                                <span>Symbols</span>
+                                <small>
+                                  {selectedPlaybookSymbolRows.length
+                                    ? `${formatNumber(selectedPlaybookTradeSymbolCount)} trade / ${formatNumber(selectedPlaybookSkippedSymbolCount)} skip`
+                                    : 'No symbol gate rows loaded'}
+                                </small>
+                              </header>
+                              <div className="pattern-family-entry-dashboard-raw-table">
+                                {selectedPlaybookSymbolRows.length ? (
+                                  <table>
+                                    <thead>
+                                      <tr>
+                                        <th>Root</th>
+                                        <th>Status</th>
+                                        <th>Train Tests</th>
+                                        <th>Train WR</th>
+                                        <th>Train Avg R</th>
+                                        <th>Train Sum R</th>
+                                        <th>Reason</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {selectedPlaybookSymbolRows.map((symbol) => {
+                                        const isSkipped = symbol.route_status !== 'TRADE';
+                                        return (
+                                          <tr
+                                            key={`${symbol.router_run_id}-${symbol.root_symbol}`}
+                                            title={`${symbol.root_symbol} | ${symbol.status_reason || ''}`}
+                                          >
+                                            <td className="pattern-family-template-table-id">{symbol.root_symbol || 'N/A'}</td>
+                                            <td className={isSkipped ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                              {symbol.route_status || 'N/A'}
+                                            </td>
+                                            <td>{formatNumber(symbol.train_eval_count)}</td>
+                                            <td>{formatRatePercent(symbol.train_win_rate, 2)}%</td>
+                                            <td className={Number(symbol.train_avg_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                              {formatDecimal(symbol.train_avg_r, 4)}R
+                                            </td>
+                                            <td className={Number(symbol.train_sum_r) < 0 ? 'pattern-family-template-table-loss' : 'pattern-family-template-table-win'}>
+                                              {formatDecimal(symbol.train_sum_r, 2)}R
+                                            </td>
+                                            <td className="pattern-family-template-table-reason">{symbol.status_reason || 'Selected by symbol gate'}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                ) : (
+                                  <div className="pattern-family-selected-playbook-empty">
+                                    No symbol filter rows loaded for this playbook.
+                                  </div>
+                                )}
+                              </div>
+                            </section>
+                          ) : (
+                            <div className="pattern-family-selected-playbook-dashboard-body">
+                          <div className="pattern-family-selected-playbook-logic-grid pattern-family-selected-playbook-dashboard-card-grid">
+                            {[
+                              {
+                                label: 'Plays',
+                                value: hasSelectedEntryExitRouterRun ? formatNumber(selectedPlaybookPlaysCount) : '',
+                                detail: 'assigned templates',
+                              },
+                              {
+                                label: 'Trade',
+                                value: hasSelectedEntryExitRouterRun ? formatNumber(selectedPlaybookTradeCount) : '',
+                                detail: 'trade families',
+                              },
+                              {
+                                label: 'Watch',
+                                value: hasSelectedEntryExitRouterRun ? formatNumber(selectedPlaybookWatchCount) : '',
+                                detail: 'watchlist families',
+                              },
+                              {
+                                label: 'Skipped',
+                                value: hasSelectedEntryExitRouterRun ? formatNumber(selectedPlaybookSkipCount) : '',
+                                detail: 'blocked families',
+                              },
+                              {
+                                label: 'Families',
+                                value: hasSelectedEntryExitRouterRun ? formatNumber(selectedPlaybookRowCount) : '',
+                                detail: 'playbook rows',
+                              },
+                            ].map((item) => (
+                              <div
+                                className="pattern-family-selected-playbook-logic-card"
+                                key={item.label}
+                              >
+                                <span>{item.label}</span>
+                                <strong>{item.value}</strong>
+                                <small>{item.detail}</small>
+                              </div>
+                            ))}
+                          </div>
+                          <section className="pattern-family-selected-playbook-assignment-chart">
+                            <header>
+                              <div>
+                                <span>Template Usage</span>
+                                <small>Build templates assigned into this playbook</small>
+                              </div>
+                              <strong>
+                                {selectedPlaybookTemplateTotal
+                                  ? `${formatNumber(selectedPlaybookAssignedTemplateCount)} / ${formatNumber(
+                                      selectedPlaybookTemplateTotal
+                                    )}`
+                                  : formatNumber(selectedPlaybookAssignedTemplateCount)}
+                              </strong>
+                            </header>
+                            <div className="pattern-family-selected-playbook-assignment-summary">
+                              <div className="pattern-family-selected-playbook-logic-card pattern-family-selected-playbook-assignment-summary-card">
+                                <span>Assigned Templates</span>
+                                <strong>{formatNumber(selectedPlaybookAssignedTemplateCount)}</strong>
+                                <small>used by trade families</small>
+                              </div>
+                              <div className="pattern-family-selected-playbook-logic-card pattern-family-selected-playbook-assignment-summary-card">
+                                <span>Unused Templates</span>
+                                <strong>{selectedPlaybookTemplateTotal ? formatNumber(selectedPlaybookUnassignedTemplateCount) : ''}</strong>
+                                <small>built but not selected</small>
+                              </div>
+                              <div className="pattern-family-selected-playbook-logic-card pattern-family-selected-playbook-assignment-summary-card">
+                                <span>Assignment Rate</span>
+                                <strong>{selectedPlaybookTemplateTotal ? `${formatDecimal(selectedPlaybookAssignmentRate, 1)}%` : ''}</strong>
+                                <small>assigned / total build</small>
+                              </div>
+                            </div>
+                            <div className="pattern-family-selected-playbook-assignment-meter">
+                              <div>
+                                <span>Overall Assignment Rate</span>
+                                <strong>{selectedPlaybookTemplateTotal ? `${formatDecimal(selectedPlaybookAssignmentRate, 1)}%` : ''}</strong>
+                              </div>
+                              <b aria-hidden="true">
+                                <i style={{ width: `${Math.max(0, Math.min(100, selectedPlaybookAssignmentRate))}%` }} />
+                              </b>
+                            </div>
+                            <div className="pattern-family-selected-playbook-assignment-bars">
+                              {selectedPlaybookAssignmentChartRows.length ? (
+                                selectedPlaybookAssignmentChartRows.map((play) => {
+                                  const familyCount = Number(play.familyCount || 0);
+                                  const barWidth = (familyCount / selectedPlaybookAssignmentMaxFamilyCount) * 100;
+                                  return (
+                                    <div
+                                      className="pattern-family-selected-playbook-assignment-bar-row"
+                                      key={play.templateUid}
+                                      title={`${play.label} | ${play.name} | ${formatNumber(familyCount)} families`}
+                                    >
+                                      <span>{play.label}</span>
+                                      <div>
+                                        <i style={{ width: `${Math.max(2, Math.min(100, barWidth))}%` }} />
+                                      </div>
+                                      <strong>{formatNumber(familyCount)}</strong>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <div className="pattern-family-selected-playbook-empty">No assigned templates loaded.</div>
+                              )}
+                            </div>
+                          </section>
+                          <section className="pattern-family-selected-playbook-description">
+                            <header>
+                              <span>Strategy Description</span>
+                              <small>{selectedEntryExitPlaybookRunRow?.run.router_run_id ?? ''}</small>
+                            </header>
+                            {selectedEntryExitPlaybookRuleSections.length ? (
+                              <div className="pattern-family-selected-playbook-rule-sections">
+                                {selectedEntryExitPlaybookRuleSections.map((section) => (
+                                  <article className="pattern-family-selected-playbook-rule-section" key={section.title}>
+                                    <header>
+                                      <span>{section.title}</span>
+                                      <small>{section.detail}</small>
+                                    </header>
+                                    <div className="pattern-family-selected-playbook-rule-grid">
+                                      {section.items.map((item) => (
+                                        <div
+                                          className={[
+                                            'pattern-family-selected-playbook-logic-card',
+                                            'pattern-family-selected-playbook-rule-card',
+                                            item.tone ? `pattern-family-selected-playbook-logic-card--${item.tone}` : '',
+                                          ].filter(Boolean).join(' ')}
+                                          key={`${section.title}-${item.label}`}
+                                        >
+                                          <span>{item.label}</span>
+                                          <strong title={item.value}>{item.value}</strong>
+                                          <small title={item.detail}>{item.detail}</small>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </article>
+                                ))}
+                              </div>
+                            ) : (
+                              <p>No playbook description available for this row yet.</p>
+                            )}
+                          </section>
+                          <section className="pattern-family-selected-playbook-rule-section pattern-family-selected-playbook-rule-impact">
+                            <header>
+                              <span>Rule Impact</span>
+                            </header>
+                            <div className="pattern-family-selected-playbook-rule-grid">
+                              {[
+                                {
+                                  label: 'Overlap Skips',
+                                  value: hasSelectedEntryExitLogicRun ? formatNumber(selectedEntryExitLogicRunRow?.run.skipped_overlap_patterns || 0) : '',
+                                  detail: hasSelectedEntryExitLogicRun ? 'trade gate' : '',
+                                  tone: Number(selectedEntryExitLogicRunRow?.run.skipped_overlap_patterns || 0) ? 'skipped' : '',
+                                },
+                                {
+                                  label: 'Symbol Gate',
+                                  value: selectedPlaybookSymbolGateLabel,
+                                  detail: selectedPlaybookSymbolGateDetail,
+                                  tone: selectedEntryExitLogicRunRow?.run.symbol_filter_enabled ? 'skipped' : '',
+                                },
+                                {
+                                  label: 'Symbol Skips',
+                                  value: hasSelectedEntryExitLogicRun ? formatNumber(selectedEntryExitLogicRunRow?.run.skipped_symbol_patterns || 0) : '',
+                                  detail: hasSelectedEntryExitLogicRun ? 'symbol gate' : '',
+                                  tone: Number(selectedEntryExitLogicRunRow?.run.skipped_symbol_patterns || 0) ? 'skipped' : '',
+                                },
+                              ].map((item) => (
+                                <div
+                                  className={[
+                                    'pattern-family-selected-playbook-logic-card',
+                                    'pattern-family-selected-playbook-rule-card',
+                                    item.tone ? `pattern-family-selected-playbook-logic-card--${item.tone}` : '',
+                                  ].filter(Boolean).join(' ')}
+                                  key={item.label}
+                                >
+                                  <span>{item.label}</span>
+                                  <strong title={item.value}>{item.value}</strong>
+                                  <small title={item.detail}>{item.detail}</small>
+                                </div>
+                              ))}
+                            </div>
+                          </section>
+                            </div>
+                          )}
+                        </aside>
+
+                        <aside className="pattern-family-selected-playbook-panel pattern-family-selected-simulation-panel">
+                          <header className="pattern-family-selected-playbook-head">
+                            <span>Simulation Testing</span>
+                            <div className="pattern-family-selected-simulation-head-actions">
+                              <div className="pattern-family-selected-simulation-tabs" aria-label="Simulation testing view">
+                                {[
+                                  { id: 'overview', label: 'Overview' },
+                                  { id: 'plays', label: 'Sim Plays' },
+                                ].map((tab) => (
+                                  <button
+                                    className={
+                                      entryExitSimulationTab === tab.id
+                                        ? 'pattern-family-selected-simulation-tab pattern-family-selected-simulation-tab--active'
+                                        : 'pattern-family-selected-simulation-tab'
+                                    }
+                                    key={tab.id}
+                                    onClick={() => setEntryExitSimulationTab(tab.id)}
+                                    type="button"
+                                  >
+                                    {tab.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <select
+                                className="pattern-family-entry-dashboard-header-select"
+                                disabled={!selectedPlaybookTestRows.length}
+                                value={selectedEntryExitSimulationTestId}
+                                onChange={(event) => {
+                                  setSelectedEntryExitRouterRunId(event.target.value || null);
+                                  setEntryExitProfileTab('model');
+                                }}
+                                title={selectedEntryExitSimulationTestId || 'No simulation test selected'}
+                              >
+                                {selectedPlaybookTestRows.length ? (
+                                  selectedPlaybookTestRows.map((row) => (
+                                    <option key={row.run.router_run_id} value={row.run.router_run_id}>
+                                      {row.run.test_year || 'All'} |{' '}
+                                      {row.run.source_timeframe ?? row.run.test_timeframe ?? ''} |{' '}
+                                      {formatDecimal(row.propClosedPassRate, 1)}% prop
+                                    </option>
+                                  ))
+                                ) : (
+                                  <option value="">No tests</option>
+                                )}
+                              </select>
+                            </div>
+                          </header>
+                          <div className={`pattern-family-selected-simulation-body pattern-family-selected-simulation-body--${entryExitSimulationTab}`}>
+                            {entryExitSimulationTab === 'overview' ? (
+                              <>
+                                <section className="pattern-family-selected-playbook-logic pattern-family-selected-simulation-overview">
+                                  <header>
+                                    <span>Playbook Test Overview</span>
+                                    <small>{selectedEntryExitSimulationTestId || 'No simulation test selected'}</small>
+                                  </header>
+                                  {selectedSimulationRunOverviewSections.length ? (
+                                    <div className="pattern-family-selected-simulation-run-overview">
+                                      {selectedSimulationRunOverviewSections.map((section) => (
+                                        <section className="pattern-family-selected-simulation-run-section" key={section.title}>
+                                          <header>
+                                            <span>{section.title}</span>
+                                          </header>
+                                          <div className="pattern-family-selected-simulation-run-grid">
+                                            {section.items.map((item) => (
+                                              <div
+                                                className={[
+                                                  'pattern-family-selected-simulation-run-card',
+                                                  item.wide ? 'pattern-family-selected-simulation-run-card--wide' : '',
+                                                  item.tone ? `pattern-family-selected-simulation-run-card--${item.tone}` : '',
+                                                ].filter(Boolean).join(' ')}
+                                                key={`${section.title}-${item.label}`}
+                                              >
+                                                <span>{item.label}</span>
+                                                <strong title={item.value}>{item.value}</strong>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </section>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">No simulation run row loaded.</div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-playbook-logic pattern-family-selected-simulation-overview">
+                                  <header>
+                                    <span>Prop Simulation Overview</span>
+                                    <small>{selectedEntryExitSimulationTestId || 'No simulation test selected'}</small>
+                                  </header>
+                                  {selectedPropSimulationOverviewSections.length ? (
+                                    <div className="pattern-family-selected-simulation-run-overview">
+                                      {selectedPropSimulationOverviewSections.map((section) => (
+                                        <section className="pattern-family-selected-simulation-run-section" key={section.title}>
+                                          <header>
+                                            <span>{section.title}</span>
+                                          </header>
+                                          <div className="pattern-family-selected-simulation-run-grid">
+                                            {section.items.map((item) => (
+                                              <div
+                                                className={[
+                                                  'pattern-family-selected-simulation-run-card',
+                                                  item.tone ? `pattern-family-selected-simulation-run-card--${item.tone}` : '',
+                                                ].filter(Boolean).join(' ')}
+                                                key={`${section.title}-${item.label}`}
+                                              >
+                                                <span>{item.label}</span>
+                                                <strong title={item.value}>{item.value}</strong>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </section>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">No prop simulation summary loaded.</div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-playbook-logic pattern-family-selected-simulation-overview">
+                                  <header>
+                                    <span>Test Overview</span>
+                                    <small>{selectedEntryExitSimulationTestId || 'No simulation test selected'}</small>
+                                  </header>
+                                  <div className="pattern-family-selected-playbook-logic-grid pattern-family-selected-simulation-overview-grid">
+                                    {selectedSimulationOverviewCards.length ? (
+                                      selectedSimulationOverviewCards.map((item) => (
+                                        <div
+                                          className={[
+                                            'pattern-family-selected-playbook-logic-card',
+                                            'pattern-family-selected-simulation-overview-card',
+                                            item.tone ? `pattern-family-selected-playbook-logic-card--${item.tone}` : '',
+                                          ].filter(Boolean).join(' ')}
+                                          key={item.label}
+                                        >
+                                          <span>{item.label}</span>
+                                          <strong title={item.value}>{item.value}</strong>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="pattern-family-selected-playbook-empty">No simulation overview loaded.</div>
+                                    )}
+                                  </div>
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart">
+                                  <header>
+                                    <span>Prop Cycle Outcomes</span>
+                                    <small>
+                                      {selectedEntryExitSimulationRunRow
+                                        ? `${formatNumber(selectedSimulationOutcomeTotal)} total cycles`
+                                        : 'No cycles loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationOutcomeSegments.length ? (
+                                    <>
+                                      <div
+                                        className="pattern-family-selected-simulation-outcome-bar"
+                                        aria-label="Prop cycle outcome distribution"
+                                      >
+                                        {selectedSimulationOutcomeSegments.map((segment) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-outcome-segment pattern-family-selected-simulation-outcome-segment--${segment.tone}`}
+                                            key={segment.label}
+                                            style={{ width: `${Math.max(segment.percent, segment.value ? 3 : 0)}%` }}
+                                            title={`${segment.label}: ${formatNumber(segment.value)} (${formatDecimal(segment.percent, 1)}%)`}
+                                          />
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-outcome-grid">
+                                        {selectedSimulationOutcomeSegments.map((segment) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-outcome-card pattern-family-selected-simulation-outcome-card--${segment.tone}`}
+                                            key={segment.label}
+                                          >
+                                            <span>{segment.label}</span>
+                                            <strong>{formatNumber(segment.value)}</strong>
+                                            <small>{formatDecimal(segment.percent, 1)}%</small>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">No prop cycle outcome data loaded.</div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-playbook-used pattern-family-selected-simulation-templates">
+                                  <header>
+                                    <span>Template Performance</span>
+                                    <small>
+                                      {hasSelectedEntryExitRouterRun
+                                        ? `${formatNumber(selectedSimulationTemplatePerformanceRows.length)} templates ranked by total R`
+                                        : ''}
+                                    </small>
+                                  </header>
+                                  <div className="pattern-family-selected-simulation-template-table">
+                                    {selectedSimulationTemplatePerformanceRows.length ? (
+                                      <table>
+                                        <thead>
+                                          <tr>
+                                            <th>Template</th>
+                                            <th>Rule</th>
+                                            <th>Tests</th>
+                                            <th>W</th>
+                                            <th>L</th>
+                                            <th>No Entry</th>
+                                            <th>Win %</th>
+                                            <th>Avg R</th>
+                                            <th>Total R</th>
+                                            <th>Families</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {selectedSimulationTemplatePerformanceRows.map((play) => (
+                                            <tr key={play.templateUid} title={`${play.templateUid} | ${play.name}`}>
+                                              <td>{play.label}</td>
+                                              <td>{play.name}</td>
+                                              <td>{formatNumber(play.evalCount)}</td>
+                                              <td className="is-win">{formatNumber(play.passCount)}</td>
+                                              <td className="is-loss">{formatNumber(play.failCount)}</td>
+                                              <td>{formatNumber(play.noEntryCount)}</td>
+                                              <td className={Number(play.winRate) >= 50 ? 'is-win' : 'is-warning'}>
+                                                {formatDecimal(play.winRate, 1)}%
+                                              </td>
+                                              <td className={Number(play.avgR) < 0 ? 'is-loss' : 'is-win'}>
+                                                {formatDecimal(play.avgR, 3)}R
+                                              </td>
+                                              <td className={Number(play.sumR) < 0 ? 'is-loss' : 'is-win'}>
+                                                {formatDecimal(play.sumR, 2)}R
+                                              </td>
+                                              <td>{formatNumber(play.familyCount)}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    ) : (
+                                      <div className="pattern-family-selected-playbook-empty">No template performance loaded.</div>
+                                    )}
+                                  </div>
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-equity">
+                                  <header>
+                                    <span>Equity Curve In R</span>
+                                    <small>
+                                      {isEntryExitSimEquityLoading
+                                        ? 'Loading curve'
+                                        : selectedSimulationEquityPoints.length
+                                          ? `${formatNumber(selectedSimulationEquityPoints.length)} points`
+                                          : entryExitSimEquityError || 'No curve loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationEquityPoints.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Current R',
+                                            value: `${formatDecimal(selectedSimulationEquityLast?.cumulative_r ?? 0, 1)}R`,
+                                            tone: Number(selectedSimulationEquityLast?.cumulative_r ?? 0) < 0 ? 'loss' : 'win',
+                                          },
+                                          {
+                                            label: 'Peak R',
+                                            value: `${formatDecimal(selectedSimulationEquityPeak, 1)}R`,
+                                            tone: 'win',
+                                          },
+                                          {
+                                            label: 'Worst DD',
+                                            value: `${formatDecimal(selectedSimulationEquityWorstDrawdown, 1)}R`,
+                                            tone: 'loss',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <svg
+                                        className="pattern-family-selected-simulation-equity-svg"
+                                        viewBox={`0 0 ${selectedSimulationEquityWidth} ${selectedSimulationEquityHeight}`}
+                                        role="img"
+                                        aria-label="Cumulative R equity curve"
+                                        preserveAspectRatio="none"
+                                      >
+                                        <line
+                                          className="pattern-family-selected-simulation-equity-zero"
+                                          x1={selectedSimulationEquityPadding.left}
+                                          x2={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y1={selectedSimulationEquityZeroY}
+                                          y2={selectedSimulationEquityZeroY}
+                                        />
+                                        <path
+                                          className="pattern-family-selected-simulation-equity-line"
+                                          d={selectedSimulationEquityPath}
+                                        />
+                                        <circle
+                                          className="pattern-family-selected-simulation-equity-dot"
+                                          cx={getSelectedSimulationEquityX(selectedSimulationEquityPoints.length - 1)}
+                                          cy={getSelectedSimulationEquityY(selectedSimulationEquityLast?.cumulative_r ?? 0)}
+                                          r="4"
+                                        />
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis"
+                                          x={selectedSimulationEquityPadding.left - 14}
+                                          y={selectedSimulationEquityPadding.top + 4}
+                                          textAnchor="end"
+                                        >
+                                          {formatNumber(Math.round(selectedSimulationEquityMax))}R
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis"
+                                          x={selectedSimulationEquityPadding.left - 14}
+                                          y={selectedSimulationEquityHeight - selectedSimulationEquityPadding.bottom + 4}
+                                          textAnchor="end"
+                                        >
+                                          {formatNumber(Math.round(selectedSimulationEquityMin))}R
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
+                                          x={selectedSimulationEquityPadding.left}
+                                          y={selectedSimulationEquityHeight - 8}
+                                        >
+                                          {selectedSimulationEquityStartLabel}
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
+                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y={selectedSimulationEquityHeight - 8}
+                                          textAnchor="end"
+                                        >
+                                          {selectedSimulationEquityEndLabel}
+                                        </text>
+                                      </svg>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimEquityLoading
+                                        ? 'Loading equity curve...'
+                                        : entryExitSimEquityError || 'No equity curve data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-drawdown">
+                                  <header>
+                                    <span>Drawdown Curve</span>
+                                    <small>
+                                      {selectedSimulationEquityPoints.length
+                                        ? `${formatDecimal(selectedSimulationEquityWorstDrawdown, 1)}R account | ${formatDecimal(
+                                            selectedSimulationWorstDailyDrawdown,
+                                            1
+                                          )}R daily`
+                                        : entryExitSimEquityError || 'No drawdown loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationEquityPoints.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Current DD',
+                                            value: `${formatDecimal(selectedSimulationDrawdownCurrent, 1)}R`,
+                                            tone: selectedSimulationDrawdownCurrent >= selectedSimulationDrawdownLimit ? 'loss' : 'skipped',
+                                          },
+                                          {
+                                            label: 'Worst DD',
+                                            value: `${formatDecimal(selectedSimulationEquityWorstDrawdown, 1)}R`,
+                                            tone: selectedSimulationEquityWorstDrawdown >= selectedSimulationDrawdownLimit ? 'loss' : 'skipped',
+                                          },
+                                          {
+                                            label: 'Worst Daily',
+                                            value: `${formatDecimal(selectedSimulationWorstDailyDrawdown, 1)}R`,
+                                            tone:
+                                              selectedSimulationWorstDailyDrawdown >= selectedSimulationDailyDrawdownLimit
+                                                ? 'loss'
+                                                : 'skipped',
+                                          },
+                                          {
+                                            label: 'DD Breach',
+                                            value: formatNumber(selectedSimulationDrawdownBreachPoints.length),
+                                            tone: selectedSimulationFirstDrawdownBreach ? 'loss' : 'skipped',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <svg
+                                        className="pattern-family-selected-simulation-equity-svg pattern-family-selected-simulation-drawdown-svg"
+                                        viewBox={`0 0 ${selectedSimulationEquityWidth} ${selectedSimulationEquityHeight}`}
+                                        role="img"
+                                        aria-label="Running drawdown in R"
+                                        preserveAspectRatio="none"
+                                      >
+                                        <g className="pattern-family-selected-simulation-drawdown-bars">
+                                          {selectedSimulationDrawdownBars.map((bar) => (
+                                            <line
+                                              className={`pattern-family-selected-simulation-drawdown-bar pattern-family-selected-simulation-drawdown-bar--${bar.tone}`}
+                                              key={`${bar.point.event_date}-${bar.index}`}
+                                              vectorEffect="non-scaling-stroke"
+                                              x1={bar.x}
+                                              x2={bar.x}
+                                              y1={getSelectedSimulationDrawdownY(0)}
+                                              y2={bar.y}
+                                            />
+                                          ))}
+                                        </g>
+                                        <line
+                                          className="pattern-family-selected-simulation-drawdown-limit"
+                                          x1={selectedSimulationEquityPadding.left}
+                                          x2={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y1={selectedSimulationDrawdownLimitY}
+                                          y2={selectedSimulationDrawdownLimitY}
+                                        />
+                                        <line
+                                          className="pattern-family-selected-simulation-drawdown-daily-limit"
+                                          x1={selectedSimulationEquityPadding.left}
+                                          x2={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y1={selectedSimulationDailyDrawdownLimitY}
+                                          y2={selectedSimulationDailyDrawdownLimitY}
+                                        />
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis"
+                                          x={selectedSimulationEquityPadding.left - 14}
+                                          y={selectedSimulationEquityPadding.top + 4}
+                                          textAnchor="end"
+                                        >
+                                          0R
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-drawdown-limit-label"
+                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y={selectedSimulationDrawdownLimitY - 8}
+                                          textAnchor="end"
+                                        >
+                                          20R max drawdown
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-drawdown-daily-limit-label"
+                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y={selectedSimulationDailyDrawdownLimitY - 8}
+                                          textAnchor="end"
+                                        >
+                                          10R daily loss
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis"
+                                          x={selectedSimulationEquityPadding.left - 14}
+                                          y={selectedSimulationEquityHeight - selectedSimulationEquityPadding.bottom + 4}
+                                          textAnchor="end"
+                                        >
+                                          {formatDecimal(selectedSimulationDrawdownChartMax, 0)}R
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
+                                          x={selectedSimulationEquityPadding.left}
+                                          y={selectedSimulationEquityHeight - 8}
+                                        >
+                                          {selectedSimulationEquityStartLabel}
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
+                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y={selectedSimulationEquityHeight - 8}
+                                          textAnchor="end"
+                                        >
+                                          {selectedSimulationEquityEndLabel}
+                                        </text>
+                                      </svg>
+                                      <div className="pattern-family-selected-simulation-drawdown-legend">
+                                        <span>
+                                          <i className="pattern-family-selected-simulation-drawdown-legend-dot pattern-family-selected-simulation-drawdown-legend-dot--drawdown" />
+                                          Drawdown
+                                        </span>
+                                        <span>
+                                          <i className="pattern-family-selected-simulation-drawdown-legend-dot pattern-family-selected-simulation-drawdown-legend-dot--daily" />
+                                          Daily Loss
+                                        </span>
+                                        <span>
+                                          <i className="pattern-family-selected-simulation-drawdown-legend-dot pattern-family-selected-simulation-drawdown-legend-dot--max" />
+                                          Max DD
+                                        </span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimEquityLoading
+                                        ? 'Loading drawdown curve...'
+                                        : entryExitSimEquityError || 'No drawdown curve data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-daily-r">
+                                  <header>
+                                    <span>Daily R Bars</span>
+                                    <small>
+                                      {isEntryExitSimDailyRLoading
+                                        ? 'Loading daily bars'
+                                        : selectedSimulationDailyRows.length
+                                          ? `${formatNumber(selectedSimulationDailyRows.length)} days | -${formatDecimal(
+                                              selectedSimulationDailyLossLimit,
+                                              0
+                                            )}R limit`
+                                          : entryExitSimDailyRError || 'No daily R loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationDailyRows.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Best Day',
+                                            value: `${formatDecimal(selectedSimulationBestDay?.total_r ?? 0, 1)}R`,
+                                            tone: 'win',
+                                          },
+                                          {
+                                            label: 'Worst Day',
+                                            value: `${formatDecimal(selectedSimulationWorstDay?.total_r ?? 0, 1)}R`,
+                                            tone:
+                                              Number(selectedSimulationWorstDay?.worst_intraday_r ?? 0) <=
+                                              -selectedSimulationDailyLossLimit
+                                                ? 'loss'
+                                                : 'skipped',
+                                          },
+                                          {
+                                            label: 'Daily Hits',
+                                            value: formatNumber(selectedSimulationDailyLossHitRows.length),
+                                            tone: selectedSimulationDailyLossHitRows.length ? 'loss' : 'win',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <svg
+                                        className="pattern-family-selected-simulation-equity-svg pattern-family-selected-simulation-daily-r-svg"
+                                        viewBox={`0 0 ${selectedSimulationEquityWidth} ${selectedSimulationEquityHeight}`}
+                                        role="img"
+                                        aria-label="Daily net R bars"
+                                        preserveAspectRatio="none"
+                                      >
+                                        <line
+                                          className="pattern-family-selected-simulation-equity-zero"
+                                          x1={selectedSimulationEquityPadding.left}
+                                          x2={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y1={selectedSimulationDailyZeroY}
+                                          y2={selectedSimulationDailyZeroY}
+                                        />
+                                        <line
+                                          className="pattern-family-selected-simulation-daily-r-limit"
+                                          x1={selectedSimulationEquityPadding.left}
+                                          x2={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y1={selectedSimulationDailyLossLimitY}
+                                          y2={selectedSimulationDailyLossLimitY}
+                                        />
+                                        {selectedSimulationDailyRows.map((day, index) => {
+                                          const totalR = Number(day.total_r || 0);
+                                          const isPositive = totalR >= 0;
+                                          const barValueY = getSelectedSimulationDailyY(totalR);
+                                          const barY = isPositive ? barValueY : selectedSimulationDailyZeroY;
+                                          const barHeight = Math.max(1, Math.abs(selectedSimulationDailyZeroY - barValueY));
+                                          const hitDailyLoss =
+                                            day.hit_daily_loss ||
+                                            Number(day.worst_intraday_r || 0) <= -selectedSimulationDailyLossLimit;
+                                          const tradeDate = String(day.trade_date || '').slice(0, 10);
+                                          const isSelectedDay = tradeDate === selectedSimulationDailyDate;
+
+                                          return (
+                                            <g key={`${tradeDate}-${index}`}>
+                                              <rect
+                                                className={[
+                                                  'pattern-family-selected-simulation-daily-r-bar',
+                                                  isPositive
+                                                    ? 'pattern-family-selected-simulation-daily-r-bar--win'
+                                                    : 'pattern-family-selected-simulation-daily-r-bar--loss',
+                                                  hitDailyLoss
+                                                    ? 'pattern-family-selected-simulation-daily-r-bar--hit'
+                                                    : '',
+                                                  isSelectedDay
+                                                    ? 'pattern-family-selected-simulation-daily-r-bar--selected'
+                                                    : '',
+                                                ]
+                                                  .filter(Boolean)
+                                                  .join(' ')}
+                                                x={getSelectedSimulationDailyX(index)}
+                                                y={barY}
+                                                width={selectedSimulationDailyBarWidth}
+                                                height={barHeight}
+                                                onClick={() => setSelectedSimulationDailyDate(tradeDate)}
+                                              >
+                                                <title>
+                                                  {`${tradeDate} | Net ${formatDecimal(totalR, 2)}R | ${formatNumber(
+                                                    day.wins
+                                                  )}W / ${formatNumber(day.losses)}L | Trades ${formatNumber(
+                                                    day.trades
+                                                  )} | Best ${formatDecimal(day.best_trade_r, 2)}R | Worst ${formatDecimal(
+                                                    day.worst_trade_r,
+                                                    2
+                                                  )}R | Intraday low ${formatDecimal(day.worst_intraday_r, 2)}R`}
+                                                </title>
+                                              </rect>
+                                              {hitDailyLoss ? (
+                                                <circle
+                                                  className="pattern-family-selected-simulation-daily-r-hit-dot"
+                                                  cx={getSelectedSimulationDailyX(index) + selectedSimulationDailyBarWidth / 2}
+                                                  cy={selectedSimulationDailyLossLimitY}
+                                                  r="3"
+                                                />
+                                              ) : null}
+                                            </g>
+                                          );
+                                        })}
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis"
+                                          x={selectedSimulationEquityPadding.left - 14}
+                                          y={selectedSimulationEquityPadding.top + 4}
+                                          textAnchor="end"
+                                        >
+                                          {formatDecimal(selectedSimulationDailyMax, 0)}R
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-daily-r-limit-label"
+                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y={selectedSimulationDailyLossLimitY - 8}
+                                          textAnchor="end"
+                                        >
+                                          -10R daily loss
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis"
+                                          x={selectedSimulationEquityPadding.left - 14}
+                                          y={selectedSimulationEquityHeight - selectedSimulationEquityPadding.bottom + 4}
+                                          textAnchor="end"
+                                        >
+                                          {formatDecimal(selectedSimulationDailyMin, 0)}R
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
+                                          x={selectedSimulationEquityPadding.left}
+                                          y={selectedSimulationEquityHeight - 8}
+                                        >
+                                          {selectedSimulationDailyStartLabel}
+                                        </text>
+                                        <text
+                                          className="pattern-family-selected-simulation-equity-axis pattern-family-selected-simulation-equity-axis--date"
+                                          x={selectedSimulationEquityWidth - selectedSimulationEquityPadding.right}
+                                          y={selectedSimulationEquityHeight - 8}
+                                          textAnchor="end"
+                                        >
+                                          {selectedSimulationDailyEndLabel}
+                                        </text>
+                                      </svg>
+                                      <div className="pattern-family-selected-simulation-daily-trades">
+                                        <header>
+                                          <span>
+                                            {selectedSimulationDailyDate
+                                              ? `${selectedSimulationDailyDate} Trades`
+                                              : 'Daily Trade Detail'}
+                                          </span>
+                                          <small>
+                                            {selectedSimulationDailyDate
+                                              ? `${formatNumber(selectedSimulationDailyTradeRows.length)} trades | ${formatDecimal(
+                                                  selectedSimulationDailyRow?.total_r ?? selectedSimulationDailyTradeNetR,
+                                                  1
+                                                )}R`
+                                              : 'No day selected'}
+                                          </small>
+                                        </header>
+                                        {selectedSimulationDailyDate ? (
+                                          selectedSimulationDailyTradeRows.length ? (
+                                            <div className="pattern-family-selected-simulation-daily-trades-table">
+                                              <table>
+                                                <thead>
+                                                  <tr>
+                                                    <th>Time</th>
+                                                    <th>Symbol</th>
+                                                    <th>Family</th>
+                                                    <th>Template</th>
+                                                    <th>Dir</th>
+                                                    <th>Result</th>
+                                                    <th>Exit</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  {selectedSimulationDailyTradeRows.map((trade) => {
+                                                    const resultR = Number(trade.result_r || 0);
+                                                    const direction = String(trade.trade_direction || '').toUpperCase();
+                                                    return (
+                                                      <tr
+                                                        className={resultR >= 0 ? 'is-win' : 'is-loss'}
+                                                        key={`${trade.id}-${trade.setup_id}`}
+                                                      >
+                                                        <td>{formatTime(trade.entry_date ?? trade.d_confirm_date)}</td>
+                                                        <td>{trade.symbol || 'N/A'}</td>
+                                                        <td title={trade.family_key}>{compactText(trade.family_key || 'N/A', 12)}</td>
+                                                        <td title={trade.template_uid}>
+                                                          {trade.template_label || compactText(trade.template_uid || 'N/A', 8)}
+                                                        </td>
+                                                        <td>{direction || 'N/A'}</td>
+                                                        <td>{formatDecimal(resultR, 2)}R</td>
+                                                        <td>{formatRouteMode(trade.exit_reason || trade.outcome || 'N/A')}</td>
+                                                      </tr>
+                                                    );
+                                                  })}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          ) : (
+                                            <div className="pattern-family-selected-playbook-empty">
+                                              {isEntryExitSimDailyTradesLoading
+                                                ? 'Loading daily trades...'
+                                                : entryExitSimDailyTradesError || 'No trades loaded for selected day.'}
+                                            </div>
+                                          )
+                                        ) : (
+                                          <div className="pattern-family-selected-playbook-empty">No day selected.</div>
+                                        )}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimDailyRLoading
+                                        ? 'Loading daily R bars...'
+                                        : entryExitSimDailyRError || 'No daily R data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-hourly">
+                                  <header>
+                                    <span>Time-of-Day Performance</span>
+                                    <small>
+                                      {isEntryExitSimHourlyLoading
+                                        ? 'Loading hours'
+                                        : selectedSimulationHourlyRows.length
+                                          ? `${formatNumber(selectedSimulationHourlyRows.length)} active hours`
+                                          : entryExitSimHourlyError || 'No hourly data loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationHourlyRows.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Best Hour',
+                                            value: `${formatHourLabel(selectedSimulationBestHour?.entry_hour)} / ${formatDecimal(
+                                              selectedSimulationBestHour?.sum_r ?? 0,
+                                              1
+                                            )}R`,
+                                            tone: 'win',
+                                          },
+                                          {
+                                            label: 'Worst Hour',
+                                            value: `${formatHourLabel(selectedSimulationWorstHour?.entry_hour)} / ${formatDecimal(
+                                              selectedSimulationWorstHour?.sum_r ?? 0,
+                                              1
+                                            )}R`,
+                                            tone: 'loss',
+                                          },
+                                          {
+                                            label: 'Most Bad-Day Trades',
+                                            value: `${formatHourLabel(selectedSimulationMostDangerHour?.entry_hour)} / ${formatNumber(
+                                              selectedSimulationMostDangerHour?.daily_loss_day_trades ?? 0
+                                            )}`,
+                                            tone: 'skipped',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-hourly-table">
+                                        <table>
+                                          <thead>
+                                            <tr>
+                                              <th>Hour</th>
+                                              <th>Trades</th>
+                                              <th>WR</th>
+                                              <th>Avg R</th>
+                                              <th>Net R</th>
+                                              <th>Best</th>
+                                              <th>Worst</th>
+                                              <th>Bad-Day</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {selectedSimulationHourlyRows.map((hour) => {
+                                              const netR = Number(hour.sum_r || 0);
+                                              return (
+                                                <tr className={netR >= 0 ? 'is-win' : 'is-loss'} key={hour.entry_hour}>
+                                                  <td>{formatHourLabel(hour.entry_hour)}</td>
+                                                  <td>{formatNumber(hour.trades)}</td>
+                                                  <td>{formatDecimal(hour.win_rate, 1)}%</td>
+                                                  <td>{formatDecimal(hour.avg_r, 3)}R</td>
+                                                  <td>{formatDecimal(netR, 1)}R</td>
+                                                  <td>{formatDecimal(hour.best_r, 1)}R</td>
+                                                  <td>{formatDecimal(hour.worst_r, 1)}R</td>
+                                                  <td>
+                                                    {formatNumber(hour.daily_loss_day_trades)} /{' '}
+                                                    {formatNumber(hour.daily_loss_day_count)}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimHourlyLoading
+                                        ? 'Loading time-of-day performance...'
+                                        : entryExitSimHourlyError || 'No hourly performance data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-cadence">
+                                  <header>
+                                    <span>Trade Cadence</span>
+                                    <small>
+                                      {isEntryExitSimTradeCadenceLoading
+                                        ? 'Loading cadence'
+                                        : selectedSimulationTradeCadence
+                                          ? `${formatNumber(selectedSimulationTradeCadence.trades)} trades | ${formatDecimal(
+                                              selectedSimulationTradeCadence.median_gap_minutes,
+                                              1
+                                            )}m median gap`
+                                          : entryExitSimTradeCadenceError || 'No cadence loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationTradeCadence ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Median Gap',
+                                            value: `${formatDecimal(
+                                              selectedSimulationTradeCadence.median_gap_minutes,
+                                              1
+                                            )}m`,
+                                            tone:
+                                              Number(selectedSimulationTradeCadence.median_gap_minutes || 0) < 5
+                                                ? 'loss'
+                                                : 'win',
+                                          },
+                                          {
+                                            label: 'Trades / Day',
+                                            value: formatDecimal(selectedSimulationTradeCadence.avg_trades_per_day, 1),
+                                            tone: 'skipped',
+                                          },
+                                          {
+                                            label: 'Max 5m Burst',
+                                            value: formatNumber(selectedSimulationTradeCadence.max_trades_5m_window),
+                                            tone:
+                                              Number(selectedSimulationTradeCadence.max_trades_5m_window || 0) > 2
+                                                ? 'loss'
+                                                : 'win',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-cadence-grid">
+                                        {[
+                                          {
+                                            label: 'First Trade',
+                                            value: `${formatDate(selectedSimulationTradeCadence.first_trade_at)} ${formatTime(
+                                              selectedSimulationTradeCadence.first_trade_at
+                                            )}`,
+                                          },
+                                          {
+                                            label: 'Last Trade',
+                                            value: `${formatDate(selectedSimulationTradeCadence.last_trade_at)} ${formatTime(
+                                              selectedSimulationTradeCadence.last_trade_at
+                                            )}`,
+                                          },
+                                          {
+                                            label: 'Trading Days',
+                                            value: formatNumber(selectedSimulationTradeCadence.trade_days),
+                                          },
+                                          {
+                                            label: 'Gap Samples',
+                                            value: formatNumber(selectedSimulationTradeCadence.gap_count),
+                                          },
+                                          {
+                                            label: 'Avg Gap',
+                                            value: `${formatDecimal(selectedSimulationTradeCadence.avg_gap_minutes, 1)}m`,
+                                          },
+                                          {
+                                            label: 'Fastest Gap',
+                                            value: `${formatDecimal(selectedSimulationTradeCadence.min_gap_minutes, 1)}m`,
+                                          },
+                                          {
+                                            label: 'Longest Gap',
+                                            value: `${formatDecimal(selectedSimulationTradeCadence.max_gap_minutes, 1)}m`,
+                                          },
+                                          {
+                                            label: 'Max / Day',
+                                            value: formatNumber(selectedSimulationTradeCadence.max_trades_per_day),
+                                          },
+                                          {
+                                            label: 'Max / Hour',
+                                            value: formatNumber(selectedSimulationTradeCadence.max_trades_per_hour),
+                                          },
+                                          {
+                                            label: 'Max / 15m',
+                                            value: formatNumber(selectedSimulationTradeCadence.max_trades_15m_window),
+                                          },
+                                        ].map((item) => (
+                                          <div className="pattern-family-selected-simulation-cadence-row" key={item.label}>
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-cadence-buckets">
+                                        {selectedSimulationTradeCadenceBuckets.map((bucket) => (
+                                          <div className="pattern-family-selected-simulation-cadence-bucket" key={bucket.label}>
+                                            <span>{bucket.label}</span>
+                                            <div>
+                                              <i style={{ width: `${bucket.count ? Math.max(3, bucket.percent) : 0}%` }} />
+                                            </div>
+                                            <strong>
+                                              {formatNumber(bucket.count)} / {formatDecimal(bucket.percent, 1)}%
+                                            </strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimTradeCadenceLoading
+                                        ? 'Loading trade cadence...'
+                                        : entryExitSimTradeCadenceError || 'No trade cadence data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-loss-cluster">
+                                  <header>
+                                    <span>Loss Behavior</span>
+                                    <small>
+                                      {isEntryExitSimLossClusterLoading
+                                        ? 'Loading loss clustering'
+                                        : selectedSimulationLossSummary
+                                          ? `${formatNumber(selectedSimulationLossSummary.losses)} losses | ${formatDecimal(
+                                              selectedSimulationLossSummary.clustered_60m_rate,
+                                              1
+                                            )}% within 60m`
+                                          : entryExitSimLossClusterError || 'No loss behavior loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationLossSummary ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Max Loss Streak',
+                                            value: `${formatNumber(selectedSimulationLossSummary.max_loss_streak)}L`,
+                                            tone: 'loss',
+                                          },
+                                          {
+                                            label: 'Median Loss Gap',
+                                            value: `${formatDecimal(
+                                              selectedSimulationLossSummary.median_loss_gap_minutes,
+                                              1
+                                            )}m`,
+                                            tone:
+                                              Number(selectedSimulationLossSummary.median_loss_gap_minutes || 0) <= 60
+                                                ? 'loss'
+                                                : 'win',
+                                          },
+                                          {
+                                            label: 'Same-Hour Pairs',
+                                            value: `${formatNumber(
+                                              selectedSimulationLossSummary.clustered_60m_loss_pairs
+                                            )} / ${formatDecimal(selectedSimulationLossSummary.clustered_60m_rate, 1)}%`,
+                                            tone:
+                                              Number(selectedSimulationLossSummary.clustered_60m_rate || 0) >= 50
+                                                ? 'loss'
+                                                : 'skipped',
+                                          },
+                                          {
+                                            label: '5+ Loss Days',
+                                            value: `${formatNumber(selectedSimulationLossSummary.loss_days_5_plus)} / ${formatNumber(
+                                              selectedSimulationLossSummary.loss_days
+                                            )}`,
+                                            tone: selectedSimulationLossSummary.loss_days_5_plus ? 'loss' : 'win',
+                                          },
+                                          {
+                                            label: 'Worst Loss Day',
+                                            value: `${formatDate(selectedSimulationLossSummary.worst_loss_day)} / ${formatNumber(
+                                              selectedSimulationLossSummary.worst_loss_day_losses
+                                            )}L`,
+                                            tone: 'loss',
+                                          },
+                                          {
+                                            label: 'Worst Hour',
+                                            value: `${formatDate(selectedSimulationLossSummary.worst_loss_hour_date)} ${formatHourLabel(
+                                              selectedSimulationLossSummary.worst_loss_hour ?? 0
+                                            )} / ${formatNumber(selectedSimulationLossSummary.worst_loss_hour_losses)}L`,
+                                            tone: 'loss',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-cadence-buckets">
+                                        {selectedSimulationLossBuckets.map((bucket) => (
+                                          <div className="pattern-family-selected-simulation-cadence-bucket" key={bucket.bucket_key}>
+                                            <span>{bucket.bucket_label}</span>
+                                            <div>
+                                              <i style={{ width: `${bucket.gap_count ? Math.max(3, bucket.gap_percent) : 0}%` }} />
+                                            </div>
+                                            <strong>
+                                              {formatNumber(bucket.gap_count)} / {formatDecimal(bucket.gap_percent, 1)}%
+                                            </strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-contribution-table">
+                                        <table>
+                                          <thead>
+                                            <tr>
+                                              <th>Date</th>
+                                              <th>Hour</th>
+                                              <th>Losses</th>
+                                              <th>Wins</th>
+                                              <th>Loss Rate</th>
+                                              <th>Net R</th>
+                                              <th>Top Symbol</th>
+                                              <th>Top Family</th>
+                                              <th>Top Test</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {selectedSimulationLossWindows.slice(0, 18).map((row) => (
+                                              <tr className="is-loss" key={`${row.trade_date}-${row.entry_hour}`}>
+                                                <td>{formatDate(row.trade_date)}</td>
+                                                <td>{formatHourLabel(row.entry_hour)}</td>
+                                                <td>{formatNumber(row.losses)}</td>
+                                                <td>{formatNumber(row.wins)}</td>
+                                                <td>{formatDecimal(row.loss_rate, 1)}%</td>
+                                                <td>{formatDecimal(row.total_r, 1)}R</td>
+                                                <td>{row.top_root_symbol || 'N/A'}</td>
+                                                <td title={row.top_family_key}>{compactText(row.top_family_key || 'N/A', 14)}</td>
+                                                <td title={row.top_template_uid}>{compactText(row.top_template_uid || 'N/A', 12)}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimLossClusterLoading
+                                        ? 'Loading loss behavior...'
+                                        : entryExitSimLossClusterError || 'No loss clustering data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-contribution">
+                                  <header>
+                                    <span>Symbol Contribution</span>
+                                    <small>
+                                      {isEntryExitSimSymbolContributionLoading
+                                        ? 'Loading symbols'
+                                        : selectedSimulationSymbolContributionRows.length
+                                          ? `${formatNumber(selectedSimulationSymbolContributionRows.length)} symbols`
+                                          : entryExitSimSymbolContributionError || 'No symbol contribution loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationSymbolContributionRows.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Top Symbol',
+                                            value: `${selectedSimulationTopSymbol?.root_symbol || 'N/A'} / ${formatDecimal(
+                                              selectedSimulationTopSymbol?.sum_r ?? 0,
+                                              1
+                                            )}R`,
+                                            tone: 'win',
+                                          },
+                                          {
+                                            label: 'Worst Symbol',
+                                            value: `${selectedSimulationWorstSymbol?.root_symbol || 'N/A'} / ${formatDecimal(
+                                              selectedSimulationWorstSymbol?.sum_r ?? 0,
+                                              1
+                                            )}R`,
+                                            tone: Number(selectedSimulationWorstSymbol?.sum_r ?? 0) < 0 ? 'loss' : 'skipped',
+                                          },
+                                          {
+                                            label: 'Bad-Day Leader',
+                                            value: `${selectedSimulationMostDangerSymbol?.root_symbol || 'N/A'} / ${formatNumber(
+                                              selectedSimulationMostDangerSymbol?.daily_loss_day_trades ?? 0
+                                            )}`,
+                                            tone: 'skipped',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-family-chart">
+                                        <header>
+                                          <span>Top Families By Net R</span>
+                                          <small>{formatNumber(selectedSimulationFamilyPerformanceRows.length)} shown</small>
+                                        </header>
+                                        {selectedSimulationFamilyPerformanceRows.map((row) => {
+                                          const barPercent = Math.max(
+                                            0,
+                                            (Number(row.netR || 0) / selectedSimulationFamilyPerformanceMaxR) * 100
+                                          );
+                                          return (
+                                            <div
+                                              className="pattern-family-selected-simulation-family-bar-row"
+                                              key={row.family_key}
+                                              title={`${row.family_key} | ${row.label}`}
+                                            >
+                                              <div className="pattern-family-selected-simulation-family-bar-head">
+                                                <span>
+                                                  #{String(row.rank).padStart(2, '0')} {row.label}
+                                                </span>
+                                                <strong>{formatDecimal(row.netR, 1)}R</strong>
+                                              </div>
+                                              <div className="pattern-family-selected-simulation-family-bar-track">
+                                                <i style={{ width: `${barPercent ? Math.max(4, barPercent) : 0}%` }} />
+                                              </div>
+                                              <small>
+                                                {formatNumber(row.trades)} trades | {formatDecimal(row.winRate, 1)}% WR |{' '}
+                                                {formatDecimal(row.avgR, 3)}R avg
+                                              </small>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-contribution-table">
+                                        <table>
+                                          <thead>
+                                            <tr>
+                                              <th>Symbol</th>
+                                              <th>Trades</th>
+                                              <th>WR</th>
+                                              <th>Avg R</th>
+                                              <th>Net R</th>
+                                              <th>Best</th>
+                                              <th>Worst</th>
+                                              <th>Bad-Day</th>
+                                              <th>Families</th>
+                                              <th>Tests</th>
+                                              <th>Contracts</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {selectedSimulationSymbolContributionRows.map((row) => {
+                                              const netR = Number(row.sum_r || 0);
+                                              return (
+                                                <tr className={netR >= 0 ? 'is-win' : 'is-loss'} key={row.root_symbol}>
+                                                  <td>{row.root_symbol || 'N/A'}</td>
+                                                  <td>{formatNumber(row.trades)}</td>
+                                                  <td>{formatDecimal(row.win_rate, 1)}%</td>
+                                                  <td>{formatDecimal(row.avg_r, 3)}R</td>
+                                                  <td>{formatDecimal(netR, 1)}R</td>
+                                                  <td>{formatDecimal(row.best_r, 1)}R</td>
+                                                  <td>{formatDecimal(row.worst_r, 1)}R</td>
+                                                  <td>
+                                                    {formatNumber(row.daily_loss_day_trades)} /{' '}
+                                                    {formatNumber(row.daily_loss_day_count)}
+                                                  </td>
+                                                  <td>{formatNumber(row.family_count)}</td>
+                                                  <td>{formatNumber(row.template_count)}</td>
+                                                  <td>{formatNumber(row.contract_count)}</td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimSymbolContributionLoading
+                                        ? 'Loading symbol contribution...'
+                                        : entryExitSimSymbolContributionError || 'No symbol contribution data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-contribution pattern-family-selected-simulation-contribution--family">
+                                  <header>
+                                    <span>Family Contribution</span>
+                                    <small>
+                                      {isEntryExitSimFamilyContributionLoading
+                                        ? 'Loading families'
+                                        : selectedSimulationFamilyContributionRows.length
+                                          ? `${formatNumber(selectedSimulationFamilyContributionRows.length)} families`
+                                          : entryExitSimFamilyContributionError || 'No family contribution loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationFamilyContributionRows.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Top Family',
+                                            value: `${compactText(selectedSimulationTopFamily?.family_key || 'N/A', 10)} / ${formatDecimal(
+                                              selectedSimulationTopFamily?.sum_r ?? 0,
+                                              1
+                                            )}R`,
+                                            tone: 'win',
+                                          },
+                                          {
+                                            label: 'Worst Family',
+                                            value: `${compactText(selectedSimulationWorstFamily?.family_key || 'N/A', 10)} / ${formatDecimal(
+                                              selectedSimulationWorstFamily?.sum_r ?? 0,
+                                              1
+                                            )}R`,
+                                            tone: Number(selectedSimulationWorstFamily?.sum_r ?? 0) < 0 ? 'loss' : 'skipped',
+                                          },
+                                          {
+                                            label: 'Bad-Day Leader',
+                                            value: `${compactText(selectedSimulationMostDangerFamily?.family_key || 'N/A', 10)} / ${formatNumber(
+                                              selectedSimulationMostDangerFamily?.daily_loss_day_trades ?? 0
+                                            )}`,
+                                            tone: 'skipped',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-contribution-table">
+                                        <table>
+                                          <thead>
+                                            <tr>
+                                              <th>Family</th>
+                                              <th>Trades</th>
+                                              <th>WR</th>
+                                              <th>Avg R</th>
+                                              <th>Net R</th>
+                                              <th>Best</th>
+                                              <th>Worst</th>
+                                              <th>Bad-Day</th>
+                                              <th>Symbols</th>
+                                              <th>Tests</th>
+                                              <th>Contracts</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {selectedSimulationFamilyContributionRows.map((row) => {
+                                              const netR = Number(row.sum_r || 0);
+                                              return (
+                                                <tr className={netR >= 0 ? 'is-win' : 'is-loss'} key={row.family_key}>
+                                                  <td title={row.family_key}>{compactText(row.family_key || 'N/A', 14)}</td>
+                                                  <td>{formatNumber(row.trades)}</td>
+                                                  <td>{formatDecimal(row.win_rate, 1)}%</td>
+                                                  <td>{formatDecimal(row.avg_r, 3)}R</td>
+                                                  <td>{formatDecimal(netR, 1)}R</td>
+                                                  <td>{formatDecimal(row.best_r, 1)}R</td>
+                                                  <td>{formatDecimal(row.worst_r, 1)}R</td>
+                                                  <td>
+                                                    {formatNumber(row.daily_loss_day_trades)} /{' '}
+                                                    {formatNumber(row.daily_loss_day_count)}
+                                                  </td>
+                                                  <td>{formatNumber(row.symbol_count)}</td>
+                                                  <td>{formatNumber(row.template_count)}</td>
+                                                  <td>{formatNumber(row.contract_count)}</td>
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimFamilyContributionLoading
+                                        ? 'Loading family contribution...'
+                                        : entryExitSimFamilyContributionError || 'No family contribution data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                                <section className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-streaks">
+                                  <header>
+                                    <span>Win/Loss Streaks</span>
+                                    <small>
+                                      {isEntryExitSimStreakLoading
+                                        ? 'Loading streaks'
+                                        : selectedSimulationStreakRows.length
+                                          ? `${formatNumber(selectedSimulationStreakRows.length)} streaks`
+                                          : entryExitSimStreakError || 'No streaks loaded'}
+                                    </small>
+                                  </header>
+                                  {selectedSimulationStreakRows.length ? (
+                                    <>
+                                      <div className="pattern-family-selected-simulation-equity-stats">
+                                        {[
+                                          {
+                                            label: 'Largest Loss',
+                                            value: `${formatNumber(selectedSimulationLargestLossStreak?.streak_length || 0)}L`,
+                                            tone: 'loss',
+                                          },
+                                          {
+                                            label: 'Largest Win',
+                                            value: `${formatNumber(selectedSimulationLargestWinStreak?.streak_length || 0)}W`,
+                                            tone: 'win',
+                                          },
+                                          {
+                                            label: 'Loss Runs',
+                                            value: formatNumber(selectedSimulationLossStreakRows.length),
+                                            tone: 'skipped',
+                                          },
+                                        ].map((item) => (
+                                          <div
+                                            className={`pattern-family-selected-simulation-equity-stat pattern-family-selected-simulation-equity-stat--${item.tone}`}
+                                            key={item.label}
+                                          >
+                                            <span>{item.label}</span>
+                                            <strong>{item.value}</strong>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-streak-chart">
+                                        {selectedSimulationStreakDistribution.map((bucket) => (
+                                          <div className="pattern-family-selected-simulation-streak-bucket" key={bucket.length}>
+                                            <span>{bucket.length}</span>
+                                            <div className="pattern-family-selected-simulation-streak-bars">
+                                              <div
+                                                className="pattern-family-selected-simulation-streak-bar pattern-family-selected-simulation-streak-bar--win"
+                                                style={{
+                                                  height: `${Math.max(
+                                                    bucket.wins
+                                                      ? (bucket.wins / selectedSimulationMaxStreakBucketCount) * 100
+                                                      : 0,
+                                                    bucket.wins ? 8 : 0
+                                                  )}%`,
+                                                }}
+                                                title={`${formatNumber(bucket.wins)} win streaks of length ${bucket.length}`}
+                                              />
+                                              <div
+                                                className="pattern-family-selected-simulation-streak-bar pattern-family-selected-simulation-streak-bar--loss"
+                                                style={{
+                                                  height: `${Math.max(
+                                                    bucket.losses
+                                                      ? (bucket.losses / selectedSimulationMaxStreakBucketCount) * 100
+                                                      : 0,
+                                                    bucket.losses ? 8 : 0
+                                                  )}%`,
+                                                }}
+                                                title={`${formatNumber(bucket.losses)} loss streaks of length ${bucket.length}`}
+                                              />
+                                            </div>
+                                            <small>
+                                              {formatNumber(bucket.wins)} / {formatNumber(bucket.losses)}
+                                            </small>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="pattern-family-selected-simulation-streak-legend">
+                                        <span><i className="pattern-family-selected-simulation-streak-dot pattern-family-selected-simulation-streak-dot--win" />Wins</span>
+                                        <span><i className="pattern-family-selected-simulation-streak-dot pattern-family-selected-simulation-streak-dot--loss" />Losses</span>
+                                        <small>Bucket label = streak length</small>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">
+                                      {isEntryExitSimStreakLoading
+                                        ? 'Loading streak chart...'
+                                        : entryExitSimStreakError || 'No streak data loaded.'}
+                                    </div>
+                                  )}
+                                </section>
+                              </>
+                            ) : (
+                              <section className="pattern-family-selected-playbook-used pattern-family-selected-simulation-plays">
+                                <header>
+                                  <span>Sim Plays</span>
+                                  <small>
+                                    {hasSelectedEntryExitRouterRun
+                                      ? `${formatNumber(selectedSimulationUsedPlayRows.length)} evaluated templates`
+                                      : ''}
+                                  </small>
+                                </header>
+                                <div className="pattern-family-selected-playbook-list">
+                                  {selectedSimulationUsedPlayRows.length ? (
+                                    selectedSimulationUsedPlayRows.map((play) => (
+                                      <div
+                                        className="pattern-family-selected-playbook-row"
+                                        key={play.templateUid}
+                                        title={`${play.templateUid} | ${play.name} | ${formatNumber(play.passCount)}W / ${formatNumber(
+                                          play.failCount
+                                        )}L / ${formatNumber(play.noEntryCount)} no entry`}
+                                      >
+                                        <span>{play.label}</span>
+                                        <small>
+                                          {formatDecimal(play.winRate, 1)}% WR | {formatDecimal(play.avgR, 3)}R |{' '}
+                                          {formatNumber(play.familyCount)} families
+                                        </small>
+                                        <strong>{formatNumber(play.evalCount)} tests</strong>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="pattern-family-selected-playbook-empty">No simulation plays loaded.</div>
+                                  )}
+                                </div>
+                              </section>
+                            )}
+                          </div>
+                        </aside>
+                      </div>
+                    </section>
+                  ) : null}
+                </section>
               </div>
             </section>
-          ) : (
-          <section className="pattern-family-route-win-profile pattern-family-route-win-profile--workspace">
-            <header>
-              <div>
-                <span>Route Win Profile</span>
-                <strong title={selectedRoute?.route_label ?? ''}>
-                  {selectedRoute ? selectedRoute.route_label : 'No route selected'}
-                </strong>
-              </div>
-              <small>
-                {isRouteTradesLoading
-                  ? 'Loading wins...'
-                  : selectedRoute
-                    ? `${formatNumber(selectedRouteWinProfile.winCount)} loaded wins`
-                    : 'Select a route'}
-              </small>
-            </header>
+          ) : testOverviewTab === 'patterns' ? (
+            <section className="pattern-family-side-data-profile pattern-family-pattern-catalog-frame">
+              <header className="pattern-family-pattern-catalog-head">
+                <div>
+                  <span>Pattern Catalog</span>
+                  <strong>
+                    {selectedPatternCatalogProfile
+                      ? `${selectedPatternCatalogProfile.displayId} | ${selectedPatternCatalogProfile.source} ${selectedPatternCatalogProfile.timeframe}`
+                      : 'No scan profile'}
+                  </strong>
+                </div>
+                <small>{formatNumber(patternCatalogTotalPatterns)} patterns</small>
+              </header>
+              <div className="pattern-family-pattern-catalog" aria-label="Pattern catalog dashboard">
+                {patternStorageError ? (
+                  <div className="pattern-family-market-empty">{patternStorageError}</div>
+                ) : isPatternStorageLoading ? (
+                  <div className="pattern-family-market-empty">Loading pattern universe...</div>
+                ) : (
+                  <div className="pattern-family-pattern-catalog-shell">
+                    <section className="pattern-family-pattern-catalog-topbar">
+                      <header>
+                        <div>
+                          <span>Catalog Filters</span>
+                          <strong>Scan Shelf</strong>
+                        </div>
+                        <small>
+                          {formatNumber(filteredPatternCatalogProfiles.length)} shown / {formatNumber(patternCatalogProfiles.length)} total
+                        </small>
+                      </header>
 
-            {selectedRoute ? (
-              <div className="pattern-family-route-win-grid">
-                <div className="pattern-family-route-win-stat">
-                  <span>Global Wins</span>
-                  <strong>{formatNumber(selectedRoute.win_count)}</strong>
-                </div>
-                <div className="pattern-family-route-win-stat">
-                  <span>Loaded Wins</span>
-                  <strong>{formatNumber(selectedRouteWinProfile.winCount)}</strong>
-                </div>
-                <div className="pattern-family-route-win-stat">
-                  <span>Avg Win</span>
-                  <strong>{formatDecimal(selectedRouteWinProfile.avgWinR, 2)}R</strong>
-                </div>
-                <div className="pattern-family-route-win-stat">
-                  <span>Best Win</span>
-                  <strong>{formatDecimal(selectedRouteWinProfile.bestWinR, 2)}R</strong>
-                </div>
+                      <section className="pattern-family-pattern-catalog-filters" aria-label="Pattern catalog filters">
+                        <div className="pattern-family-pattern-catalog-filter-group">
+                          <span>Source</span>
+                          <div>
+                            {patternCatalogSourceOptions.map((option) => (
+                              <button
+                                className={patternCatalogSource === option ? 'pattern-family-pattern-catalog-filter--active' : ''}
+                                key={option}
+                                onClick={() => setPatternCatalogSource(option)}
+                                type="button"
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="pattern-family-pattern-catalog-filter-group">
+                          <span>Timeframe</span>
+                          <div>
+                            {patternCatalogTimeframeOptions.map((option) => (
+                              <button
+                                className={patternCatalogTimeframe === option ? 'pattern-family-pattern-catalog-filter--active' : ''}
+                                key={option}
+                                onClick={() => setPatternCatalogTimeframe(option)}
+                                type="button"
+                              >
+                                {option}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="pattern-family-pattern-catalog-filter-group">
+                          <span>Fit</span>
+                          <div>
+                            {patternCatalogFitOptions.map((option) => (
+                              <button
+                                className={patternCatalogFit === option.key ? 'pattern-family-pattern-catalog-filter--active' : ''}
+                                key={option.key}
+                                onClick={() => setPatternCatalogFit(option.key)}
+                                type="button"
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </section>
 
-                <div className="pattern-family-route-win-list">
-                  <span>Winning Symbols</span>
-                  {selectedRouteWinProfile.symbols.length ? (
-                    selectedRouteWinProfile.symbols.slice(0, 4).map((item) => (
-                      <strong key={item.key}>
-                        {item.key} / {formatNumber(item.wins)} wins / {formatDecimal(item.avgR, 2)}R
-                      </strong>
-                    ))
-                  ) : (
-                    <strong>No loaded wins yet</strong>
-                  )}
-                </div>
-                <div className="pattern-family-route-win-list">
-                  <span>Winning Families</span>
-                  {selectedRouteWinProfile.families.length ? (
-                    selectedRouteWinProfile.families.slice(0, 4).map((item) => (
-                      <strong key={item.family_key}>
-                        {(item.harmonic_type || item.family_key)} / {formatNumber(item.inferredWins)} wins / {formatDecimal(item.avg_r, 2)}R
-                      </strong>
-                    ))
-                  ) : (
-                    <strong>No family win rows loaded</strong>
-                  )}
-                </div>
-                <div className="pattern-family-route-win-list">
-                  <span>Winning Direction</span>
-                  {selectedRouteWinProfile.directions.length ? (
-                    selectedRouteWinProfile.directions.slice(0, 3).map((item) => (
-                      <strong key={item.key}>
-                        {item.key} / {formatNumber(item.wins)} wins / {formatDecimal(item.avgR, 2)}R
-                      </strong>
-                    ))
-                  ) : (
-                    <strong>No direction wins yet</strong>
-                  )}
-                </div>
+                      <section className="pattern-family-pattern-catalog-profiles">
+                        {filteredPatternCatalogProfiles.length ? (
+                          filteredPatternCatalogProfiles.map((profile) => (
+                            <button
+                              className={[
+                                'pattern-family-pattern-profile-card',
+                                `pattern-family-pattern-profile-card--${profile.sourceKey}`,
+                                selectedPatternCatalogProfile?.id === profile.id ? 'pattern-family-pattern-profile-card--active' : '',
+                              ].join(' ')}
+                              key={profile.id}
+                              onClick={() => setSelectedPatternCatalogProfileId(profile.id)}
+                              type="button"
+                            >
+                              <span>{profile.displayId}</span>
+                              <strong>{profile.source} | {profile.timeframe}</strong>
+                              <small>{profile.fitLabel}</small>
+                              <div>
+                                <b>{formatNumber(profile.setup_count)}</b>
+                                <em>patterns</em>
+                              </div>
+                              <footer>
+                                {formatNumber(profile.root_count)} roots | {formatNumber(profile.contract_count)} contracts
+                              </footer>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="pattern-family-market-empty">No scan profiles matched this filter.</div>
+                      )}
+                    </section>
+                    </section>
+
+                    <main className="pattern-family-pattern-catalog-workbench">
+                      {selectedPatternCatalogProfile ? (
+                        <>
+                          <section className="pattern-family-pattern-catalog-hero">
+                            <div className="pattern-family-pattern-catalog-hero-title">
+                              <span>{selectedPatternCatalogProfile.displayId}</span>
+                              <div>
+                                <strong>
+                                  {selectedPatternCatalogProfile.source} | {selectedPatternCatalogProfile.timeframe} |{' '}
+                                  {selectedPatternCatalogProfile.fitLabel}
+                                </strong>
+                                <small>
+                                  {formatDate(selectedPatternCatalogProfile.first_d_date)} to{' '}
+                                  {formatDate(selectedPatternCatalogProfile.last_d_date)}
+                                </small>
+                              </div>
+                            </div>
+                            <div className="pattern-family-pattern-catalog-metrics">
+                              <section>
+                                <span>Patterns</span>
+                                <strong>{formatNumber(selectedPatternCatalogProfile.setup_count)}</strong>
+                                <small>selected scan universe</small>
+                              </section>
+                              <section>
+                                <span>Roots</span>
+                                <strong>{formatNumber(selectedPatternCatalogProfile.root_count)}</strong>
+                                <small>tradable roots</small>
+                              </section>
+                              <section>
+                                <span>Contracts</span>
+                                <strong>{formatNumber(selectedPatternCatalogProfile.contract_count)}</strong>
+                                <small>contract symbols</small>
+                              </section>
+                              <section>
+                                <span>Venues</span>
+                                <strong>{formatNumber(selectedPatternCatalogProfile.exchange_count)}</strong>
+                                <small>exchange groups</small>
+                              </section>
+                            </div>
+                          </section>
+
+                          <section className="pattern-family-pattern-catalog-body-grid">
+                            <section className="pattern-family-pattern-catalog-section pattern-family-pattern-catalog-section--symbols">
+                              <header>
+                                <div>
+                                  <span>Exchange / Symbol Drilldown</span>
+                                  <strong>{formatNumber(selectedPatternCatalogRootRows.length)} roots</strong>
+                                </div>
+                                <small>{formatNumber(selectedPatternCatalogExchangeSections.length)} groups</small>
+                              </header>
+                              {selectedPatternCatalogExchangeSections.length ? (
+                                <div className="pattern-family-pattern-catalog-exchanges">
+                                  {selectedPatternCatalogExchangeSections.map((section) => (
+                                    <div
+                                      className={[
+                                        'pattern-family-pattern-catalog-exchange',
+                                        `pattern-family-pattern-catalog-exchange--${getExchangeClassSuffix(section.exchange)}`,
+                                      ].join(' ')}
+                                      key={section.exchange}
+                                    >
+                                      <header>
+                                        <span>{section.exchange}</span>
+                                        <strong>{formatNumber(section.setupCount)}</strong>
+                                        <small>{formatNumber(section.rows.length)} roots</small>
+                                      </header>
+                                      <div>
+                                        {section.rows.map((row) => (
+                                          <article className="pattern-family-pattern-catalog-symbol" key={row.root_symbol}>
+                                            <strong>{row.root_symbol}</strong>
+                                            <span>{formatNumber(row.setup_count)}</span>
+                                            <small>{formatNumber(row.contract_count)} contracts</small>
+                                          </article>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="pattern-family-market-empty">No symbol data loaded for this scan profile.</div>
+                              )}
+                            </section>
+
+                            <div className="pattern-family-pattern-catalog-side-stack">
+                              <section className="pattern-family-pattern-catalog-section">
+                                <header>
+                                  <div>
+                                    <span>Harmonic Types</span>
+                                    <strong>{formatNumber(selectedPatternCatalogHarmonicRows.length)} types</strong>
+                                  </div>
+                                </header>
+                                <div className="pattern-family-pattern-catalog-rank-list">
+                                  {selectedPatternCatalogHarmonicRows.length ? (
+                                    selectedPatternCatalogHarmonicRows.slice(0, 12).map((row) => (
+                                      <div key={row.harmonic_type}>
+                                        <span>{row.harmonic_type}</span>
+                                        <strong>{formatNumber(row.setup_count)}</strong>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <small>No harmonic breakdown loaded.</small>
+                                  )}
+                                </div>
+                              </section>
+                              <section className="pattern-family-pattern-catalog-section">
+                                <header>
+                                  <div>
+                                    <span>Pattern Market</span>
+                                    <strong>{formatNumber(selectedPatternCatalogMarketRows.length)} sides</strong>
+                                  </div>
+                                </header>
+                                <div className="pattern-family-pattern-catalog-rank-list">
+                                  {selectedPatternCatalogMarketRows.length ? (
+                                    selectedPatternCatalogMarketRows.map((row) => (
+                                      <div key={row.market}>
+                                        <span>{row.market}</span>
+                                        <strong>{formatNumber(row.setup_count)}</strong>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <small>No market breakdown loaded.</small>
+                                  )}
+                                </div>
+                              </section>
+                            </div>
+                          </section>
+                        </>
+                      ) : (
+                        <div className="pattern-family-market-empty">Select a scan profile to drill in.</div>
+                      )}
+                    </main>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="pattern-family-route-win-empty">
-                Collapse the canvas after selecting an Entry / Exit Test to see route wins here.
-              </div>
-            )}
-          </section>
-          )}
+            </section>
+          ) : null}
         </section>
 
         <aside
@@ -3879,16 +9026,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
           <header className="pattern-family-inspector-head">
             <div className="pattern-family-inspector-title">
               <span>Trade Inspector</span>
-              <strong>
-                {canvasChartData.rust_patterns?.symbol ??
-                  selectedFamily?.harmonic_type ??
-                  'Family Preview'}
-              </strong>
-              <small>
-                {selectedFamily
-                  ? `${selectedFamily.harmonic_type} / ${selectedFamily.bin} / ${selectedFamily.size_bucket}`
-                  : 'Select a family'}
-              </small>
             </div>
 
             <div className="pattern-family-inspector-status">
@@ -3908,32 +9045,18 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
           </header>
 
           <div className="pattern-family-inspector-body">
-            <section className="pattern-family-trade-ticket">
+            <section
+              className={[
+                'pattern-family-trade-ticket',
+                showRouteLogicPanel && !isRouteLogicCollapsed ? 'pattern-family-trade-ticket--logic-open' : '',
+                showRouteLogicPanel && isRouteLogicCollapsed ? 'pattern-family-trade-ticket--logic-collapsed' : '',
+              ].filter(Boolean).join(' ')}
+            >
               <div className="pattern-family-trade-ticket-head">
                 <div className="pattern-family-trade-ticket-title">
-                  <span>
-                    {inspectorDetailMode === 'trade'
-                      ? 'Current Trade'
-                      : inspectorDetailMode === 'family'
-                        ? 'Family Details'
-                        : 'Entry / Exit Logic'}
-                  </span>
-                  <strong>
-                    {inspectorDetailMode === 'trade'
-                      ? selectedRouteTrade?.symbol ?? 'No trade'
-                      : inspectorDetailMode === 'family'
-                        ? selectedFamily?.harmonic_type ?? 'No family'
-                        : selectedRoute ? `Route #${selectedRoute.result_rank}` : 'No route'}
-                  </strong>
-                  <small>
-                    {inspectorDetailMode === 'trade'
-                      ? selectedRouteTrade
-                        ? `${formatDate(selectedRouteTrade.entry_date)} to ${formatDate(selectedRouteTrade.target_date)}`
-                        : 'Select a trade'
-                      : inspectorDetailMode === 'family'
-                        ? selectedFamily?.family_key ?? 'Select a family'
-                        : selectedRoute?.route_label ?? 'Select a route'}
-                  </small>
+                  <span>{inspectorDetailTitle}</span>
+                  {inspectorDetailHeading ? <strong>{inspectorDetailHeading}</strong> : null}
+                  {inspectorDetailSubheading ? <small>{inspectorDetailSubheading}</small> : null}
                 </div>
 
                 <div className="pattern-family-ticket-toggle" role="tablist" aria-label="Inspector details">
@@ -3943,6 +9066,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                     type="button"
                   >
                     Trade
+                  </button>
+                  <button
+                    className={inspectorDetailMode === 'pattern' ? 'pattern-family-ticket-toggle-button pattern-family-ticket-toggle-button--active' : 'pattern-family-ticket-toggle-button'}
+                    onClick={() => setInspectorDetailMode('pattern')}
+                    type="button"
+                  >
+                    Pattern
                   </button>
                   <button
                     className={inspectorDetailMode === 'family' ? 'pattern-family-ticket-toggle-button pattern-family-ticket-toggle-button--active' : 'pattern-family-ticket-toggle-button'}
@@ -3962,89 +9092,121 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
               </div>
 
               <div className="pattern-family-trade-ticket-grid">
-                {(inspectorDetailMode === 'trade'
-                  ? selectedTradeDetailStats
-                  : inspectorDetailMode === 'family'
-                    ? selectedFamilyDetailStats
-                    : selectedRouteLogicStats
-                ).map((item) => (
-                  <div
+                {inspectorDetailStats.map((item) => (
+                  <button
                     className={[
                       'pattern-family-trade-ticket-cell',
                       item.wide ? 'pattern-family-trade-ticket-cell--wide' : '',
                       item.code ? 'pattern-family-trade-ticket-cell--code' : '',
                       item.tone ? `pattern-family-trade-ticket-cell--${item.tone}` : '',
+                      item.onClick ? 'pattern-family-trade-ticket-cell--button' : '',
                     ].filter(Boolean).join(' ')}
                     key={item.label}
+                    onClick={item.onClick}
+                    type="button"
+                    disabled={!item.onClick}
                   >
                     <span>{item.label}</span>
-                    <strong title={item.value}>{item.value}</strong>
-                  </div>
+                    <strong title={item.title ?? item.value}>{item.value}</strong>
+                  </button>
                 ))}
               </div>
 
-              {selectedRoute ? (
-                <div className="pattern-family-route-logic-panel">
+              {showRouteLogicPanel ? (
+                <div
+                  className={[
+                    'pattern-family-route-logic-panel',
+                    isRouteLogicCollapsed ? 'pattern-family-route-logic-panel--collapsed' : '',
+                  ].filter(Boolean).join(' ')}
+                >
                   <div className="pattern-family-route-logic-title">
-                    <span>Route Logic</span>
-                    <strong title={selectedRoute.route_label}>{selectedRoute.route_label}</strong>
-                    <small title={selectedRoute.route_id}>{selectedRoute.route_id}</small>
+                    <span className="pattern-family-section-bar-title">Route Logic</span>
+                    <span className="pattern-family-section-bar-line" aria-hidden="true" />
+                    <strong
+                      className="pattern-family-section-bar-context"
+                      title={`${selectedRoute.route_label} | ${selectedRoute.route_id}`}
+                    >
+                      {selectedRoute.route_label}
+                    </strong>
+                    <button
+                      aria-label={isRouteLogicCollapsed ? 'Show Route Logic' : 'Hide Route Logic'}
+                      aria-expanded={!isRouteLogicCollapsed}
+                      onClick={() => {
+                        setRouteLogicCollapsed((current) => !current);
+                        setRouteLogicHover(null);
+                      }}
+                      title={isRouteLogicCollapsed ? 'Show Route Logic' : 'Hide Route Logic'}
+                      type="button"
+                    >
+                      <span
+                        className={
+                          isRouteLogicCollapsed
+                            ? 'pattern-family-selected-collapse-arrow pattern-family-selected-collapse-arrow--down'
+                            : 'pattern-family-selected-collapse-arrow pattern-family-selected-collapse-arrow--up'
+                        }
+                      />
+                    </button>
                   </div>
-                  <div className="pattern-family-route-logic-steps">
-                    {selectedRouteOverlayDetails.map((item, index) => (
-                      <div
-                        className={[
-                          'pattern-family-route-logic-step',
-                          item.label === 'Entry' ? 'pattern-family-route-logic-step--entry' : '',
-                          item.tone ? `pattern-family-route-logic-step--${item.tone}` : '',
-                        ].filter(Boolean).join(' ')}
-                        key={item.label}
-                        onMouseEnter={() => setRouteLogicHover(item.label === 'Entry' ? 'entry' : null)}
-                        onMouseLeave={() => setRouteLogicHover(null)}
-                      >
-                        <div className="pattern-family-route-logic-step-head">
-                          <span>{String(index + 1).padStart(2, '0')}</span>
-                          <b>{item.label}</b>
+                  {!isRouteLogicCollapsed ? (
+                    <div className="pattern-family-route-logic-steps">
+                      {selectedRouteOverlayDetails.map((item, index) => (
+                        <div
+                          className={[
+                            'pattern-family-route-logic-step',
+                            item.label === 'Entry' ? 'pattern-family-route-logic-step--entry' : '',
+                            item.tone ? `pattern-family-route-logic-step--${item.tone}` : '',
+                          ].filter(Boolean).join(' ')}
+                          key={item.label}
+                          onMouseEnter={() => setRouteLogicHover(item.label === 'Entry' ? 'entry' : null)}
+                          onMouseLeave={() => setRouteLogicHover(null)}
+                        >
+                          <div className="pattern-family-route-logic-step-head">
+                            <span>{String(index + 1).padStart(2, '0')}</span>
+                            <b>{item.label}</b>
+                          </div>
+                          <strong>{item.action}</strong>
+                          {item.meta ? <em>{item.meta}</em> : null}
+                          <small>{item.value}</small>
                         </div>
-                        <strong>{item.action}</strong>
-                        {item.meta ? <em>{item.meta}</em> : null}
-                        <small>{item.value}</small>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </section>
 
             <section className="pattern-family-chart-bay">
               <div className="pattern-family-chart-stage">
-                {isCanvasLoading ? (
-                  <div className="pattern-family-inspector-empty">Loading family canvas...</div>
-                ) : (
+                {canvasChartData.candles.length && canvasChartData.rust_patterns ? (
                   <>
-                    {canvasError ? <div className="pattern-family-inspector-error">{canvasError}</div> : null}
-                    {canvasChartData.candles.length && canvasChartData.rust_patterns ? (
-                      <div className="pattern-family-full-chart pattern-family-inspector-chart">
-                        <CandleChartPanel
-                          chartData={canvasChartData}
-                          isSectionsExpanded={isCanvasExpanded}
-                          setSectionsExpanded={setCanvasExpanded}
-                          focusMode="prop"
-                          market={canvasChartData.rust_patterns.market ?? selectedFamily?.market ?? 'Bullish'}
-                          overlayTopOffset={0}
-                          showCandles={showCanvasCandles}
-                          presentationMode="graph"
-                          routeLogicHover={routeLogicHover}
-                        />
-                      </div>
-                    ) : canvasPattern ? (
-                      <div className="pattern-family-inspector-empty">
-                        Canvas is waiting for candle data so the XABCD lines can use the chart scale.
-                      </div>
-                    ) : (
-                      <div className="pattern-family-inspector-empty">Select a family to preview its canvas.</div>
-                    )}
+                    <div className="pattern-family-full-chart pattern-family-inspector-chart">
+                      <CandleChartPanel
+                        chartData={canvasChartData}
+                        isSectionsExpanded={isCanvasExpanded}
+                        setSectionsExpanded={setCanvasExpanded}
+                        focusMode="prop"
+                        market={canvasChartData.rust_patterns.market ?? selectedFamily?.market ?? 'Bullish'}
+                        overlayTopOffset={0}
+                        showCandles={showCanvasCandles}
+                        presentationMode="graph"
+                        routeLogicHover={routeLogicHover}
+                      />
+                    </div>
+                    {isCanvasLoading ? (
+                      <div className="pattern-family-chart-loading-badge">Updating candles...</div>
+                    ) : null}
+                    {canvasError ? <div className="pattern-family-chart-error-badge">{canvasError}</div> : null}
                   </>
+                ) : isCanvasLoading ? (
+                  <div className="pattern-family-inspector-empty">Loading family canvas...</div>
+                ) : canvasError ? (
+                  <div className="pattern-family-inspector-error">{canvasError}</div>
+                ) : canvasPattern ? (
+                  <div className="pattern-family-inspector-empty">
+                    Canvas is waiting for candle data so the XABCD lines can use the chart scale.
+                  </div>
+                ) : (
+                  <div className="pattern-family-inspector-empty">Select a family to preview its canvas.</div>
                 )}
               </div>
             </section>
@@ -4077,6 +9239,67 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
             <div className="pattern-family-browse-table">
               {browsePanel === 'families' ? (
                 <>
+                  <section className="pattern-family-controls pattern-family-browse-filters">
+                    <label className="pattern-family-search-field">
+                      <span>Search</span>
+                      <input
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="family key, harmonic, bin, size..."
+                      />
+                    </label>
+                    <label>
+                      <span>Harmonic</span>
+                      <select value={harmonicType} onChange={(event) => setHarmonicType(event.target.value)}>
+                        {harmonicOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Source</span>
+                      <select
+                        value={sourceScope}
+                        onChange={(event) => {
+                          setSourceScope(event.target.value);
+                          setYearFilter('All');
+                        }}
+                      >
+                        {SOURCE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Timeframe</span>
+                      <select value={timeframeFilter} onChange={(event) => setTimeframeFilter(event.target.value)}>
+                        {TIMEFRAME_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Year</span>
+                      <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)}>
+                        <option value="All">All</option>
+                        {yearOptions.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Min Setups</span>
+                      <input value={minSetups} onChange={(event) => setMinSetups(event.target.value)} />
+                    </label>
+                  </section>
                   <div className="pattern-family-row pattern-family-row--head">
                     <span>Family</span>
                     <span>Setups</span>
@@ -4175,18 +9398,94 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
 
               {browsePanel === 'patterns' ? (
                 <>
+                  <section className="pattern-family-controls pattern-family-browse-filters pattern-family-browse-filters--patterns">
+                    <label>
+                      <span>Family Scope</span>
+                      <select value={patternBrowseScope} onChange={(event) => setPatternBrowseScope(event.target.value)}>
+                        <option value="selected">Selected Family</option>
+                        <option value="all">All Families</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Symbol</span>
+                      <select
+                        disabled={isPatternBrowseLoading}
+                        value={patternBrowseSymbol}
+                        onChange={(event) => setPatternBrowseSymbol(event.target.value)}
+                      >
+                        {patternBrowseSymbolOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="pattern-family-search-field">
+                      <span>Search</span>
+                      <input
+                        value={patternBrowseSearch}
+                        onChange={(event) => setPatternBrowseSearch(event.target.value)}
+                        placeholder="pattern, family, market..."
+                      />
+                    </label>
+                    <div className="pattern-family-browse-actions">
+                      <button
+                        disabled={!canApplyPatternNavigation}
+                        onClick={applyPatternNavigationSet}
+                        type="button"
+                      >
+                        Apply
+                      </button>
+                      <button
+                        disabled={!appliedPatternNavigation && patternBrowseSymbol === 'All' && !patternBrowseSearch.trim()}
+                        onClick={clearPatternNavigationSet}
+                        type="button"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="pattern-family-browse-filter-summary">
+                      <span>Showing</span>
+                      <strong>
+                        {isPatternBrowseLoading
+                          ? 'Loading...'
+                          : patternBrowseSearch.trim()
+                            ? `${formatNumber(visiblePatternBrowseRows.length)} / ${formatNumber(patternBrowseRows.length)} loaded`
+                            : `${formatNumber(patternBrowseRows.length)} / ${formatNumber(patternBrowseMeta.totalCount || patternBrowseRows.length)}`}
+                      </strong>
+                      <small title={appliedPatternNavigation?.label ?? undefined}>
+                        {appliedPatternNavigation
+                          ? `Nav: ${appliedPatternNavigation.label}`
+                          : patternBrowseScope === 'selected'
+                            ? selectedFamily?.family_key ?? selectedFamilyKey ?? 'No selected family'
+                            : patternBrowseMeta.hasMore
+                              ? 'All families | first rows'
+                              : 'All families'}
+                      </small>
+                    </div>
+                  </section>
                   <div className="pattern-family-pattern-row pattern-family-pattern-row--head">
                     <span>Pattern</span>
+                    <span>Twin</span>
+                    <span>Family</span>
                     <span>Symbol</span>
                     <span>Market</span>
                     <span>Harmonic</span>
                     <span>D Date</span>
                     <span>Trade</span>
                   </div>
-                  {familyPatterns.length ? (
-                    familyPatterns.map((pattern) => {
+                  {patternBrowseError ? (
+                    <div className="pattern-family-empty">{patternBrowseError}</div>
+                  ) : isPatternBrowseLoading ? (
+                    <div className="pattern-family-empty">Loading patterns...</div>
+                  ) : visiblePatternBrowseRows.length ? (
+                    visiblePatternBrowseRows.map((pattern) => {
                       const patternKey = getFamilyPatternKey(pattern);
-                      const matchingTrade = routeTrades.find((trade) => patternMatchesTrade(pattern, trade));
+                      const patternFamilyKey = getPatternFamilyKey(pattern);
+                      const matchingTrade =
+                        patternFamilyKey === selectedFamilyKey
+                          ? routeTrades.find((trade) => patternMatchesTrade(pattern, trade))
+                          : null;
 
                       return (
                         <button
@@ -4195,6 +9494,18 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                           }`}
                           key={patternKey}
                           onClick={() => {
+                            setAppliedPatternNavigation({
+                              familyKey: patternBrowseScope === 'selected' ? selectedFamilyKey : null,
+                              label: patternBrowseFilterLabel,
+                              rows: visiblePatternBrowseRows,
+                              scope: patternBrowseScope,
+                              search: patternBrowseSearch.trim(),
+                              symbol: patternBrowseSymbol,
+                            });
+                            if (patternFamilyKey && patternFamilyKey !== selectedFamilyKey) {
+                              setSelectedFamilyKey(patternFamilyKey);
+                              setSelectedRouteTradeKey(null);
+                            }
                             setSelectedFamilyPatternKey(patternKey);
                             if (matchingTrade) {
                               setSelectedRouteTradeKey(getRouteTradeKey(matchingTrade));
@@ -4206,6 +9517,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                           <span className="pattern-family-id" title={pattern.pattern_id ?? pattern.pattern_group_id ?? ''}>
                             {pattern.pattern_id ?? pattern.pattern_group_id ?? 'N/A'}
                           </span>
+                          <span title={pattern.event_id ?? ''}>
+                            {Number(pattern.event_sister_count) > 1
+                              ? `${pattern.event_rank ?? '-'} / ${pattern.event_sister_count}`
+                              : 'Solo'}
+                          </span>
+                          <span className="pattern-family-id" title={patternFamilyKey ?? ''}>
+                            {patternFamilyKey ?? 'N/A'}
+                          </span>
                           <strong>{pattern.symbol ?? 'N/A'}</strong>
                           <span>{pattern.market ?? 'N/A'}</span>
                           <span>{pattern.harmonic_type ?? selectedFamily?.harmonic_type ?? 'N/A'}</span>
@@ -4215,7 +9534,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null } = {}) => {
                       );
                     })
                   ) : (
-                    <div className="pattern-family-empty">No family patterns loaded.</div>
+                    <div className="pattern-family-empty">No patterns matched this browse filter.</div>
                   )}
                 </>
               ) : null}

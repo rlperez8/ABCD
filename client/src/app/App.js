@@ -40,6 +40,7 @@ const APP_VIEW_SIMULATOR = 'simulator';
 const APP_VIEW_PATTERN_DISCOVERY = 'pattern-discovery';
 const APP_VIEW_RULE_LAB = 'rule-lab';
 const APP_VIEW_FAMILY_UNIVERSE = 'family-universe';
+const APP_VIEW_ENTRY_EXIT = 'entry-exit';
 const APP_VIEW_PHASE1_OUTCOMES = 'phase1-outcomes';
 const APP_VIEW_STORAGE = 'storage';
 const APP_VIEW_ADMIN = 'admin';
@@ -2318,6 +2319,17 @@ const App = () => {
               <button
                 type="button"
                 className={
+                  activeAppView === APP_VIEW_ENTRY_EXIT
+                    ? 'station-button station-button--active'
+                    : 'station-button'
+                }
+                onClick={() => setActiveAppView(APP_VIEW_ENTRY_EXIT)}
+              >
+                Entry / Exit
+              </button>
+              <button
+                type="button"
+                className={
                   activeAppView === APP_VIEW_PHASE1_OUTCOMES
                     ? 'station-button station-button--active'
                     : 'station-button'
@@ -2377,8 +2389,10 @@ const App = () => {
             <StorageDashboardPage />
           ) : activeAppView === APP_VIEW_ADMIN ? (
             <AdminRunsPage />
+          ) : activeAppView === APP_VIEW_ENTRY_EXIT ? (
+            <PatternFamilyUniversePage key="entry-exit-workspace" entryExitOnly />
           ) : activeAppView === APP_VIEW_FAMILY_UNIVERSE ? (
-            <PatternFamilyUniversePage />
+            <PatternFamilyUniversePage key="family-universe-workspace" />
           ) : activeAppView === APP_VIEW_PHASE1_OUTCOMES ? (
             <Phase1OutcomesPage
               onOpenSimulatorFamily={(familyId) => {

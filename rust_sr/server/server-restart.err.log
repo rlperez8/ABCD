@@ -1,3 +1,76 @@
    Compiling server v0.1.0 (C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\server)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.04s
+warning: field `max_forward_bars` is never read
+    --> src\main.rs:1526:5
+     |
+1502 | struct Phase1YearlyRouteContext {
+     |        ------------------------ field in this struct
+...
+1526 |     max_forward_bars: i64,
+     |     ^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `ensure_entry_exit_template_build_coverage_ui_table` is never used
+    --> src\main.rs:8059:10
+     |
+8059 | async fn ensure_entry_exit_template_build_coverage_ui_table(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `ensure_entry_exit_template_build_coverage_rows_ui_table` is never used
+    --> src\main.rs:8087:10
+     |
+8087 | async fn ensure_entry_exit_template_build_coverage_rows_ui_table(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `ensure_entry_exit_template_build_summary_ui_table` is never used
+    --> src\main.rs:8119:10
+     |
+8119 | async fn ensure_entry_exit_template_build_summary_ui_table(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `refresh_entry_exit_template_build_coverage_ui` is never used
+    --> src\main.rs:8154:10
+     |
+8154 | async fn refresh_entry_exit_template_build_coverage_ui(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `refresh_entry_exit_template_build_coverage_rows_ui` is never used
+    --> src\main.rs:8227:10
+     |
+8227 | async fn refresh_entry_exit_template_build_coverage_rows_ui(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `refresh_entry_exit_template_build_summary_ui` is never used
+    --> src\main.rs:8464:10
+     |
+8464 | async fn refresh_entry_exit_template_build_summary_ui(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `fetch_entry_exit_template_build_summary_ui` is never used
+    --> src\main.rs:8570:10
+     |
+8570 | async fn fetch_entry_exit_template_build_summary_ui(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `fetch_entry_exit_template_build_coverage_rows_ui` is never used
+    --> src\main.rs:8677:10
+     |
+8677 | async fn fetch_entry_exit_template_build_coverage_rows_ui(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `fetch_entry_exit_template_build_coverage_ui` is never used
+    --> src\main.rs:8743:10
+     |
+8743 | async fn fetch_entry_exit_template_build_coverage_ui(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `fetch_entry_exit_template_build_coverage_fallback` is never used
+    --> src\main.rs:8777:10
+     |
+8777 | async fn fetch_entry_exit_template_build_coverage_fallback(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `server` (bin "server") generated 11 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.58s
      Running `target\debug\server.exe`
+error

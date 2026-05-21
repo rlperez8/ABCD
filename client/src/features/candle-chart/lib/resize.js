@@ -267,7 +267,7 @@ const getGraphFocusBounds = (rustPattern) => {
   const minFocusPrice = Math.min(...graphPrices);
   const maxFocusPrice = Math.max(...graphPrices);
   const pricePadding = Math.max(
-    (maxFocusPrice - minFocusPrice) * 0.035,
+    (maxFocusPrice - minFocusPrice) * 0.2,
     getMinimumFitPriceSpan(maxFocusPrice, GRAPH_MIN_FIT_PRICE_SPAN_RATIO)
   );
 
@@ -290,8 +290,13 @@ const applyHorizontalFit = (chartStateRef, minIndex, maxIndex, options = {}) => 
         Math.max(chartState.canvas.width * 0.08, 12)
       );
   const drawableWidth = Math.max(chartState.canvas.width - horizontalPadding * 2, 1);
-  const edgeBufferCandles = isGraphFocus ? 0.5 : options.focusMode === 'reversal' ? 2 : 4;
-  const spanInCandles = Math.max(maxIndex - minIndex + 1 + edgeBufferCandles * 2, 1);
+  const coreSpanInCandles = Math.max(maxIndex - minIndex + 1, 1);
+  const edgeBufferCandles = isGraphFocus
+    ? Math.max(16, Math.min(54, coreSpanInCandles * 0.35))
+    : options.focusMode === 'reversal'
+      ? 2
+      : 4;
+  const spanInCandles = Math.max(coreSpanInCandles + edgeBufferCandles * 2, 1);
   const completeWidth = clamp(
     drawableWidth / spanInCandles,
     MIN_FIT_COMPLETE_CANDLE_WIDTH,

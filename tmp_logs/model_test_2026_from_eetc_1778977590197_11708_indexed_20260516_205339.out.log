@@ -1,0 +1,47 @@
+Adding index idx_entry_exit_template_results_run_family_template for family-template model selection...
+Building family selection model
+model_test_id=eefr-1778982901745-19684
+train_run_id=eetc-1778977590197-11708 test_year=2026 source=futures min_train_tests=25
+prop_filter=on trade_bar=50 tests / 24.0% WR / 0.200R avg watchlist_bar=25 tests / 21.0% WR / 0.050R avg
+symbol_filter=on bar=1000 tests / 23.0% WR / 0.050R avg
+selected 152 family -> template mappings from 80 templates (trade=121 watchlist=31 skip=0)
+symbol filter roots trade=29 skip=13 skipped=ES(192356 tests/19.6%/-0.019R), HO(798 tests/27.6%/0.362R), NQ(468958 tests/18.6%/-0.071R), PA(304 tests/38.2%/0.908R), RB(380 tests/27.1%/0.350R), YM(321480 tests/22.9%/0.143R), ZBH6(38 tests/36.8%/0.842R), ZBU5(722 tests/37.5%/0.877R), ZBZ5(950 tests/33.9%/0.695R), ZNM4(912 tests/29.8%/0.488R), ZNU4(912 tests/32.9%/0.645R), ZNU5(608 tests/35.4%/0.768R), ZNZ5(456 tests/37.5%/0.875R)
+loaded 18175 patterns -> 12171 twin-aware decision events for 2026
+processed 500/12171 routed=244 wins=79 losses=165 no_entry=0 avg_r=0.619
+processed 1500/12171 routed=732 wins=231 losses=501 no_entry=0 avg_r=0.578
+processed 2000/12171 routed=1037 wins=330 losses=707 no_entry=0 avg_r=0.591
+processed 2500/12171 routed=1326 wins=421 losses=905 no_entry=0 avg_r=0.587
+processed 4000/12171 routed=2147 wins=664 losses=1483 no_entry=0 avg_r=0.546
+processed 4500/12171 routed=2395 wins=753 losses=1642 no_entry=0 avg_r=0.572
+processed 5000/12171 routed=2646 wins=832 losses=1813 no_entry=1 avg_r=0.573
+processed 6000/12171 routed=3207 wins=979 losses=2227 no_entry=1 avg_r=0.527
+processed 6500/12171 routed=3507 wins=1046 losses=2460 no_entry=1 avg_r=0.492
+processed 7000/12171 routed=3800 wins=1117 losses=2682 no_entry=1 avg_r=0.470
+processed 9000/12171 routed=4932 wins=1418 losses=3509 no_entry=5 avg_r=0.439
+processed 9500/12171 routed=5210 wins=1494 losses=3711 no_entry=5 avg_r=0.435
+processed 10500/12171 routed=5769 wins=1644 losses=4120 no_entry=5 avg_r=0.426
+processed 11500/12171 routed=6309 wins=1788 losses=4515 no_entry=6 avg_r=0.418
+processed 12000/12171 routed=6566 wins=1880 losses=4680 no_entry=6 avg_r=0.433
+
+Family selection model 2026 result
+model_test_id=eefr-1778982901745-19684
+families_selected=152
+trade_choices=121
+watchlist_choices=31
+skip_choices=0
+symbol_trade_roots=29
+symbol_skip_roots=13
+patterns_scanned=12171
+routed_patterns=6657
+no_route_patterns=291
+skipped_non_trade_patterns=400
+skipped_symbol_patterns=4823
+wins=1909
+losses=4742
+no_entry=6
+win_rate=28.68%
+avg_r=0.4349R
+sum_r=2895.00R
+best_r=4.00R
+worst_r=-1.00R
+elapsed=161.48s

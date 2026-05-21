@@ -1,13 +1,14 @@
-use std::env;
-use std::time::Duration;
-
 use sqlx::mysql::{MySqlPool, MySqlPoolOptions};
 use sqlx::MySqlConnection;
-use tokio::time::sleep;
+use sqlx::Row;
+use std::env;
 
-const ENTRY_EXIT_TEMPLATE_TABLES: [&str; 5] = [
+const ENTRY_EXIT_TEMPLATE_TABLES: [&str; 8] = [
     "entry_exit_template_condition_stats",
     "entry_exit_template_ui_stats",
+    "entry_exit_template_build_coverage_rows_ui",
+    "entry_exit_template_build_coverage_ui",
+    "entry_exit_template_build_summary_ui",
     "entry_exit_template_results",
     "entry_exit_templates",
     "entry_exit_template_creator_runs",
@@ -19,6 +20,13 @@ fn database_url_from_env() -> Result<String, Box<dyn std::error::Error>> {
         .map_err(|_| {
             "Missing required environment variable: ABCD_DATABASE_URL or DATABASE_URL".into()
         })
+}
+
+fn quoted_identifier(identifier: &str) -> String {
+    debug_assert!(identifier
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_'));
+    format!("`{identifier}`")
 }
 
 async fn table_exists(pool: &MySqlPool, table: &str) -> Result<bool, sqlx::Error> {
@@ -37,43 +45,43 @@ async fn table_exists(pool: &MySqlPool, table: &str) -> Result<bool, sqlx::Error
     Ok(exists > 0)
 }
 
-async fn table_count(pool: &MySqlPool, table: &str) -> Result<i64, sqlx::Error> {
-    let sql = format!("SELECT COUNT(*) FROM {table}");
-    sqlx::query_scalar::<_, i64>(&sql).fetch_one(pool).await
-}
-
-fn is_lock_timeout(error: &sqlx::Error) -> bool {
-    match error {
-        sqlx::Error::Database(db_error) => {
-            db_error.code().as_deref() == Some("HY000") && db_error.message().contains("1205")
-        }
-        _ => false,
-    }
-}
-
 async fn clear_table_with_retry(
     conn: &mut MySqlConnection,
     table: &str,
 ) -> Result<(), sqlx::Error> {
     let sql = format!("TRUNCATE TABLE {table}");
+    sqlx::query(&sql).execute(&mut *conn).await?;
+    println!("truncated {table}");
+    Ok(())
+}
 
-    for attempt in 1..=3 {
-        match sqlx::query(&sql).execute(&mut *conn).await {
-            Ok(_) => {
-                println!("truncated {table}");
-                return Ok(());
-            }
-            Err(error) if is_lock_timeout(&error) && attempt < 3 => {
-                println!(
-                    "lock timeout truncating {table}; retrying attempt {}",
-                    attempt + 1
-                );
-                sleep(Duration::from_secs(2 * attempt)).await;
-            }
-            Err(error) => return Err(error),
-        }
-    }
+async fn dynamic_result_tables(pool: &MySqlPool) -> Result<Vec<String>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME LIKE 'entry_exit_template_results_eetc\\_%' ESCAPE '\\'
+        ORDER BY TABLE_NAME
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
 
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| row.try_get::<String, _>("TABLE_NAME").ok())
+        .collect())
+}
+
+async fn drop_dynamic_result_table(
+    conn: &mut MySqlConnection,
+    table: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(&format!("DROP TABLE {}", quoted_identifier(table)))
+        .execute(&mut *conn)
+        .await?;
+    println!("dropped {table}");
     Ok(())
 }
 
@@ -87,20 +95,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut existing_tables = Vec::new();
-    println!("Clearing Entry/Exit template creator tables:");
+    println!("Clearing Entry/Exit build tables without pre-counting:");
     for table in ENTRY_EXIT_TEMPLATE_TABLES {
         if table_exists(&pool, table).await? {
-            println!("before {table}={}", table_count(&pool, table).await?);
+            println!("found {table}");
             existing_tables.push(table);
         } else {
-            println!("before {table}=MISSING");
+            println!("missing {table}");
         }
     }
+    let dynamic_tables = dynamic_result_tables(&pool).await?;
 
     let mut conn = pool.acquire().await?;
     sqlx::query("SET FOREIGN_KEY_CHECKS = 0")
         .execute(&mut *conn)
         .await?;
+
+    for table in dynamic_tables {
+        drop_dynamic_result_table(&mut conn, &table).await?;
+    }
 
     let mut clear_result = Ok(());
     for table in &existing_tables {
@@ -117,9 +130,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(conn);
     clear_result?;
 
-    println!("Counts after clear:");
+    println!("Cleared tables:");
     for table in existing_tables {
-        println!("after {table}={}", table_count(&pool, table).await?);
+        println!("{table}");
     }
 
     Ok(())

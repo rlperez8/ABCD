@@ -1,0 +1,71 @@
+   Compiling abcd v0.1.0 (C:\Users\rpere\Desktop\abcd_local_v3_github_shallow_20260502_165339\rust_sr\abcd)
+warning: function `refresh_entry_exit_template_ui_stats` is never used
+    --> src\bin\create_entry_exit_templates.rs:1891:10
+     |
+1891 | async fn refresh_entry_exit_template_ui_stats(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `ConditionAggregate` is never constructed
+    --> src\bin\create_entry_exit_templates.rs:2632:8
+     |
+2632 | struct ConditionAggregate {
+     |        ^^^^^^^^^^^^^^^^^^
+
+warning: methods `record` and `avg_r` are never used
+    --> src\bin\create_entry_exit_templates.rs:2657:8
+     |
+2656 | impl ConditionAggregate {
+     | ----------------------- methods in this implementation
+2657 |     fn record(&mut self, outcome: &str, result_r: Option<f64>) {
+     |        ^^^^^^
+...
+2677 |     fn avg_r(&self) -> f64 {
+     |        ^^^^^
+
+warning: function `first_clean_condition_value` is never used
+    --> src\bin\create_entry_exit_templates.rs:2693:4
+     |
+2693 | fn first_clean_condition_value(primary: Option<String>, fallback: Option<String>) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `trend_condition_value` is never used
+    --> src\bin\create_entry_exit_templates.rs:2702:4
+     |
+2702 | fn trend_condition_value(value: Option<i64>) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `confirm_year_value` is never used
+    --> src\bin\create_entry_exit_templates.rs:2710:4
+     |
+2710 | fn confirm_year_value(value: Option<NaiveDateTime>) -> String {
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `confirm_quarter_value` is never used
+    --> src\bin\create_entry_exit_templates.rs:2716:4
+     |
+2716 | fn confirm_quarter_value(value: Option<NaiveDateTime>) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `pattern_length_bucket` is never used
+    --> src\bin\create_entry_exit_templates.rs:2737:4
+     |
+2737 | fn pattern_length_bucket(value: Option<i64>) -> String {
+     |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `record_condition` is never used
+    --> src\bin\create_entry_exit_templates.rs:2749:4
+     |
+2749 | fn record_condition(
+     |    ^^^^^^^^^^^^^^^^
+
+warning: function `refresh_entry_exit_template_condition_stats` is never used
+    --> src\bin\create_entry_exit_templates.rs:2767:10
+     |
+2767 | async fn refresh_entry_exit_template_condition_stats(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `abcd` (bin "create_entry_exit_templates") generated 10 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.67s
+     Running `target\debug\create_entry_exit_templates.exe --source futures --timeframe 1m --start-year 2024 --end-year 2025 --limit 0 --event-result-policy first`

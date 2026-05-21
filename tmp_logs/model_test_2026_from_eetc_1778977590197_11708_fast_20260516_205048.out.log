@@ -1,0 +1,5 @@
+Building family selection model
+model_test_id=eefr-1778982650783-15288
+train_run_id=eetc-1778977590197-11708 test_year=2026 source=futures min_train_tests=25
+prop_filter=on trade_bar=50 tests / 24.0% WR / 0.200R avg watchlist_bar=25 tests / 21.0% WR / 0.050R avg
+symbol_filter=on bar=1000 tests / 23.0% WR / 0.050R avg

@@ -1,0 +1,62 @@
+Building family selection model
+model_test_id=eefr-1779328347748-73444
+train_run_id=eetc-1779246590881-200312 test_year=2026 source=futures timeframe=1m min_train_tests=25
+reuse_model_test_id=eepb-1779327911377-307860
+prop_filter=on trade_bar=50 tests / 24.0% WR / 0.200R avg watchlist_bar=25 tests / 21.0% WR / 0.050R avg
+symbol_filter=on bar=1000 tests / 23.0% WR / 0.050R avg
+one_trade_per_root_symbol=on
+trade_cooldown_minutes=5
+daily_loss_lockout=on
+manual_family_skips=1 applied=1 keys=3ee7f252240bafa1
+selected 174 family -> template mappings from 42 templates (trade=147 watchlist=26 skip=1)
+symbol filter roots trade=20 skip=7 skipped=CL(158764 tests/23.9%/0.192R), ES(192356 tests/19.6%/-0.021R), HO(798 tests/28.3%/0.399R), NQ(468958 tests/18.6%/-0.072R), PA(304 tests/37.5%/0.875R), RB(380 tests/28.4%/0.412R), YM(321480 tests/22.9%/0.143R)
+loaded 18175 patterns -> 12171 twin-aware decision events for 2026
+processed 1500/12171 routed=331 wins=104 losses=227 no_entry=0 overlap_skip=326 avg_r=0.571
+processed 2500/12171 routed=644 wins=223 losses=421 no_entry=0 overlap_skip=546 avg_r=0.731
+processed 5000/12171 routed=1393 wins=485 losses=908 no_entry=0 overlap_skip=954 avg_r=0.742
+processed 6500/12171 routed=1763 wins=598 losses=1165 no_entry=0 overlap_skip=1277 avg_r=0.697
+processed 7000/12171 routed=1926 wins=642 losses=1284 no_entry=0 overlap_skip=1326 avg_r=0.667
+processed 9500/12171 routed=2604 wins=855 losses=1748 no_entry=1 overlap_skip=1748 avg_r=0.642
+processed 12000/12171 routed=3303 wins=1072 losses=2229 no_entry=2 overlap_skip=2168 avg_r=0.624
+saving sim run summary...
+saved sim run summary
+loading replay trades...
+storing prop summary...
+storing equity points...
+storing daily R...
+storing hourly performance...
+storing trade cadence...
+storing loss clustering...
+storing symbol contribution...
+storing family contribution...
+storing streaks...
+
+Family selection model 2026 result
+model_test_id=eefr-1779328347748-73444
+families_selected=174
+trade_choices=147
+watchlist_choices=26
+skip_choices=1
+symbol_trade_roots=20
+symbol_skip_roots=7
+patterns_scanned=12171
+routed_patterns=3353
+no_route_patterns=167
+skipped_non_trade_patterns=523
+skipped_symbol_patterns=5929
+skipped_overlap_patterns=2199
+one_trade_at_a_time=off
+one_trade_per_root_symbol=on
+one_trade_per_minute=off
+trade_cooldown_minutes=5
+daily_loss_lockout=on
+wins=1086
+losses=2265
+no_entry=2
+win_rate=32.39%
+avg_r=0.6203R
+sum_r=2080.00R
+best_r=4.00R
+worst_r=-1.00R
+prop_cycles=69 passed=67 daily_fails=0 drawdown_fails=1 incomplete=1 prop_pass_rate=97.10% closed_prop_pass_rate=98.53%
+elapsed=24.05s
