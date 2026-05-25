@@ -48,6 +48,27 @@ struct PropCycleRow {
     worst_day_r: f64,
 }
 
+struct TestFrequencyRow {
+    cycle_number: i64,
+    outcome: String,
+    start_at: NaiveDateTime,
+    end_at: NaiveDateTime,
+    duration_minutes: f64,
+    calendar_days: i64,
+    active_trade_days: i64,
+    events: i64,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    sum_r: f64,
+    avg_trades_per_calendar_day: f64,
+    avg_trades_per_active_day: f64,
+    avg_trades_per_hour: f64,
+    max_drawdown_r: f64,
+    worst_day_r: f64,
+}
+
 struct EquityPointRow {
     point_index: i64,
     event_date: NaiveDateTime,
@@ -199,7 +220,11 @@ struct StreakRow {
 struct OpenCycle {
     cycle_number: i64,
     start_date: NaiveDate,
+    start_at: NaiveDateTime,
     current_date: NaiveDate,
+    current_at: NaiveDateTime,
+    active_trade_dates: HashSet<NaiveDate>,
+    actual_trades: i64,
     trades: i64,
     wins: i64,
     losses: i64,
@@ -232,11 +257,16 @@ fn normalize_root_symbol(value: &str) -> String {
 }
 
 impl OpenCycle {
-    fn new(cycle_number: i64, date: NaiveDate) -> Self {
+    fn new(cycle_number: i64, event_at: NaiveDateTime) -> Self {
+        let date = event_at.date();
         Self {
             cycle_number,
             start_date: date,
+            start_at: event_at,
             current_date: date,
+            current_at: event_at,
+            active_trade_dates: HashSet::new(),
+            actual_trades: 0,
             trades: 0,
             wins: 0,
             losses: 0,
@@ -251,6 +281,7 @@ impl OpenCycle {
 
     fn apply_trade(&mut self, trade: &ReplayTrade) {
         let date = trade.event_date.date();
+        self.current_at = trade.event_date;
         if self.current_date != date {
             self.current_date = date;
             self.daily_r = 0.0;
@@ -258,8 +289,12 @@ impl OpenCycle {
 
         self.trades += 1;
         if trade.outcome == "pass" {
+            self.actual_trades += 1;
+            self.active_trade_dates.insert(date);
             self.wins += 1;
         } else if trade.outcome == "fail" {
+            self.actual_trades += 1;
+            self.active_trade_dates.insert(date);
             self.losses += 1;
         } else {
             self.no_entries += 1;
@@ -283,6 +318,56 @@ impl OpenCycle {
             losses: self.losses,
             no_entries: self.no_entries,
             sum_r: self.equity_r,
+            max_drawdown_r: self.max_drawdown_r,
+            worst_day_r: self.worst_day_r,
+        }
+    }
+
+    fn finish_frequency(&self, outcome: &str) -> TestFrequencyRow {
+        let duration_seconds = self
+            .current_at
+            .signed_duration_since(self.start_at)
+            .num_seconds()
+            .max(0) as f64;
+        let duration_minutes = duration_seconds / 60.0;
+        let duration_hours = duration_seconds / 3600.0;
+        let calendar_days = self
+            .current_date
+            .signed_duration_since(self.start_date)
+            .num_days()
+            .max(0)
+            + 1;
+        let active_trade_days = self.active_trade_dates.len() as i64;
+
+        TestFrequencyRow {
+            cycle_number: self.cycle_number,
+            outcome: outcome.to_string(),
+            start_at: self.start_at,
+            end_at: self.current_at,
+            duration_minutes,
+            calendar_days,
+            active_trade_days,
+            events: self.trades,
+            trades: self.actual_trades,
+            wins: self.wins,
+            losses: self.losses,
+            no_entries: self.no_entries,
+            sum_r: self.equity_r,
+            avg_trades_per_calendar_day: if calendar_days > 0 {
+                self.actual_trades as f64 / calendar_days as f64
+            } else {
+                0.0
+            },
+            avg_trades_per_active_day: if active_trade_days > 0 {
+                self.actual_trades as f64 / active_trade_days as f64
+            } else {
+                0.0
+            },
+            avg_trades_per_hour: if duration_hours > 0.0 {
+                self.actual_trades as f64 / duration_hours
+            } else {
+                self.actual_trades as f64
+            },
             max_drawdown_r: self.max_drawdown_r,
             worst_day_r: self.worst_day_r,
         }
@@ -773,6 +858,42 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
 
     sqlx::query(
         r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_test_frequency (
+            sim_run_id VARCHAR(64) NOT NULL,
+            cycle_number BIGINT NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            outcome VARCHAR(32) NOT NULL,
+            start_at DATETIME NOT NULL,
+            end_at DATETIME NOT NULL,
+            duration_minutes DOUBLE NOT NULL DEFAULT 0,
+            calendar_days BIGINT NOT NULL DEFAULT 0,
+            active_trade_days BIGINT NOT NULL DEFAULT 0,
+            events BIGINT NOT NULL DEFAULT 0,
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            sum_r DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_calendar_day DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_active_day DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_hour DOUBLE NOT NULL DEFAULT 0,
+            max_drawdown_r DOUBLE NOT NULL DEFAULT 0,
+            worst_day_r DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, cycle_number),
+            INDEX idx_entry_exit_sim_test_frequency_playbook (playbook_id, start_at),
+            INDEX idx_entry_exit_sim_test_frequency_duration (sim_run_id, duration_minutes),
+            INDEX idx_entry_exit_sim_test_frequency_trades (sim_run_id, trades)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
         CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_loss_gap_buckets (
             sim_run_id VARCHAR(64) NOT NULL,
             bucket_key VARCHAR(32) NOT NULL,
@@ -1119,6 +1240,7 @@ async fn load_trades(pool: &MySqlPool, sim_run_id: &str) -> Result<Vec<ReplayTra
 fn close_cycle(
     summary: &mut PropSummary,
     cycles: &mut Vec<PropCycleRow>,
+    frequency_rows: &mut Vec<TestFrequencyRow>,
     cycle: &OpenCycle,
     outcome: &str,
 ) {
@@ -1131,26 +1253,27 @@ fn close_cycle(
         _ => summary.incomplete += 1,
     }
     cycles.push(cycle.finish(outcome));
+    frequency_rows.push(cycle.finish_frequency(outcome));
 }
 
 fn compute_prop_summary(
     trades: &[ReplayTrade],
     daily_loss_lockout: bool,
-) -> (PropSummary, Vec<PropCycleRow>) {
+) -> (PropSummary, Vec<PropCycleRow>, Vec<TestFrequencyRow>) {
     const PROFIT_TARGET_R: f64 = 30.0;
     const MAX_DRAWDOWN_R: f64 = 20.0;
     const DAILY_LOSS_R: f64 = 10.0;
 
     let mut summary = PropSummary::default();
     let mut cycles = Vec::new();
+    let mut frequency_rows = Vec::new();
     let mut active_cycle: Option<OpenCycle> = None;
     let mut current_loss_streak = 0_i64;
     let mut next_cycle_number = 1_i64;
 
     for trade in trades {
-        let date = trade.event_date.date();
         let cycle = active_cycle.get_or_insert_with(|| {
-            let cycle = OpenCycle::new(next_cycle_number, date);
+            let cycle = OpenCycle::new(next_cycle_number, trade.event_date);
             next_cycle_number += 1;
             cycle
         });
@@ -1175,7 +1298,13 @@ fn compute_prop_summary(
 
         if let Some(outcome) = close_cycle_as {
             if let Some(finished_cycle) = active_cycle.take() {
-                close_cycle(&mut summary, &mut cycles, &finished_cycle, outcome);
+                close_cycle(
+                    &mut summary,
+                    &mut cycles,
+                    &mut frequency_rows,
+                    &finished_cycle,
+                    outcome,
+                );
             }
         }
     }
@@ -1184,6 +1313,7 @@ fn compute_prop_summary(
         close_cycle(
             &mut summary,
             &mut cycles,
+            &mut frequency_rows,
             &finished_cycle,
             "open_incomplete",
         );
@@ -1201,7 +1331,7 @@ fn compute_prop_summary(
         0.0
     };
 
-    (summary, cycles)
+    (summary, cycles, frequency_rows)
 }
 
 fn compute_equity_points(trades: &[ReplayTrade], daily_loss_lockout: bool) -> Vec<EquityPointRow> {
@@ -1215,9 +1345,8 @@ fn compute_equity_points(trades: &[ReplayTrade], daily_loss_lockout: bool) -> Ve
     let mut next_cycle_number = 1_i64;
 
     for (index, trade) in trades.iter().enumerate() {
-        let date = trade.event_date.date();
         let cycle = active_cycle.get_or_insert_with(|| {
-            let cycle = OpenCycle::new(next_cycle_number, date);
+            let cycle = OpenCycle::new(next_cycle_number, trade.event_date);
             next_cycle_number += 1;
             cycle
         });
@@ -2304,6 +2433,75 @@ async fn store_trade_cadence(
     Ok(())
 }
 
+async fn store_test_frequency_rows(
+    pool: &MySqlPool,
+    sim_run_id: &str,
+    playbook_id: Option<&str>,
+    build_id: &str,
+    rows: &[TestFrequencyRow],
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM entry_exit_playbook_sim_test_frequency WHERE sim_run_id = ?")
+        .bind(sim_run_id)
+        .execute(pool)
+        .await?;
+
+    for row in rows {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_playbook_sim_test_frequency (
+                sim_run_id,
+                cycle_number,
+                playbook_id,
+                build_id,
+                outcome,
+                start_at,
+                end_at,
+                duration_minutes,
+                calendar_days,
+                active_trade_days,
+                events,
+                trades,
+                wins,
+                losses,
+                no_entries,
+                sum_r,
+                avg_trades_per_calendar_day,
+                avg_trades_per_active_day,
+                avg_trades_per_hour,
+                max_drawdown_r,
+                worst_day_r
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(row.cycle_number)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(&row.outcome)
+        .bind(row.start_at)
+        .bind(row.end_at)
+        .bind(row.duration_minutes)
+        .bind(row.calendar_days)
+        .bind(row.active_trade_days)
+        .bind(row.events)
+        .bind(row.trades)
+        .bind(row.wins)
+        .bind(row.losses)
+        .bind(row.no_entries)
+        .bind(row.sum_r)
+        .bind(row.avg_trades_per_calendar_day)
+        .bind(row.avg_trades_per_active_day)
+        .bind(row.avg_trades_per_hour)
+        .bind(row.max_drawdown_r)
+        .bind(row.worst_day_r)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
 async fn store_loss_clustering(
     pool: &MySqlPool,
     sim_run_id: &str,
@@ -2682,7 +2880,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!("Simulation {} has no result rows.", args.sim_run_id).into());
     }
 
-    let (summary, cycles) = compute_prop_summary(&trades, daily_loss_lockout);
+    let (summary, cycles, test_frequency_rows) = compute_prop_summary(&trades, daily_loss_lockout);
     let equity_points = compute_equity_points(&trades, daily_loss_lockout);
     let daily_r_rows = compute_daily_r(&trades);
     let hourly_rows = compute_hourly_performance(&trades, &daily_r_rows);
@@ -2733,6 +2931,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.playbook_id.as_deref(),
         &build_id,
         &trade_cadence,
+    )
+    .await?;
+    store_test_frequency_rows(
+        &pool,
+        &args.sim_run_id,
+        args.playbook_id.as_deref(),
+        &build_id,
+        &test_frequency_rows,
     )
     .await?;
     store_loss_clustering(
@@ -2786,6 +2992,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("daily_r_days={}", daily_r_rows.len());
     println!("hourly_rows={}", hourly_rows.len());
     println!("trade_cadence_trades={}", trade_cadence.trades);
+    println!("test_frequency_rows={}", test_frequency_rows.len());
     println!("losses={}", loss_summary.losses);
     println!("loss_gap_buckets={}", loss_gap_buckets.len());
     println!("loss_windows={}", loss_windows.len().min(200));

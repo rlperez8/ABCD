@@ -8,13 +8,9 @@ import StrategyInsightCharts from '../features/strategies/StrategyInsightCharts'
 import StrategyFrequencyPanel from '../features/strategies/StrategyFrequencyPanel';
 import StrategyContractBreakdownPanel from '../features/strategies/StrategyContractBreakdownPanel';
 import StrategyVariationPoolCard from '../features/strategies/StrategyVariationPoolCard';
-import TradeSimulatorPanel from '../features/simulator/TradeSimulatorPanel';
 import StorageDashboardPage from '../features/storage/StorageDashboardPage';
 import AdminRunsPage from '../features/admin/AdminRunsPage';
-import FamilyRuleLabPage from '../features/diagnostics/FamilyRuleLabPage';
-import Phase1OutcomesPage from '../features/diagnostics/Phase1OutcomesPage';
 import PatternFamilyUniversePage from '../features/diagnostics/PatternFamilyUniversePage';
-import PatternDiscoveryPage from '../features/diagnostics/PatternDiscoveryPage';
 import {
   fetchCurrentSetupStrategies,
   fetchCurrentSetups,
@@ -36,12 +32,7 @@ const ALL_BINS_OPTION = 'All Bins';
 const STRATEGY_WORKSPACE_VIEW_CANVAS = 'canvas';
 const STRATEGY_WORKSPACE_VIEW_GRAPHS = 'graphs';
 const STRATEGY_WORKSPACE_VIEW_FREQUENCY = 'frequency';
-const APP_VIEW_SIMULATOR = 'simulator';
-const APP_VIEW_PATTERN_DISCOVERY = 'pattern-discovery';
-const APP_VIEW_RULE_LAB = 'rule-lab';
 const APP_VIEW_FAMILY_UNIVERSE = 'family-universe';
-const APP_VIEW_ENTRY_EXIT = 'entry-exit';
-const APP_VIEW_PHASE1_OUTCOMES = 'phase1-outcomes';
 const APP_VIEW_STORAGE = 'storage';
 const APP_VIEW_ADMIN = 'admin';
 const STRATEGY_LIBRARY_VIEW_MATCHED = 'matched-patterns';
@@ -648,108 +639,6 @@ const getPatternSelectionKey = (pattern = {}) => {
   ].join('|');
 };
 
-const getReplayPatternMatchKeys = (pattern = {}) => {
-  const keys = [];
-
-  if (pattern.pattern_id) {
-    keys.push(`id:${pattern.pattern_id}`);
-  }
-
-  if (pattern.pattern_group_id) {
-    keys.push(`group:${pattern.pattern_group_id}`);
-    [pattern.entry_date, pattern.reversal_detect_date, pattern.d_confirm_date, pattern.d_date]
-      .filter(Boolean)
-      .forEach((dateValue) => {
-        keys.push(`group-date:${pattern.pattern_group_id}|${String(dateValue).slice(0, 19)}`);
-        keys.push(`group-day:${pattern.pattern_group_id}|${String(dateValue).slice(0, 10)}`);
-      });
-  }
-
-  return keys;
-};
-
-const getReplayEventStatus = (event = {}) => {
-  if (event.skipped_for_overlap) {
-    return 'skipped';
-  }
-
-  if (event.failed_intratrade_drawdown || Number(event.pnl) < 0 || Number(event.trade_result) === 2) {
-    return 'lost';
-  }
-
-  return 'won';
-};
-
-const findReplayTradeForPattern = (trades = [], pattern = {}) => {
-  if (!pattern || !trades?.length) {
-    return null;
-  }
-
-  const patternTestIndex = Number(pattern.simulator_result_test_index);
-  const patternTradeIndex = Number(pattern.simulator_result_trade_index);
-  if (Number.isFinite(patternTestIndex) && Number.isFinite(patternTradeIndex)) {
-    const indexedTrade = trades.find(
-      (trade) =>
-        Number(trade?.test_index) === patternTestIndex &&
-        Number(trade?.trade_index) === patternTradeIndex
-    );
-    if (indexedTrade) {
-      return indexedTrade;
-    }
-  }
-
-  const patternKeys = new Set(getReplayPatternMatchKeys(pattern));
-  if (!patternKeys.size) {
-    return null;
-  }
-
-  return (
-    trades.find((trade) => getReplayPatternMatchKeys(trade).some((key) => patternKeys.has(key))) ??
-    null
-  );
-};
-
-const withReplayTradeForCanvas = (pattern = {}, trade = null) => {
-  if (!trade) {
-    return pattern;
-  }
-
-  const exitPrice =
-    trade.exit_price ??
-    trade.trade_exit_price ??
-    (Number(trade.trade_result) === 2
-      ? trade.trade_risk_exit_price
-      : trade.trade_reward_exit_price);
-
-  return {
-    ...pattern,
-    prop_outcome_mode: pattern?.prop_outcome_mode ?? trade?.prop_outcome_mode ?? null,
-    entry_date: trade.entry_date ?? pattern?.entry_date,
-    target_date: trade.target_date ?? pattern?.target_date,
-    trade_enter_price: trade.trade_enter_price ?? pattern?.trade_enter_price,
-    trade_risk_exit_price: trade.trade_risk_exit_price ?? pattern?.trade_risk_exit_price,
-    trade_reward_exit_price: trade.trade_reward_exit_price ?? pattern?.trade_reward_exit_price,
-    trade_current_price: exitPrice ?? pattern?.trade_current_price,
-    target_close: exitPrice ?? pattern?.target_close,
-    trade_result: trade.trade_result ?? pattern?.trade_result,
-    result_r: trade.result_r ?? pattern?.result_r,
-    risk_points: trade.risk_points ?? pattern?.risk_points,
-  };
-};
-
-const getPatternEntryTime = (pattern = {}) =>
-  getDateTimeForCompare(pattern.entry_date ?? pattern.reversal_detect_date ?? pattern.d_confirm_date ?? pattern.d_date);
-
-const isPatternOnOrAfterStartDate = (pattern = {}, startDate = null) => {
-  const startTime = getDateTimeForCompare(startDate);
-  if (startTime === null) {
-    return true;
-  }
-
-  const patternTime = getPatternEntryTime(pattern);
-  return patternTime === null || patternTime >= startTime;
-};
-
 const parseStrategyMaxDaysOpen = (value) => {
   if (!value || value === 'Any') {
     return null;
@@ -776,14 +665,6 @@ const App = () => {
   const [strategySortState, setStrategySortState] = useState(DEFAULT_STRATEGY_SORT);
   const [leaderChartStartIndex, setLeaderChartStartIndex] = useState(0);
   const [strategyTrades, setStrategyTrades] = useState([]);
-  const [simulatorReplay, setSimulatorReplay] = useState(null);
-  const [selectedSimulatorReplayTrade, setSelectedSimulatorReplayTrade] = useState(null);
-  const [simulatorFirstStartDate, setSimulatorFirstStartDate] = useState('2021-04-26');
-  const [strategyTradeDateRange, setStrategyTradeDateRange] = useState({
-    earliest: null,
-    latest: null,
-    dates: [],
-  });
   const [strategyTradeTotalCount, setStrategyTradeTotalCount] = useState(0);
   const [strategyContractWeeks, setStrategyContractWeeks] = useState([]);
   const [isLoadingStrategyContractWeeks, setLoadingStrategyContractWeeks] = useState(false);
@@ -1111,8 +992,7 @@ const App = () => {
       setSelectedStrategyId(getStrategySelectionId(strategyTableSnapshots[0]));
     }
   }, [selectedStrategyId, strategyTableSnapshots]);
-  const strategyTradeStartDate =
-    activeAppView === APP_VIEW_SIMULATOR ? simulatorFirstStartDate : null;
+  const strategyTradeStartDate = null;
   const strategyTradesQueryKey = useMemo(
     () =>
       selectedStrategy
@@ -1128,8 +1008,7 @@ const App = () => {
         : '',
     [propOutcomeMode, selectedStrategy, strategyMode, strategyTradeStartDate]
   );
-  const strategyTradePageSize =
-    activeAppView === APP_VIEW_SIMULATOR ? 500 : STRATEGY_TRADE_PAGE_SIZE;
+  const strategyTradePageSize = STRATEGY_TRADE_PAGE_SIZE;
 
   const setStrategyUniverseMode = useCallback(
     (nextView) => {
@@ -1169,19 +1048,6 @@ const App = () => {
     setActiveStrategyWorkspaceView(STRATEGY_WORKSPACE_VIEW_CANVAS);
   }, [setStrategyUniverseMode]);
 
-  const handleSelectSimulatorPattern = useCallback((trade, rowIndex) => {
-    setSelectedStrategyTradeIndex(rowIndex);
-    setSelectedStrategyTradeKey(getPatternSelectionKey(trade));
-    setSelectedSimulatorReplayTrade(findReplayTradeForPattern(simulatorReplay?.trades ?? [], trade));
-  }, [simulatorReplay]);
-
-  const handleSimulatorReplayChange = useCallback((nextReplay) => {
-    setSimulatorReplay(nextReplay);
-    if (!nextReplay) {
-      setSelectedSimulatorReplayTrade(null);
-    }
-  }, []);
-
   const handleSelectStrategy = useCallback(
     (strategyId) => {
       if (!strategyId) {
@@ -1199,7 +1065,6 @@ const App = () => {
       setHasMoreStrategyTrades(false);
       setSelectedStrategyTradeIndex(0);
       setSelectedStrategyTradeKey('');
-      setSelectedSimulatorReplayTrade(null);
       if (
         strategyMode !== STRATEGY_MODE_PROP ||
         strategyLibraryPatternView !== STRATEGY_LIBRARY_VIEW_CURRENT
@@ -1641,7 +1506,6 @@ const App = () => {
       latestStrategyTradesQueryKeyRef.current = '';
       requestedStrategyTradeOffsetsRef.current = new Set();
       setStrategyTrades([]);
-      setStrategyTradeDateRange({ earliest: null, latest: null, dates: [] });
       setStrategyContractWeeks([]);
       setStrategyTradeTotalCount(0);
       setHasMoreStrategyTrades(false);
@@ -1695,11 +1559,6 @@ const App = () => {
 
         const nextTrades = sortStrategyTrades(data?.patterns ?? []);
         setStrategyTrades(nextTrades);
-        setStrategyTradeDateRange({
-          earliest: data?.earliest_entry_date ?? null,
-          latest: data?.latest_entry_date ?? null,
-          dates: Array.isArray(data?.entry_dates) ? data.entry_dates : [],
-        });
         setStrategyTradeTotalCount(
           Number.isFinite(data?.total_count) && data.total_count >= 0 ? data.total_count : -1
         );
@@ -1724,7 +1583,6 @@ const App = () => {
         if (!isCancelled) {
           strategyChartRequestIdRef.current += 1;
           setStrategyTrades([]);
-          setStrategyTradeDateRange({ earliest: null, latest: null, dates: [] });
           setStrategyTradeTotalCount(0);
           setHasMoreStrategyTrades(false);
           setSelectedStrategyTradeKey('');
@@ -2005,140 +1863,6 @@ const App = () => {
     }
   };
 
-  const updateSimulatorPatternForChart = useCallback(
-    async (selectedPattern, setChartDataValue = setStrategyChartData) => {
-      return updateStrategyPatternForChart(selectedPattern, setChartDataValue);
-    },
-    [updateStrategyPatternForChart]
-  );
-
-  const simulatorPatternRows = useMemo(() => {
-    const filteredStrategyTrades = strategyTrades.filter((pattern) =>
-      isPatternOnOrAfterStartDate(pattern, simulatorFirstStartDate)
-    );
-
-    if (!simulatorReplay?.trades?.length) {
-      return filteredStrategyTrades;
-    }
-
-    const replayFamilyKey = simulatorReplay.family_key;
-    const selectedFamilyKey =
-      selectedStrategy?.propStrategyId ?? selectedStrategy?.familyKey ?? selectedStrategy?.id ?? null;
-
-    if (replayFamilyKey && selectedFamilyKey && replayFamilyKey !== selectedFamilyKey) {
-      return filteredStrategyTrades;
-    }
-
-    const replayStatusByKey = new Map();
-
-    simulatorReplay.trades.forEach((event) => {
-      const status = getReplayEventStatus(event);
-      getReplayPatternMatchKeys(event).forEach((key) => {
-        if (!replayStatusByKey.has(key) || replayStatusByKey.get(key)?.status === 'skipped') {
-          replayStatusByKey.set(key, {
-            status,
-            testIndex: event.test_index,
-            tradeIndex: event.trade_index,
-            pnl: event.pnl,
-            failureReason: event.failure_reason ?? null,
-          });
-        }
-      });
-    });
-
-    const loadedPatternKeys = new Set();
-    const rows = filteredStrategyTrades.map((pattern) => {
-      getReplayPatternMatchKeys(pattern).forEach((key) => loadedPatternKeys.add(key));
-      const replayStatus = getReplayPatternMatchKeys(pattern)
-        .map((key) => replayStatusByKey.get(key))
-        .find(Boolean);
-
-      if (!replayStatus) {
-        return pattern;
-      }
-
-      return {
-        ...pattern,
-        simulator_result_status: replayStatus.status,
-        simulator_result_test_index: replayStatus.testIndex,
-        simulator_result_trade_index: replayStatus.tradeIndex,
-        simulator_result_pnl: replayStatus.pnl,
-        simulator_result_reason: replayStatus.failureReason,
-      };
-    });
-
-    simulatorReplay.trades.forEach((event) => {
-      if (!isPatternOnOrAfterStartDate(event, simulatorFirstStartDate)) {
-        return;
-      }
-
-      const eventKeys = getReplayPatternMatchKeys(event);
-      if (!eventKeys.length || eventKeys.some((key) => loadedPatternKeys.has(key))) {
-        return;
-      }
-
-      eventKeys.forEach((key) => loadedPatternKeys.add(key));
-      const status = getReplayEventStatus(event);
-      rows.push({
-        ...event,
-        prop_strategy_id: selectedFamilyKey,
-        market: event.market ?? selectedStrategy?.market ?? null,
-        harmonic_type: event.harmonic_type ?? selectedStrategy?.harmonicType ?? null,
-        bin: event.bin ?? selectedStrategy?.bin ?? null,
-        reversal_type: event.reversal_type ?? selectedStrategy?.reversalType ?? 'None',
-        size_bucket: event.size_bucket ?? selectedStrategy?.sizeBucket ?? null,
-        time_bin: event.time_bin ?? selectedStrategy?.timeBin ?? null,
-        simulator_result_status: status,
-        simulator_result_test_index: event.test_index,
-        simulator_result_trade_index: event.trade_index,
-        simulator_result_pnl: event.pnl,
-        simulator_result_reason: event.failure_reason ?? null,
-      });
-    });
-
-    return sortStrategyTrades(rows);
-  }, [selectedStrategy, simulatorFirstStartDate, simulatorReplay, strategyTrades]);
-
-  const handleSimulatorReplayTradeSelect = useCallback(
-    async (trade) => {
-      setSelectedSimulatorReplayTrade(trade ?? null);
-      if (!trade) {
-        return;
-      }
-
-      const tradeKeys = new Set(getReplayPatternMatchKeys(trade));
-      const matchingRowIndex = simulatorPatternRows.findIndex((row) =>
-        getReplayPatternMatchKeys(row).some((key) => tradeKeys.has(key))
-      );
-
-      if (matchingRowIndex >= 0) {
-        const matchingRow = simulatorPatternRows[matchingRowIndex];
-        setSelectedStrategyTradeIndex(matchingRowIndex);
-        setSelectedStrategyTradeKey(getPatternSelectionKey(matchingRow));
-
-        try {
-          await updateSimulatorPatternForChart(withReplayTradeForCanvas(matchingRow, trade));
-        } catch (error) {
-          console.error('Error loading replay trade on canvas:', error);
-        }
-        return;
-      }
-
-      try {
-        await updateSimulatorPatternForChart(withReplayTradeForCanvas(trade, trade));
-      } catch (error) {
-        console.error('Error loading replay trade on canvas:', error);
-      }
-    },
-    [simulatorPatternRows, updateSimulatorPatternForChart]
-  );
-
-  const activeSimulatorPatternKeys = useMemo(() => {
-    const lastReplayTrade = simulatorReplay?.trades?.[simulatorReplay.trades.length - 1] ?? null;
-    const activeTrade = selectedSimulatorReplayTrade ?? lastReplayTrade;
-    return activeTrade ? getReplayPatternMatchKeys(activeTrade) : [];
-  }, [selectedSimulatorReplayTrade, simulatorReplay]);
-
   const updateStrategyFilter = (key, value) => {
     setStrategyFilters((prev) => ({
       ...prev,
@@ -2297,17 +2021,6 @@ const App = () => {
               <button
                 type="button"
                 className={
-                  activeAppView === APP_VIEW_SIMULATOR
-                    ? 'station-button station-button--active'
-                    : 'station-button'
-                }
-                onClick={() => setActiveAppView(APP_VIEW_SIMULATOR)}
-              >
-                Simulator
-              </button>
-              <button
-                type="button"
-                className={
                   activeAppView === APP_VIEW_FAMILY_UNIVERSE
                     ? 'station-button station-button--active'
                     : 'station-button'
@@ -2315,50 +2028,6 @@ const App = () => {
                 onClick={() => setActiveAppView(APP_VIEW_FAMILY_UNIVERSE)}
               >
                 Family Universe
-              </button>
-              <button
-                type="button"
-                className={
-                  activeAppView === APP_VIEW_ENTRY_EXIT
-                    ? 'station-button station-button--active'
-                    : 'station-button'
-                }
-                onClick={() => setActiveAppView(APP_VIEW_ENTRY_EXIT)}
-              >
-                Entry / Exit
-              </button>
-              <button
-                type="button"
-                className={
-                  activeAppView === APP_VIEW_PHASE1_OUTCOMES
-                    ? 'station-button station-button--active'
-                    : 'station-button'
-                }
-                onClick={() => setActiveAppView(APP_VIEW_PHASE1_OUTCOMES)}
-              >
-                Phase 1 Outcomes
-              </button>
-              <button
-                type="button"
-                className={
-                  activeAppView === APP_VIEW_PATTERN_DISCOVERY
-                    ? 'station-button station-button--active'
-                    : 'station-button'
-                }
-                onClick={() => setActiveAppView(APP_VIEW_PATTERN_DISCOVERY)}
-              >
-                Pattern Discovery
-              </button>
-              <button
-                type="button"
-                className={
-                  activeAppView === APP_VIEW_RULE_LAB
-                    ? 'station-button station-button--active'
-                    : 'station-button'
-                }
-                onClick={() => setActiveAppView(APP_VIEW_RULE_LAB)}
-              >
-                Rule Lab
               </button>
               <button
                 type="button"
@@ -2389,90 +2058,8 @@ const App = () => {
             <StorageDashboardPage />
           ) : activeAppView === APP_VIEW_ADMIN ? (
             <AdminRunsPage />
-          ) : activeAppView === APP_VIEW_ENTRY_EXIT ? (
-            <PatternFamilyUniversePage key="entry-exit-workspace" entryExitOnly />
           ) : activeAppView === APP_VIEW_FAMILY_UNIVERSE ? (
             <PatternFamilyUniversePage key="family-universe-workspace" />
-          ) : activeAppView === APP_VIEW_PHASE1_OUTCOMES ? (
-            <Phase1OutcomesPage
-              onOpenSimulatorFamily={(familyId) => {
-                setSelectedStrategyId(familyId);
-                setActiveAppView(APP_VIEW_SIMULATOR);
-              }}
-            />
-          ) : activeAppView === APP_VIEW_PATTERN_DISCOVERY ? (
-            <PatternDiscoveryPage
-              initialFamily={selectedStrategy}
-              onOpenSimulatorFamily={(familyId) => {
-                setSelectedStrategyId(familyId);
-                setActiveAppView(APP_VIEW_SIMULATOR);
-              }}
-            />
-          ) : activeAppView === APP_VIEW_RULE_LAB ? (
-            <FamilyRuleLabPage
-              initialFamily={selectedStrategy}
-              onOpenSimulatorFamily={(familyId) => {
-                setSelectedStrategyId(familyId);
-                setActiveAppView(APP_VIEW_SIMULATOR);
-              }}
-            />
-          ) : activeAppView === APP_VIEW_SIMULATOR ? (
-            <div className="simulator-page-shell">
-              <div className="simulator-page-stack">
-                <TradeSimulatorPanel
-                  selectedStrategy={selectedStrategy}
-                  familyOptions={strategyTableSnapshots}
-                  familyOptionsCount={strategyTableSnapshots.length}
-                  isLoadingFamilyOptions={isLoadingStrategyUniverse}
-                  onSelectFamilyId={setSelectedStrategyId}
-                  onReplayChange={handleSimulatorReplayChange}
-                  onFirstStartDateChange={setSimulatorFirstStartDate}
-                  selectedReplayTrade={selectedSimulatorReplayTrade}
-                  onReplayTradeSelect={handleSimulatorReplayTradeSelect}
-                  highlightedPatternKeys={activeSimulatorPatternKeys}
-                  loadedTrades={strategyTrades}
-                  loadedCandles={strategyChartData.candles}
-                  earliestTradeDate={strategyTradeDateRange.earliest}
-                  latestTradeDate={strategyTradeDateRange.latest}
-                  familyStartDateOptions={strategyTradeDateRange.dates}
-                  tradeChartData={strategyChartData}
-                  isTradeChartExpanded={isStrategyChartExpanded}
-                  setTradeChartExpanded={setStrategyChartExpanded}
-                  chartOverlayTop={chartOverlayTop}
-                  totalTradeCount={strategyTradeTotalCount}
-                />
-
-                <div className="simulator-pattern-table-panel">
-                  <PatternTable
-                    key={`simulator-patterns-${selectedStrategy?.id ?? 'none'}`}
-                    density="compact"
-                    includeSizeColumn
-                    includeSimulatorResultColumn
-                    statusLabel="Family Patterns"
-                    emptyMessage={
-                      selectedStrategy
-                        ? isLoadingStrategyTrades
-                          ? 'Loading patterns for this family...'
-                          : 'No patterns are loaded for this family.'
-                        : 'Select a family to load patterns.'
-                    }
-                    patterns={simulatorPatternRows}
-                    totalPatternCount={strategyTradeTotalCount}
-                    hasMorePatterns={hasMoreStrategyTrades}
-                    isLoadingMorePatterns={isLoadingStrategyTrades || isFetchingMoreStrategyTrades}
-                    onLoadMorePatterns={loadMoreStrategyTrades}
-                    onSelectPattern={handleSelectSimulatorPattern}
-                    highlightedPatternKeys={activeSimulatorPatternKeys}
-                    setLoadingPatterns={setLoadingStrategyChart}
-                    setChartData={setStrategyChartData}
-                    selectedRowIndex={selectedStrategyTradeIndex}
-                    selectedPatternKey={selectedStrategyTradeKey}
-                    setSelectedRowIndex={setSelectedStrategyTradeIndex}
-                    updateSelectedPattern={updateSimulatorPatternForChart}
-                  />
-                </div>
-              </div>
-            </div>
           ) : (
               <div className="strategies-station-shell">
                 <div className="strategies-station-layout">

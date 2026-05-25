@@ -928,6 +928,13 @@ struct EntryExitBuildDashboardParams {
 }
 
 #[derive(Deserialize, Debug)]
+struct EntryExitBuildRawRowsParams {
+    run_id: String,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+#[derive(Deserialize, Debug)]
 struct EntryExitBuildListParams {
     limit: Option<i64>,
 }
@@ -1024,6 +1031,45 @@ struct EntryExitTemplateBuildSummary {
     elapsed_ms: i64,
     created_at: Option<NaiveDateTime>,
     updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct EntryExitBuildRawResultRow {
+    id: i64,
+    template_uid: String,
+    setup_id: String,
+    pattern_id: Option<String>,
+    pattern_group_id: String,
+    event_id: Option<String>,
+    event_rank: Option<i64>,
+    event_sister_count: i64,
+    pattern_family_key: Option<String>,
+    symbol: String,
+    market: String,
+    d_confirm_date: NaiveDateTime,
+    evaluation_order: i64,
+    was_created_for_setup: i64,
+    outcome: String,
+    exit_reason: String,
+    result_r: Option<f64>,
+    entry_date: Option<NaiveDateTime>,
+    exit_date: Option<NaiveDateTime>,
+    entry_price: Option<f64>,
+    stop_price: Option<f64>,
+    target_price: Option<f64>,
+    exit_price: Option<f64>,
+    risk_points: Option<f64>,
+    trade_direction: Option<String>,
+}
+
+#[derive(Serialize)]
+struct EntryExitBuildRawRowsResponse {
+    run_id: String,
+    table_name: Option<String>,
+    total_rows: i64,
+    limit: i64,
+    offset: i64,
+    rows: Vec<EntryExitBuildRawResultRow>,
 }
 
 #[derive(Serialize)]
@@ -1184,6 +1230,13 @@ struct EntryExitSimDailyTradesParams {
     trade_date: String,
 }
 
+#[derive(Deserialize, Debug)]
+struct EntryExitSimRawTradesParams {
+    sim_run_id: String,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
 #[derive(Clone, sqlx::FromRow, Serialize)]
 struct EntryExitSimDailyTradeRow {
     id: i64,
@@ -1219,6 +1272,59 @@ struct EntryExitSimDailyTradesResponse {
     sim_run_id: String,
     trade_date: NaiveDate,
     trades: Vec<EntryExitSimDailyTradeRow>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimRawTradeRow {
+    id: i64,
+    setup_id: String,
+    pattern_id: Option<String>,
+    pattern_group_id: String,
+    event_id: Option<String>,
+    event_rank: Option<i64>,
+    event_sister_count: i64,
+    event_decision_date: Option<NaiveDateTime>,
+    event_candidate_count: i64,
+    event_live_candidate_count: i64,
+    family_key: String,
+    template_uid: String,
+    template_label: String,
+    symbol: String,
+    market: String,
+    outcome: String,
+    exit_reason: String,
+    result_r: f64,
+    cycle_number: Option<i64>,
+    cycle_equity_r_before: Option<f64>,
+    cycle_equity_r_after: Option<f64>,
+    cycle_drawdown_r_before: Option<f64>,
+    cycle_drawdown_r_after: Option<f64>,
+    tp_progress_pct_before: Option<f64>,
+    tp_progress_pct_after: Option<f64>,
+    tp_progress_pct_delta: Option<f64>,
+    drawdown_progress_pct_before: Option<f64>,
+    drawdown_progress_pct_after: Option<f64>,
+    drawdown_progress_pct_delta: Option<f64>,
+    d_date: NaiveDateTime,
+    d_confirm_date: NaiveDateTime,
+    entry_date: Option<NaiveDateTime>,
+    exit_date: Option<NaiveDateTime>,
+    duration_minutes: Option<f64>,
+    entry_price: Option<f64>,
+    stop_price: Option<f64>,
+    target_price: Option<f64>,
+    exit_price: Option<f64>,
+    risk_points: Option<f64>,
+    trade_direction: Option<String>,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimRawTradesResponse {
+    sim_run_id: String,
+    total_rows: i64,
+    limit: i64,
+    offset: i64,
+    trades: Vec<EntryExitSimRawTradeRow>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -1349,6 +1455,113 @@ struct EntryExitSimTradeWorkloadRow {
 struct EntryExitSimTradeWorkloadResponse {
     sim_run_id: String,
     workload: Option<EntryExitSimTradeWorkloadRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitSimTestFrequencyParams {
+    sim_run_id: String,
+    limit: Option<i64>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitSimTestFrequencyRow {
+    cycle_number: i64,
+    outcome: String,
+    start_at: NaiveDateTime,
+    end_at: NaiveDateTime,
+    duration_minutes: f64,
+    calendar_days: i64,
+    active_trade_days: i64,
+    events: i64,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    sum_r: f64,
+    avg_trades_per_calendar_day: f64,
+    avg_trades_per_active_day: f64,
+    avg_trades_per_hour: f64,
+    max_drawdown_r: f64,
+    worst_day_r: f64,
+}
+
+#[derive(Serialize)]
+struct EntryExitSimTestFrequencyResponse {
+    sim_run_id: String,
+    tests: Vec<EntryExitSimTestFrequencyRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct EntryExitDayTradingSimParams {
+    sim_run_id: String,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitDayTradingSummaryRow {
+    starting_equity_r: f64,
+    ending_equity_r: f64,
+    peak_equity_r: f64,
+    max_drawdown_r: f64,
+    total_trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    total_r: f64,
+    gross_profit_r: f64,
+    gross_loss_r: f64,
+    profit_factor: f64,
+    best_trade_r: f64,
+    worst_trade_r: f64,
+    best_day_r: f64,
+    worst_day_r: f64,
+    trading_days: i64,
+    profitable_days: i64,
+    losing_days: i64,
+    avg_day_r: f64,
+    max_trades_per_day: i64,
+    avg_trade_duration_minutes: f64,
+    median_trade_duration_minutes: f64,
+    longest_trade_duration_minutes: f64,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitDayTradingDailyRow {
+    trade_date: NaiveDate,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    gross_profit_r: f64,
+    gross_loss_r: f64,
+    net_r: f64,
+    end_equity_r: f64,
+    intraday_drawdown_r: f64,
+    best_trade_r: f64,
+    worst_trade_r: f64,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct EntryExitDayTradingMonthlyRow {
+    month_start: NaiveDate,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    gross_profit_r: f64,
+    gross_loss_r: f64,
+    net_r: f64,
+    end_equity_r: f64,
+    max_drawdown_r: f64,
+}
+
+#[derive(Serialize)]
+struct EntryExitDayTradingSimResponse {
+    sim_run_id: String,
+    summary: Option<EntryExitDayTradingSummaryRow>,
+    daily: Vec<EntryExitDayTradingDailyRow>,
+    monthly: Vec<EntryExitDayTradingMonthlyRow>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -2263,6 +2476,43 @@ async fn table_exists(pool: &MySqlPool, table_name: &str) -> Result<bool, sqlx::
     .await?;
 
     Ok(count > 0)
+}
+
+fn entry_exit_result_table_name_for_run(run_id: &str) -> Option<String> {
+    if run_id.trim().is_empty() {
+        return None;
+    }
+
+    let suffix = run_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if suffix.is_empty()
+        || !suffix
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
+        return None;
+    }
+
+    Some(format!("entry_exit_template_results_{suffix}"))
+}
+
+fn quoted_identifier(identifier: &str) -> Option<String> {
+    if identifier
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
+        Some(format!("`{identifier}`"))
+    } else {
+        None
+    }
 }
 
 async fn table_column_exists(
@@ -6336,16 +6586,20 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_phase1_supply)
             .service(fetch_entry_exit_builds)
             .service(fetch_entry_exit_build_dashboard)
+            .service(fetch_entry_exit_build_raw_rows)
             .service(fetch_entry_exit_templates)
             .service(fetch_entry_exit_template_breakdown)
             .service(fetch_entry_exit_router_runs)
             .service(fetch_entry_exit_sim_equity_curve)
             .service(fetch_entry_exit_sim_daily_r)
             .service(fetch_entry_exit_sim_daily_trades)
+            .service(fetch_entry_exit_sim_raw_trades)
             .service(fetch_entry_exit_sim_hourly)
             .service(fetch_entry_exit_sim_trade_cadence)
             .service(fetch_entry_exit_sim_trade_gaps)
             .service(fetch_entry_exit_sim_trade_workload)
+            .service(fetch_entry_exit_sim_test_frequency)
+            .service(fetch_entry_exit_day_trading_sim)
             .service(fetch_entry_exit_sim_market_trends)
             .service(fetch_entry_exit_sim_symbol_contribution)
             .service(fetch_entry_exit_sim_family_contribution)
@@ -9143,6 +9397,118 @@ async fn fetch_entry_exit_build_dashboard(
     })
 }
 
+#[route("/entry-exit/build-raw-rows", method = "GET", method = "POST")]
+async fn fetch_entry_exit_build_raw_rows(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitBuildRawRowsParams>,
+) -> impl Responder {
+    let run_id = params.run_id.trim();
+    if run_id.is_empty() {
+        return HttpResponse::BadRequest().body("run_id is required");
+    }
+
+    let Some(table_name) = entry_exit_result_table_name_for_run(run_id) else {
+        return HttpResponse::BadRequest().body("invalid run_id");
+    };
+    let Some(quoted_table_name) = quoted_identifier(&table_name) else {
+        return HttpResponse::BadRequest().body("invalid raw table");
+    };
+
+    let has_raw_table = match table_exists(pool.get_ref(), &table_name).await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Entry/Exit raw table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_raw_table {
+        return HttpResponse::Ok().json(EntryExitBuildRawRowsResponse {
+            run_id: run_id.to_string(),
+            table_name: None,
+            total_rows: 0,
+            limit: params.limit.unwrap_or(300).clamp(1, 1000),
+            offset: params.offset.unwrap_or(0).max(0),
+            rows: Vec::new(),
+        });
+    }
+
+    let limit = params.limit.unwrap_or(300).clamp(1, 1000);
+    let offset = params.offset.unwrap_or(0).max(0);
+    let total_rows = match sqlx::query_scalar::<_, i64>(&format!(
+        "SELECT COUNT(*) FROM {quoted_table_name} WHERE run_id = ?"
+    ))
+    .bind(run_id)
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(count) => count,
+        Err(error) if is_missing_table_error(&error) => 0,
+        Err(error) => {
+            eprintln!("Entry/Exit raw row count DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let raw_sql = format!(
+        r#"
+        SELECT
+            id,
+            template_uid,
+            setup_id,
+            pattern_id,
+            pattern_group_id,
+            event_id,
+            event_rank,
+            event_sister_count,
+            pattern_family_key,
+            symbol,
+            market,
+            d_confirm_date,
+            evaluation_order,
+            CAST(was_created_for_setup AS SIGNED) AS was_created_for_setup,
+            outcome,
+            exit_reason,
+            result_r,
+            entry_date,
+            exit_date,
+            entry_price,
+            stop_price,
+            target_price,
+            exit_price,
+            risk_points,
+            trade_direction
+        FROM {quoted_table_name}
+        WHERE run_id = ?
+        ORDER BY evaluation_order ASC, id ASC
+        LIMIT ? OFFSET ?
+        "#
+    );
+
+    let rows = match sqlx::query_as::<_, EntryExitBuildRawResultRow>(&raw_sql)
+        .bind(run_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool.get_ref())
+        .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit raw rows DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitBuildRawRowsResponse {
+        run_id: run_id.to_string(),
+        table_name: Some(table_name),
+        total_rows,
+        limit,
+        offset,
+        rows,
+    })
+}
+
 #[route("/entry-exit/builds", method = "GET", method = "POST")]
 async fn fetch_entry_exit_builds(
     pool: web::Data<MySqlPool>,
@@ -10974,6 +11340,172 @@ async fn fetch_entry_exit_sim_daily_trades(
     })
 }
 
+#[route("/entry-exit/sim-raw-trades", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_raw_trades(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimRawTradesParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let limit = params.limit.unwrap_or(500).clamp(1, 5000);
+    let offset = params.offset.unwrap_or(0).max(0);
+
+    let has_results =
+        match table_exists(pool.get_ref(), "entry_exit_template_family_router_results").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim raw trade table lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_results {
+        return HttpResponse::Ok().json(EntryExitSimRawTradesResponse {
+            sim_run_id: sim_run_id.to_string(),
+            total_rows: 0,
+            limit,
+            offset,
+            trades: Vec::new(),
+        });
+    }
+
+    let has_trade_progress =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_trade_progress").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim trade progress table lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    let progress_join = if has_trade_progress {
+        "LEFT JOIN entry_exit_playbook_sim_trade_progress p ON p.sim_run_id = r.router_run_id AND p.result_id = r.id"
+    } else {
+        ""
+    };
+    let progress_columns = if has_trade_progress {
+        r#"
+            p.cycle_number,
+            p.cycle_equity_r_before,
+            p.cycle_equity_r_after,
+            p.cycle_drawdown_r_before,
+            p.cycle_drawdown_r_after,
+            p.tp_progress_pct_before,
+            p.tp_progress_pct_after,
+            p.tp_progress_pct_delta,
+            p.drawdown_progress_pct_before,
+            p.drawdown_progress_pct_after,
+            p.drawdown_progress_pct_delta,
+        "#
+    } else {
+        r#"
+            CAST(NULL AS SIGNED) AS cycle_number,
+            CAST(NULL AS DOUBLE) AS cycle_equity_r_before,
+            CAST(NULL AS DOUBLE) AS cycle_equity_r_after,
+            CAST(NULL AS DOUBLE) AS cycle_drawdown_r_before,
+            CAST(NULL AS DOUBLE) AS cycle_drawdown_r_after,
+            CAST(NULL AS DOUBLE) AS tp_progress_pct_before,
+            CAST(NULL AS DOUBLE) AS tp_progress_pct_after,
+            CAST(NULL AS DOUBLE) AS tp_progress_pct_delta,
+            CAST(NULL AS DOUBLE) AS drawdown_progress_pct_before,
+            CAST(NULL AS DOUBLE) AS drawdown_progress_pct_after,
+            CAST(NULL AS DOUBLE) AS drawdown_progress_pct_delta,
+        "#
+    };
+
+    let total_rows = match sqlx::query(
+        r#"
+        SELECT COUNT(*)
+        FROM entry_exit_template_family_router_results
+        WHERE router_run_id = ?
+          AND outcome IN ('pass', 'fail')
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(row) => row.try_get::<i64, _>(0).unwrap_or(0),
+        Err(error) if is_missing_table_error(&error) => 0,
+        Err(error) => {
+            eprintln!("Entry/Exit sim raw trades count DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let raw_trades_sql = format!(
+        r#"
+        SELECT
+            r.id,
+            r.setup_id,
+            r.pattern_id,
+            r.pattern_group_id,
+            r.event_id,
+            r.event_rank,
+            r.event_sister_count,
+            r.event_decision_date,
+            r.event_candidate_count,
+            r.event_live_candidate_count,
+            r.family_key,
+            r.template_uid,
+            r.template_label,
+            r.symbol,
+            r.market,
+            r.outcome,
+            r.exit_reason,
+            COALESCE(r.result_r, 0) AS result_r,
+            {progress_columns}
+            r.d_date,
+            r.d_confirm_date,
+            r.entry_date,
+            r.exit_date,
+            CAST(TIMESTAMPDIFF(MINUTE, r.entry_date, r.exit_date) AS DOUBLE) AS duration_minutes,
+            r.entry_price,
+            r.stop_price,
+            r.target_price,
+            r.exit_price,
+            r.risk_points,
+            r.trade_direction
+        FROM entry_exit_template_family_router_results r
+        {progress_join}
+        WHERE r.router_run_id = ?
+          AND r.outcome IN ('pass', 'fail')
+        ORDER BY COALESCE(r.entry_date, r.d_confirm_date, r.d_date) ASC, r.id ASC
+        LIMIT ? OFFSET ?
+        "#,
+    );
+
+    let trades = match sqlx::query_as::<_, EntryExitSimRawTradeRow>(&raw_trades_sql)
+        .bind(sim_run_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool.get_ref())
+        .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim raw trades DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimRawTradesResponse {
+        sim_run_id: sim_run_id.to_string(),
+        total_rows,
+        limit,
+        offset,
+        trades,
+    })
+}
+
 #[route("/entry-exit/sim-hourly", method = "GET", method = "POST")]
 async fn fetch_entry_exit_sim_hourly(
     pool: web::Data<MySqlPool>,
@@ -11252,6 +11784,227 @@ async fn fetch_entry_exit_sim_trade_workload(
     HttpResponse::Ok().json(EntryExitSimTradeWorkloadResponse {
         sim_run_id: sim_run_id.to_string(),
         workload,
+    })
+}
+
+#[route("/entry-exit/sim-test-frequency", method = "GET", method = "POST")]
+async fn fetch_entry_exit_sim_test_frequency(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitSimTestFrequencyParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_frequency =
+        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_test_frequency").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit sim test frequency table lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_frequency {
+        return HttpResponse::Ok().json(EntryExitSimTestFrequencyResponse {
+            sim_run_id: sim_run_id.to_string(),
+            tests: Vec::new(),
+        });
+    }
+
+    let limit = params.limit.unwrap_or(500).clamp(1, 5000);
+    let tests = match sqlx::query_as::<_, EntryExitSimTestFrequencyRow>(
+        r#"
+        SELECT
+            cycle_number,
+            outcome,
+            start_at,
+            end_at,
+            duration_minutes,
+            calendar_days,
+            active_trade_days,
+            events,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            sum_r,
+            avg_trades_per_calendar_day,
+            avg_trades_per_active_day,
+            avg_trades_per_hour,
+            max_drawdown_r,
+            worst_day_r
+        FROM entry_exit_playbook_sim_test_frequency
+        WHERE sim_run_id = ?
+        ORDER BY cycle_number ASC
+        LIMIT ?
+        "#,
+    )
+    .bind(sim_run_id)
+    .bind(limit)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit sim test frequency DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitSimTestFrequencyResponse {
+        sim_run_id: sim_run_id.to_string(),
+        tests,
+    })
+}
+
+#[route("/entry-exit/day-trading-sim", method = "GET", method = "POST")]
+async fn fetch_entry_exit_day_trading_sim(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<EntryExitDayTradingSimParams>,
+) -> impl Responder {
+    let sim_run_id = params.sim_run_id.trim();
+    if sim_run_id.is_empty() {
+        return HttpResponse::BadRequest().body("Missing sim_run_id");
+    }
+
+    let has_summary =
+        match table_exists(pool.get_ref(), "entry_exit_day_trading_sim_summary").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "Entry/Exit day trading summary table lookup failed: {:?}",
+                    error
+                );
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_summary {
+        return HttpResponse::Ok().json(EntryExitDayTradingSimResponse {
+            sim_run_id: sim_run_id.to_string(),
+            summary: None,
+            daily: Vec::new(),
+            monthly: Vec::new(),
+        });
+    }
+
+    let summary = match sqlx::query_as::<_, EntryExitDayTradingSummaryRow>(
+        r#"
+        SELECT
+            starting_equity_r,
+            ending_equity_r,
+            peak_equity_r,
+            max_drawdown_r,
+            total_trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            total_r,
+            gross_profit_r,
+            gross_loss_r,
+            profit_factor,
+            best_trade_r,
+            worst_trade_r,
+            best_day_r,
+            worst_day_r,
+            trading_days,
+            profitable_days,
+            losing_days,
+            avg_day_r,
+            max_trades_per_day,
+            avg_trade_duration_minutes,
+            median_trade_duration_minutes,
+            longest_trade_duration_minutes
+        FROM entry_exit_day_trading_sim_summary
+        WHERE sim_run_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(row) => row,
+        Err(error) if is_missing_table_error(&error) => None,
+        Err(error) => {
+            eprintln!("Entry/Exit day trading summary DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let daily = match sqlx::query_as::<_, EntryExitDayTradingDailyRow>(
+        r#"
+        SELECT
+            trade_date,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            gross_profit_r,
+            gross_loss_r,
+            net_r,
+            end_equity_r,
+            intraday_drawdown_r,
+            best_trade_r,
+            worst_trade_r
+        FROM entry_exit_day_trading_sim_daily_results
+        WHERE sim_run_id = ?
+        ORDER BY trade_date ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit day trading daily DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let monthly = match sqlx::query_as::<_, EntryExitDayTradingMonthlyRow>(
+        r#"
+        SELECT
+            month_start,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            gross_profit_r,
+            gross_loss_r,
+            net_r,
+            end_equity_r,
+            max_drawdown_r
+        FROM entry_exit_day_trading_sim_monthly_results
+        WHERE sim_run_id = ?
+        ORDER BY month_start ASC
+        "#,
+    )
+    .bind(sim_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Entry/Exit day trading monthly DB error: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(EntryExitDayTradingSimResponse {
+        sim_run_id: sim_run_id.to_string(),
+        summary,
+        daily,
+        monthly,
     })
 }
 

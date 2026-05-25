@@ -161,6 +161,7 @@ struct PropReplayTrade {
     result_id: i64,
     setup_id: String,
     event_date: NaiveDateTime,
+    exit_date: Option<NaiveDateTime>,
     symbol: String,
     root_symbol: String,
     family_key: String,
@@ -169,6 +170,107 @@ struct PropReplayTrade {
     template_name: String,
     outcome: String,
     result_r: f64,
+}
+
+#[derive(Default)]
+struct DayTradingSummary {
+    starting_equity_r: f64,
+    ending_equity_r: f64,
+    peak_equity_r: f64,
+    max_drawdown_r: f64,
+    total_trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    total_r: f64,
+    gross_profit_r: f64,
+    gross_loss_r: f64,
+    profit_factor: f64,
+    best_trade_r: f64,
+    worst_trade_r: f64,
+    best_day_r: f64,
+    worst_day_r: f64,
+    trading_days: i64,
+    profitable_days: i64,
+    losing_days: i64,
+    avg_day_r: f64,
+    max_trades_per_day: i64,
+    avg_trade_duration_minutes: f64,
+    median_trade_duration_minutes: f64,
+    longest_trade_duration_minutes: f64,
+}
+
+struct DayTradingTradeRow {
+    sequence_number: i64,
+    result_id: i64,
+    setup_id: String,
+    event_date: NaiveDateTime,
+    exit_date: Option<NaiveDateTime>,
+    symbol: String,
+    root_symbol: String,
+    family_key: String,
+    template_uid: String,
+    template_label: String,
+    template_name: String,
+    outcome: String,
+    result_r: f64,
+    cumulative_r: f64,
+    drawdown_r: f64,
+    trade_duration_minutes: Option<f64>,
+}
+
+struct DayTradingEquityPointRow {
+    point_index: i64,
+    event_date: NaiveDateTime,
+    result_r: f64,
+    cumulative_r: f64,
+    drawdown_r: f64,
+}
+
+struct DayTradingDrawdownPointRow {
+    point_index: i64,
+    event_date: NaiveDateTime,
+    drawdown_r: f64,
+    drawdown_pct_of_peak: f64,
+}
+
+struct DayTradingDailyResultRow {
+    trade_date: NaiveDate,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    gross_profit_r: f64,
+    gross_loss_r: f64,
+    net_r: f64,
+    end_equity_r: f64,
+    intraday_drawdown_r: f64,
+    best_trade_r: f64,
+    worst_trade_r: f64,
+}
+
+struct DayTradingMonthlyResultRow {
+    month_start: NaiveDate,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    gross_profit_r: f64,
+    gross_loss_r: f64,
+    net_r: f64,
+    end_equity_r: f64,
+    max_drawdown_r: f64,
+}
+
+struct DayTradingComputedRows {
+    summary: DayTradingSummary,
+    trades: Vec<DayTradingTradeRow>,
+    equity_points: Vec<DayTradingEquityPointRow>,
+    drawdown_points: Vec<DayTradingDrawdownPointRow>,
+    daily_results: Vec<DayTradingDailyResultRow>,
+    monthly_results: Vec<DayTradingMonthlyResultRow>,
 }
 
 struct SimTradeTrendRow {
@@ -229,6 +331,27 @@ struct PropCycleRow {
     losses: i64,
     no_entries: i64,
     sum_r: f64,
+    max_drawdown_r: f64,
+    worst_day_r: f64,
+}
+
+struct TestFrequencyRow {
+    cycle_number: i64,
+    outcome: String,
+    start_at: NaiveDateTime,
+    end_at: NaiveDateTime,
+    duration_minutes: f64,
+    calendar_days: i64,
+    active_trade_days: i64,
+    events: i64,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    sum_r: f64,
+    avg_trades_per_calendar_day: f64,
+    avg_trades_per_active_day: f64,
+    avg_trades_per_hour: f64,
     max_drawdown_r: f64,
     worst_day_r: f64,
 }
@@ -428,7 +551,11 @@ struct StreakRow {
 struct OpenPropCycle {
     cycle_number: i64,
     start_date: NaiveDate,
+    start_at: NaiveDateTime,
     current_date: NaiveDate,
+    current_at: NaiveDateTime,
+    active_trade_dates: HashSet<NaiveDate>,
+    actual_trades: i64,
     trades: i64,
     wins: i64,
     losses: i64,
@@ -441,11 +568,16 @@ struct OpenPropCycle {
 }
 
 impl OpenPropCycle {
-    fn new(cycle_number: i64, date: NaiveDate) -> Self {
+    fn new(cycle_number: i64, event_at: NaiveDateTime) -> Self {
+        let date = event_at.date();
         Self {
             cycle_number,
             start_date: date,
+            start_at: event_at,
             current_date: date,
+            current_at: event_at,
+            active_trade_dates: HashSet::new(),
+            actual_trades: 0,
             trades: 0,
             wins: 0,
             losses: 0,
@@ -460,6 +592,7 @@ impl OpenPropCycle {
 
     fn apply_trade(&mut self, trade: &PropReplayTrade) {
         let date = trade.event_date.date();
+        self.current_at = trade.event_date;
         if date != self.current_date {
             self.current_date = date;
             self.daily_r = 0.0;
@@ -467,8 +600,16 @@ impl OpenPropCycle {
 
         self.trades += 1;
         match trade.outcome.as_str() {
-            "pass" => self.wins += 1,
-            "fail" => self.losses += 1,
+            "pass" => {
+                self.actual_trades += 1;
+                self.active_trade_dates.insert(date);
+                self.wins += 1;
+            }
+            "fail" => {
+                self.actual_trades += 1;
+                self.active_trade_dates.insert(date);
+                self.losses += 1;
+            }
             "no_entry" => self.no_entries += 1,
             _ => {}
         }
@@ -491,6 +632,56 @@ impl OpenPropCycle {
             losses: self.losses,
             no_entries: self.no_entries,
             sum_r: self.equity_r,
+            max_drawdown_r: self.max_drawdown_r,
+            worst_day_r: self.worst_day_r,
+        }
+    }
+
+    fn finish_frequency(&self, outcome: &str) -> TestFrequencyRow {
+        let duration_seconds = self
+            .current_at
+            .signed_duration_since(self.start_at)
+            .num_seconds()
+            .max(0) as f64;
+        let duration_minutes = duration_seconds / 60.0;
+        let duration_hours = duration_seconds / 3600.0;
+        let calendar_days = self
+            .current_date
+            .signed_duration_since(self.start_date)
+            .num_days()
+            .max(0)
+            + 1;
+        let active_trade_days = self.active_trade_dates.len() as i64;
+
+        TestFrequencyRow {
+            cycle_number: self.cycle_number,
+            outcome: outcome.to_string(),
+            start_at: self.start_at,
+            end_at: self.current_at,
+            duration_minutes,
+            calendar_days,
+            active_trade_days,
+            events: self.trades,
+            trades: self.actual_trades,
+            wins: self.wins,
+            losses: self.losses,
+            no_entries: self.no_entries,
+            sum_r: self.equity_r,
+            avg_trades_per_calendar_day: if calendar_days > 0 {
+                self.actual_trades as f64 / calendar_days as f64
+            } else {
+                0.0
+            },
+            avg_trades_per_active_day: if active_trade_days > 0 {
+                self.actual_trades as f64 / active_trade_days as f64
+            } else {
+                0.0
+            },
+            avg_trades_per_hour: if duration_hours > 0.0 {
+                self.actual_trades as f64 / duration_hours
+            } else {
+                self.actual_trades as f64
+            },
             max_drawdown_r: self.max_drawdown_r,
             worst_day_r: self.worst_day_r,
         }
@@ -1846,6 +2037,42 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
 
     sqlx::query(
         r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_test_frequency (
+            sim_run_id VARCHAR(64) NOT NULL,
+            cycle_number BIGINT NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            outcome VARCHAR(32) NOT NULL,
+            start_at DATETIME NOT NULL,
+            end_at DATETIME NOT NULL,
+            duration_minutes DOUBLE NOT NULL DEFAULT 0,
+            calendar_days BIGINT NOT NULL DEFAULT 0,
+            active_trade_days BIGINT NOT NULL DEFAULT 0,
+            events BIGINT NOT NULL DEFAULT 0,
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            sum_r DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_calendar_day DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_active_day DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_hour DOUBLE NOT NULL DEFAULT 0,
+            max_drawdown_r DOUBLE NOT NULL DEFAULT 0,
+            worst_day_r DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, cycle_number),
+            INDEX idx_entry_exit_sim_test_frequency_playbook (playbook_id, start_at),
+            INDEX idx_entry_exit_sim_test_frequency_duration (sim_run_id, duration_minutes),
+            INDEX idx_entry_exit_sim_test_frequency_trades (sim_run_id, trades)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
         CREATE TABLE IF NOT EXISTS entry_exit_playbook_sim_trade_gaps (
             sim_run_id VARCHAR(64) NOT NULL,
             sequence_number BIGINT NOT NULL,
@@ -2060,6 +2287,181 @@ async fn ensure_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
             PRIMARY KEY (sim_run_id, streak_number),
             INDEX idx_entry_exit_sim_streaks_type (sim_run_id, streak_type, streak_length),
             INDEX idx_entry_exit_sim_streaks_playbook (playbook_id, streak_type, streak_length)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_day_trading_sim_summary (
+            sim_run_id VARCHAR(64) NOT NULL PRIMARY KEY,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            starting_equity_r DOUBLE NOT NULL DEFAULT 0,
+            ending_equity_r DOUBLE NOT NULL DEFAULT 0,
+            peak_equity_r DOUBLE NOT NULL DEFAULT 0,
+            max_drawdown_r DOUBLE NOT NULL DEFAULT 0,
+            total_trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            win_rate DOUBLE NOT NULL DEFAULT 0,
+            avg_r DOUBLE NOT NULL DEFAULT 0,
+            total_r DOUBLE NOT NULL DEFAULT 0,
+            gross_profit_r DOUBLE NOT NULL DEFAULT 0,
+            gross_loss_r DOUBLE NOT NULL DEFAULT 0,
+            profit_factor DOUBLE NOT NULL DEFAULT 0,
+            best_trade_r DOUBLE NOT NULL DEFAULT 0,
+            worst_trade_r DOUBLE NOT NULL DEFAULT 0,
+            best_day_r DOUBLE NOT NULL DEFAULT 0,
+            worst_day_r DOUBLE NOT NULL DEFAULT 0,
+            trading_days BIGINT NOT NULL DEFAULT 0,
+            profitable_days BIGINT NOT NULL DEFAULT 0,
+            losing_days BIGINT NOT NULL DEFAULT 0,
+            avg_day_r DOUBLE NOT NULL DEFAULT 0,
+            max_trades_per_day BIGINT NOT NULL DEFAULT 0,
+            avg_trade_duration_minutes DOUBLE NOT NULL DEFAULT 0,
+            median_trade_duration_minutes DOUBLE NOT NULL DEFAULT 0,
+            longest_trade_duration_minutes DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_entry_exit_day_trading_summary_playbook (playbook_id, created_at),
+            INDEX idx_entry_exit_day_trading_summary_build (build_id, created_at)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_day_trading_sim_trades (
+            sim_run_id VARCHAR(64) NOT NULL,
+            sequence_number BIGINT NOT NULL,
+            result_id BIGINT NOT NULL,
+            setup_id VARCHAR(64) NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            event_date DATETIME NOT NULL,
+            exit_date DATETIME NULL,
+            symbol VARCHAR(32) NOT NULL,
+            root_symbol VARCHAR(16) NOT NULL,
+            family_key VARCHAR(64) NOT NULL,
+            template_uid VARCHAR(128) NOT NULL,
+            template_label VARCHAR(128) NOT NULL DEFAULT '',
+            template_name VARCHAR(255) NOT NULL DEFAULT '',
+            outcome VARCHAR(16) NOT NULL,
+            result_r DOUBLE NOT NULL DEFAULT 0,
+            cumulative_r DOUBLE NOT NULL DEFAULT 0,
+            drawdown_r DOUBLE NOT NULL DEFAULT 0,
+            trade_duration_minutes DOUBLE NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, sequence_number),
+            UNIQUE KEY ux_entry_exit_day_trading_trade_result (sim_run_id, result_id),
+            INDEX idx_entry_exit_day_trading_trades_playbook (playbook_id, event_date),
+            INDEX idx_entry_exit_day_trading_trades_symbol (sim_run_id, root_symbol, event_date)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_day_trading_sim_equity_points (
+            sim_run_id VARCHAR(64) NOT NULL,
+            point_index BIGINT NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            event_date DATETIME NOT NULL,
+            result_r DOUBLE NOT NULL DEFAULT 0,
+            cumulative_r DOUBLE NOT NULL DEFAULT 0,
+            drawdown_r DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, point_index),
+            INDEX idx_entry_exit_day_trading_equity_playbook (playbook_id, event_date),
+            INDEX idx_entry_exit_day_trading_equity_build (build_id, event_date)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_day_trading_sim_drawdown_points (
+            sim_run_id VARCHAR(64) NOT NULL,
+            point_index BIGINT NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            event_date DATETIME NOT NULL,
+            drawdown_r DOUBLE NOT NULL DEFAULT 0,
+            drawdown_pct_of_peak DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, point_index),
+            INDEX idx_entry_exit_day_trading_drawdown_playbook (playbook_id, event_date),
+            INDEX idx_entry_exit_day_trading_drawdown_build (build_id, event_date)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_day_trading_sim_daily_results (
+            sim_run_id VARCHAR(64) NOT NULL,
+            trade_date DATE NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            gross_profit_r DOUBLE NOT NULL DEFAULT 0,
+            gross_loss_r DOUBLE NOT NULL DEFAULT 0,
+            net_r DOUBLE NOT NULL DEFAULT 0,
+            end_equity_r DOUBLE NOT NULL DEFAULT 0,
+            intraday_drawdown_r DOUBLE NOT NULL DEFAULT 0,
+            best_trade_r DOUBLE NOT NULL DEFAULT 0,
+            worst_trade_r DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, trade_date),
+            INDEX idx_entry_exit_day_trading_daily_playbook (playbook_id, trade_date),
+            INDEX idx_entry_exit_day_trading_daily_build (build_id, trade_date)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS entry_exit_day_trading_sim_monthly_results (
+            sim_run_id VARCHAR(64) NOT NULL,
+            month_start DATE NOT NULL,
+            playbook_id VARCHAR(64) NULL,
+            build_id VARCHAR(64) NOT NULL,
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            gross_profit_r DOUBLE NOT NULL DEFAULT 0,
+            gross_loss_r DOUBLE NOT NULL DEFAULT 0,
+            net_r DOUBLE NOT NULL DEFAULT 0,
+            end_equity_r DOUBLE NOT NULL DEFAULT 0,
+            max_drawdown_r DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (sim_run_id, month_start),
+            INDEX idx_entry_exit_day_trading_monthly_playbook (playbook_id, month_start),
+            INDEX idx_entry_exit_day_trading_monthly_build (build_id, month_start)
         )
         "#,
     )
@@ -3647,6 +4049,7 @@ async fn load_prop_replay_trades(
             r.id AS result_id,
             r.setup_id,
             COALESCE(r.entry_date, r.d_confirm_date, r.d_date) AS event_date,
+            r.exit_date,
             r.symbol,
             r.family_key,
             r.template_uid,
@@ -3676,6 +4079,7 @@ async fn load_prop_replay_trades(
                 result_id: row.try_get("result_id")?,
                 setup_id: row.try_get("setup_id")?,
                 event_date: row.try_get("event_date")?,
+                exit_date: row.try_get("exit_date")?,
                 root_symbol: normalize_root_symbol(&root_symbol_from_contract(&symbol)),
                 symbol,
                 family_key: row.try_get("family_key")?,
@@ -3777,6 +4181,7 @@ async fn compute_trade_trend_rows(
 fn close_prop_cycle(
     summary: &mut PropSummary,
     cycles: &mut Vec<PropCycleRow>,
+    frequency_rows: &mut Vec<TestFrequencyRow>,
     cycle: &OpenPropCycle,
     outcome: &str,
 ) {
@@ -3789,18 +4194,20 @@ fn close_prop_cycle(
         _ => summary.incomplete += 1,
     }
     cycles.push(cycle.finish(outcome));
+    frequency_rows.push(cycle.finish_frequency(outcome));
 }
 
 fn compute_prop_summary_from_trades(
     trades: &[PropReplayTrade],
     daily_loss_lockout: bool,
-) -> (PropSummary, Vec<PropCycleRow>) {
+) -> (PropSummary, Vec<PropCycleRow>, Vec<TestFrequencyRow>) {
     const PROFIT_TARGET_R: f64 = 30.0;
     const MAX_DRAWDOWN_R: f64 = 20.0;
     const DAILY_LOSS_R: f64 = 10.0;
 
     let mut summary = PropSummary::default();
     let mut cycles = Vec::new();
+    let mut frequency_rows = Vec::new();
     let mut active_cycle: Option<OpenPropCycle> = None;
     let mut current_loss_streak = 0_i64;
     let mut next_cycle_number = 1_i64;
@@ -3811,9 +4218,8 @@ fn compute_prop_summary_from_trades(
             template_uids_used.insert(trade.template_uid.clone());
         }
 
-        let date = trade.event_date.date();
         let cycle = active_cycle.get_or_insert_with(|| {
-            let cycle = OpenPropCycle::new(next_cycle_number, date);
+            let cycle = OpenPropCycle::new(next_cycle_number, trade.event_date);
             next_cycle_number += 1;
             cycle
         });
@@ -3838,7 +4244,13 @@ fn compute_prop_summary_from_trades(
 
         if let Some(outcome) = close_cycle_as {
             if let Some(finished_cycle) = active_cycle.take() {
-                close_prop_cycle(&mut summary, &mut cycles, &finished_cycle, outcome);
+                close_prop_cycle(
+                    &mut summary,
+                    &mut cycles,
+                    &mut frequency_rows,
+                    &finished_cycle,
+                    outcome,
+                );
             }
         }
     }
@@ -3847,6 +4259,7 @@ fn compute_prop_summary_from_trades(
         close_prop_cycle(
             &mut summary,
             &mut cycles,
+            &mut frequency_rows,
             &finished_cycle,
             "open_incomplete",
         );
@@ -3865,7 +4278,7 @@ fn compute_prop_summary_from_trades(
         0.0
     };
 
-    (summary, cycles)
+    (summary, cycles, frequency_rows)
 }
 
 fn compute_equity_points_from_trades(
@@ -3882,9 +4295,8 @@ fn compute_equity_points_from_trades(
     let mut next_cycle_number = 1_i64;
 
     for (index, trade) in trades.iter().enumerate() {
-        let date = trade.event_date.date();
         let cycle = active_cycle.get_or_insert_with(|| {
-            let cycle = OpenPropCycle::new(next_cycle_number, date);
+            let cycle = OpenPropCycle::new(next_cycle_number, trade.event_date);
             next_cycle_number += 1;
             cycle
         });
@@ -3934,9 +4346,8 @@ fn compute_trade_progress_from_trades(
     let mut next_cycle_number = 1_i64;
 
     for trade in trades {
-        let date = trade.event_date.date();
         let cycle = active_cycle.get_or_insert_with(|| {
-            let cycle = OpenPropCycle::new(next_cycle_number, date);
+            let cycle = OpenPropCycle::new(next_cycle_number, trade.event_date);
             next_cycle_number += 1;
             cycle
         });
@@ -4324,15 +4735,15 @@ fn trade_gap_bucket(gap_minutes: f64) -> (&'static str, &'static str) {
     if gap_minutes <= 1.0 {
         ("0_1m", "0-1m")
     } else if gap_minutes <= 5.0 {
-        ("1_5m", "1-5m")
+        ("1_5m", ">1-5m")
     } else if gap_minutes <= 15.0 {
-        ("5_15m", "5-15m")
+        ("5_15m", ">5-15m")
     } else if gap_minutes <= 30.0 {
-        ("15_30m", "15-30m")
+        ("15_30m", ">15-30m")
     } else if gap_minutes <= 60.0 {
-        ("30_60m", "30-60m")
+        ("30_60m", ">30-60m")
     } else {
-        ("over_60m", "60m+")
+        ("over_60m", ">60m")
     }
 }
 
@@ -4864,6 +5275,318 @@ fn compute_streaks_from_trades(trades: &[PropReplayTrade]) -> Vec<StreakRow> {
     }
 
     streaks
+}
+
+fn trade_duration_minutes(trade: &PropReplayTrade) -> Option<f64> {
+    trade.exit_date.map(|exit_date| {
+        exit_date
+            .signed_duration_since(trade.event_date)
+            .num_seconds()
+            .max(0) as f64
+            / 60.0
+    })
+}
+
+fn compute_day_trading_rows_from_trades(trades: &[PropReplayTrade]) -> DayTradingComputedRows {
+    let mut cumulative_r = 0.0_f64;
+    let mut peak_r = 0.0_f64;
+    let mut max_drawdown_r = 0.0_f64;
+    let mut day_peak_r = 0.0_f64;
+    let mut month_peak_r = 0.0_f64;
+    let mut current_day: Option<NaiveDate> = None;
+    let mut current_month: Option<NaiveDate> = None;
+    let mut daily_results = Vec::new();
+    let mut monthly_results = Vec::new();
+    let mut trade_rows = Vec::new();
+    let mut equity_points = Vec::new();
+    let mut drawdown_points = Vec::new();
+    let mut durations = Vec::new();
+    let mut day = DayTradingDailyResultRow {
+        trade_date: NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
+        trades: 0,
+        wins: 0,
+        losses: 0,
+        no_entries: 0,
+        gross_profit_r: 0.0,
+        gross_loss_r: 0.0,
+        net_r: 0.0,
+        end_equity_r: 0.0,
+        intraday_drawdown_r: 0.0,
+        best_trade_r: 0.0,
+        worst_trade_r: 0.0,
+    };
+    let mut month = DayTradingMonthlyResultRow {
+        month_start: NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
+        trades: 0,
+        wins: 0,
+        losses: 0,
+        no_entries: 0,
+        gross_profit_r: 0.0,
+        gross_loss_r: 0.0,
+        net_r: 0.0,
+        end_equity_r: 0.0,
+        max_drawdown_r: 0.0,
+    };
+
+    let finish_day = |rows: &mut Vec<DayTradingDailyResultRow>, row: &mut DayTradingDailyResultRow| {
+        if row.trade_date.year() != 1970 {
+            rows.push(DayTradingDailyResultRow {
+                trade_date: row.trade_date,
+                trades: row.trades,
+                wins: row.wins,
+                losses: row.losses,
+                no_entries: row.no_entries,
+                gross_profit_r: row.gross_profit_r,
+                gross_loss_r: row.gross_loss_r,
+                net_r: row.net_r,
+                end_equity_r: row.end_equity_r,
+                intraday_drawdown_r: row.intraday_drawdown_r,
+                best_trade_r: row.best_trade_r,
+                worst_trade_r: row.worst_trade_r,
+            });
+        }
+    };
+    let finish_month =
+        |rows: &mut Vec<DayTradingMonthlyResultRow>, row: &mut DayTradingMonthlyResultRow| {
+            if row.month_start.year() != 1970 {
+                rows.push(DayTradingMonthlyResultRow {
+                    month_start: row.month_start,
+                    trades: row.trades,
+                    wins: row.wins,
+                    losses: row.losses,
+                    no_entries: row.no_entries,
+                    gross_profit_r: row.gross_profit_r,
+                    gross_loss_r: row.gross_loss_r,
+                    net_r: row.net_r,
+                    end_equity_r: row.end_equity_r,
+                    max_drawdown_r: row.max_drawdown_r,
+                });
+            }
+        };
+
+    for trade in trades {
+        let trade_date = trade.event_date.date();
+        let month_start = NaiveDate::from_ymd_opt(trade_date.year(), trade_date.month(), 1)
+            .unwrap_or(trade_date);
+
+        if current_day != Some(trade_date) {
+            finish_day(&mut daily_results, &mut day);
+            current_day = Some(trade_date);
+            day_peak_r = cumulative_r;
+            day = DayTradingDailyResultRow {
+                trade_date,
+                trades: 0,
+                wins: 0,
+                losses: 0,
+                no_entries: 0,
+                gross_profit_r: 0.0,
+                gross_loss_r: 0.0,
+                net_r: 0.0,
+                end_equity_r: cumulative_r,
+                intraday_drawdown_r: 0.0,
+                best_trade_r: 0.0,
+                worst_trade_r: 0.0,
+            };
+        }
+
+        if current_month != Some(month_start) {
+            finish_month(&mut monthly_results, &mut month);
+            current_month = Some(month_start);
+            month_peak_r = cumulative_r;
+            month = DayTradingMonthlyResultRow {
+                month_start,
+                trades: 0,
+                wins: 0,
+                losses: 0,
+                no_entries: 0,
+                gross_profit_r: 0.0,
+                gross_loss_r: 0.0,
+                net_r: 0.0,
+                end_equity_r: cumulative_r,
+                max_drawdown_r: 0.0,
+            };
+        }
+
+        match trade.outcome.as_str() {
+            "pass" => {
+                day.trades += 1;
+                day.wins += 1;
+                month.trades += 1;
+                month.wins += 1;
+                day.gross_profit_r += trade.result_r.max(0.0);
+                month.gross_profit_r += trade.result_r.max(0.0);
+            }
+            "fail" => {
+                day.trades += 1;
+                day.losses += 1;
+                month.trades += 1;
+                month.losses += 1;
+                day.gross_loss_r += trade.result_r.min(0.0);
+                month.gross_loss_r += trade.result_r.min(0.0);
+            }
+            "no_entry" => {
+                day.no_entries += 1;
+                month.no_entries += 1;
+            }
+            _ => {}
+        }
+
+        if matches!(trade.outcome.as_str(), "pass" | "fail") {
+            cumulative_r += trade.result_r;
+            peak_r = peak_r.max(cumulative_r);
+            max_drawdown_r = max_drawdown_r.max(peak_r - cumulative_r);
+            day_peak_r = day_peak_r.max(cumulative_r);
+            month_peak_r = month_peak_r.max(cumulative_r);
+            day.intraday_drawdown_r = day.intraday_drawdown_r.max(day_peak_r - cumulative_r);
+            month.max_drawdown_r = month.max_drawdown_r.max(month_peak_r - cumulative_r);
+            day.net_r += trade.result_r;
+            month.net_r += trade.result_r;
+            day.end_equity_r = cumulative_r;
+            month.end_equity_r = cumulative_r;
+
+            if day.trades == 1 {
+                day.best_trade_r = trade.result_r;
+                day.worst_trade_r = trade.result_r;
+            } else {
+                day.best_trade_r = day.best_trade_r.max(trade.result_r);
+                day.worst_trade_r = day.worst_trade_r.min(trade.result_r);
+            }
+
+            let point_index = equity_points.len() as i64 + 1;
+            let drawdown_r = peak_r - cumulative_r;
+            let duration = trade_duration_minutes(trade);
+            if let Some(value) = duration {
+                durations.push(value);
+            }
+            trade_rows.push(DayTradingTradeRow {
+                sequence_number: point_index,
+                result_id: trade.result_id,
+                setup_id: trade.setup_id.clone(),
+                event_date: trade.event_date,
+                exit_date: trade.exit_date,
+                symbol: trade.symbol.clone(),
+                root_symbol: trade.root_symbol.clone(),
+                family_key: trade.family_key.clone(),
+                template_uid: trade.template_uid.clone(),
+                template_label: trade.template_label.clone(),
+                template_name: trade.template_name.clone(),
+                outcome: trade.outcome.clone(),
+                result_r: trade.result_r,
+                cumulative_r,
+                drawdown_r,
+                trade_duration_minutes: duration,
+            });
+            equity_points.push(DayTradingEquityPointRow {
+                point_index,
+                event_date: trade.event_date,
+                result_r: trade.result_r,
+                cumulative_r,
+                drawdown_r,
+            });
+            drawdown_points.push(DayTradingDrawdownPointRow {
+                point_index,
+                event_date: trade.event_date,
+                drawdown_r,
+                drawdown_pct_of_peak: if peak_r > 0.0 {
+                    drawdown_r / peak_r * 100.0
+                } else {
+                    0.0
+                },
+            });
+        }
+    }
+
+    finish_day(&mut daily_results, &mut day);
+    finish_month(&mut monthly_results, &mut month);
+
+    let total_trades = trade_rows.len() as i64;
+    let wins = trade_rows.iter().filter(|row| row.outcome == "pass").count() as i64;
+    let losses = trade_rows.iter().filter(|row| row.outcome == "fail").count() as i64;
+    let no_entries = trades.iter().filter(|trade| trade.outcome == "no_entry").count() as i64;
+    let gross_profit_r = trade_rows
+        .iter()
+        .map(|row| row.result_r.max(0.0))
+        .sum::<f64>();
+    let gross_loss_r = trade_rows
+        .iter()
+        .map(|row| row.result_r.min(0.0))
+        .sum::<f64>();
+    let total_r = cumulative_r;
+    let mut durations_for_median = durations.clone();
+
+    let summary = DayTradingSummary {
+        starting_equity_r: 0.0,
+        ending_equity_r: cumulative_r,
+        peak_equity_r: peak_r,
+        max_drawdown_r,
+        total_trades,
+        wins,
+        losses,
+        no_entries,
+        win_rate: if total_trades > 0 {
+            wins as f64 / total_trades as f64 * 100.0
+        } else {
+            0.0
+        },
+        avg_r: if total_trades > 0 {
+            total_r / total_trades as f64
+        } else {
+            0.0
+        },
+        total_r,
+        gross_profit_r,
+        gross_loss_r,
+        profit_factor: if gross_loss_r < 0.0 {
+            gross_profit_r / gross_loss_r.abs()
+        } else {
+            0.0
+        },
+        best_trade_r: trade_rows
+            .iter()
+            .map(|row| row.result_r)
+            .fold(0.0, f64::max),
+        worst_trade_r: trade_rows
+            .iter()
+            .map(|row| row.result_r)
+            .fold(0.0, f64::min),
+        best_day_r: daily_results
+            .iter()
+            .map(|row| row.net_r)
+            .fold(0.0, f64::max),
+        worst_day_r: daily_results
+            .iter()
+            .map(|row| row.net_r)
+            .fold(0.0, f64::min),
+        trading_days: daily_results.iter().filter(|row| row.trades > 0).count() as i64,
+        profitable_days: daily_results.iter().filter(|row| row.net_r > 0.0).count() as i64,
+        losing_days: daily_results.iter().filter(|row| row.net_r < 0.0).count() as i64,
+        avg_day_r: if !daily_results.is_empty() {
+            daily_results.iter().map(|row| row.net_r).sum::<f64>() / daily_results.len() as f64
+        } else {
+            0.0
+        },
+        max_trades_per_day: daily_results
+            .iter()
+            .map(|row| row.trades)
+            .max()
+            .unwrap_or(0),
+        avg_trade_duration_minutes: if durations.is_empty() {
+            0.0
+        } else {
+            durations.iter().sum::<f64>() / durations.len() as f64
+        },
+        median_trade_duration_minutes: median(&mut durations_for_median),
+        longest_trade_duration_minutes: durations.iter().copied().fold(0.0, f64::max),
+    };
+
+    DayTradingComputedRows {
+        summary,
+        trades: trade_rows,
+        equity_points,
+        drawdown_points,
+        daily_results,
+        monthly_results,
+    }
 }
 
 async fn store_prop_summary(
@@ -5480,6 +6203,95 @@ async fn store_trade_workload(
     Ok(())
 }
 
+async fn store_test_frequency_rows(
+    pool: &MySqlPool,
+    sim_run_id: &str,
+    playbook_id: Option<&str>,
+    build_id: &str,
+    rows: &[TestFrequencyRow],
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM entry_exit_playbook_sim_test_frequency WHERE sim_run_id = ?")
+        .bind(sim_run_id)
+        .execute(pool)
+        .await?;
+
+    for row in rows {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_playbook_sim_test_frequency (
+                sim_run_id,
+                cycle_number,
+                playbook_id,
+                build_id,
+                outcome,
+                start_at,
+                end_at,
+                duration_minutes,
+                calendar_days,
+                active_trade_days,
+                events,
+                trades,
+                wins,
+                losses,
+                no_entries,
+                sum_r,
+                avg_trades_per_calendar_day,
+                avg_trades_per_active_day,
+                avg_trades_per_hour,
+                max_drawdown_r,
+                worst_day_r
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                playbook_id = VALUES(playbook_id),
+                build_id = VALUES(build_id),
+                outcome = VALUES(outcome),
+                start_at = VALUES(start_at),
+                end_at = VALUES(end_at),
+                duration_minutes = VALUES(duration_minutes),
+                calendar_days = VALUES(calendar_days),
+                active_trade_days = VALUES(active_trade_days),
+                events = VALUES(events),
+                trades = VALUES(trades),
+                wins = VALUES(wins),
+                losses = VALUES(losses),
+                no_entries = VALUES(no_entries),
+                sum_r = VALUES(sum_r),
+                avg_trades_per_calendar_day = VALUES(avg_trades_per_calendar_day),
+                avg_trades_per_active_day = VALUES(avg_trades_per_active_day),
+                avg_trades_per_hour = VALUES(avg_trades_per_hour),
+                max_drawdown_r = VALUES(max_drawdown_r),
+                worst_day_r = VALUES(worst_day_r)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(row.cycle_number)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(&row.outcome)
+        .bind(row.start_at)
+        .bind(row.end_at)
+        .bind(row.duration_minutes)
+        .bind(row.calendar_days)
+        .bind(row.active_trade_days)
+        .bind(row.events)
+        .bind(row.trades)
+        .bind(row.wins)
+        .bind(row.losses)
+        .bind(row.no_entries)
+        .bind(row.sum_r)
+        .bind(row.avg_trades_per_calendar_day)
+        .bind(row.avg_trades_per_active_day)
+        .bind(row.avg_trades_per_hour)
+        .bind(row.max_drawdown_r)
+        .bind(row.worst_day_r)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
 async fn store_trade_gap_rows(
     pool: &MySqlPool,
     sim_run_id: &str,
@@ -5964,6 +6776,310 @@ async fn store_streaks(
         .bind(streak.end_date)
         .bind(streak.streak_length)
         .bind(streak.sum_r)
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn store_day_trading_rows(
+    pool: &MySqlPool,
+    sim_run_id: &str,
+    playbook_id: Option<&str>,
+    build_id: &str,
+    rows: &DayTradingComputedRows,
+) -> Result<(), sqlx::Error> {
+    for table in [
+        "entry_exit_day_trading_sim_trades",
+        "entry_exit_day_trading_sim_equity_points",
+        "entry_exit_day_trading_sim_drawdown_points",
+        "entry_exit_day_trading_sim_daily_results",
+        "entry_exit_day_trading_sim_monthly_results",
+    ] {
+        sqlx::query(&format!("DELETE FROM {table} WHERE sim_run_id = ?"))
+            .bind(sim_run_id)
+            .execute(pool)
+            .await?;
+    }
+
+    sqlx::query(
+        r#"
+        INSERT INTO entry_exit_day_trading_sim_summary (
+            sim_run_id,
+            playbook_id,
+            build_id,
+            starting_equity_r,
+            ending_equity_r,
+            peak_equity_r,
+            max_drawdown_r,
+            total_trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            total_r,
+            gross_profit_r,
+            gross_loss_r,
+            profit_factor,
+            best_trade_r,
+            worst_trade_r,
+            best_day_r,
+            worst_day_r,
+            trading_days,
+            profitable_days,
+            losing_days,
+            avg_day_r,
+            max_trades_per_day,
+            avg_trade_duration_minutes,
+            median_trade_duration_minutes,
+            longest_trade_duration_minutes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            playbook_id = VALUES(playbook_id),
+            build_id = VALUES(build_id),
+            starting_equity_r = VALUES(starting_equity_r),
+            ending_equity_r = VALUES(ending_equity_r),
+            peak_equity_r = VALUES(peak_equity_r),
+            max_drawdown_r = VALUES(max_drawdown_r),
+            total_trades = VALUES(total_trades),
+            wins = VALUES(wins),
+            losses = VALUES(losses),
+            no_entries = VALUES(no_entries),
+            win_rate = VALUES(win_rate),
+            avg_r = VALUES(avg_r),
+            total_r = VALUES(total_r),
+            gross_profit_r = VALUES(gross_profit_r),
+            gross_loss_r = VALUES(gross_loss_r),
+            profit_factor = VALUES(profit_factor),
+            best_trade_r = VALUES(best_trade_r),
+            worst_trade_r = VALUES(worst_trade_r),
+            best_day_r = VALUES(best_day_r),
+            worst_day_r = VALUES(worst_day_r),
+            trading_days = VALUES(trading_days),
+            profitable_days = VALUES(profitable_days),
+            losing_days = VALUES(losing_days),
+            avg_day_r = VALUES(avg_day_r),
+            max_trades_per_day = VALUES(max_trades_per_day),
+            avg_trade_duration_minutes = VALUES(avg_trade_duration_minutes),
+            median_trade_duration_minutes = VALUES(median_trade_duration_minutes),
+            longest_trade_duration_minutes = VALUES(longest_trade_duration_minutes)
+        "#,
+    )
+    .bind(sim_run_id)
+    .bind(playbook_id)
+    .bind(build_id)
+    .bind(rows.summary.starting_equity_r)
+    .bind(rows.summary.ending_equity_r)
+    .bind(rows.summary.peak_equity_r)
+    .bind(rows.summary.max_drawdown_r)
+    .bind(rows.summary.total_trades)
+    .bind(rows.summary.wins)
+    .bind(rows.summary.losses)
+    .bind(rows.summary.no_entries)
+    .bind(rows.summary.win_rate)
+    .bind(rows.summary.avg_r)
+    .bind(rows.summary.total_r)
+    .bind(rows.summary.gross_profit_r)
+    .bind(rows.summary.gross_loss_r)
+    .bind(rows.summary.profit_factor)
+    .bind(rows.summary.best_trade_r)
+    .bind(rows.summary.worst_trade_r)
+    .bind(rows.summary.best_day_r)
+    .bind(rows.summary.worst_day_r)
+    .bind(rows.summary.trading_days)
+    .bind(rows.summary.profitable_days)
+    .bind(rows.summary.losing_days)
+    .bind(rows.summary.avg_day_r)
+    .bind(rows.summary.max_trades_per_day)
+    .bind(rows.summary.avg_trade_duration_minutes)
+    .bind(rows.summary.median_trade_duration_minutes)
+    .bind(rows.summary.longest_trade_duration_minutes)
+    .execute(pool)
+    .await?;
+
+    for trade in &rows.trades {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_day_trading_sim_trades (
+                sim_run_id,
+                sequence_number,
+                result_id,
+                setup_id,
+                playbook_id,
+                build_id,
+                event_date,
+                exit_date,
+                symbol,
+                root_symbol,
+                family_key,
+                template_uid,
+                template_label,
+                template_name,
+                outcome,
+                result_r,
+                cumulative_r,
+                drawdown_r,
+                trade_duration_minutes
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(trade.sequence_number)
+        .bind(trade.result_id)
+        .bind(&trade.setup_id)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(trade.event_date)
+        .bind(trade.exit_date)
+        .bind(&trade.symbol)
+        .bind(&trade.root_symbol)
+        .bind(&trade.family_key)
+        .bind(&trade.template_uid)
+        .bind(&trade.template_label)
+        .bind(&trade.template_name)
+        .bind(&trade.outcome)
+        .bind(trade.result_r)
+        .bind(trade.cumulative_r)
+        .bind(trade.drawdown_r)
+        .bind(trade.trade_duration_minutes)
+        .execute(pool)
+        .await?;
+    }
+
+    for point in &rows.equity_points {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_day_trading_sim_equity_points (
+                sim_run_id,
+                point_index,
+                playbook_id,
+                build_id,
+                event_date,
+                result_r,
+                cumulative_r,
+                drawdown_r
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(point.point_index)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(point.event_date)
+        .bind(point.result_r)
+        .bind(point.cumulative_r)
+        .bind(point.drawdown_r)
+        .execute(pool)
+        .await?;
+    }
+
+    for point in &rows.drawdown_points {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_day_trading_sim_drawdown_points (
+                sim_run_id,
+                point_index,
+                playbook_id,
+                build_id,
+                event_date,
+                drawdown_r,
+                drawdown_pct_of_peak
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(point.point_index)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(point.event_date)
+        .bind(point.drawdown_r)
+        .bind(point.drawdown_pct_of_peak)
+        .execute(pool)
+        .await?;
+    }
+
+    for day in &rows.daily_results {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_day_trading_sim_daily_results (
+                sim_run_id,
+                trade_date,
+                playbook_id,
+                build_id,
+                trades,
+                wins,
+                losses,
+                no_entries,
+                gross_profit_r,
+                gross_loss_r,
+                net_r,
+                end_equity_r,
+                intraday_drawdown_r,
+                best_trade_r,
+                worst_trade_r
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(day.trade_date)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(day.trades)
+        .bind(day.wins)
+        .bind(day.losses)
+        .bind(day.no_entries)
+        .bind(day.gross_profit_r)
+        .bind(day.gross_loss_r)
+        .bind(day.net_r)
+        .bind(day.end_equity_r)
+        .bind(day.intraday_drawdown_r)
+        .bind(day.best_trade_r)
+        .bind(day.worst_trade_r)
+        .execute(pool)
+        .await?;
+    }
+
+    for month in &rows.monthly_results {
+        sqlx::query(
+            r#"
+            INSERT INTO entry_exit_day_trading_sim_monthly_results (
+                sim_run_id,
+                month_start,
+                playbook_id,
+                build_id,
+                trades,
+                wins,
+                losses,
+                no_entries,
+                gross_profit_r,
+                gross_loss_r,
+                net_r,
+                end_equity_r,
+                max_drawdown_r
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(sim_run_id)
+        .bind(month.month_start)
+        .bind(playbook_id)
+        .bind(build_id)
+        .bind(month.trades)
+        .bind(month.wins)
+        .bind(month.losses)
+        .bind(month.no_entries)
+        .bind(month.gross_profit_r)
+        .bind(month.gross_loss_r)
+        .bind(month.net_r)
+        .bind(month.end_equity_r)
+        .bind(month.max_drawdown_r)
         .execute(pool)
         .await?;
     }
@@ -6461,8 +7577,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("loading replay trades...");
     let prop_trades = load_prop_replay_trades(&pool, &router_run_id).await?;
+    let day_trading_rows = compute_day_trading_rows_from_trades(&prop_trades);
     let trade_trend_rows = compute_trade_trend_rows(&pool, &prop_trades).await?;
-    let (prop_summary, prop_cycles) =
+    let (prop_summary, prop_cycles, test_frequency_rows) =
         compute_prop_summary_from_trades(&prop_trades, args.daily_loss_lockout);
     let equity_points = compute_equity_points_from_trades(&prop_trades, args.daily_loss_lockout);
     let trade_progress_rows =
@@ -6557,6 +7674,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &trade_cadence,
     )
     .await?;
+    println!("storing test frequency...");
+    store_test_frequency_rows(
+        &pool,
+        &router_run_id,
+        args.reuse_router_run_id.as_deref(),
+        &train_run_id,
+        &test_frequency_rows,
+    )
+    .await?;
     println!("storing trade gap sequence...");
     store_trade_gap_rows(
         &pool,
@@ -6611,6 +7737,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.reuse_router_run_id.as_deref(),
         &train_run_id,
         &streaks,
+    )
+    .await?;
+    println!("storing day trading simulation...");
+    store_day_trading_rows(
+        &pool,
+        &router_run_id,
+        args.reuse_router_run_id.as_deref(),
+        &train_run_id,
+        &day_trading_rows,
     )
     .await?;
 
