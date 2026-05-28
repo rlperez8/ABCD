@@ -10,6 +10,9 @@ use serde::Serialize;
 use sqlx::{MySql, MySqlPool, QueryBuilder, Row};
 
 const RESULT_BATCH_SIZE: usize = 2_000;
+const MIN_EXECUTION_RISK_TICKS: f64 = 4.0;
+const PULLBACK_RETEST_WINDOW_BARS: usize = 24;
+const PULLBACK_RETEST_TOLERANCE_CD_MULTIPLE: f64 = 0.25;
 
 #[derive(Debug)]
 struct Args {
@@ -21,9 +24,18 @@ struct Args {
     limit: i64,
     event_result_policy: String,
     result_storage: String,
+    risk_basis: String,
+    risk_multiple: Option<f64>,
+    target_r: Option<f64>,
+    max_hold_multiple: i64,
+    entry_kind: String,
+    entry_offset: Option<i64>,
+    direction_mode: Option<String>,
     skip_condition_stats: bool,
     family_key: Option<String>,
     symbol: Option<String>,
+    template_source_run_id: Option<String>,
+    output_run_id: Option<String>,
 }
 
 #[derive(Clone, sqlx::FromRow)]
@@ -43,7 +55,9 @@ struct PatternSetup {
     pattern_family_key: Option<String>,
     d_date: NaiveDateTime,
     d_confirm_date: NaiveDateTime,
+    d_price: f64,
     cd_price_length: f64,
+    xa_price_length: f64,
     full_pattern_length: i64,
 }
 
@@ -107,6 +121,14 @@ struct EntryRule {
     kind: String,
     offset_from_confirmation: i64,
     price: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pullback_window_bars: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pullback_tolerance_basis: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pullback_tolerance_multiple: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    trigger: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -147,6 +169,7 @@ struct GeneratedTemplate {
     template_uid: String,
     template_name: String,
     rule_json: String,
+    entry_kind: String,
     entry_offset: i64,
     direction_mode: String,
     risk_basis: String,
@@ -403,7 +426,7 @@ impl SummaryCollector {
 }
 
 fn usage() -> &'static str {
-    "Usage: cargo run --bin create_entry_exit_templates -- [--source futures|daily|all] [--timeframe 1m|5m|daily] [--year YYYY | --start-year YYYY --end-year YYYY] [--limit N] [--family FAMILY_KEY] [--symbol SYMBOL] [--event-result-policy first|best] [--result-storage summary-only|full] [--skip-condition-stats]\nUse --limit 0 to scan every Twin/Event in the selected period. Default result storage is summary-only; use --result-storage full for raw audit rows. It does not read entry_exit_tests or the Phase 1 optimizer routes."
+    "Usage: cargo run --bin create_entry_exit_templates -- [--source futures|daily|all] [--timeframe 1m|5m|daily] [--year YYYY | --start-year YYYY --end-year YYYY] [--limit N] [--family FAMILY_KEY] [--symbol SYMBOL] [--event-result-policy first|best] [--result-storage summary-only|full] [--entry-kind confirmation|pullback-retest-d] [--entry-offset N] [--direction-mode pattern|inverse_pattern|reversal] [--risk-basis cd|xa] [--risk-multiple M] [--target-r R] [--max-hold-multiple N] [--template-source-run-id RUN_ID] [--output-run-id RUN_ID] [--skip-condition-stats]\nUse --limit 0 to scan every Twin/Event in the selected period. Default result storage is summary-only; use --result-storage full for raw audit rows. With --template-source-run-id it evaluates that run's existing templates over the selected period without creating new templates. It does not read entry_exit_tests or the Phase 1 optimizer routes."
 }
 
 fn arg_value(args: &[String], name: &str) -> Option<String> {
@@ -429,6 +452,44 @@ fn normalize_timeframe(value: Option<String>) -> Option<String> {
             "5" | "5min" | "5-min" | "5minute" | "5-minute" => "5m".to_string(),
             "day" | "1d" => "daily".to_string(),
             _ => value,
+        })
+}
+
+fn normalize_risk_basis(value: Option<String>) -> String {
+    match value.as_deref().map(str::trim).map(str::to_ascii_lowercase) {
+        Some(value) if value == "xa" || value == "xa_price_length" || value == "x_to_a" => {
+            "xa_price_length".to_string()
+        }
+        _ => "cd_price_length".to_string(),
+    }
+}
+
+fn normalize_entry_kind(value: Option<String>) -> String {
+    match value.as_deref().map(str::trim).map(str::to_ascii_lowercase) {
+        Some(value)
+            if value == "pullback"
+                || value == "pullback_retest"
+                || value == "pullback-retest-d"
+                || value == "pullback_retest_d"
+                || value == "retest-d"
+                || value == "retest_d" =>
+        {
+            "pullback_retest_d".to_string()
+        }
+        _ => "confirmation_plus_n_open".to_string(),
+    }
+}
+
+fn normalize_direction_mode(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+        .and_then(|value| match value.as_str() {
+            "pattern" | "pattern_direction" | "with_pattern" => Some("pattern".to_string()),
+            "inverse" | "inverse_pattern" | "against_pattern" | "reversal" | "xa_reversal" => {
+                Some("inverse_pattern".to_string())
+            }
+            _ => None,
         })
 }
 
@@ -459,6 +520,82 @@ fn normalized_root_symbol(setup: &PatternSetup) -> String {
     } else {
         root
     }
+}
+
+fn root_symbol_from_contract(symbol: &str) -> String {
+    let uppercase = symbol.trim().to_uppercase();
+    let chars = uppercase.chars().collect::<Vec<_>>();
+    for index in 0..chars.len().saturating_sub(1) {
+        let is_contract_month = matches!(
+            chars[index],
+            'F' | 'G' | 'H' | 'J' | 'K' | 'M' | 'N' | 'Q' | 'U' | 'V' | 'X' | 'Z'
+        );
+        if is_contract_month && chars[index + 1].is_ascii_digit() && index > 0 {
+            return chars[..index].iter().collect::<String>();
+        }
+    }
+    uppercase
+}
+
+fn tick_size_for_root(root_symbol: &str) -> f64 {
+    match root_symbol {
+        "ES" | "MES" | "NQ" | "MNQ" => 0.25,
+        "RTY" | "M2K" | "EMD" => 0.10,
+        "YM" | "MYM" => 1.0,
+        "NKD" => 5.0,
+        "CL" | "MCL" => 0.01,
+        "QM" => 0.025,
+        "NG" => 0.001,
+        "QG" => 0.005,
+        "GC" | "MGC" | "PA" | "PL" => 0.10,
+        "SI" | "SIL" => 0.005,
+        "HG" => 0.0005,
+        "RB" | "HO" => 0.0001,
+        "6A" | "6B" | "6C" | "6E" | "6M" | "6N" | "6S" => 0.00005,
+        "6J" => 0.0000005,
+        "GF" | "HE" | "LE" => 0.025,
+        "ZC" | "ZW" | "ZS" | "KE" => 0.25,
+        "ZL" => 0.01,
+        "ZM" => 0.10,
+        "ZB" | "UB" => 0.03125,
+        "ZN" => 0.015625,
+        "ZF" => 0.0078125,
+        "ZT" => 0.00390625,
+        _ => 0.01,
+    }
+}
+
+fn tick_size_for_setup(setup: &PatternSetup) -> f64 {
+    let root = clean_optional_text(setup.root_symbol.as_deref())
+        .or_else(|| clean_optional_text(setup.contract_symbol.as_deref()))
+        .or_else(|| clean_optional_text(Some(&setup.symbol)))
+        .unwrap_or_else(|| setup.symbol.clone());
+    tick_size_for_root(&root_symbol_from_contract(&root))
+}
+
+fn clean_tick_price(price: f64) -> f64 {
+    (price * 1_000_000_000.0).round() / 1_000_000_000.0
+}
+
+fn round_to_tick(price: f64, tick_size: f64) -> f64 {
+    if !price.is_finite() || !tick_size.is_finite() || tick_size <= 0.0 {
+        return price;
+    }
+    clean_tick_price((price / tick_size).round() * tick_size)
+}
+
+fn floor_to_tick(price: f64, tick_size: f64) -> f64 {
+    if !price.is_finite() || !tick_size.is_finite() || tick_size <= 0.0 {
+        return price;
+    }
+    clean_tick_price((price / tick_size).floor() * tick_size)
+}
+
+fn ceil_to_tick(price: f64, tick_size: f64) -> f64 {
+    if !price.is_finite() || !tick_size.is_finite() || tick_size <= 0.0 {
+        return price;
+    }
+    clean_tick_price((price / tick_size).ceil() * tick_size)
 }
 
 fn exchange_for_root(root_symbol: &str) -> &'static str {
@@ -532,12 +669,48 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
                 "summary-only".to_string()
             }
         });
+    let risk_basis = normalize_risk_basis(arg_value(&raw_args, "--risk-basis"));
+    let risk_multiple = arg_value(&raw_args, "--risk-multiple")
+        .or_else(|| arg_value(&raw_args, "--risk-mult"))
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value > 0.0);
+    let target_r = arg_value(&raw_args, "--target-r")
+        .or_else(|| arg_value(&raw_args, "--target"))
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value > 0.0);
+    let max_hold_multiple = arg_value(&raw_args, "--max-hold-multiple")
+        .or_else(|| arg_value(&raw_args, "--hold-multiple"))
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(5)
+        .clamp(1, 50);
+    let entry_kind = normalize_entry_kind(
+        arg_value(&raw_args, "--entry-kind")
+            .or_else(|| arg_value(&raw_args, "--entry"))
+            .or_else(|| arg_value(&raw_args, "--entry-type")),
+    );
+    let entry_offset = arg_value(&raw_args, "--entry-offset")
+        .or_else(|| arg_value(&raw_args, "--offset"))
+        .and_then(|value| value.parse::<i64>().ok())
+        .filter(|value| *value > 0);
+    let direction_mode = normalize_direction_mode(
+        arg_value(&raw_args, "--direction-mode")
+            .or_else(|| arg_value(&raw_args, "--direction"))
+            .or_else(|| arg_value(&raw_args, "--trade-direction-mode")),
+    );
     let skip_condition_stats = raw_args.iter().any(|arg| arg == "--skip-condition-stats");
     let family_key = arg_value(&raw_args, "--family")
         .or_else(|| arg_value(&raw_args, "--family-key"))
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
     let symbol = arg_value(&raw_args, "--symbol")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let template_source_run_id = arg_value(&raw_args, "--template-source-run-id")
+        .or_else(|| arg_value(&raw_args, "--existing-template-run-id"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let output_run_id = arg_value(&raw_args, "--output-run-id")
+        .or_else(|| arg_value(&raw_args, "--append-to-run-id"))
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
@@ -550,9 +723,18 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
         limit,
         event_result_policy,
         result_storage,
+        risk_basis,
+        risk_multiple,
+        target_r,
+        max_hold_multiple,
+        entry_kind,
+        entry_offset,
+        direction_mode,
         skip_condition_stats,
         family_key,
         symbol,
+        template_source_run_id,
+        output_run_id,
     })
 }
 
@@ -1077,12 +1259,15 @@ async fn fetch_patterns(pool: &MySqlPool, args: &Args) -> Result<Vec<PatternSetu
             ps.pattern_family_key,
             ps.d_date,
             CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS d_confirm_date,
+            ps.d_min_max AS d_price,
             ps.cd_price_length,
+            COALESCE(ps.xa_price_length, ABS(ps.a_min_max - ps.x_min_max), 0) AS xa_price_length,
             CAST(ps.full_pattern_length AS SIGNED) AS full_pattern_length
         FROM pattern_setups ps
         WHERE ps.d_date IS NOT NULL
           AND ps.full_pattern_length > 0
           AND ABS(ps.cd_price_length) > 0
+          AND COALESCE(ps.xa_price_length, ABS(ps.a_min_max - ps.x_min_max), 0) > 0
           {source_filter}
           {year_filter}
           {timeframe_filter}
@@ -1200,8 +1385,12 @@ fn futures_candle_table(source_table: Option<&str>) -> &'static str {
 async fn fetch_forward_candles(
     pool: &MySqlPool,
     setup: &PatternSetup,
+    max_hold_multiple: i64,
 ) -> Result<Vec<ForwardCandle>, sqlx::Error> {
-    let max_forward_bars = setup.full_pattern_length.saturating_mul(5).max(1);
+    let max_forward_bars = setup
+        .full_pattern_length
+        .saturating_mul(max_hold_multiple.max(5))
+        .max(1);
     let use_daily = setup
         .source_table
         .as_deref()
@@ -1286,6 +1475,147 @@ fn direction_for_mode(setup: &PatternSetup, direction_mode: &str) -> f64 {
     }
 }
 
+fn risk_basis_length(setup: &PatternSetup, risk_basis: &str) -> f64 {
+    match risk_basis {
+        "xa_price_length" => setup.xa_price_length.abs(),
+        _ => setup.cd_price_length.abs(),
+    }
+}
+
+fn risk_points_for_template(template: &GeneratedTemplate, setup: &PatternSetup) -> f64 {
+    risk_basis_length(setup, &template.risk_basis) * template.risk_multiple
+}
+
+fn execution_prices(
+    template: &GeneratedTemplate,
+    setup: &PatternSetup,
+    raw_entry_price: f64,
+    direction: f64,
+) -> Option<(f64, f64, f64, f64, f64)> {
+    let raw_risk_points = risk_points_for_template(template, setup);
+    if !raw_risk_points.is_finite() || raw_risk_points <= 0.0 {
+        return None;
+    }
+
+    let tick_size = tick_size_for_setup(setup);
+    let entry_price = round_to_tick(raw_entry_price, tick_size);
+    let min_risk_points = MIN_EXECUTION_RISK_TICKS * tick_size;
+    let tick_rounded_risk = clean_tick_price((raw_risk_points / tick_size).ceil() * tick_size);
+    let risk_points = tick_rounded_risk.max(min_risk_points);
+    let stop_price = if direction > 0.0 {
+        floor_to_tick(entry_price - risk_points, tick_size)
+    } else {
+        ceil_to_tick(entry_price + risk_points, tick_size)
+    };
+    let adjusted_risk_points = clean_tick_price((entry_price - stop_price).abs());
+    if !adjusted_risk_points.is_finite() || adjusted_risk_points <= 0.0 {
+        return None;
+    }
+
+    let raw_target_price = entry_price + direction * adjusted_risk_points * template.target_r;
+    let target_price = if direction > 0.0 {
+        ceil_to_tick(raw_target_price, tick_size)
+    } else {
+        floor_to_tick(raw_target_price, tick_size)
+    };
+    let target_result_r = ((target_price - entry_price) * direction) / adjusted_risk_points;
+    Some((
+        entry_price,
+        stop_price,
+        target_price,
+        adjusted_risk_points,
+        target_result_r,
+    ))
+}
+
+fn execution_prices_from_stop(
+    template: &GeneratedTemplate,
+    setup: &PatternSetup,
+    raw_entry_price: f64,
+    raw_stop_price: f64,
+    direction: f64,
+) -> Option<(f64, f64, f64, f64, f64)> {
+    let tick_size = tick_size_for_setup(setup);
+    let entry_price = round_to_tick(raw_entry_price, tick_size);
+    let mut stop_price = if direction > 0.0 {
+        floor_to_tick(raw_stop_price, tick_size)
+    } else {
+        ceil_to_tick(raw_stop_price, tick_size)
+    };
+
+    let min_risk_points = MIN_EXECUTION_RISK_TICKS * tick_size;
+    let risk_points = clean_tick_price((entry_price - stop_price).abs());
+    if !risk_points.is_finite() || risk_points < min_risk_points {
+        stop_price = if direction > 0.0 {
+            floor_to_tick(entry_price - min_risk_points, tick_size)
+        } else {
+            ceil_to_tick(entry_price + min_risk_points, tick_size)
+        };
+    }
+
+    let adjusted_risk_points = clean_tick_price((entry_price - stop_price).abs());
+    if !adjusted_risk_points.is_finite() || adjusted_risk_points <= 0.0 {
+        return None;
+    }
+
+    let raw_target_price = entry_price + direction * adjusted_risk_points * template.target_r;
+    let target_price = if direction > 0.0 {
+        ceil_to_tick(raw_target_price, tick_size)
+    } else {
+        floor_to_tick(raw_target_price, tick_size)
+    };
+    let target_result_r = ((target_price - entry_price) * direction) / adjusted_risk_points;
+    Some((
+        entry_price,
+        stop_price,
+        target_price,
+        adjusted_risk_points,
+        target_result_r,
+    ))
+}
+
+fn pullback_retest_entry(
+    setup: &PatternSetup,
+    candles: &[ForwardCandle],
+    start_index: usize,
+    direction: f64,
+) -> Option<(usize, f64)> {
+    let tick_size = tick_size_for_setup(setup);
+    let tolerance = (setup.cd_price_length.abs() * PULLBACK_RETEST_TOLERANCE_CD_MULTIPLE)
+        .max(MIN_EXECUTION_RISK_TICKS * tick_size);
+    let zone_low = setup.d_price - tolerance;
+    let zone_high = setup.d_price + tolerance;
+    let search_end = candles
+        .len()
+        .min(start_index.saturating_add(PULLBACK_RETEST_WINDOW_BARS));
+
+    for trigger_index in start_index..search_end {
+        let Some(candle) = candles.get(trigger_index) else {
+            continue;
+        };
+        let touches_zone = candle.low <= zone_high && candle.high >= zone_low;
+        let rejects_zone = if direction > 0.0 {
+            candle.close > setup.d_price
+        } else {
+            candle.close < setup.d_price
+        };
+        if touches_zone && rejects_zone {
+            let entry_index = trigger_index.saturating_add(1);
+            if entry_index >= candles.len() {
+                return None;
+            }
+            let raw_stop_price = if direction > 0.0 {
+                candle.low - tick_size
+            } else {
+                candle.high + tick_size
+            };
+            return Some((entry_index, raw_stop_price));
+        }
+    }
+
+    None
+}
+
 fn no_entry(reason: &str) -> TemplateEvaluation {
     TemplateEvaluation {
         outcome: "no_entry".to_string(),
@@ -1311,23 +1641,42 @@ fn evaluate_template(
         return no_entry("no_candles");
     }
 
+    let direction = direction_for_mode(setup, &template.direction_mode);
     let start_index = forward_start_index(setup, candles);
-    let entry_offset = template.entry_offset.max(1) as usize;
-    let entry_index = start_index.saturating_add(entry_offset - 1);
+    let (entry_index, prices) = if template.entry_kind == "pullback_retest_d" {
+        let Some((entry_index, raw_stop_price)) =
+            pullback_retest_entry(setup, candles, start_index, direction)
+        else {
+            return no_entry("pullback_retest_missing");
+        };
+        let Some(entry_candle) = candles.get(entry_index) else {
+            return no_entry("entry_offset_missing");
+        };
+        let Some(prices) = execution_prices_from_stop(
+            template,
+            setup,
+            entry_candle.open,
+            raw_stop_price,
+            direction,
+        ) else {
+            return no_entry("invalid_risk");
+        };
+        (entry_index, prices)
+    } else {
+        let entry_offset = template.entry_offset.max(1) as usize;
+        let entry_index = start_index.saturating_add(entry_offset - 1);
+        let Some(entry_candle) = candles.get(entry_index) else {
+            return no_entry("entry_offset_missing");
+        };
+        let Some(prices) = execution_prices(template, setup, entry_candle.open, direction) else {
+            return no_entry("invalid_risk");
+        };
+        (entry_index, prices)
+    };
     let Some(entry_candle) = candles.get(entry_index) else {
         return no_entry("entry_offset_missing");
     };
-
-    let cd_length = setup.cd_price_length.abs();
-    let risk_points = cd_length * template.risk_multiple;
-    if !risk_points.is_finite() || risk_points <= 0.0 {
-        return no_entry("invalid_risk");
-    }
-
-    let direction = direction_for_mode(setup, &template.direction_mode);
-    let entry_price = entry_candle.open;
-    let stop_price = entry_price - direction * risk_points;
-    let target_price = entry_price + direction * risk_points * template.target_r;
+    let (entry_price, stop_price, target_price, risk_points, target_result_r) = prices;
     let max_hold_bars = setup
         .full_pattern_length
         .saturating_mul(template.max_hold_multiple.max(1))
@@ -1363,7 +1712,7 @@ fn evaluate_template(
             return TemplateEvaluation {
                 outcome: "pass".to_string(),
                 exit_reason: "target".to_string(),
-                result_r: Some(template.target_r),
+                result_r: Some(target_result_r),
                 entry_date: Some(entry_candle.candle_date),
                 exit_date: Some(candles[candle_index].candle_date),
                 entry_price: Some(entry_price),
@@ -1526,17 +1875,50 @@ fn build_template_json(
             },
         },
         entry: EntryRule {
-            kind: "confirmation_plus_n_open".to_string(),
+            kind: template.entry_kind.clone(),
             offset_from_confirmation: template.entry_offset,
             price: "open".to_string(),
+            pullback_window_bars: if template.entry_kind == "pullback_retest_d" {
+                Some(PULLBACK_RETEST_WINDOW_BARS as i64)
+            } else {
+                None
+            },
+            pullback_tolerance_basis: if template.entry_kind == "pullback_retest_d" {
+                Some("cd_price_length".to_string())
+            } else {
+                None
+            },
+            pullback_tolerance_multiple: if template.entry_kind == "pullback_retest_d" {
+                Some(PULLBACK_RETEST_TOLERANCE_CD_MULTIPLE)
+            } else {
+                None
+            },
+            trigger: if template.entry_kind == "pullback_retest_d" {
+                Some("touch D zone, close back in trade direction, enter next open".to_string())
+            } else {
+                None
+            },
         },
         stop: StopRule {
-            kind: "cd_fraction_from_entry".to_string(),
+            kind: if template.entry_kind == "pullback_retest_d" {
+                "beyond_pullback_extreme_min_4_ticks".to_string()
+            } else if template.risk_basis == "xa_price_length" {
+                "xa_distance_from_entry".to_string()
+            } else {
+                "cd_fraction_from_entry".to_string()
+            },
             basis: template.risk_basis.clone(),
             multiple: template.risk_multiple,
-            description:
+            description: if template.entry_kind == "pullback_retest_d" {
+                "Risk is calculated from entry to the pullback rejection candle extreme, with a minimum 4-tick stop distance."
+                    .to_string()
+            } else if template.risk_basis == "xa_price_length" {
+                "Risk is calculated as ABS(A price - X price) multiplied by this template multiple."
+                    .to_string()
+            } else {
                 "Risk is calculated as ABS(CD price length) multiplied by this template multiple."
-                    .to_string(),
+                    .to_string()
+            },
         },
         target: TargetRule {
             kind: "risk_multiple".to_string(),
@@ -1567,28 +1949,114 @@ fn synthesize_template(
     sequence: usize,
     setup: &PatternSetup,
     candles: &[ForwardCandle],
+    args: &Args,
 ) -> Option<GeneratedTemplate> {
     let start_index = forward_start_index(setup, candles);
     if candles.len() <= start_index {
         return None;
     }
 
-    let cd_length = setup.cd_price_length.abs();
-    if !cd_length.is_finite() || cd_length <= 0.0 {
+    let basis_length = risk_basis_length(setup, &args.risk_basis);
+    if !basis_length.is_finite() || basis_length <= 0.0 {
         return None;
     }
 
-    let max_hold_bars = setup.full_pattern_length.saturating_mul(5).max(1) as usize;
+    let max_hold_bars = setup
+        .full_pattern_length
+        .saturating_mul(args.max_hold_multiple.max(1))
+        .max(1) as usize;
     let max_entry_offset = candles
         .len()
         .saturating_sub(start_index)
         .min(max_hold_bars)
         .min(24);
-    let target_rs = [4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5];
-    let risk_buffer = (cd_length * 0.01).max(0.01);
+    let target_rs = args
+        .target_r
+        .map(|target_r| vec![target_r])
+        .unwrap_or_else(|| vec![4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5]);
+    let direction_modes = args
+        .direction_mode
+        .as_deref()
+        .map(|direction_mode| vec![direction_mode])
+        .unwrap_or_else(|| vec!["pattern", "inverse_pattern"]);
+    let risk_buffer = (basis_length * 0.01).max(0.01);
     let mut best: Option<(GeneratedTemplate, TemplateEvaluation, f64)> = None;
 
-    for entry_offset in 1..=max_entry_offset {
+    if args.entry_kind == "pullback_retest_d" {
+        for direction_mode in direction_modes.iter().copied() {
+            let direction = direction_for_mode(setup, direction_mode);
+            let Some((entry_index, _)) =
+                pullback_retest_entry(setup, candles, start_index, direction)
+            else {
+                continue;
+            };
+            let entry_offset = entry_index.saturating_sub(start_index).saturating_add(1);
+
+            for target_r in target_rs.iter().copied() {
+                let mut template = GeneratedTemplate {
+                    template_uid: template_uid(run_id, sequence),
+                    template_name: String::new(),
+                    rule_json: "{}".to_string(),
+                    entry_kind: args.entry_kind.clone(),
+                    entry_offset: entry_offset as i64,
+                    direction_mode: direction_mode.to_string(),
+                    risk_basis: "pullback_retest_extreme".to_string(),
+                    risk_multiple: 1.0,
+                    target_r,
+                    max_hold_multiple: args.max_hold_multiple,
+                };
+
+                let evaluation = evaluate_template(&template, setup, candles);
+                if evaluation.outcome != "pass" {
+                    continue;
+                }
+                let display_risk_multiple = evaluation
+                    .risk_points
+                    .map(|risk_points| risk_points / basis_length)
+                    .filter(|value| value.is_finite() && *value > 0.0)
+                    .unwrap_or(1.0);
+                template.risk_multiple = display_risk_multiple;
+                template.template_name = format!(
+                    "{} + D pullback retest + swing stop + {:.2}R target",
+                    if direction_mode == "inverse_pattern" {
+                        "Inverse pattern"
+                    } else {
+                        "Pattern direction"
+                    },
+                    template.target_r
+                );
+                let score =
+                    target_r * 100.0 - entry_offset as f64 * 3.0 - display_risk_multiple * 4.0
+                        + if direction_mode == "pattern" {
+                            5.0
+                        } else {
+                            0.0
+                        };
+
+                let replace = best
+                    .as_ref()
+                    .map(|(_, _, best_score)| score > *best_score)
+                    .unwrap_or(true);
+                if replace {
+                    best = Some((template, evaluation, score));
+                }
+            }
+        }
+
+        let (mut template, evaluation, _) = best?;
+        template.rule_json = build_template_json(setup, &template, &evaluation).ok()?;
+        return Some(template);
+    }
+
+    let entry_offsets: Vec<usize> = args
+        .entry_offset
+        .map(|entry_offset| vec![entry_offset as usize])
+        .unwrap_or_else(|| (1..=max_entry_offset).collect());
+
+    for entry_offset in entry_offsets {
+        if entry_offset == 0 || entry_offset > max_entry_offset {
+            continue;
+        }
         let entry_index = start_index + entry_offset - 1;
         let Some(entry_candle) = candles.get(entry_index) else {
             continue;
@@ -1598,7 +2066,7 @@ fn synthesize_template(
             continue;
         }
 
-        for direction_mode in ["pattern", "inverse_pattern"] {
+        for direction_mode in direction_modes.iter().copied() {
             let direction = direction_for_mode(setup, direction_mode);
             let entry_price = entry_candle.open;
             let mut max_adverse = 0.0f64;
@@ -1607,22 +2075,28 @@ fn synthesize_template(
                 let (adverse, favorable) = candidate_price_stats(direction, entry_price, candle);
                 max_adverse = max_adverse.max(adverse);
 
-                for target_r in target_rs {
+                for target_r in target_rs.iter().copied() {
                     if favorable <= 0.0 {
                         continue;
                     }
-                    let min_risk = max_adverse + risk_buffer;
-                    let max_risk = favorable / target_r;
-                    if !min_risk.is_finite()
-                        || !max_risk.is_finite()
-                        || min_risk <= 0.0
-                        || max_risk <= min_risk
-                    {
-                        continue;
-                    }
+                    let risk_multiple = if let Some(risk_multiple) = args.risk_multiple {
+                        risk_multiple
+                    } else if args.risk_basis == "xa_price_length" {
+                        1.0
+                    } else {
+                        let min_risk = max_adverse + risk_buffer;
+                        let max_risk = favorable / target_r;
+                        if !min_risk.is_finite()
+                            || !max_risk.is_finite()
+                            || min_risk <= 0.0
+                            || max_risk <= min_risk
+                        {
+                            continue;
+                        }
 
-                    let risk_points = (min_risk + max_risk) / 2.0;
-                    let risk_multiple = risk_points / cd_length;
+                        let risk_points = (min_risk + max_risk) / 2.0;
+                        risk_points / basis_length
+                    };
                     if !(0.005..=5.0).contains(&risk_multiple) {
                         continue;
                     }
@@ -1631,21 +2105,27 @@ fn synthesize_template(
                         template_uid: template_uid(run_id, sequence),
                         template_name: String::new(),
                         rule_json: "{}".to_string(),
+                        entry_kind: args.entry_kind.clone(),
                         entry_offset: entry_offset as i64,
                         direction_mode: direction_mode.to_string(),
-                        risk_basis: "cd_price_length".to_string(),
+                        risk_basis: args.risk_basis.clone(),
                         risk_multiple,
                         target_r,
-                        max_hold_multiple: 5,
+                        max_hold_multiple: args.max_hold_multiple,
                     };
                     template.template_name = format!(
-                        "{} + confirmation+{} open + CD {:.3} risk + {:.2}R target",
+                        "{} + confirmation+{} open + {} {:.3} risk + {:.2}R target",
                         if direction_mode == "inverse_pattern" {
                             "Inverse pattern"
                         } else {
                             "Pattern direction"
                         },
                         template.entry_offset,
+                        if template.risk_basis == "xa_price_length" {
+                            "XA"
+                        } else {
+                            "CD"
+                        },
                         template.risk_multiple,
                         template.target_r
                     );
@@ -1713,7 +2193,7 @@ async fn insert_template(
     .bind(&template.template_uid)
     .bind(run_id)
     .bind(&template.template_name)
-    .bind("confirmation_plus_n_open")
+    .bind(&template.entry_kind)
     .bind(&template.direction_mode)
     .bind(&template.risk_basis)
     .bind(template.risk_multiple)
@@ -1732,6 +2212,54 @@ async fn insert_template(
     .await?;
 
     Ok(())
+}
+
+async fn load_templates_for_run(
+    pool: &MySqlPool,
+    source_run_id: &str,
+) -> Result<Vec<GeneratedTemplate>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            template_uid,
+            template_name,
+            CAST(rule_json AS CHAR) AS rule_json,
+            entry_kind,
+            COALESCE(
+                CAST(JSON_UNQUOTE(JSON_EXTRACT(rule_json, '$.entry.offset_from_confirmation')) AS SIGNED),
+                1
+            ) AS entry_offset,
+            direction_mode,
+            risk_basis,
+            risk_multiple,
+            target_r,
+            CAST(max_hold_multiple AS SIGNED) AS max_hold_multiple
+        FROM entry_exit_templates
+        WHERE origin_run_id = ?
+          AND is_active = TRUE
+        ORDER BY created_at ASC, template_uid ASC
+        "#,
+    )
+    .bind(source_run_id)
+    .fetch_all(pool)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(GeneratedTemplate {
+                template_uid: row.try_get("template_uid")?,
+                template_name: row.try_get("template_name")?,
+                rule_json: row.try_get("rule_json")?,
+                entry_kind: row.try_get("entry_kind")?,
+                entry_offset: row.try_get("entry_offset")?,
+                direction_mode: row.try_get("direction_mode")?,
+                risk_basis: row.try_get("risk_basis")?,
+                risk_multiple: row.try_get("risk_multiple")?,
+                target_r: row.try_get("target_r")?,
+                max_hold_multiple: row.try_get("max_hold_multiple")?,
+            })
+        })
+        .collect()
 }
 
 async fn flush_result_batch(
@@ -3095,9 +3623,115 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    let store_raw_results = args.stores_raw_results();
+
+    if let Some(template_source_run_id) = args.template_source_run_id.as_deref() {
+        if !store_raw_results {
+            return Err("--template-source-run-id requires --result-storage full so validation rows are stored".into());
+        }
+
+        let run_id = args
+            .output_run_id
+            .as_deref()
+            .unwrap_or(template_source_run_id)
+            .to_string();
+        let result_table_name = result_table_name_for_run(&run_id);
+        ensure_result_table_for_run(&pool, &result_table_name).await?;
+
+        let templates = load_templates_for_run(&pool, template_source_run_id).await?;
+        if templates.is_empty() {
+            println!("No active templates found for source run {template_source_run_id}.");
+            return Ok(());
+        }
+
+        let started = Instant::now();
+        let mut pending_results: Vec<StoredTemplateResult> =
+            Vec::with_capacity(RESULT_BATCH_SIZE);
+        let mut summary = SummaryCollector::default();
+        let mut result_rows = 0_i64;
+
+        println!(
+            "Entry/Exit existing-template evaluator run {run_id}: {} raw patterns -> {} Twin/Event decisions, templates_from={}, templates={}, source={}, timeframe={}, year={}, event_result_policy={}, result_storage={}",
+            raw_patterns_loaded,
+            events.len(),
+            template_source_run_id,
+            templates.len(),
+            args.source_scope,
+            args.source_timeframe.as_deref().unwrap_or("all"),
+            args.year_label(),
+            args.event_result_policy,
+            args.result_storage
+        );
+        println!("Build test results table: {result_table_name}");
+        println!("Template discovery is disabled in this mode; only existing templates are evaluated.");
+
+        for (event_index, event) in events.iter().enumerate() {
+            let mut candle_cache: HashMap<String, Vec<ForwardCandle>> = HashMap::new();
+            for setup in &event.candidates {
+                let candles = match fetch_forward_candles(&pool, setup, args.max_hold_multiple).await
+                {
+                    Ok(candles) => candles,
+                    Err(error) => {
+                        eprintln!(
+                            "Existing-template candle fetch failed for setup {} ({}): {:?}",
+                            setup.setup_id, setup.symbol, error
+                        );
+                        Vec::new()
+                    }
+                };
+                candle_cache.insert(setup.setup_id.clone(), candles);
+            }
+
+            let evaluation_order = event_index as i64 + 1;
+            for template in &templates {
+                let Some(event_evaluation) = evaluate_template_on_event(
+                    template,
+                    event,
+                    &candle_cache,
+                    evaluation_order,
+                    &args.event_result_policy,
+                    None,
+                ) else {
+                    continue;
+                };
+                summary.record(&event_evaluation.selected_result);
+                pending_results.push(event_evaluation.selected_result);
+                result_rows += 1;
+
+                if pending_results.len() >= RESULT_BATCH_SIZE {
+                    flush_result_batch(&pool, &result_table_name, &run_id, &mut pending_results)
+                        .await?;
+                }
+            }
+
+            if (event_index + 1) % 500 == 0 || event_index + 1 == events.len() {
+                println!(
+                    "Existing-template coverage {}/{} decisions, templates={}, result_rows={}",
+                    event_index + 1,
+                    events.len(),
+                    templates.len(),
+                    result_rows
+                );
+            }
+        }
+
+        flush_result_batch(&pool, &result_table_name, &run_id, &mut pending_results).await?;
+
+        let elapsed_ms = started.elapsed().as_millis() as i64;
+        println!();
+        println!(
+            "Stored existing-template evaluation rows for {run_id}: scanned={}, templates_evaluated={}, result_rows={}, elapsed={:.2}s",
+            events.len(),
+            templates.len(),
+            result_rows,
+            elapsed_ms as f64 / 1000.0
+        );
+
+        return Ok(());
+    }
+
     let run_id = creator_run_id();
     let result_table_name = result_table_name_for_run(&run_id);
-    let store_raw_results = args.stores_raw_results();
     if store_raw_results {
         ensure_result_table_for_run(&pool, &result_table_name).await?;
     }
@@ -3110,14 +3744,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut summary = SummaryCollector::default();
 
     println!(
-        "Entry/Exit template creator run {run_id}: {} raw patterns -> {} Twin/Event decisions, source={}, timeframe={}, year={}, event_result_policy={}, result_storage={}",
+        "Entry/Exit template creator run {run_id}: {} raw patterns -> {} Twin/Event decisions, source={}, timeframe={}, year={}, event_result_policy={}, result_storage={}, entry_kind={}, entry_offset={}, direction_mode={}, risk_basis={}, risk_multiple={}, target_r={}, max_hold_multiple={}",
         raw_patterns_loaded,
         events.len(),
         args.source_scope,
         args.source_timeframe.as_deref().unwrap_or("all"),
         args.year_label(),
         args.event_result_policy,
-        args.result_storage
+        args.result_storage,
+        args.entry_kind,
+        args.entry_offset
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "auto".to_string()),
+        args.direction_mode.as_deref().unwrap_or("auto"),
+        args.risk_basis,
+        args.risk_multiple
+            .map(|value| format!("{value:.3}"))
+            .unwrap_or_else(|| "auto".to_string()),
+        args.target_r
+            .map(|value| format!("{value:.2}"))
+            .unwrap_or_else(|| "auto".to_string()),
+        args.max_hold_multiple
     );
     if store_raw_results {
         println!("Build test results table: {result_table_name}");
@@ -3131,7 +3778,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (event_index, event) in events.iter().enumerate() {
         let mut candle_cache: HashMap<String, Vec<ForwardCandle>> = HashMap::new();
         for setup in &event.candidates {
-            let candles = match fetch_forward_candles(&pool, setup).await {
+            let candles = match fetch_forward_candles(&pool, setup, args.max_hold_multiple).await {
                 Ok(candles) => candles,
                 Err(error) => {
                     eprintln!(
@@ -3186,7 +3833,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
             let next_sequence = templates.len() + 1;
-            match synthesize_template(&run_id, next_sequence, setup, &candles) {
+            match synthesize_template(&run_id, next_sequence, setup, &candles, &args) {
                 Some(template) => {
                     let evaluation = evaluate_template(&template, setup, &candles);
                     insert_template(&pool, &template, setup, &evaluation, &run_id).await?;
@@ -3276,7 +3923,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (event_index, event) in events.iter().enumerate() {
         let mut candle_cache: HashMap<String, Vec<ForwardCandle>> = HashMap::new();
         for setup in &event.candidates {
-            let candles = match fetch_forward_candles(&pool, setup).await {
+            let candles = match fetch_forward_candles(&pool, setup, args.max_hold_multiple).await {
                 Ok(candles) => candles,
                 Err(error) => {
                     eprintln!(

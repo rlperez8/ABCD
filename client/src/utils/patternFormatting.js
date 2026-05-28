@@ -63,8 +63,13 @@ const buildFormattedPattern = (candles, rustPattern) => {
   const dConfirmDate = rustPattern?.d_confirm_date ?? null;
   const reversalDetectDate = rustPattern?.reversal_detect_date ?? null;
   const entryDate = rustPattern?.entry_date ?? null;
-  const effectiveTargetDate = rustPattern?.target_date ?? null;
-  const effectiveExitDate = rustPattern?.target_date ?? rustPattern?.trade_date ?? null;
+  const effectiveTargetDate = rustPattern?.canvas_end_date ?? rustPattern?.xa_outcome_hit_date ?? rustPattern?.target_date ?? null;
+  const effectiveExitDate =
+    rustPattern?.canvas_end_date ??
+    rustPattern?.xa_outcome_hit_date ??
+    rustPattern?.target_date ??
+    rustPattern?.trade_date ??
+    null;
   const indexX = findIndexByDate(candles, rustPattern?.x_date);
   const indexA = findIndexByDate(candles, rustPattern?.a_date);
   const indexB = findIndexByDate(candles, rustPattern?.b_date);
@@ -75,17 +80,20 @@ const buildFormattedPattern = (candles, rustPattern) => {
   const indexEntry = findIndexByDate(candles, entryDate);
   const indexTarget = findIndexByDate(candles, effectiveTargetDate);
   const resolvedDConfirm = indexDConfirm > 0 ? indexDConfirm : indexD > 1 ? indexD - 1 : -1;
+  const resolvedXaScanStart =
+    rustPattern?.xa_canvas_mode && resolvedDConfirm > 1 ? resolvedDConfirm - 1 : -1;
   const resolvedReversalDetect =
     indexReversalDetect > 0 ? indexReversalDetect : -1;
   const resolvedEntry = indexEntry > 0 ? indexEntry : -1;
   const resolvedTarget = indexTarget > 0 ? indexTarget : -1;
   const exit = findIndexByDate(candles, effectiveExitDate);
   const isBearish = rustPattern?.market === 'Bearish';
-  const exitPrice =
-    rustPattern?.target_close ??
-    rustPattern?.target_open ??
-    rustPattern?.trade_current_price ??
-    rustPattern?.trade_reward_exit_price;
+  const exitPrice = rustPattern?.xa_canvas_mode
+    ? rustPattern?.xa_outcome_price
+    : rustPattern?.target_close ??
+      rustPattern?.target_open ??
+      rustPattern?.trade_current_price ??
+      rustPattern?.trade_reward_exit_price;
 
   return {
     ...rustPattern,
@@ -97,6 +105,7 @@ const buildFormattedPattern = (candles, rustPattern) => {
     c: indexC,
     d: indexD,
     d_confirm: resolvedDConfirm,
+    xa_scan_start: resolvedXaScanStart,
     reversal_detect: resolvedReversalDetect,
     entry: resolvedEntry,
     target: resolvedTarget,

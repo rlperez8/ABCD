@@ -230,14 +230,15 @@ export const CandleChart = ({
       if (isGraphPresentation) {
         patternLayer.graph_retracements(ctx, chartData.rust_patterns);
         patternLayer.graph_trade_levels(ctx, canvas, chartData.rust_patterns);
-      } else {
-        mouseLayer.mouse_Y(canvas, ctx);
-        mouseLayer.mouse_X(canvas, ctx, hoveredCandleIndexRef, set_hovered_candle);
-        mouseLayer.price_background(cp, ctx_price);
-        mouseLayer.mouse_price(cp, ctx_price);
-        mouseLayer.date_background(ctx_date, canvas_date);
-        mouseLayer.mouse_date(canvas_date, ctx_date);
+        patternLayer.xa_scan_start_beam(ctx, chartData.rust_patterns);
       }
+
+      mouseLayer.mouse_Y(canvas, ctx);
+      mouseLayer.mouse_X(canvas, ctx, hoveredCandleIndexRef, set_hovered_candle);
+      mouseLayer.price_background(cp, ctx_price);
+      mouseLayer.mouse_price(cp, ctx_price);
+      mouseLayer.date_background(ctx_date, canvas_date);
+      mouseLayer.mouse_date(canvas_date, ctx_date);
 
       if (focusMode === 'prop') {
         patternLayer.drawSetupOverlay(ctx, chartData.rust_patterns, {
@@ -266,7 +267,12 @@ export const CandleChart = ({
         patternLayer.reversal_signal(ctx, chartData.rust_patterns, activeReversalFilter);
       }
 
-      if (!isGraphPresentation && (showPriceLevelRays || showPriceLevelTags)) {
+      if (isGraphPresentation) {
+        patternLayer.price_levels(ctx_price, ctx, canvas, chartData.rust_patterns, {
+          showRays: false,
+          showTags: true,
+        });
+      } else if (showPriceLevelRays || showPriceLevelTags) {
         patternLayer.price_levels(ctx_price, ctx, canvas, chartData.rust_patterns, {
           showRays: showPriceLevelRays,
           showTags: showPriceLevelTags,

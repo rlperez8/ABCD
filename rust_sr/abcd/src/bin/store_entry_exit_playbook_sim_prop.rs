@@ -1667,7 +1667,11 @@ fn compute_trade_cadence(trades: &[ReplayTrade]) -> TradeCadenceRow {
     cadence
 }
 
-fn loss_gap_bucket(previous: NaiveDateTime, current: NaiveDateTime, gap_minutes: f64) -> (&'static str, &'static str, i64) {
+fn loss_gap_bucket(
+    previous: NaiveDateTime,
+    current: NaiveDateTime,
+    gap_minutes: f64,
+) -> (&'static str, &'static str, i64) {
     if previous.date() != current.date() {
         ("next_day_plus", "Next day+", 7)
     } else if gap_minutes <= 5.0 {
@@ -1703,7 +1707,11 @@ fn most_common_key(counts: &HashMap<String, i64>) -> String {
 fn compute_loss_clustering(
     trades: &[ReplayTrade],
     streaks: &[StreakRow],
-) -> (LossClusterSummaryRow, Vec<LossGapBucketRow>, Vec<LossWindowRow>) {
+) -> (
+    LossClusterSummaryRow,
+    Vec<LossGapBucketRow>,
+    Vec<LossWindowRow>,
+) {
     let loss_trades = trades
         .iter()
         .filter(|trade| trade.outcome == "fail")
@@ -1735,11 +1743,8 @@ fn compute_loss_clustering(
     for window in loss_trades.windows(2) {
         let previous = window[0].event_date;
         let current = window[1].event_date;
-        let gap_minutes = current
-            .signed_duration_since(previous)
-            .num_seconds()
-            .max(0) as f64
-            / 60.0;
+        let gap_minutes =
+            current.signed_duration_since(previous).num_seconds().max(0) as f64 / 60.0;
         gaps.push(gap_minutes);
         if gap_minutes <= 60.0 {
             summary.clustered_60m_loss_pairs += 1;
@@ -1775,20 +1780,21 @@ fn compute_loss_clustering(
             *day_losses.entry(trade_date).or_default() += 1;
         }
 
-        let window = windows
-            .entry((trade_date, entry_hour))
-            .or_insert_with(|| LossWindowAccumulator {
-                trade_date,
-                entry_hour,
-                trades: 0,
-                wins: 0,
-                losses: 0,
-                no_entries: 0,
-                total_r: 0.0,
-                root_counts: HashMap::new(),
-                family_counts: HashMap::new(),
-                template_counts: HashMap::new(),
-            });
+        let window =
+            windows
+                .entry((trade_date, entry_hour))
+                .or_insert_with(|| LossWindowAccumulator {
+                    trade_date,
+                    entry_hour,
+                    trades: 0,
+                    wins: 0,
+                    losses: 0,
+                    no_entries: 0,
+                    total_r: 0.0,
+                    root_counts: HashMap::new(),
+                    family_counts: HashMap::new(),
+                    template_counts: HashMap::new(),
+                });
 
         match trade.outcome.as_str() {
             "pass" => {
@@ -1814,16 +1820,14 @@ fn compute_loss_clustering(
     summary.loss_days = day_losses.len() as i64;
     summary.loss_days_5_plus = day_losses.values().filter(|losses| **losses >= 5).count() as i64;
     if let Some((day, losses)) = day_losses.iter().max_by(|left, right| {
-        left.1
-            .cmp(right.1)
-            .then_with(|| {
-                day_r
-                    .get(right.0)
-                    .copied()
-                    .unwrap_or(0.0)
-                    .partial_cmp(&day_r.get(left.0).copied().unwrap_or(0.0))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        left.1.cmp(right.1).then_with(|| {
+            day_r
+                .get(right.0)
+                .copied()
+                .unwrap_or(0.0)
+                .partial_cmp(&day_r.get(left.0).copied().unwrap_or(0.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     }) {
         summary.worst_loss_day = Some(*day);
         summary.worst_loss_day_losses = *losses;
@@ -2890,8 +2894,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let family_contribution_rows =
         compute_contribution_rows(&trades, &daily_r_rows, |trade| trade.family_key.clone());
     let streaks = compute_streaks(&trades);
-    let (loss_summary, loss_gap_buckets, loss_windows) =
-        compute_loss_clustering(&trades, &streaks);
+    let (loss_summary, loss_gap_buckets, loss_windows) = compute_loss_clustering(&trades, &streaks);
     store_prop_summary(
         &pool,
         &args.sim_run_id,

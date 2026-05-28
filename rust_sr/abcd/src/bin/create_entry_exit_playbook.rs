@@ -41,8 +41,10 @@ struct TemplateSpec {
     template_uid: String,
     template_label: String,
     template_name: String,
+    entry_kind: String,
     entry_offset: i64,
     direction_mode: String,
+    risk_basis: String,
     risk_multiple: f64,
     target_r: f64,
 }
@@ -224,6 +226,16 @@ fn playbook_id() -> String {
     format!("eepb-{millis}-{pid}")
 }
 
+fn template_risk_label(template: &TemplateSpec) -> &'static str {
+    if template.risk_basis == "xa_price_length" {
+        "XA"
+    } else if template.risk_basis == "pullback_retest_extreme" {
+        "PB"
+    } else {
+        "CD"
+    }
+}
+
 fn build_playbook_description(
     build_id: &str,
     args: &Args,
@@ -271,7 +283,8 @@ fn build_playbook_description(
 
     let mut execution_rules = Vec::new();
     if args.one_trade_at_a_time {
-        execution_rules.push("only one active trade can be open across the whole account".to_string());
+        execution_rules
+            .push("only one active trade can be open across the whole account".to_string());
     } else if args.one_trade_per_root_symbol {
         execution_rules.push("only one active trade can be open per root symbol".to_string());
     }
@@ -667,9 +680,15 @@ fn template_rule_label(template: &TemplateSpec) -> String {
     } else {
         "PAT"
     };
+    if template.entry_kind == "pullback_retest_d" {
+        return format!("{direction} PB-D {:.0}R", template.target_r);
+    }
     format!(
-        "{direction} C+{} {:.3}CD {:.0}R",
-        template.entry_offset, template.risk_multiple, template.target_r
+        "{direction} C+{} {:.3}{} {:.0}R",
+        template.entry_offset,
+        template.risk_multiple,
+        template_risk_label(template),
+        template.target_r
     )
 }
 
@@ -827,7 +846,9 @@ async fn load_templates(
         SELECT
             t.template_uid,
             t.template_name,
+            t.entry_kind,
             t.direction_mode,
+            t.risk_basis,
             t.risk_multiple,
             t.target_r,
             CAST(t.rule_json AS CHAR) AS rule_json,
@@ -854,8 +875,10 @@ async fn load_templates(
             template_uid: template_uid.clone(),
             template_label: format!("T{:02}", index + 1),
             template_name: row.try_get("template_name")?,
+            entry_kind: row.try_get("entry_kind")?,
             entry_offset: parse_entry_offset(&rule_json),
             direction_mode: row.try_get("direction_mode")?,
+            risk_basis: row.try_get("risk_basis")?,
             risk_multiple: row.try_get("risk_multiple")?,
             target_r: row.try_get("target_r")?,
         };

@@ -28,6 +28,10 @@ yarn-error.log*
 # local run logs
 logs/
 rust_sr/server/*.log
+client/*.log
+tmp_logs/
+rust_sr/abcd/tmp_logs/
+catboost_info/
 
 # --------------------------------------------------
 # RUST IGNORE
@@ -49,3 +53,4 @@ rust_sr/target/
 Thumbs.db
 __pycache__/
 *.pyc
+.venv_ai/

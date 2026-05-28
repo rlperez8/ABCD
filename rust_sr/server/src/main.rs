@@ -796,6 +796,421 @@ struct Phase1FamilyPatternsParams {
 }
 
 #[derive(Deserialize, Debug)]
+struct PatternXaOutcomeParams {
+    run_id: Option<String>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternXaOutcomeRunRecord {
+    run_id: String,
+    source_scope: String,
+    source_timeframe: Option<String>,
+    scan_year_start: i64,
+    scan_year_end: i64,
+    scan_year_label: String,
+    requested_limit: i64,
+    max_forward_multiple: i64,
+    xa_multiple: f64,
+    patterns_scanned: i64,
+    reversal_count: i64,
+    continuation_count: i64,
+    ambiguous_count: i64,
+    none_count: i64,
+    elapsed_ms: i64,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternXaOutcomeRow {
+    setup_id: String,
+    pattern_id: Option<String>,
+    pattern_group_id: String,
+    event_id: Option<String>,
+    symbol: String,
+    root_symbol: Option<String>,
+    contract_symbol: Option<String>,
+    source_timeframe: Option<String>,
+    market: String,
+    pattern_family_key: Option<String>,
+    d_date: NaiveDateTime,
+    d_confirm_date: NaiveDateTime,
+    d_price: f64,
+    xa_distance: f64,
+    xa_multiple: f64,
+    reversal_target_price: f64,
+    continuation_target_price: f64,
+    outcome: String,
+    hit_date: Option<NaiveDateTime>,
+    bars_to_hit: Option<i64>,
+    minutes_to_hit: Option<i64>,
+    max_reversal_excursion: f64,
+    max_continuation_excursion: f64,
+    candles_scanned: i64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternXaOutcomeFamilyRow {
+    pattern_family_key: String,
+    harmonic_type: String,
+    family_bin: String,
+    family_size_bucket: String,
+    family_time_bin: String,
+    family_x_strictness: String,
+    total_count: i64,
+    reversal_count: i64,
+    continuation_count: i64,
+    ambiguous_count: i64,
+    none_count: i64,
+    avg_bars_to_hit: Option<f64>,
+    avg_minutes_to_hit: Option<f64>,
+}
+
+#[derive(Serialize)]
+struct PatternXaOutcomeResponse {
+    run: Option<PatternXaOutcomeRunRecord>,
+    total_rows: i64,
+    limit: i64,
+    offset: i64,
+    family_rows: Vec<PatternXaOutcomeFamilyRow>,
+    rows: Vec<PatternXaOutcomeRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct PatternReversalAiParams {
+    ai_run_id: Option<String>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternReversalAiRunRecord {
+    ai_run_id: String,
+    source_xa_run_id: String,
+    model_type: String,
+    feature_set_version: String,
+    decision_threshold: f64,
+    score_rows: i64,
+    predicted_reversal_count: i64,
+    predicted_reversal_actual_reversal_count: i64,
+    baseline_reversal_rate: f64,
+    predicted_reversal_actual_rate: f64,
+    lift_vs_baseline: f64,
+    elapsed_ms: i64,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternReversalAiBucketRow {
+    confidence_bucket: String,
+    row_count: i64,
+    actual_reversal_count: i64,
+    actual_reversal_rate: f64,
+    avg_predicted_reversal_probability: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternReversalAiThresholdRow {
+    threshold_value: f64,
+    row_count: i64,
+    actual_reversal_count: i64,
+    actual_reversal_rate: f64,
+    avg_predicted_reversal_probability: f64,
+    lift_vs_baseline: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternReversalAiScoreRow {
+    setup_id: String,
+    pattern_id: Option<String>,
+    pattern_group_id: String,
+    symbol: String,
+    root_symbol: Option<String>,
+    market: String,
+    pattern_family_key: Option<String>,
+    d_confirm_date: NaiveDateTime,
+    actual_outcome: String,
+    actual_reversed: i64,
+    predicted_reversal_probability: f64,
+    predicted_continuation_probability: f64,
+    ai_decision: String,
+    was_correct: i64,
+    confidence_bucket: String,
+    harmonic_type: String,
+    family_bin: String,
+    family_size_bucket: String,
+    family_time_bin: String,
+    family_x_strictness: String,
+}
+
+#[derive(Serialize)]
+struct PatternReversalAiResponse {
+    run: Option<PatternReversalAiRunRecord>,
+    total_rows: i64,
+    limit: i64,
+    offset: i64,
+    thresholds: Vec<PatternReversalAiThresholdRow>,
+    buckets: Vec<PatternReversalAiBucketRow>,
+    rows: Vec<PatternReversalAiScoreRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct PatternAiStage1TradeParams {
+    ai_run_id: Option<String>,
+    valid_year: Option<i64>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+    refresh: Option<bool>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct PatternAiStage1TradeRunRecord {
+    multi_valid_eval_run_id: String,
+    source_run_id: String,
+    results_table: String,
+    train_start_year: i64,
+    train_end_year: i64,
+    valid_year: i64,
+    train_sample_slot: i64,
+    valid_sample_slots: String,
+    train_setups: i64,
+    train_rows: i64,
+    iterations: i64,
+    depth: i64,
+    learning_rate: f64,
+    l2_leaf_reg: f64,
+    random_strength: f64,
+    random_seed: i64,
+    pre_feature_set: String,
+    aggregate_feature_set: Option<String>,
+    excluded_roots: Option<String>,
+    model_path: Option<String>,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1TradeRow {
+    multi_valid_eval_run_id: String,
+    valid_sample_slot: i64,
+    setup_id: String,
+    pattern_id: Option<String>,
+    pattern_group_id: Option<String>,
+    symbol: Option<String>,
+    root_symbol: Option<String>,
+    market: Option<String>,
+    pattern_family_key: Option<String>,
+    d_confirm_date: Option<NaiveDateTime>,
+    template_uid: Option<String>,
+    template_name: Option<String>,
+    predicted_expected_r: Option<f64>,
+    score_margin_top2: Option<f64>,
+    result_r: Option<f64>,
+    outcome: Option<String>,
+    oracle_template_uid: Option<String>,
+    oracle_result_r: Option<f64>,
+    oracle_rank: Option<i64>,
+    entry_date: Option<NaiveDateTime>,
+    exit_date: Option<NaiveDateTime>,
+    entry_price: Option<f64>,
+    stop_price: Option<f64>,
+    target_price: Option<f64>,
+    exit_price: Option<f64>,
+    risk_points: Option<f64>,
+    exit_reason: Option<String>,
+    trade_direction: Option<String>,
+    harmonic_type: Option<String>,
+    family_bin: Option<String>,
+    family_size_bucket: Option<String>,
+    family_time_bin: Option<String>,
+    family_x_strictness: Option<String>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1TradeSummaryRecord {
+    total_trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    first_trade_date: Option<NaiveDateTime>,
+    last_trade_date: Option<NaiveDateTime>,
+    slot_count: i64,
+    symbol_count: i64,
+    family_count: i64,
+    template_count: i64,
+    avg_predicted_expected_r: f64,
+    avg_score_margin_top2: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1TemplatePerformanceRow {
+    template_uid: String,
+    template_name: String,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    family_count: i64,
+    symbol_count: i64,
+    avg_predicted_expected_r: f64,
+    avg_score_margin_top2: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1DailyRow {
+    trade_date: String,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    total_r: f64,
+    avg_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    cumulative_r: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1HourlyRow {
+    entry_hour: i64,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1TradeCadenceRow {
+    first_trade_at: Option<NaiveDateTime>,
+    last_trade_at: Option<NaiveDateTime>,
+    trades: i64,
+    trade_days: i64,
+    active_weeks: i64,
+    active_months: i64,
+    gap_count: i64,
+    avg_gap_minutes: f64,
+    median_gap_minutes: f64,
+    min_gap_minutes: f64,
+    max_gap_minutes: f64,
+    max_trades_5m_window: i64,
+    max_trades_15m_window: i64,
+    gap_0_1m: i64,
+    gap_1_5m: i64,
+    gap_5_15m: i64,
+    gap_15_30m: i64,
+    gap_30_60m: i64,
+    gap_over_60m: i64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1TradeWorkloadRow {
+    first_trade_at: Option<NaiveDateTime>,
+    last_trade_at: Option<NaiveDateTime>,
+    trades: i64,
+    active_hours: i64,
+    active_days: i64,
+    active_weeks: i64,
+    active_months: i64,
+    avg_trades_per_hour: f64,
+    avg_trades_per_day: f64,
+    avg_trades_per_week: f64,
+    avg_trades_per_month: f64,
+    min_trades_per_day: i64,
+    max_trades_per_hour: i64,
+    max_trades_per_day: i64,
+    max_trades_per_week: i64,
+    max_trades_per_month: i64,
+    hours_over_5_trades: i64,
+    days_over_20_trades: i64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1ContributionSymbolRow {
+    root_symbol: String,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    family_count: i64,
+    template_count: i64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1ContributionFamilyRow {
+    family_key: String,
+    harmonic_type: String,
+    family_bin: String,
+    family_size_bucket: String,
+    family_time_bin: String,
+    family_x_strictness: String,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    best_r: f64,
+    worst_r: f64,
+    symbol_count: i64,
+    template_count: i64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiStage1LossWindowRow {
+    trade_date: String,
+    entry_hour: i64,
+    trades: i64,
+    wins: i64,
+    losses: i64,
+    no_entries: i64,
+    loss_rate: f64,
+    total_r: f64,
+    symbol_count: i64,
+    family_count: i64,
+    template_count: i64,
+}
+
+#[derive(Serialize)]
+struct PatternAiStage1TradeResponse {
+    run: Option<PatternAiStage1TradeRunRecord>,
+    summary: Option<PatternAiStage1TradeSummaryRecord>,
+    template_performance: Vec<PatternAiStage1TemplatePerformanceRow>,
+    daily: Vec<PatternAiStage1DailyRow>,
+    hourly: Vec<PatternAiStage1HourlyRow>,
+    trade_cadence: Option<PatternAiStage1TradeCadenceRow>,
+    trade_workload: Option<PatternAiStage1TradeWorkloadRow>,
+    symbol_contribution: Vec<PatternAiStage1ContributionSymbolRow>,
+    family_contribution: Vec<PatternAiStage1ContributionFamilyRow>,
+    loss_windows: Vec<PatternAiStage1LossWindowRow>,
+    total_rows: i64,
+    limit: i64,
+    offset: i64,
+    rows: Vec<PatternAiStage1TradeRow>,
+}
+
+#[derive(Deserialize, Debug)]
 struct Phase1LeaderboardParams {
     source_scope: Option<String>,
     year: Option<i64>,
@@ -1245,6 +1660,14 @@ struct EntryExitSimDailyTradeRow {
     family_key: String,
     template_uid: String,
     template_label: String,
+    template_name: String,
+    entry_kind: String,
+    direction_mode: String,
+    risk_basis: String,
+    risk_multiple: f64,
+    target_r: f64,
+    max_hold_multiple: i64,
+    rule_json: String,
     symbol: String,
     market: String,
     outcome: String,
@@ -2476,6 +2899,2011 @@ async fn table_exists(pool: &MySqlPool, table_name: &str) -> Result<bool, sqlx::
     .await?;
 
     Ok(count > 0)
+}
+
+async fn fetch_pattern_xa_outcome_run(
+    pool: &MySqlPool,
+    run_id: Option<&str>,
+) -> Result<Option<PatternXaOutcomeRunRecord>, sqlx::Error> {
+    if let Some(run_id) = run_id.filter(|value| !value.trim().is_empty()) {
+        return sqlx::query_as::<_, PatternXaOutcomeRunRecord>(
+            r#"
+            SELECT
+                run_id,
+                source_scope,
+                source_timeframe,
+                CAST(scan_year_start AS SIGNED) AS scan_year_start,
+                CAST(scan_year_end AS SIGNED) AS scan_year_end,
+                scan_year_label,
+                CAST(requested_limit AS SIGNED) AS requested_limit,
+                CAST(max_forward_multiple AS SIGNED) AS max_forward_multiple,
+                xa_multiple,
+                CAST(patterns_scanned AS SIGNED) AS patterns_scanned,
+                CAST(reversal_count AS SIGNED) AS reversal_count,
+                CAST(continuation_count AS SIGNED) AS continuation_count,
+                CAST(ambiguous_count AS SIGNED) AS ambiguous_count,
+                CAST(none_count AS SIGNED) AS none_count,
+                CAST(elapsed_ms AS SIGNED) AS elapsed_ms,
+                CAST(created_at AS DATETIME) AS created_at
+            FROM pattern_xa_outcome_runs
+            WHERE run_id = ?
+            LIMIT 1
+            "#,
+        )
+        .bind(run_id)
+        .fetch_optional(pool)
+        .await;
+    }
+
+    sqlx::query_as::<_, PatternXaOutcomeRunRecord>(
+        r#"
+        SELECT
+            run_id,
+            source_scope,
+            source_timeframe,
+            CAST(scan_year_start AS SIGNED) AS scan_year_start,
+            CAST(scan_year_end AS SIGNED) AS scan_year_end,
+            scan_year_label,
+            CAST(requested_limit AS SIGNED) AS requested_limit,
+            CAST(max_forward_multiple AS SIGNED) AS max_forward_multiple,
+            xa_multiple,
+            CAST(patterns_scanned AS SIGNED) AS patterns_scanned,
+            CAST(reversal_count AS SIGNED) AS reversal_count,
+            CAST(continuation_count AS SIGNED) AS continuation_count,
+            CAST(ambiguous_count AS SIGNED) AS ambiguous_count,
+            CAST(none_count AS SIGNED) AS none_count,
+            CAST(elapsed_ms AS SIGNED) AS elapsed_ms,
+            CAST(created_at AS DATETIME) AS created_at
+        FROM pattern_xa_outcome_runs
+        ORDER BY created_at DESC, run_id DESC
+        LIMIT 1
+        "#,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+#[route("/patterns/xa-outcomes", method = "GET", method = "POST")]
+async fn fetch_pattern_xa_outcomes(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<PatternXaOutcomeParams>,
+) -> impl Responder {
+    let limit = params.limit.unwrap_or(300).clamp(1, 1000);
+    let offset = params.offset.unwrap_or(0).max(0);
+
+    let has_runs = match table_exists(pool.get_ref(), "pattern_xa_outcome_runs").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Pattern XA outcome run table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let has_rows = match table_exists(pool.get_ref(), "pattern_xa_outcomes").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Pattern XA outcome table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_runs || !has_rows {
+        return HttpResponse::Ok().json(PatternXaOutcomeResponse {
+            run: None,
+            total_rows: 0,
+            limit,
+            offset,
+            family_rows: Vec::new(),
+            rows: Vec::new(),
+        });
+    }
+    let has_family_rows = match table_exists(pool.get_ref(), "pattern_xa_outcome_families").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Pattern XA outcome family table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let run = match fetch_pattern_xa_outcome_run(pool.get_ref(), params.run_id.as_deref()).await {
+        Ok(run) => run,
+        Err(error) => {
+            eprintln!("Pattern XA outcome run fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let Some(run) = run else {
+        return HttpResponse::Ok().json(PatternXaOutcomeResponse {
+            run: None,
+            total_rows: 0,
+            limit,
+            offset,
+            family_rows: Vec::new(),
+            rows: Vec::new(),
+        });
+    };
+
+    let total_rows = match sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM pattern_xa_outcomes WHERE run_id = ?",
+    )
+    .bind(&run.run_id)
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Pattern XA outcome count failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let family_rows = if has_family_rows {
+        match sqlx::query_as::<_, PatternXaOutcomeFamilyRow>(
+            r#"
+            SELECT
+                pattern_family_key,
+                harmonic_type,
+                family_bin,
+                family_size_bucket,
+                family_time_bin,
+                family_x_strictness,
+                CAST(total_count AS SIGNED) AS total_count,
+                CAST(reversal_count AS SIGNED) AS reversal_count,
+                CAST(continuation_count AS SIGNED) AS continuation_count,
+                CAST(ambiguous_count AS SIGNED) AS ambiguous_count,
+                CAST(none_count AS SIGNED) AS none_count,
+                avg_bars_to_hit,
+                avg_minutes_to_hit
+            FROM pattern_xa_outcome_families
+            WHERE run_id = ?
+            ORDER BY total_count DESC, reversal_rate DESC, pattern_family_key ASC
+            LIMIT 1000
+            "#,
+        )
+        .bind(&run.run_id)
+        .fetch_all(pool.get_ref())
+        .await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("Pattern XA outcome family rows fetch failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        }
+    } else {
+        Vec::new()
+    };
+
+    let rows = match sqlx::query_as::<_, PatternXaOutcomeRow>(
+        r#"
+        SELECT
+            setup_id,
+            pattern_id,
+            pattern_group_id,
+            event_id,
+            symbol,
+            root_symbol,
+            contract_symbol,
+            source_timeframe,
+            market,
+            pattern_family_key,
+            d_date,
+            d_confirm_date,
+            d_price,
+            xa_distance,
+            xa_multiple,
+            reversal_target_price,
+            continuation_target_price,
+            outcome,
+            hit_date,
+            CAST(bars_to_hit AS SIGNED) AS bars_to_hit,
+            CAST(minutes_to_hit AS SIGNED) AS minutes_to_hit,
+            max_reversal_excursion,
+            max_continuation_excursion,
+            CAST(candles_scanned AS SIGNED) AS candles_scanned
+        FROM pattern_xa_outcomes
+        WHERE run_id = ?
+        ORDER BY d_confirm_date DESC, setup_id DESC
+        LIMIT ? OFFSET ?
+        "#,
+    )
+    .bind(&run.run_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("Pattern XA outcome rows fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(PatternXaOutcomeResponse {
+        run: Some(run),
+        total_rows,
+        limit,
+        offset,
+        family_rows,
+        rows,
+    })
+}
+
+async fn fetch_pattern_reversal_ai_run(
+    pool: &MySqlPool,
+    ai_run_id: Option<&str>,
+) -> Result<Option<PatternReversalAiRunRecord>, sqlx::Error> {
+    if let Some(ai_run_id) = ai_run_id.map(str::trim).filter(|value| !value.is_empty()) {
+        return sqlx::query_as::<_, PatternReversalAiRunRecord>(
+            r#"
+            SELECT
+                ai_run_id,
+                source_xa_run_id,
+                model_type,
+                feature_set_version,
+                CAST(decision_threshold AS DOUBLE) AS decision_threshold,
+                CAST(score_rows AS SIGNED) AS score_rows,
+                CAST(predicted_reversal_count AS SIGNED) AS predicted_reversal_count,
+                CAST(predicted_reversal_actual_reversal_count AS SIGNED) AS predicted_reversal_actual_reversal_count,
+                CAST(baseline_reversal_rate AS DOUBLE) AS baseline_reversal_rate,
+                CAST(predicted_reversal_actual_rate AS DOUBLE) AS predicted_reversal_actual_rate,
+                CAST(lift_vs_baseline AS DOUBLE) AS lift_vs_baseline,
+                CAST(elapsed_ms AS SIGNED) AS elapsed_ms,
+                CAST(created_at AS DATETIME) AS created_at
+            FROM pattern_reversal_ai_runs
+            WHERE ai_run_id = ?
+            LIMIT 1
+            "#,
+        )
+        .bind(ai_run_id)
+        .fetch_optional(pool)
+        .await;
+    }
+
+    sqlx::query_as::<_, PatternReversalAiRunRecord>(
+        r#"
+        SELECT
+            ai_run_id,
+            source_xa_run_id,
+            model_type,
+            feature_set_version,
+            CAST(decision_threshold AS DOUBLE) AS decision_threshold,
+            CAST(score_rows AS SIGNED) AS score_rows,
+            CAST(predicted_reversal_count AS SIGNED) AS predicted_reversal_count,
+            CAST(predicted_reversal_actual_reversal_count AS SIGNED) AS predicted_reversal_actual_reversal_count,
+            CAST(baseline_reversal_rate AS DOUBLE) AS baseline_reversal_rate,
+            CAST(predicted_reversal_actual_rate AS DOUBLE) AS predicted_reversal_actual_rate,
+            CAST(lift_vs_baseline AS DOUBLE) AS lift_vs_baseline,
+            CAST(elapsed_ms AS SIGNED) AS elapsed_ms,
+            CAST(created_at AS DATETIME) AS created_at
+        FROM pattern_reversal_ai_runs
+        ORDER BY created_at DESC, ai_run_id DESC
+        LIMIT 1
+        "#,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+#[route("/patterns/reversal-ai-scores", method = "GET", method = "POST")]
+async fn fetch_pattern_reversal_ai_scores(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<PatternReversalAiParams>,
+) -> impl Responder {
+    let limit = params.limit.unwrap_or(300).clamp(1, 1000);
+    let offset = params.offset.unwrap_or(0).max(0);
+
+    let has_runs = match table_exists(pool.get_ref(), "pattern_reversal_ai_runs").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Pattern reversal AI run table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let has_scores = match table_exists(pool.get_ref(), "pattern_reversal_ai_scores").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Pattern reversal AI score table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_runs || !has_scores {
+        return HttpResponse::Ok().json(PatternReversalAiResponse {
+            run: None,
+            total_rows: 0,
+            limit,
+            offset,
+            thresholds: Vec::new(),
+            buckets: Vec::new(),
+            rows: Vec::new(),
+        });
+    }
+
+    let run = match fetch_pattern_reversal_ai_run(pool.get_ref(), params.ai_run_id.as_deref()).await
+    {
+        Ok(run) => run,
+        Err(error) => {
+            eprintln!("Pattern reversal AI run fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let Some(run) = run else {
+        return HttpResponse::Ok().json(PatternReversalAiResponse {
+            run: None,
+            total_rows: 0,
+            limit,
+            offset,
+            thresholds: Vec::new(),
+            buckets: Vec::new(),
+            rows: Vec::new(),
+        });
+    };
+
+    let total_rows = match sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM pattern_reversal_ai_scores WHERE ai_run_id = ?",
+    )
+    .bind(&run.ai_run_id)
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("Pattern reversal AI score count failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let buckets = match sqlx::query_as::<_, PatternReversalAiBucketRow>(
+        r#"
+        SELECT
+            confidence_bucket,
+            CAST(COUNT(*) AS SIGNED) AS row_count,
+            CAST(SUM(actual_reversed) AS SIGNED) AS actual_reversal_count,
+            CAST(AVG(actual_reversed) AS DOUBLE) AS actual_reversal_rate,
+            CAST(AVG(predicted_reversal_probability) AS DOUBLE) AS avg_predicted_reversal_probability
+        FROM pattern_reversal_ai_scores
+        WHERE ai_run_id = ?
+        GROUP BY confidence_bucket
+        ORDER BY MIN(predicted_reversal_probability) DESC
+        "#,
+    )
+    .bind(&run.ai_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("Pattern reversal AI buckets fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let thresholds = match sqlx::query_as::<_, PatternReversalAiThresholdRow>(
+        r#"
+        SELECT
+            CAST(threshold_values.threshold_value AS DOUBLE) AS threshold_value,
+            CAST(COUNT(scores.setup_id) AS SIGNED) AS row_count,
+            CAST(COALESCE(SUM(scores.actual_reversed), 0) AS SIGNED) AS actual_reversal_count,
+            CAST(COALESCE(AVG(scores.actual_reversed), 0) AS DOUBLE) AS actual_reversal_rate,
+            CAST(COALESCE(AVG(scores.predicted_reversal_probability), 0) AS DOUBLE) AS avg_predicted_reversal_probability,
+            CAST(COALESCE(AVG(scores.actual_reversed), 0) - ? AS DOUBLE) AS lift_vs_baseline
+        FROM (
+            SELECT 0.70 AS threshold_value
+            UNION ALL
+            SELECT 0.65 AS threshold_value
+        ) threshold_values
+        LEFT JOIN pattern_reversal_ai_scores scores
+            ON scores.ai_run_id = ?
+            AND scores.predicted_reversal_probability >= threshold_values.threshold_value
+        GROUP BY threshold_values.threshold_value
+        ORDER BY threshold_values.threshold_value DESC
+        "#,
+    )
+    .bind(run.baseline_reversal_rate)
+    .bind(&run.ai_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("Pattern reversal AI threshold fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let rows = match sqlx::query_as::<_, PatternReversalAiScoreRow>(
+        r#"
+        SELECT
+            setup_id,
+            pattern_id,
+            pattern_group_id,
+            symbol,
+            root_symbol,
+            market,
+            pattern_family_key,
+            d_confirm_date,
+            actual_outcome,
+            CAST(actual_reversed AS SIGNED) AS actual_reversed,
+            CAST(predicted_reversal_probability AS DOUBLE) AS predicted_reversal_probability,
+            CAST(predicted_continuation_probability AS DOUBLE) AS predicted_continuation_probability,
+            ai_decision,
+            CAST(was_correct AS SIGNED) AS was_correct,
+            confidence_bucket,
+            harmonic_type,
+            family_bin,
+            family_size_bucket,
+            family_time_bin,
+            family_x_strictness
+        FROM pattern_reversal_ai_scores
+        WHERE ai_run_id = ?
+        ORDER BY predicted_reversal_probability DESC, d_confirm_date DESC, setup_id DESC
+        LIMIT ? OFFSET ?
+        "#,
+    )
+    .bind(&run.ai_run_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("Pattern reversal AI rows fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(PatternReversalAiResponse {
+        run: Some(run),
+        total_rows,
+        limit,
+        offset,
+        thresholds,
+        buckets,
+        rows,
+    })
+}
+
+async fn fetch_pattern_ai_stage1_trade_run(
+    pool: &MySqlPool,
+    ai_run_id: Option<&str>,
+    valid_year: i64,
+) -> Result<Option<PatternAiStage1TradeRunRecord>, sqlx::Error> {
+    if let Some(ai_run_id) = ai_run_id.map(str::trim).filter(|value| !value.is_empty()) {
+        return sqlx::query_as::<_, PatternAiStage1TradeRunRecord>(
+            r#"
+            SELECT
+                multi_valid_eval_run_id,
+                source_run_id,
+                results_table,
+                CAST(train_start_year AS SIGNED) AS train_start_year,
+                CAST(train_end_year AS SIGNED) AS train_end_year,
+                CAST(valid_year AS SIGNED) AS valid_year,
+                CAST(train_sample_slot AS SIGNED) AS train_sample_slot,
+                valid_sample_slots,
+                CAST(train_setups AS SIGNED) AS train_setups,
+                CAST(train_rows AS SIGNED) AS train_rows,
+                CAST(iterations AS SIGNED) AS iterations,
+                CAST(depth AS SIGNED) AS depth,
+                CAST(learning_rate AS DOUBLE) AS learning_rate,
+                CAST(l2_leaf_reg AS DOUBLE) AS l2_leaf_reg,
+                CAST(random_strength AS DOUBLE) AS random_strength,
+                CAST(random_seed AS SIGNED) AS random_seed,
+                pre_feature_set,
+                aggregate_feature_set,
+                excluded_roots,
+                model_path,
+                CAST(created_at AS DATETIME) AS created_at
+            FROM ai_stage1_multi_valid_eval_runs
+            WHERE multi_valid_eval_run_id = ?
+            LIMIT 1
+            "#,
+        )
+        .bind(ai_run_id)
+        .fetch_optional(pool)
+        .await;
+    }
+
+    sqlx::query_as::<_, PatternAiStage1TradeRunRecord>(
+        r#"
+        SELECT
+            multi_valid_eval_run_id,
+            source_run_id,
+            results_table,
+            CAST(train_start_year AS SIGNED) AS train_start_year,
+            CAST(train_end_year AS SIGNED) AS train_end_year,
+            CAST(valid_year AS SIGNED) AS valid_year,
+            CAST(train_sample_slot AS SIGNED) AS train_sample_slot,
+            valid_sample_slots,
+            CAST(train_setups AS SIGNED) AS train_setups,
+            CAST(train_rows AS SIGNED) AS train_rows,
+            CAST(iterations AS SIGNED) AS iterations,
+            CAST(depth AS SIGNED) AS depth,
+            CAST(learning_rate AS DOUBLE) AS learning_rate,
+            CAST(l2_leaf_reg AS DOUBLE) AS l2_leaf_reg,
+            CAST(random_strength AS DOUBLE) AS random_strength,
+            CAST(random_seed AS SIGNED) AS random_seed,
+            pre_feature_set,
+            aggregate_feature_set,
+            excluded_roots,
+            model_path,
+            CAST(created_at AS DATETIME) AS created_at
+        FROM ai_stage1_multi_valid_eval_runs
+        WHERE valid_year = ?
+        ORDER BY created_at DESC, multi_valid_eval_run_id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(valid_year)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn ensure_pattern_ai_stage1_trade_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_rows (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL,
+            valid_sample_slot BIGINT NOT NULL DEFAULT 0,
+            setup_id VARCHAR(64) NOT NULL,
+            pattern_id VARCHAR(64) NULL,
+            pattern_group_id VARCHAR(128) NULL,
+            symbol VARCHAR(32) NULL,
+            root_symbol VARCHAR(32) NULL,
+            market VARCHAR(16) NULL,
+            pattern_family_key VARCHAR(128) NULL,
+            trade_at DATETIME NULL,
+            d_confirm_date DATETIME NULL,
+            template_uid VARCHAR(128) NOT NULL,
+            template_name VARCHAR(255) NULL,
+            predicted_expected_r DOUBLE NULL,
+            score_margin_top2 DOUBLE NULL,
+            result_r DOUBLE NULL,
+            outcome VARCHAR(32) NULL,
+            oracle_template_uid VARCHAR(128) NULL,
+            oracle_result_r DOUBLE NULL,
+            oracle_rank BIGINT NULL,
+            entry_date DATETIME NULL,
+            exit_date DATETIME NULL,
+            entry_price DOUBLE NULL,
+            stop_price DOUBLE NULL,
+            target_price DOUBLE NULL,
+            exit_price DOUBLE NULL,
+            risk_points DOUBLE NULL,
+            exit_reason VARCHAR(64) NULL,
+            trade_direction VARCHAR(16) NULL,
+            harmonic_type VARCHAR(64) NULL,
+            family_bin VARCHAR(64) NULL,
+            family_size_bucket VARCHAR(64) NULL,
+            family_time_bin VARCHAR(64) NULL,
+            family_x_strictness VARCHAR(64) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (multi_valid_eval_run_id, setup_id, template_uid),
+            INDEX idx_ai_stage1_trade_rows_time (multi_valid_eval_run_id, trade_at),
+            INDEX idx_ai_stage1_trade_rows_symbol (multi_valid_eval_run_id, root_symbol),
+            INDEX idx_ai_stage1_trade_rows_family (multi_valid_eval_run_id, pattern_family_key),
+            INDEX idx_ai_stage1_trade_rows_template (multi_valid_eval_run_id, template_uid),
+            INDEX idx_ai_stage1_trade_rows_outcome (multi_valid_eval_run_id, outcome)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_summary (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL PRIMARY KEY,
+            total_trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            win_rate DOUBLE NOT NULL DEFAULT 0,
+            avg_r DOUBLE NOT NULL DEFAULT 0,
+            sum_r DOUBLE NOT NULL DEFAULT 0,
+            best_r DOUBLE NOT NULL DEFAULT 0,
+            worst_r DOUBLE NOT NULL DEFAULT 0,
+            first_trade_date DATETIME NULL,
+            last_trade_date DATETIME NULL,
+            slot_count BIGINT NOT NULL DEFAULT 0,
+            symbol_count BIGINT NOT NULL DEFAULT 0,
+            family_count BIGINT NOT NULL DEFAULT 0,
+            template_count BIGINT NOT NULL DEFAULT 0,
+            avg_predicted_expected_r DOUBLE NOT NULL DEFAULT 0,
+            avg_score_margin_top2 DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_template_performance (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL,
+            template_uid VARCHAR(128) NOT NULL,
+            template_name VARCHAR(255) NOT NULL DEFAULT '',
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            win_rate DOUBLE NOT NULL DEFAULT 0,
+            avg_r DOUBLE NOT NULL DEFAULT 0,
+            sum_r DOUBLE NOT NULL DEFAULT 0,
+            best_r DOUBLE NOT NULL DEFAULT 0,
+            worst_r DOUBLE NOT NULL DEFAULT 0,
+            family_count BIGINT NOT NULL DEFAULT 0,
+            symbol_count BIGINT NOT NULL DEFAULT 0,
+            avg_predicted_expected_r DOUBLE NOT NULL DEFAULT 0,
+            avg_score_margin_top2 DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (multi_valid_eval_run_id, template_uid),
+            INDEX idx_ai_stage1_template_perf_rank (multi_valid_eval_run_id, sum_r)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_daily_r (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL,
+            trade_date DATE NOT NULL,
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            win_rate DOUBLE NOT NULL DEFAULT 0,
+            total_r DOUBLE NOT NULL DEFAULT 0,
+            avg_r DOUBLE NOT NULL DEFAULT 0,
+            best_r DOUBLE NOT NULL DEFAULT 0,
+            worst_r DOUBLE NOT NULL DEFAULT 0,
+            cumulative_r DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (multi_valid_eval_run_id, trade_date)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_hourly (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL,
+            entry_hour BIGINT NOT NULL,
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            win_rate DOUBLE NOT NULL DEFAULT 0,
+            avg_r DOUBLE NOT NULL DEFAULT 0,
+            sum_r DOUBLE NOT NULL DEFAULT 0,
+            best_r DOUBLE NOT NULL DEFAULT 0,
+            worst_r DOUBLE NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (multi_valid_eval_run_id, entry_hour)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_cadence (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL PRIMARY KEY,
+            first_trade_at DATETIME NULL,
+            last_trade_at DATETIME NULL,
+            trades BIGINT NOT NULL DEFAULT 0,
+            trade_days BIGINT NOT NULL DEFAULT 0,
+            active_weeks BIGINT NOT NULL DEFAULT 0,
+            active_months BIGINT NOT NULL DEFAULT 0,
+            gap_count BIGINT NOT NULL DEFAULT 0,
+            avg_gap_minutes DOUBLE NOT NULL DEFAULT 0,
+            median_gap_minutes DOUBLE NOT NULL DEFAULT 0,
+            min_gap_minutes DOUBLE NOT NULL DEFAULT 0,
+            max_gap_minutes DOUBLE NOT NULL DEFAULT 0,
+            max_trades_5m_window BIGINT NOT NULL DEFAULT 0,
+            max_trades_15m_window BIGINT NOT NULL DEFAULT 0,
+            gap_0_1m BIGINT NOT NULL DEFAULT 0,
+            gap_1_5m BIGINT NOT NULL DEFAULT 0,
+            gap_5_15m BIGINT NOT NULL DEFAULT 0,
+            gap_15_30m BIGINT NOT NULL DEFAULT 0,
+            gap_30_60m BIGINT NOT NULL DEFAULT 0,
+            gap_over_60m BIGINT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_workload (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL PRIMARY KEY,
+            first_trade_at DATETIME NULL,
+            last_trade_at DATETIME NULL,
+            trades BIGINT NOT NULL DEFAULT 0,
+            active_hours BIGINT NOT NULL DEFAULT 0,
+            active_days BIGINT NOT NULL DEFAULT 0,
+            active_weeks BIGINT NOT NULL DEFAULT 0,
+            active_months BIGINT NOT NULL DEFAULT 0,
+            avg_trades_per_hour DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_day DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_week DOUBLE NOT NULL DEFAULT 0,
+            avg_trades_per_month DOUBLE NOT NULL DEFAULT 0,
+            min_trades_per_day BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_hour BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_day BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_week BIGINT NOT NULL DEFAULT 0,
+            max_trades_per_month BIGINT NOT NULL DEFAULT 0,
+            hours_over_5_trades BIGINT NOT NULL DEFAULT 0,
+            days_over_20_trades BIGINT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_symbol_contribution (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL,
+            root_symbol VARCHAR(32) NOT NULL,
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            win_rate DOUBLE NOT NULL DEFAULT 0,
+            avg_r DOUBLE NOT NULL DEFAULT 0,
+            sum_r DOUBLE NOT NULL DEFAULT 0,
+            best_r DOUBLE NOT NULL DEFAULT 0,
+            worst_r DOUBLE NOT NULL DEFAULT 0,
+            family_count BIGINT NOT NULL DEFAULT 0,
+            template_count BIGINT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (multi_valid_eval_run_id, root_symbol),
+            INDEX idx_ai_stage1_symbol_contribution_rank (multi_valid_eval_run_id, sum_r)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_family_contribution (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL,
+            family_key VARCHAR(128) NOT NULL,
+            harmonic_type VARCHAR(64) NOT NULL DEFAULT '',
+            family_bin VARCHAR(64) NOT NULL DEFAULT '',
+            family_size_bucket VARCHAR(64) NOT NULL DEFAULT '',
+            family_time_bin VARCHAR(64) NOT NULL DEFAULT '',
+            family_x_strictness VARCHAR(64) NOT NULL DEFAULT '',
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            win_rate DOUBLE NOT NULL DEFAULT 0,
+            avg_r DOUBLE NOT NULL DEFAULT 0,
+            sum_r DOUBLE NOT NULL DEFAULT 0,
+            best_r DOUBLE NOT NULL DEFAULT 0,
+            worst_r DOUBLE NOT NULL DEFAULT 0,
+            symbol_count BIGINT NOT NULL DEFAULT 0,
+            template_count BIGINT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (multi_valid_eval_run_id, family_key),
+            INDEX idx_ai_stage1_family_contribution_rank (multi_valid_eval_run_id, sum_r)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ai_stage1_trade_loss_windows (
+            multi_valid_eval_run_id VARCHAR(64) NOT NULL,
+            trade_date DATE NOT NULL,
+            entry_hour BIGINT NOT NULL,
+            trades BIGINT NOT NULL DEFAULT 0,
+            wins BIGINT NOT NULL DEFAULT 0,
+            losses BIGINT NOT NULL DEFAULT 0,
+            no_entries BIGINT NOT NULL DEFAULT 0,
+            loss_rate DOUBLE NOT NULL DEFAULT 0,
+            total_r DOUBLE NOT NULL DEFAULT 0,
+            symbol_count BIGINT NOT NULL DEFAULT 0,
+            family_count BIGINT NOT NULL DEFAULT 0,
+            template_count BIGINT NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (multi_valid_eval_run_id, trade_date, entry_hour),
+            INDEX idx_ai_stage1_loss_windows_rank (multi_valid_eval_run_id, losses, total_r)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn pattern_ai_stage1_trade_tables_need_refresh(
+    pool: &MySqlPool,
+    run_id: &str,
+    selected_count: i64,
+) -> Result<bool, sqlx::Error> {
+    let persisted_count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM ai_stage1_trade_rows
+        WHERE multi_valid_eval_run_id = ?
+        "#,
+    )
+    .bind(run_id)
+    .fetch_one(pool)
+    .await?;
+
+    if persisted_count != selected_count {
+        return Ok(true);
+    }
+
+    let summary_count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM ai_stage1_trade_summary
+        WHERE multi_valid_eval_run_id = ?
+        "#,
+    )
+    .bind(run_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(selected_count > 0 && summary_count == 0)
+}
+
+async fn refresh_pattern_ai_stage1_trade_tables(
+    pool: &MySqlPool,
+    run: &PatternAiStage1TradeRunRecord,
+    quoted_results_table: &str,
+) -> Result<(), sqlx::Error> {
+    let run_id = &run.multi_valid_eval_run_id;
+    let mut tx = pool.begin().await?;
+
+    for table_name in [
+        "ai_stage1_trade_loss_windows",
+        "ai_stage1_trade_family_contribution",
+        "ai_stage1_trade_symbol_contribution",
+        "ai_stage1_trade_workload",
+        "ai_stage1_trade_cadence",
+        "ai_stage1_trade_hourly",
+        "ai_stage1_trade_daily_r",
+        "ai_stage1_trade_template_performance",
+        "ai_stage1_trade_summary",
+        "ai_stage1_trade_rows",
+    ] {
+        let delete_sql = format!("DELETE FROM {table_name} WHERE multi_valid_eval_run_id = ?");
+        sqlx::query(&delete_sql)
+            .bind(run_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    let raw_insert_sql = format!(
+        r#"
+        INSERT INTO ai_stage1_trade_rows (
+            multi_valid_eval_run_id,
+            valid_sample_slot,
+            setup_id,
+            pattern_id,
+            pattern_group_id,
+            symbol,
+            root_symbol,
+            market,
+            pattern_family_key,
+            trade_at,
+            d_confirm_date,
+            template_uid,
+            template_name,
+            predicted_expected_r,
+            score_margin_top2,
+            result_r,
+            outcome,
+            oracle_template_uid,
+            oracle_result_r,
+            oracle_rank,
+            entry_date,
+            exit_date,
+            entry_price,
+            stop_price,
+            target_price,
+            exit_price,
+            risk_points,
+            exit_reason,
+            trade_direction,
+            harmonic_type,
+            family_bin,
+            family_size_bucket,
+            family_time_bin,
+            family_x_strictness
+        )
+        SELECT
+            s.multi_valid_eval_run_id,
+            CAST(s.valid_sample_slot AS SIGNED) AS valid_sample_slot,
+            s.setup_id,
+            s.pattern_id,
+            s.pattern_group_id,
+            s.symbol,
+            COALESCE(NULLIF(ps.root_symbol, ''), NULLIF(s.symbol, ''), 'Unknown') AS root_symbol,
+            s.market,
+            COALESCE(NULLIF(s.pattern_family_key, ''), 'Unknown') AS pattern_family_key,
+            COALESCE(r.entry_date, s.d_confirm_date) AS trade_at,
+            s.d_confirm_date,
+            COALESCE(NULLIF(s.template_uid, ''), 'Unknown') AS template_uid,
+            COALESCE(NULLIF(s.template_name, ''), 'AI template') AS template_name,
+            CAST(s.predicted_expected_r AS DOUBLE) AS predicted_expected_r,
+            CAST(s.score_margin_top2 AS DOUBLE) AS score_margin_top2,
+            CAST(COALESCE(s.actual_result_r, r.result_r, 0) AS DOUBLE) AS result_r,
+            COALESCE(NULLIF(s.actual_outcome, ''), r.outcome, 'unknown') AS outcome,
+            s.oracle_template_uid,
+            CAST(s.oracle_result_r AS DOUBLE) AS oracle_result_r,
+            CAST(s.oracle_rank AS SIGNED) AS oracle_rank,
+            r.entry_date,
+            r.exit_date,
+            CAST(r.entry_price AS DOUBLE) AS entry_price,
+            CAST(r.stop_price AS DOUBLE) AS stop_price,
+            CAST(r.target_price AS DOUBLE) AS target_price,
+            CAST(r.exit_price AS DOUBLE) AS exit_price,
+            CAST(r.risk_points AS DOUBLE) AS risk_points,
+            r.exit_reason,
+            r.trade_direction,
+            COALESCE(NULLIF(ps.pattern_family_harmonic_type, ''), NULLIF(ps.harmonic_type, ''), 'Unknown') AS harmonic_type,
+            COALESCE(NULLIF(ps.pattern_family_bin, ''), 'Unknown') AS family_bin,
+            COALESCE(NULLIF(ps.pattern_family_size_bucket, ''), 'Unknown') AS family_size_bucket,
+            COALESCE(NULLIF(ps.pattern_family_time_bin, ''), 'Unknown') AS family_time_bin,
+            COALESCE(NULLIF(ps.pattern_family_x_strictness, ''), 'Unknown') AS family_x_strictness
+        FROM ai_stage1_multi_valid_eval_selected s
+        LEFT JOIN {quoted_results_table} r
+          ON r.run_id = ?
+         AND r.setup_id = s.setup_id
+         AND r.template_uid = s.template_uid
+        LEFT JOIN pattern_setups ps
+          ON ps.setup_id = s.setup_id
+        WHERE s.multi_valid_eval_run_id = ?
+        "#
+    );
+    sqlx::query(&raw_insert_sql)
+        .bind(&run.source_run_id)
+        .bind(run_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_stage1_trade_summary (
+            multi_valid_eval_run_id,
+            total_trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            first_trade_date,
+            last_trade_date,
+            slot_count,
+            symbol_count,
+            family_count,
+            template_count,
+            avg_predicted_expected_r,
+            avg_score_margin_top2
+        )
+        SELECT
+            multi_valid_eval_run_id,
+            CAST(COUNT(*) AS SIGNED) AS total_trades,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END), 0) AS SIGNED) AS wins,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END), 0) AS SIGNED) AS losses,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END), 0) AS SIGNED) AS no_entries,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100, 0) AS DOUBLE) AS win_rate,
+            CAST(COALESCE(AVG(COALESCE(result_r, 0)), 0) AS DOUBLE) AS avg_r,
+            CAST(COALESCE(SUM(COALESCE(result_r, 0)), 0) AS DOUBLE) AS sum_r,
+            CAST(COALESCE(MAX(COALESCE(result_r, 0)), 0) AS DOUBLE) AS best_r,
+            CAST(COALESCE(MIN(COALESCE(result_r, 0)), 0) AS DOUBLE) AS worst_r,
+            CAST(MIN(trade_at) AS DATETIME) AS first_trade_date,
+            CAST(MAX(trade_at) AS DATETIME) AS last_trade_date,
+            CAST(COUNT(DISTINCT valid_sample_slot) AS SIGNED) AS slot_count,
+            CAST(COUNT(DISTINCT root_symbol) AS SIGNED) AS symbol_count,
+            CAST(COUNT(DISTINCT pattern_family_key) AS SIGNED) AS family_count,
+            CAST(COUNT(DISTINCT template_uid) AS SIGNED) AS template_count,
+            CAST(COALESCE(AVG(COALESCE(predicted_expected_r, 0)), 0) AS DOUBLE) AS avg_predicted_expected_r,
+            CAST(COALESCE(AVG(COALESCE(score_margin_top2, 0)), 0) AS DOUBLE) AS avg_score_margin_top2
+        FROM ai_stage1_trade_rows
+        WHERE multi_valid_eval_run_id = ?
+        GROUP BY multi_valid_eval_run_id
+        "#,
+    )
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_stage1_trade_template_performance (
+            multi_valid_eval_run_id,
+            template_uid,
+            template_name,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            family_count,
+            symbol_count,
+            avg_predicted_expected_r,
+            avg_score_margin_top2
+        )
+        SELECT
+            multi_valid_eval_run_id,
+            template_uid,
+            COALESCE(MAX(template_name), '') AS template_name,
+            CAST(COUNT(*) AS SIGNED) AS trades,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END), 0) AS SIGNED) AS wins,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END), 0) AS SIGNED) AS losses,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END), 0) AS SIGNED) AS no_entries,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100, 0) AS DOUBLE) AS win_rate,
+            CAST(COALESCE(AVG(COALESCE(result_r, 0)), 0) AS DOUBLE) AS avg_r,
+            CAST(COALESCE(SUM(COALESCE(result_r, 0)), 0) AS DOUBLE) AS sum_r,
+            CAST(COALESCE(MAX(COALESCE(result_r, 0)), 0) AS DOUBLE) AS best_r,
+            CAST(COALESCE(MIN(COALESCE(result_r, 0)), 0) AS DOUBLE) AS worst_r,
+            CAST(COUNT(DISTINCT pattern_family_key) AS SIGNED) AS family_count,
+            CAST(COUNT(DISTINCT root_symbol) AS SIGNED) AS symbol_count,
+            CAST(COALESCE(AVG(COALESCE(predicted_expected_r, 0)), 0) AS DOUBLE) AS avg_predicted_expected_r,
+            CAST(COALESCE(AVG(COALESCE(score_margin_top2, 0)), 0) AS DOUBLE) AS avg_score_margin_top2
+        FROM ai_stage1_trade_rows
+        WHERE multi_valid_eval_run_id = ?
+        GROUP BY multi_valid_eval_run_id, template_uid
+        "#,
+    )
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_stage1_trade_daily_r (
+            multi_valid_eval_run_id,
+            trade_date,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            total_r,
+            avg_r,
+            best_r,
+            worst_r,
+            cumulative_r
+        )
+        SELECT
+            daily_rows.multi_valid_eval_run_id,
+            daily_rows.trade_date,
+            daily_rows.trades,
+            daily_rows.wins,
+            daily_rows.losses,
+            daily_rows.no_entries,
+            daily_rows.win_rate,
+            daily_rows.total_r,
+            daily_rows.avg_r,
+            daily_rows.best_r,
+            daily_rows.worst_r,
+            CAST(COALESCE(SUM(daily_rows.total_r) OVER (ORDER BY daily_rows.trade_date), 0) AS DOUBLE) AS cumulative_r
+        FROM (
+            SELECT
+                multi_valid_eval_run_id,
+                DATE(trade_at) AS trade_date,
+                CAST(COUNT(*) AS SIGNED) AS trades,
+                CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END), 0) AS SIGNED) AS wins,
+                CAST(COALESCE(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END), 0) AS SIGNED) AS losses,
+                CAST(COALESCE(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END), 0) AS SIGNED) AS no_entries,
+                CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100, 0) AS DOUBLE) AS win_rate,
+                CAST(COALESCE(SUM(COALESCE(result_r, 0)), 0) AS DOUBLE) AS total_r,
+                CAST(COALESCE(AVG(COALESCE(result_r, 0)), 0) AS DOUBLE) AS avg_r,
+                CAST(COALESCE(MAX(COALESCE(result_r, 0)), 0) AS DOUBLE) AS best_r,
+                CAST(COALESCE(MIN(COALESCE(result_r, 0)), 0) AS DOUBLE) AS worst_r
+            FROM ai_stage1_trade_rows
+            WHERE multi_valid_eval_run_id = ?
+              AND trade_at IS NOT NULL
+            GROUP BY multi_valid_eval_run_id, DATE(trade_at)
+        ) daily_rows
+        ORDER BY daily_rows.trade_date ASC
+        "#,
+    )
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_stage1_trade_hourly (
+            multi_valid_eval_run_id,
+            entry_hour,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r
+        )
+        SELECT
+            multi_valid_eval_run_id,
+            CAST(HOUR(trade_at) AS SIGNED) AS entry_hour,
+            CAST(COUNT(*) AS SIGNED) AS trades,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END), 0) AS SIGNED) AS wins,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END), 0) AS SIGNED) AS losses,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END), 0) AS SIGNED) AS no_entries,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100, 0) AS DOUBLE) AS win_rate,
+            CAST(COALESCE(AVG(COALESCE(result_r, 0)), 0) AS DOUBLE) AS avg_r,
+            CAST(COALESCE(SUM(COALESCE(result_r, 0)), 0) AS DOUBLE) AS sum_r,
+            CAST(COALESCE(MAX(COALESCE(result_r, 0)), 0) AS DOUBLE) AS best_r,
+            CAST(COALESCE(MIN(COALESCE(result_r, 0)), 0) AS DOUBLE) AS worst_r
+        FROM ai_stage1_trade_rows
+        WHERE multi_valid_eval_run_id = ?
+          AND trade_at IS NOT NULL
+        GROUP BY multi_valid_eval_run_id, CAST(HOUR(trade_at) AS SIGNED)
+        "#,
+    )
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_stage1_trade_cadence (
+            multi_valid_eval_run_id,
+            first_trade_at,
+            last_trade_at,
+            trades,
+            trade_days,
+            active_weeks,
+            active_months,
+            gap_count,
+            avg_gap_minutes,
+            median_gap_minutes,
+            min_gap_minutes,
+            max_gap_minutes,
+            max_trades_5m_window,
+            max_trades_15m_window,
+            gap_0_1m,
+            gap_1_5m,
+            gap_5_15m,
+            gap_15_30m,
+            gap_30_60m,
+            gap_over_60m
+        )
+        WITH ordered_trades AS (
+            SELECT
+                trade_at,
+                setup_id,
+                template_uid,
+                LAG(trade_at) OVER (ORDER BY trade_at, setup_id, template_uid) AS previous_trade_at
+            FROM ai_stage1_trade_rows
+            WHERE multi_valid_eval_run_id = ?
+              AND trade_at IS NOT NULL
+        ),
+        gaps AS (
+            SELECT
+                TIMESTAMPDIFF(SECOND, previous_trade_at, trade_at) / 60.0 AS gap_minutes
+            FROM ordered_trades
+            WHERE previous_trade_at IS NOT NULL
+        ),
+        ranked_gaps AS (
+            SELECT
+                gap_minutes,
+                ROW_NUMBER() OVER (ORDER BY gap_minutes) AS rn,
+                COUNT(*) OVER () AS cnt
+            FROM gaps
+        )
+        SELECT
+            ? AS multi_valid_eval_run_id,
+            CAST((SELECT MIN(trade_at) FROM ordered_trades) AS DATETIME) AS first_trade_at,
+            CAST((SELECT MAX(trade_at) FROM ordered_trades) AS DATETIME) AS last_trade_at,
+            CAST((SELECT COUNT(*) FROM ordered_trades) AS SIGNED) AS trades,
+            CAST((SELECT COUNT(DISTINCT DATE(trade_at)) FROM ordered_trades) AS SIGNED) AS trade_days,
+            CAST((SELECT COUNT(DISTINCT YEARWEEK(trade_at, 3)) FROM ordered_trades) AS SIGNED) AS active_weeks,
+            CAST((SELECT COUNT(DISTINCT DATE_FORMAT(trade_at, '%Y-%m')) FROM ordered_trades) AS SIGNED) AS active_months,
+            CAST((SELECT COUNT(*) FROM gaps) AS SIGNED) AS gap_count,
+            CAST(COALESCE((SELECT AVG(gap_minutes) FROM gaps), 0) AS DOUBLE) AS avg_gap_minutes,
+            CAST(COALESCE((
+                SELECT AVG(gap_minutes)
+                FROM ranked_gaps
+                WHERE rn = FLOOR((cnt + 1) / 2)
+                   OR rn = FLOOR((cnt + 2) / 2)
+            ), 0) AS DOUBLE) AS median_gap_minutes,
+            CAST(COALESCE((SELECT MIN(gap_minutes) FROM gaps), 0) AS DOUBLE) AS min_gap_minutes,
+            CAST(COALESCE((SELECT MAX(gap_minutes) FROM gaps), 0) AS DOUBLE) AS max_gap_minutes,
+            CAST(0 AS SIGNED) AS max_trades_5m_window,
+            CAST(0 AS SIGNED) AS max_trades_15m_window,
+            CAST(COALESCE((SELECT SUM(CASE WHEN gap_minutes >= 0 AND gap_minutes <= 1 THEN 1 ELSE 0 END) FROM gaps), 0) AS SIGNED) AS gap_0_1m,
+            CAST(COALESCE((SELECT SUM(CASE WHEN gap_minutes > 1 AND gap_minutes <= 5 THEN 1 ELSE 0 END) FROM gaps), 0) AS SIGNED) AS gap_1_5m,
+            CAST(COALESCE((SELECT SUM(CASE WHEN gap_minutes > 5 AND gap_minutes <= 15 THEN 1 ELSE 0 END) FROM gaps), 0) AS SIGNED) AS gap_5_15m,
+            CAST(COALESCE((SELECT SUM(CASE WHEN gap_minutes > 15 AND gap_minutes <= 30 THEN 1 ELSE 0 END) FROM gaps), 0) AS SIGNED) AS gap_15_30m,
+            CAST(COALESCE((SELECT SUM(CASE WHEN gap_minutes > 30 AND gap_minutes <= 60 THEN 1 ELSE 0 END) FROM gaps), 0) AS SIGNED) AS gap_30_60m,
+            CAST(COALESCE((SELECT SUM(CASE WHEN gap_minutes > 60 THEN 1 ELSE 0 END) FROM gaps), 0) AS SIGNED) AS gap_over_60m
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_stage1_trade_workload (
+            multi_valid_eval_run_id,
+            first_trade_at,
+            last_trade_at,
+            trades,
+            active_hours,
+            active_days,
+            active_weeks,
+            active_months,
+            avg_trades_per_hour,
+            avg_trades_per_day,
+            avg_trades_per_week,
+            avg_trades_per_month,
+            min_trades_per_day,
+            max_trades_per_hour,
+            max_trades_per_day,
+            max_trades_per_week,
+            max_trades_per_month,
+            hours_over_5_trades,
+            days_over_20_trades
+        )
+        WITH day_counts AS (
+            SELECT DATE(trade_at) AS bucket_date, COUNT(*) AS trades
+            FROM ai_stage1_trade_rows
+            WHERE multi_valid_eval_run_id = ?
+              AND trade_at IS NOT NULL
+            GROUP BY DATE(trade_at)
+        ),
+        hour_counts AS (
+            SELECT DATE_FORMAT(trade_at, '%Y-%m-%d %H:00:00') AS bucket_hour, COUNT(*) AS trades
+            FROM ai_stage1_trade_rows
+            WHERE multi_valid_eval_run_id = ?
+              AND trade_at IS NOT NULL
+            GROUP BY DATE_FORMAT(trade_at, '%Y-%m-%d %H:00:00')
+        ),
+        week_counts AS (
+            SELECT YEARWEEK(trade_at, 3) AS bucket_week, COUNT(*) AS trades
+            FROM ai_stage1_trade_rows
+            WHERE multi_valid_eval_run_id = ?
+              AND trade_at IS NOT NULL
+            GROUP BY YEARWEEK(trade_at, 3)
+        ),
+        month_counts AS (
+            SELECT DATE_FORMAT(trade_at, '%Y-%m') AS bucket_month, COUNT(*) AS trades
+            FROM ai_stage1_trade_rows
+            WHERE multi_valid_eval_run_id = ?
+              AND trade_at IS NOT NULL
+            GROUP BY DATE_FORMAT(trade_at, '%Y-%m')
+        )
+        SELECT
+            ? AS multi_valid_eval_run_id,
+            CAST((SELECT MIN(trade_at) FROM ai_stage1_trade_rows WHERE multi_valid_eval_run_id = ? AND trade_at IS NOT NULL) AS DATETIME) AS first_trade_at,
+            CAST((SELECT MAX(trade_at) FROM ai_stage1_trade_rows WHERE multi_valid_eval_run_id = ? AND trade_at IS NOT NULL) AS DATETIME) AS last_trade_at,
+            CAST((SELECT COUNT(*) FROM ai_stage1_trade_rows WHERE multi_valid_eval_run_id = ? AND trade_at IS NOT NULL) AS SIGNED) AS trades,
+            CAST((SELECT COUNT(*) FROM hour_counts) AS SIGNED) AS active_hours,
+            CAST((SELECT COUNT(*) FROM day_counts) AS SIGNED) AS active_days,
+            CAST((SELECT COUNT(*) FROM week_counts) AS SIGNED) AS active_weeks,
+            CAST((SELECT COUNT(*) FROM month_counts) AS SIGNED) AS active_months,
+            CAST(COALESCE((SELECT AVG(trades) FROM hour_counts), 0) AS DOUBLE) AS avg_trades_per_hour,
+            CAST(COALESCE((SELECT AVG(trades) FROM day_counts), 0) AS DOUBLE) AS avg_trades_per_day,
+            CAST(COALESCE((SELECT AVG(trades) FROM week_counts), 0) AS DOUBLE) AS avg_trades_per_week,
+            CAST(COALESCE((SELECT AVG(trades) FROM month_counts), 0) AS DOUBLE) AS avg_trades_per_month,
+            CAST(COALESCE((SELECT MIN(trades) FROM day_counts), 0) AS SIGNED) AS min_trades_per_day,
+            CAST(COALESCE((SELECT MAX(trades) FROM hour_counts), 0) AS SIGNED) AS max_trades_per_hour,
+            CAST(COALESCE((SELECT MAX(trades) FROM day_counts), 0) AS SIGNED) AS max_trades_per_day,
+            CAST(COALESCE((SELECT MAX(trades) FROM week_counts), 0) AS SIGNED) AS max_trades_per_week,
+            CAST(COALESCE((SELECT MAX(trades) FROM month_counts), 0) AS SIGNED) AS max_trades_per_month,
+            CAST(COALESCE((SELECT SUM(CASE WHEN trades > 5 THEN 1 ELSE 0 END) FROM hour_counts), 0) AS SIGNED) AS hours_over_5_trades,
+            CAST(COALESCE((SELECT SUM(CASE WHEN trades > 20 THEN 1 ELSE 0 END) FROM day_counts), 0) AS SIGNED) AS days_over_20_trades
+        "#,
+    )
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_stage1_trade_symbol_contribution (
+            multi_valid_eval_run_id,
+            root_symbol,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            family_count,
+            template_count
+        )
+        SELECT
+            multi_valid_eval_run_id,
+            COALESCE(NULLIF(root_symbol, ''), 'Unknown') AS root_symbol,
+            CAST(COUNT(*) AS SIGNED) AS trades,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END), 0) AS SIGNED) AS wins,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END), 0) AS SIGNED) AS losses,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END), 0) AS SIGNED) AS no_entries,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100, 0) AS DOUBLE) AS win_rate,
+            CAST(COALESCE(AVG(COALESCE(result_r, 0)), 0) AS DOUBLE) AS avg_r,
+            CAST(COALESCE(SUM(COALESCE(result_r, 0)), 0) AS DOUBLE) AS sum_r,
+            CAST(COALESCE(MAX(COALESCE(result_r, 0)), 0) AS DOUBLE) AS best_r,
+            CAST(COALESCE(MIN(COALESCE(result_r, 0)), 0) AS DOUBLE) AS worst_r,
+            CAST(COUNT(DISTINCT pattern_family_key) AS SIGNED) AS family_count,
+            CAST(COUNT(DISTINCT template_uid) AS SIGNED) AS template_count
+        FROM ai_stage1_trade_rows
+        WHERE multi_valid_eval_run_id = ?
+        GROUP BY multi_valid_eval_run_id, COALESCE(NULLIF(root_symbol, ''), 'Unknown')
+        "#,
+    )
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_stage1_trade_family_contribution (
+            multi_valid_eval_run_id,
+            family_key,
+            harmonic_type,
+            family_bin,
+            family_size_bucket,
+            family_time_bin,
+            family_x_strictness,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            symbol_count,
+            template_count
+        )
+        SELECT
+            multi_valid_eval_run_id,
+            COALESCE(NULLIF(pattern_family_key, ''), 'Unknown') AS family_key,
+            COALESCE(MAX(harmonic_type), 'Unknown') AS harmonic_type,
+            COALESCE(MAX(family_bin), 'Unknown') AS family_bin,
+            COALESCE(MAX(family_size_bucket), 'Unknown') AS family_size_bucket,
+            COALESCE(MAX(family_time_bin), 'Unknown') AS family_time_bin,
+            COALESCE(MAX(family_x_strictness), 'Unknown') AS family_x_strictness,
+            CAST(COUNT(*) AS SIGNED) AS trades,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END), 0) AS SIGNED) AS wins,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END), 0) AS SIGNED) AS losses,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END), 0) AS SIGNED) AS no_entries,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100, 0) AS DOUBLE) AS win_rate,
+            CAST(COALESCE(AVG(COALESCE(result_r, 0)), 0) AS DOUBLE) AS avg_r,
+            CAST(COALESCE(SUM(COALESCE(result_r, 0)), 0) AS DOUBLE) AS sum_r,
+            CAST(COALESCE(MAX(COALESCE(result_r, 0)), 0) AS DOUBLE) AS best_r,
+            CAST(COALESCE(MIN(COALESCE(result_r, 0)), 0) AS DOUBLE) AS worst_r,
+            CAST(COUNT(DISTINCT root_symbol) AS SIGNED) AS symbol_count,
+            CAST(COUNT(DISTINCT template_uid) AS SIGNED) AS template_count
+        FROM ai_stage1_trade_rows
+        WHERE multi_valid_eval_run_id = ?
+        GROUP BY multi_valid_eval_run_id, COALESCE(NULLIF(pattern_family_key, ''), 'Unknown')
+        "#,
+    )
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO ai_stage1_trade_loss_windows (
+            multi_valid_eval_run_id,
+            trade_date,
+            entry_hour,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            loss_rate,
+            total_r,
+            symbol_count,
+            family_count,
+            template_count
+        )
+        SELECT
+            multi_valid_eval_run_id,
+            DATE(trade_at) AS trade_date,
+            CAST(HOUR(trade_at) AS SIGNED) AS entry_hour,
+            CAST(COUNT(*) AS SIGNED) AS trades,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'pass' THEN 1 ELSE 0 END), 0) AS SIGNED) AS wins,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END), 0) AS SIGNED) AS losses,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'no_entry' THEN 1 ELSE 0 END), 0) AS SIGNED) AS no_entries,
+            CAST(COALESCE(SUM(CASE WHEN outcome = 'fail' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0) * 100, 0) AS DOUBLE) AS loss_rate,
+            CAST(COALESCE(SUM(COALESCE(result_r, 0)), 0) AS DOUBLE) AS total_r,
+            CAST(COUNT(DISTINCT root_symbol) AS SIGNED) AS symbol_count,
+            CAST(COUNT(DISTINCT pattern_family_key) AS SIGNED) AS family_count,
+            CAST(COUNT(DISTINCT template_uid) AS SIGNED) AS template_count
+        FROM ai_stage1_trade_rows
+        WHERE multi_valid_eval_run_id = ?
+          AND trade_at IS NOT NULL
+        GROUP BY multi_valid_eval_run_id, DATE(trade_at), CAST(HOUR(trade_at) AS SIGNED)
+        HAVING losses > 0
+        "#,
+    )
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+#[route("/patterns/ai-stage1-trades", method = "GET", method = "POST")]
+async fn fetch_pattern_ai_stage1_trades(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<PatternAiStage1TradeParams>,
+) -> impl Responder {
+    let limit = params.limit.unwrap_or(300).clamp(1, 1000);
+    let offset = params.offset.unwrap_or(0).max(0);
+    let valid_year = params.valid_year.unwrap_or(2026);
+
+    let has_runs = match table_exists(pool.get_ref(), "ai_stage1_multi_valid_eval_runs").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("AI Stage 1 run table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let has_selected =
+        match table_exists(pool.get_ref(), "ai_stage1_multi_valid_eval_selected").await {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!("AI Stage 1 selected table lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+    if !has_runs || !has_selected {
+        return HttpResponse::Ok().json(PatternAiStage1TradeResponse {
+            run: None,
+            summary: None,
+            template_performance: Vec::new(),
+            daily: Vec::new(),
+            hourly: Vec::new(),
+            trade_cadence: None,
+            trade_workload: None,
+            symbol_contribution: Vec::new(),
+            family_contribution: Vec::new(),
+            loss_windows: Vec::new(),
+            total_rows: 0,
+            limit,
+            offset,
+            rows: Vec::new(),
+        });
+    }
+
+    let run = match fetch_pattern_ai_stage1_trade_run(
+        pool.get_ref(),
+        params.ai_run_id.as_deref(),
+        valid_year,
+    )
+    .await
+    {
+        Ok(run) => run,
+        Err(error) => {
+            eprintln!("AI Stage 1 run fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let Some(run) = run else {
+        return HttpResponse::Ok().json(PatternAiStage1TradeResponse {
+            run: None,
+            summary: None,
+            template_performance: Vec::new(),
+            daily: Vec::new(),
+            hourly: Vec::new(),
+            trade_cadence: None,
+            trade_workload: None,
+            symbol_contribution: Vec::new(),
+            family_contribution: Vec::new(),
+            loss_windows: Vec::new(),
+            total_rows: 0,
+            limit,
+            offset,
+            rows: Vec::new(),
+        });
+    };
+
+    let Some(quoted_results_table) = quoted_identifier(&run.results_table) else {
+        eprintln!("AI Stage 1 run has unsafe result table name: {}", run.results_table);
+        return HttpResponse::InternalServerError().finish();
+    };
+    match table_exists(pool.get_ref(), &run.results_table).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return HttpResponse::Ok().json(PatternAiStage1TradeResponse {
+                run: Some(run),
+                summary: None,
+                template_performance: Vec::new(),
+                daily: Vec::new(),
+                hourly: Vec::new(),
+                trade_cadence: None,
+                trade_workload: None,
+                symbol_contribution: Vec::new(),
+                family_contribution: Vec::new(),
+                loss_windows: Vec::new(),
+                total_rows: 0,
+                limit,
+                offset,
+                rows: Vec::new(),
+            });
+        }
+        Err(error) => {
+            eprintln!("AI Stage 1 result table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let total_rows = match sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*)
+        FROM ai_stage1_multi_valid_eval_selected
+        WHERE multi_valid_eval_run_id = ?
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_one(pool.get_ref())
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("AI Stage 1 selected count failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    if let Err(error) = ensure_pattern_ai_stage1_trade_tables(pool.get_ref()).await {
+        eprintln!("AI Stage 1 trade table ensure failed: {:?}", error);
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    let needs_refresh = match pattern_ai_stage1_trade_tables_need_refresh(
+        pool.get_ref(),
+        &run.multi_valid_eval_run_id,
+        total_rows,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("AI Stage 1 trade table refresh check failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    if total_rows > 0 && (params.refresh.unwrap_or(false) || needs_refresh) {
+        if let Err(error) =
+            refresh_pattern_ai_stage1_trade_tables(pool.get_ref(), &run, &quoted_results_table).await
+        {
+            eprintln!("AI Stage 1 trade table refresh failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let summary = match sqlx::query_as::<_, PatternAiStage1TradeSummaryRecord>(
+        r#"
+        SELECT
+            total_trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            CAST(first_trade_date AS DATETIME) AS first_trade_date,
+            CAST(last_trade_date AS DATETIME) AS last_trade_date,
+            slot_count,
+            symbol_count,
+            family_count,
+            template_count,
+            avg_predicted_expected_r,
+            avg_score_margin_top2
+        FROM ai_stage1_trade_summary
+        WHERE multi_valid_eval_run_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(summary) => summary,
+        Err(error) => {
+            eprintln!("AI Stage 1 trade summary table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let template_performance = match sqlx::query_as::<_, PatternAiStage1TemplatePerformanceRow>(
+        r#"
+        SELECT
+            template_uid,
+            template_name,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            family_count,
+            symbol_count,
+            avg_predicted_expected_r,
+            avg_score_margin_top2
+        FROM ai_stage1_trade_template_performance
+        WHERE multi_valid_eval_run_id = ?
+        ORDER BY sum_r DESC, avg_r DESC, trades DESC, template_name ASC
+        LIMIT 120
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("AI Stage 1 template performance table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let daily = match sqlx::query_as::<_, PatternAiStage1DailyRow>(
+        r#"
+        SELECT
+            DATE_FORMAT(trade_date, '%Y-%m-%d') AS trade_date,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            total_r,
+            avg_r,
+            best_r,
+            worst_r,
+            cumulative_r
+        FROM ai_stage1_trade_daily_r
+        WHERE multi_valid_eval_run_id = ?
+        ORDER BY trade_date ASC
+        LIMIT 400
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("AI Stage 1 daily table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let hourly = match sqlx::query_as::<_, PatternAiStage1HourlyRow>(
+        r#"
+        SELECT
+            entry_hour,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r
+        FROM ai_stage1_trade_hourly
+        WHERE multi_valid_eval_run_id = ?
+        ORDER BY entry_hour ASC
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("AI Stage 1 hourly table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let trade_cadence = match sqlx::query_as::<_, PatternAiStage1TradeCadenceRow>(
+        r#"
+        SELECT
+            CAST(first_trade_at AS DATETIME) AS first_trade_at,
+            CAST(last_trade_at AS DATETIME) AS last_trade_at,
+            trades,
+            trade_days,
+            active_weeks,
+            active_months,
+            gap_count,
+            avg_gap_minutes,
+            median_gap_minutes,
+            min_gap_minutes,
+            max_gap_minutes,
+            max_trades_5m_window,
+            max_trades_15m_window,
+            gap_0_1m,
+            gap_1_5m,
+            gap_5_15m,
+            gap_15_30m,
+            gap_30_60m,
+            gap_over_60m
+        FROM ai_stage1_trade_cadence
+        WHERE multi_valid_eval_run_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(row) => row,
+        Err(error) => {
+            eprintln!("AI Stage 1 trade cadence table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let trade_workload = match sqlx::query_as::<_, PatternAiStage1TradeWorkloadRow>(
+        r#"
+        SELECT
+            CAST(first_trade_at AS DATETIME) AS first_trade_at,
+            CAST(last_trade_at AS DATETIME) AS last_trade_at,
+            trades,
+            active_hours,
+            active_days,
+            active_weeks,
+            active_months,
+            avg_trades_per_hour,
+            avg_trades_per_day,
+            avg_trades_per_week,
+            avg_trades_per_month,
+            min_trades_per_day,
+            max_trades_per_hour,
+            max_trades_per_day,
+            max_trades_per_week,
+            max_trades_per_month,
+            hours_over_5_trades,
+            days_over_20_trades
+        FROM ai_stage1_trade_workload
+        WHERE multi_valid_eval_run_id = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(row) => row,
+        Err(error) => {
+            eprintln!("AI Stage 1 trade workload table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let symbol_contribution = match sqlx::query_as::<_, PatternAiStage1ContributionSymbolRow>(
+        r#"
+        SELECT
+            root_symbol,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            family_count,
+            template_count
+        FROM ai_stage1_trade_symbol_contribution
+        WHERE multi_valid_eval_run_id = ?
+        ORDER BY sum_r DESC, trades DESC, root_symbol ASC
+        LIMIT 120
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("AI Stage 1 symbol contribution table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let family_contribution = match sqlx::query_as::<_, PatternAiStage1ContributionFamilyRow>(
+        r#"
+        SELECT
+            family_key,
+            harmonic_type,
+            family_bin,
+            family_size_bucket,
+            family_time_bin,
+            family_x_strictness,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            win_rate,
+            avg_r,
+            sum_r,
+            best_r,
+            worst_r,
+            symbol_count,
+            template_count
+        FROM ai_stage1_trade_family_contribution
+        WHERE multi_valid_eval_run_id = ?
+        ORDER BY sum_r DESC, trades DESC, family_key ASC
+        LIMIT 300
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("AI Stage 1 family contribution table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let loss_windows = match sqlx::query_as::<_, PatternAiStage1LossWindowRow>(
+        r#"
+        SELECT
+            DATE_FORMAT(trade_date, '%Y-%m-%d') AS trade_date,
+            entry_hour,
+            trades,
+            wins,
+            losses,
+            no_entries,
+            loss_rate,
+            total_r,
+            symbol_count,
+            family_count,
+            template_count
+        FROM ai_stage1_trade_loss_windows
+        WHERE multi_valid_eval_run_id = ?
+        ORDER BY losses DESC, total_r ASC, trades DESC
+        LIMIT 30
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("AI Stage 1 loss window table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let rows = match sqlx::query_as::<_, PatternAiStage1TradeRow>(
+        r#"
+        SELECT
+            multi_valid_eval_run_id,
+            CAST(valid_sample_slot AS SIGNED) AS valid_sample_slot,
+            setup_id,
+            pattern_id,
+            pattern_group_id,
+            symbol,
+            root_symbol,
+            market,
+            pattern_family_key,
+            CAST(d_confirm_date AS DATETIME) AS d_confirm_date,
+            template_uid,
+            template_name,
+            CAST(predicted_expected_r AS DOUBLE) AS predicted_expected_r,
+            CAST(score_margin_top2 AS DOUBLE) AS score_margin_top2,
+            CAST(result_r AS DOUBLE) AS result_r,
+            outcome,
+            oracle_template_uid,
+            CAST(oracle_result_r AS DOUBLE) AS oracle_result_r,
+            CAST(oracle_rank AS SIGNED) AS oracle_rank,
+            CAST(entry_date AS DATETIME) AS entry_date,
+            CAST(exit_date AS DATETIME) AS exit_date,
+            CAST(entry_price AS DOUBLE) AS entry_price,
+            CAST(stop_price AS DOUBLE) AS stop_price,
+            CAST(target_price AS DOUBLE) AS target_price,
+            CAST(exit_price AS DOUBLE) AS exit_price,
+            CAST(risk_points AS DOUBLE) AS risk_points,
+            exit_reason,
+            trade_direction,
+            harmonic_type,
+            family_bin,
+            family_size_bucket,
+            family_time_bin,
+            family_x_strictness
+        FROM ai_stage1_trade_rows
+        WHERE multi_valid_eval_run_id = ?
+        ORDER BY trade_at DESC, setup_id DESC
+        LIMIT ? OFFSET ?
+        "#,
+    )
+    .bind(&run.multi_valid_eval_run_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool.get_ref())
+    .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("AI Stage 1 trade row table fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(PatternAiStage1TradeResponse {
+        run: Some(run),
+        summary,
+        template_performance,
+        daily,
+        hourly,
+        trade_cadence,
+        trade_workload,
+        symbol_contribution,
+        family_contribution,
+        loss_windows,
+        total_rows,
+        limit,
+        offset,
+        rows,
+    })
 }
 
 fn entry_exit_result_table_name_for_run(run_id: &str) -> Option<String> {
@@ -6582,6 +9010,9 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_pattern_families)
             .service(fetch_phase1_results)
             .service(fetch_phase1_family_patterns)
+            .service(fetch_pattern_xa_outcomes)
+            .service(fetch_pattern_reversal_ai_scores)
+            .service(fetch_pattern_ai_stage1_trades)
             .service(fetch_phase1_leaderboard)
             .service(fetch_phase1_supply)
             .service(fetch_entry_exit_builds)
@@ -10125,17 +12556,21 @@ async fn fetch_entry_exit_router_runs(
                 return HttpResponse::InternalServerError().finish();
             }
         };
-    let has_template_performance =
-        match table_exists(pool.get_ref(), "entry_exit_playbook_sim_template_performance").await {
-            Ok(value) => value,
-            Err(error) => {
-                eprintln!(
-                    "Entry/Exit sim template performance table lookup failed: {:?}",
-                    error
-                );
-                return HttpResponse::InternalServerError().finish();
-            }
-        };
+    let has_template_performance = match table_exists(
+        pool.get_ref(),
+        "entry_exit_playbook_sim_template_performance",
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit sim template performance table lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
 
     let requested_train_run_id = params
         .train_run_id
@@ -10221,7 +12656,10 @@ async fn fetch_entry_exit_router_runs(
         Ok(true) => "near_pass_within_r",
         Ok(false) => "0",
         Err(error) => {
-            eprintln!("Entry/Exit router near-pass within column lookup failed: {:?}", error);
+            eprintln!(
+                "Entry/Exit router near-pass within column lookup failed: {:?}",
+                error
+            );
             return HttpResponse::InternalServerError().finish();
         }
     };
@@ -10360,7 +12798,10 @@ async fn fetch_entry_exit_router_runs(
             Ok(true) => "CAST(daily_loss_lockout AS SIGNED)",
             Ok(false) => "0",
             Err(error) => {
-                eprintln!("Entry/Exit sim daily lockout column lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim daily lockout column lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -10378,7 +12819,10 @@ async fn fetch_entry_exit_router_runs(
             Ok(true) => "CAST(near_pass_protection AS SIGNED)",
             Ok(false) => "0",
             Err(error) => {
-                eprintln!("Entry/Exit sim near-pass protection column lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim near-pass protection column lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -10396,7 +12840,10 @@ async fn fetch_entry_exit_router_runs(
             Ok(true) => "near_pass_within_r",
             Ok(false) => "0",
             Err(error) => {
-                eprintln!("Entry/Exit sim near-pass within column lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim near-pass within column lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -10414,7 +12861,10 @@ async fn fetch_entry_exit_router_runs(
             Ok(true) => "near_pass_daily_loss_r",
             Ok(false) => "0",
             Err(error) => {
-                eprintln!("Entry/Exit sim near-pass daily loss column lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim near-pass daily loss column lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -10432,7 +12882,10 @@ async fn fetch_entry_exit_router_runs(
             Ok(true) => "CAST(loss_cluster_day_lockout AS SIGNED)",
             Ok(false) => "0",
             Err(error) => {
-                eprintln!("Entry/Exit sim loss-cluster lockout column lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim loss-cluster lockout column lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -10450,7 +12903,10 @@ async fn fetch_entry_exit_router_runs(
             Ok(true) => "loss_cluster_loss_count",
             Ok(false) => "0",
             Err(error) => {
-                eprintln!("Entry/Exit sim loss-cluster count column lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim loss-cluster count column lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -10468,7 +12924,10 @@ async fn fetch_entry_exit_router_runs(
             Ok(true) => "loss_cluster_window_minutes",
             Ok(false) => "0",
             Err(error) => {
-                eprintln!("Entry/Exit sim loss-cluster window column lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim loss-cluster window column lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -10486,7 +12945,10 @@ async fn fetch_entry_exit_router_runs(
             Ok(true) => "playbook_description",
             Ok(false) => "NULL",
             Err(error) => {
-                eprintln!("Entry/Exit sim playbook description column lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim playbook description column lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -10504,7 +12966,10 @@ async fn fetch_entry_exit_router_runs(
             Ok(true) => "trade_win_rate",
             Ok(false) => "NULL",
             Err(error) => {
-                eprintln!("Entry/Exit sim trade win rate column lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim trade win rate column lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -10795,8 +13260,7 @@ async fn fetch_entry_exit_router_runs(
         for run_id in &run_ids {
             query = query.bind(run_id);
         }
-        match query.fetch_all(pool.get_ref()).await
-        {
+        match query.fetch_all(pool.get_ref()).await {
             Ok(rows) => rows,
             Err(error) if is_missing_table_error(&error) => Vec::new(),
             Err(error) => {
@@ -10947,10 +13411,7 @@ async fn fetch_entry_exit_router_runs(
             Ok(rows) => rows,
             Err(error) if is_missing_table_error(&error) => Vec::new(),
             Err(error) => {
-                eprintln!(
-                    "Entry/Exit sim template performance DB error: {:?}",
-                    error
-                );
+                eprintln!("Entry/Exit sim template performance DB error: {:?}", error);
                 return HttpResponse::InternalServerError().finish();
             }
         }
@@ -11194,9 +13655,9 @@ async fn fetch_entry_exit_sim_daily_r(
     );
 
     let days = match sqlx::query_as::<_, EntryExitSimDailyRRow>(&daily_r_sql)
-    .bind(sim_run_id)
-    .fetch_all(pool.get_ref())
-    .await
+        .bind(sim_run_id)
+        .fetch_all(pool.get_ref())
+        .await
     {
         Ok(rows) => rows,
         Err(error) if is_missing_table_error(&error) => Vec::new(),
@@ -11301,6 +13762,14 @@ async fn fetch_entry_exit_sim_daily_trades(
             r.family_key,
             r.template_uid,
             r.template_label,
+            COALESCE(t.template_name, '') AS template_name,
+            COALESCE(t.entry_kind, '') AS entry_kind,
+            COALESCE(t.direction_mode, '') AS direction_mode,
+            COALESCE(t.risk_basis, '') AS risk_basis,
+            CAST(COALESCE(t.risk_multiple, 0) AS DOUBLE) AS risk_multiple,
+            CAST(COALESCE(t.target_r, 0) AS DOUBLE) AS target_r,
+            COALESCE(t.max_hold_multiple, 0) AS max_hold_multiple,
+            COALESCE(CAST(t.rule_json AS CHAR), '') AS rule_json,
             r.symbol,
             r.market,
             r.outcome,
@@ -11320,10 +13789,10 @@ async fn fetch_entry_exit_sim_daily_trades(
     );
 
     let trades = match sqlx::query_as::<_, EntryExitSimDailyTradeRow>(&daily_trades_sql)
-    .bind(sim_run_id)
-    .bind(trade_date)
-    .fetch_all(pool.get_ref())
-    .await
+        .bind(sim_run_id)
+        .bind(trade_date)
+        .fetch_all(pool.get_ref())
+        .await
     {
         Ok(rows) => rows,
         Err(error) if is_missing_table_error(&error) => Vec::new(),
@@ -11357,10 +13826,7 @@ async fn fetch_entry_exit_sim_raw_trades(
         match table_exists(pool.get_ref(), "entry_exit_template_family_router_results").await {
             Ok(value) => value,
             Err(error) => {
-                eprintln!(
-                    "Entry/Exit sim raw trade table lookup failed: {:?}",
-                    error
-                );
+                eprintln!("Entry/Exit sim raw trade table lookup failed: {:?}", error);
                 return HttpResponse::InternalServerError().finish();
             }
         };
@@ -11475,6 +13941,8 @@ async fn fetch_entry_exit_sim_raw_trades(
             r.trade_direction
         FROM entry_exit_template_family_router_results r
         {progress_join}
+        LEFT JOIN entry_exit_templates t
+          ON t.template_uid = r.template_uid
         WHERE r.router_run_id = ?
           AND r.outcome IN ('pass', 'fail')
         ORDER BY COALESCE(r.entry_date, r.d_confirm_date, r.d_date) ASC, r.id ASC
@@ -11662,8 +14130,7 @@ async fn fetch_entry_exit_sim_trade_gaps(
         return HttpResponse::BadRequest().body("Missing sim_run_id");
     }
 
-    let has_gaps = match table_exists(pool.get_ref(), "entry_exit_playbook_sim_trade_gaps").await
-    {
+    let has_gaps = match table_exists(pool.get_ref(), "entry_exit_playbook_sim_trade_gaps").await {
         Ok(value) => value,
         Err(error) => {
             eprintln!("Entry/Exit sim trade gaps table lookup failed: {:?}", error);
@@ -11872,17 +14339,17 @@ async fn fetch_entry_exit_day_trading_sim(
         return HttpResponse::BadRequest().body("Missing sim_run_id");
     }
 
-    let has_summary =
-        match table_exists(pool.get_ref(), "entry_exit_day_trading_sim_summary").await {
-            Ok(value) => value,
-            Err(error) => {
-                eprintln!(
-                    "Entry/Exit day trading summary table lookup failed: {:?}",
-                    error
-                );
-                return HttpResponse::InternalServerError().finish();
-            }
-        };
+    let has_summary = match table_exists(pool.get_ref(), "entry_exit_day_trading_sim_summary").await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!(
+                "Entry/Exit day trading summary table lookup failed: {:?}",
+                error
+            );
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
     if !has_summary {
         return HttpResponse::Ok().json(EntryExitDayTradingSimResponse {
             sim_run_id: sim_run_id.to_string(),
@@ -12452,7 +14919,10 @@ async fn fetch_entry_exit_sim_loss_clustering(
         match table_exists(pool.get_ref(), "entry_exit_playbook_sim_loss_summary").await {
             Ok(value) => value,
             Err(error) => {
-                eprintln!("Entry/Exit sim loss summary table lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim loss summary table lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         };
@@ -12468,7 +14938,10 @@ async fn fetch_entry_exit_sim_loss_clustering(
         match table_exists(pool.get_ref(), "entry_exit_playbook_sim_loss_windows").await {
             Ok(value) => value,
             Err(error) => {
-                eprintln!("Entry/Exit sim loss window table lookup failed: {:?}", error);
+                eprintln!(
+                    "Entry/Exit sim loss window table lookup failed: {:?}",
+                    error
+                );
                 return HttpResponse::InternalServerError().finish();
             }
         };

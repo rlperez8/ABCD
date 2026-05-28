@@ -7,6 +7,10 @@ use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike};
 use serde_json::Value;
 use sqlx::{mysql::MySqlPool, Row};
 
+const MIN_EXECUTION_RISK_TICKS: f64 = 4.0;
+const PULLBACK_RETEST_WINDOW_BARS: usize = 24;
+const PULLBACK_RETEST_TOLERANCE_CD_MULTIPLE: f64 = 0.25;
+
 #[derive(Debug)]
 struct Args {
     train_run_id: Option<String>,
@@ -41,6 +45,9 @@ struct Args {
     loss_cluster_window_minutes: i64,
     playbook_description: Option<String>,
     ignore_manual_family_skips: bool,
+    ai_run_id: Option<String>,
+    ai_reversal_min_probability: f64,
+    ai_reversal_primary: bool,
 }
 
 #[derive(Clone, sqlx::FromRow)]
@@ -59,7 +66,9 @@ struct PatternSetup {
     pattern_family_key: Option<String>,
     d_date: NaiveDateTime,
     d_confirm_date: NaiveDateTime,
+    d_price: f64,
     cd_price_length: f64,
+    xa_price_length: f64,
     full_pattern_length: i64,
 }
 
@@ -85,8 +94,10 @@ struct TemplateSpec {
     template_uid: String,
     template_label: String,
     template_name: String,
+    entry_kind: String,
     entry_offset: i64,
     direction_mode: String,
+    risk_basis: String,
     risk_multiple: f64,
     target_r: f64,
     max_hold_multiple: i64,
@@ -735,7 +746,7 @@ impl RouterSummary {
 }
 
 fn usage() -> &'static str {
-    "Usage: cargo run --bin run_entry_exit_playbook_sim -- --playbook-id PLAYBOOK_ID [--test-year 2026] [--source futures] [--source-timeframe 1m|5m] [--limit 0] [--sister-window-minutes 15]\nPlaybook execution rules are loaded from --playbook-id. Create playbooks with create_entry_exit_playbook."
+    "Usage: cargo run --bin run_entry_exit_playbook_sim -- --playbook-id PLAYBOOK_ID [--test-year 2026] [--source futures] [--source-timeframe 1m|5m] [--limit 0] [--sister-window-minutes 15] [--ai-reversal-min-probability 0.65] [--ai-run-id AI_RUN_ID] [--ai-reversal-primary]\nPlaybook execution rules are loaded from --playbook-id. Create playbooks with create_entry_exit_playbook."
 }
 
 fn arg_value(args: &[String], name: &str) -> Option<String> {
@@ -865,6 +876,16 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
             .max(1),
         playbook_description: None,
         ignore_manual_family_skips: has_flag(&raw_args, "--ignore-manual-family-skips"),
+        ai_run_id: arg_value(&raw_args, "--ai-run-id")
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        ai_reversal_min_probability: arg_value(&raw_args, "--ai-reversal-min-probability")
+            .or_else(|| arg_value(&raw_args, "--ai-min-reversal-probability"))
+            .as_deref()
+            .unwrap_or("0")
+            .parse::<f64>()?
+            .clamp(0.0, 1.0),
+        ai_reversal_primary: has_flag(&raw_args, "--ai-reversal-primary"),
     })
 }
 
@@ -887,6 +908,19 @@ async fn latest_train_run_id(pool: &MySqlPool) -> Result<String, sqlx::Error> {
         "#,
     )
     .fetch_one(pool)
+    .await
+}
+
+async fn latest_ai_reversal_run_id(pool: &MySqlPool) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT ai_run_id
+        FROM pattern_reversal_ai_runs
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .fetch_optional(pool)
     .await
 }
 
@@ -2518,8 +2552,18 @@ fn template_rule_label(template: &TemplateSpec) -> String {
     } else {
         "PAT"
     };
+    if template.entry_kind == "pullback_retest_d" {
+        return format!("{direction} PB-D {:.0}R", template.target_r);
+    }
+    let risk_label = if template.risk_basis == "xa_price_length" {
+        "XA"
+    } else if template.risk_basis == "pullback_retest_extreme" {
+        "PB"
+    } else {
+        "CD"
+    };
     format!(
-        "{direction} C+{} {:.3}CD {:.0}R",
+        "{direction} C+{} {:.3}{risk_label} {:.0}R",
         template.entry_offset, template.risk_multiple, template.target_r
     )
 }
@@ -2714,7 +2758,9 @@ async fn load_templates(
         SELECT
             t.template_uid,
             t.template_name,
+            t.entry_kind,
             t.direction_mode,
+            t.risk_basis,
             t.risk_multiple,
             t.target_r,
             CAST(t.max_hold_multiple AS SIGNED) AS max_hold_multiple,
@@ -2742,8 +2788,10 @@ async fn load_templates(
             template_uid: template_uid.clone(),
             template_label: format!("T{:02}", index + 1),
             template_name: row.try_get("template_name")?,
+            entry_kind: row.try_get("entry_kind")?,
             entry_offset: parse_entry_offset(&rule_json),
             direction_mode: row.try_get("direction_mode")?,
+            risk_basis: row.try_get("risk_basis")?,
             risk_multiple: row.try_get("risk_multiple")?,
             target_r: row.try_get("target_r")?,
             max_hold_multiple: row.try_get("max_hold_multiple")?,
@@ -3024,6 +3072,8 @@ async fn load_reused_router_choices(
             c.route_status,
             c.status_reason,
             t.direction_mode,
+            t.entry_kind,
+            t.risk_basis,
             t.risk_multiple,
             t.target_r,
             CAST(t.max_hold_multiple AS SIGNED) AS max_hold_multiple,
@@ -3057,8 +3107,10 @@ async fn load_reused_router_choices(
                     template_uid,
                     template_label: row.try_get("template_label")?,
                     template_name: row.try_get("template_name")?,
+                    entry_kind: row.try_get("entry_kind")?,
                     entry_offset: parse_entry_offset(&rule_json),
                     direction_mode: row.try_get("direction_mode")?,
+                    risk_basis: row.try_get("risk_basis")?,
                     risk_multiple: row.try_get("risk_multiple")?,
                     target_r: row.try_get("target_r")?,
                     max_hold_multiple: row.try_get("max_hold_multiple")?,
@@ -3154,6 +3206,89 @@ fn setup_gate_root_symbol(setup: &PatternSetup) -> String {
         .map(str::to_string)
         .unwrap_or_else(|| root_symbol_from_contract(&setup.symbol));
     normalize_root_symbol(&root)
+}
+
+fn ai_primary_choice_for_setup(setup: &PatternSetup, base_choice: &RouterChoice) -> RouterChoice {
+    let family_key = setup
+        .pattern_family_key
+        .clone()
+        .unwrap_or_else(|| "Unknown".to_string());
+    RouterChoice {
+        family_key,
+        harmonic_type: base_choice.harmonic_type.clone(),
+        market: setup.market.clone(),
+        family_bin: base_choice.family_bin.clone(),
+        family_size_bucket: base_choice.family_size_bucket.clone(),
+        family_time_bin: base_choice.family_time_bin.clone(),
+        family_x_strictness: base_choice.family_x_strictness.clone(),
+        template: base_choice.template.clone(),
+        rank: base_choice.rank,
+        score: base_choice.score,
+        train_eval_count: base_choice.train_eval_count,
+        train_pass_count: base_choice.train_pass_count,
+        train_fail_count: base_choice.train_fail_count,
+        train_no_entry_count: base_choice.train_no_entry_count,
+        train_avg_r: base_choice.train_avg_r,
+        route_status: "TRADE".to_string(),
+        status_reason: "AI reversal primary gate".to_string(),
+    }
+}
+
+fn tick_size_for_root(root_symbol: &str) -> f64 {
+    match root_symbol {
+        "ES" | "MES" | "NQ" | "MNQ" => 0.25,
+        "RTY" | "M2K" | "EMD" => 0.10,
+        "YM" | "MYM" => 1.0,
+        "NKD" => 5.0,
+        "CL" | "MCL" => 0.01,
+        "QM" => 0.025,
+        "NG" => 0.001,
+        "QG" => 0.005,
+        "GC" | "MGC" | "PA" | "PL" => 0.10,
+        "SI" | "SIL" => 0.005,
+        "HG" => 0.0005,
+        "RB" | "HO" => 0.0001,
+        "6A" | "6B" | "6C" | "6E" | "6M" | "6N" | "6S" => 0.00005,
+        "6J" => 0.0000005,
+        "GF" | "HE" | "LE" => 0.025,
+        "ZC" | "ZW" | "ZS" | "KE" => 0.25,
+        "ZL" => 0.01,
+        "ZM" => 0.10,
+        "ZB" | "UB" => 0.03125,
+        "ZN" => 0.015625,
+        "ZF" => 0.0078125,
+        "ZT" => 0.00390625,
+        _ => 0.01,
+    }
+}
+
+fn tick_size_for_setup(setup: &PatternSetup) -> f64 {
+    tick_size_for_root(&setup_gate_root_symbol(setup))
+}
+
+fn clean_tick_price(price: f64) -> f64 {
+    (price * 1_000_000_000.0).round() / 1_000_000_000.0
+}
+
+fn round_to_tick(price: f64, tick_size: f64) -> f64 {
+    if !price.is_finite() || !tick_size.is_finite() || tick_size <= 0.0 {
+        return price;
+    }
+    clean_tick_price((price / tick_size).round() * tick_size)
+}
+
+fn floor_to_tick(price: f64, tick_size: f64) -> f64 {
+    if !price.is_finite() || !tick_size.is_finite() || tick_size <= 0.0 {
+        return price;
+    }
+    clean_tick_price((price / tick_size).floor() * tick_size)
+}
+
+fn ceil_to_tick(price: f64, tick_size: f64) -> f64 {
+    if !price.is_finite() || !tick_size.is_finite() || tick_size <= 0.0 {
+        return price;
+    }
+    clean_tick_price((price / tick_size).ceil() * tick_size)
 }
 
 fn is_better_event_candidate(
@@ -3262,6 +3397,19 @@ async fn fetch_test_patterns(
     } else {
         ""
     };
+    let ai_filter = if args.ai_reversal_min_probability > 0.0 {
+        r#"
+          AND EXISTS (
+              SELECT 1
+              FROM pattern_reversal_ai_scores ai
+              WHERE ai.ai_run_id = ?
+                AND ai.setup_id = ps.setup_id
+                AND ai.predicted_reversal_probability >= ?
+          )
+        "#
+    } else {
+        ""
+    };
     let raw_candidate_limit = if args.limit > 0 {
         Some(args.limit.saturating_mul(10).max(args.limit).min(100_000))
     } else {
@@ -3289,26 +3437,36 @@ async fn fetch_test_patterns(
             ps.pattern_family_key,
             ps.d_date,
             CAST(COALESCE(ps.d_confirm_date, ps.d_date) AS DATETIME) AS d_confirm_date,
+            ps.d_min_max AS d_price,
             ps.cd_price_length,
+            COALESCE(ps.xa_price_length, ABS(ps.a_min_max - ps.x_min_max), 0) AS xa_price_length,
             CAST(ps.full_pattern_length AS SIGNED) AS full_pattern_length
         FROM pattern_setups ps
         WHERE ps.d_date IS NOT NULL
           AND ps.full_pattern_length > 0
           AND ABS(ps.cd_price_length) > 0
+          AND COALESCE(ps.xa_price_length, ABS(ps.a_min_max - ps.x_min_max), 0) > 0
           AND YEAR(COALESCE(ps.d_confirm_date, ps.d_date)) = ?
           {source_filter}
           {timeframe_filter}
+          {ai_filter}
         ORDER BY COALESCE(ps.d_confirm_date, ps.d_date) ASC, ps.setup_id ASC
         {limit_clause}
         "#,
         source_filter = source_filter,
         timeframe_filter = timeframe_filter,
+        ai_filter = ai_filter,
         limit_clause = limit_clause,
     );
 
     let mut query = sqlx::query_as::<_, PatternSetup>(&sql).bind(args.test_year);
     if let Some(source_timeframe) = args.source_timeframe.as_deref() {
         query = query.bind(source_timeframe);
+    }
+    if args.ai_reversal_min_probability > 0.0 {
+        query = query
+            .bind(args.ai_run_id.as_deref().unwrap_or(""))
+            .bind(args.ai_reversal_min_probability);
     }
     if let Some(raw_candidate_limit) = raw_candidate_limit {
         query = query.bind(raw_candidate_limit);
@@ -3333,8 +3491,12 @@ fn futures_candle_table(source_table: Option<&str>) -> &'static str {
 async fn fetch_forward_candles(
     pool: &MySqlPool,
     setup: &PatternSetup,
+    max_hold_multiple: i64,
 ) -> Result<Vec<ForwardCandle>, sqlx::Error> {
-    let max_forward_bars = setup.full_pattern_length.saturating_mul(5).max(1);
+    let max_forward_bars = setup
+        .full_pattern_length
+        .saturating_mul(max_hold_multiple.max(5))
+        .max(1);
     let use_daily = setup
         .source_table
         .as_deref()
@@ -3419,6 +3581,143 @@ fn direction_for_mode(setup: &PatternSetup, direction_mode: &str) -> f64 {
     }
 }
 
+fn risk_basis_length(setup: &PatternSetup, risk_basis: &str) -> f64 {
+    match risk_basis {
+        "xa_price_length" => setup.xa_price_length.abs(),
+        _ => setup.cd_price_length.abs(),
+    }
+}
+
+fn execution_prices(
+    template: &TemplateSpec,
+    setup: &PatternSetup,
+    raw_entry_price: f64,
+    direction: f64,
+) -> Option<(f64, f64, f64, f64, f64)> {
+    let raw_risk_points = risk_basis_length(setup, &template.risk_basis) * template.risk_multiple;
+    if !raw_risk_points.is_finite() || raw_risk_points <= 0.0 {
+        return None;
+    }
+
+    let tick_size = tick_size_for_setup(setup);
+    let entry_price = round_to_tick(raw_entry_price, tick_size);
+    let min_risk_points = MIN_EXECUTION_RISK_TICKS * tick_size;
+    let tick_rounded_risk = clean_tick_price((raw_risk_points / tick_size).ceil() * tick_size);
+    let risk_points = tick_rounded_risk.max(min_risk_points);
+    let stop_price = if direction > 0.0 {
+        floor_to_tick(entry_price - risk_points, tick_size)
+    } else {
+        ceil_to_tick(entry_price + risk_points, tick_size)
+    };
+    let adjusted_risk_points = clean_tick_price((entry_price - stop_price).abs());
+    if !adjusted_risk_points.is_finite() || adjusted_risk_points <= 0.0 {
+        return None;
+    }
+
+    let raw_target_price = entry_price + direction * adjusted_risk_points * template.target_r;
+    let target_price = if direction > 0.0 {
+        ceil_to_tick(raw_target_price, tick_size)
+    } else {
+        floor_to_tick(raw_target_price, tick_size)
+    };
+    let target_result_r = ((target_price - entry_price) * direction) / adjusted_risk_points;
+    Some((
+        entry_price,
+        stop_price,
+        target_price,
+        adjusted_risk_points,
+        target_result_r,
+    ))
+}
+
+fn execution_prices_from_stop(
+    template: &TemplateSpec,
+    setup: &PatternSetup,
+    raw_entry_price: f64,
+    raw_stop_price: f64,
+    direction: f64,
+) -> Option<(f64, f64, f64, f64, f64)> {
+    let tick_size = tick_size_for_setup(setup);
+    let entry_price = round_to_tick(raw_entry_price, tick_size);
+    let mut stop_price = if direction > 0.0 {
+        floor_to_tick(raw_stop_price, tick_size)
+    } else {
+        ceil_to_tick(raw_stop_price, tick_size)
+    };
+
+    let min_risk_points = MIN_EXECUTION_RISK_TICKS * tick_size;
+    let risk_points = clean_tick_price((entry_price - stop_price).abs());
+    if !risk_points.is_finite() || risk_points < min_risk_points {
+        stop_price = if direction > 0.0 {
+            floor_to_tick(entry_price - min_risk_points, tick_size)
+        } else {
+            ceil_to_tick(entry_price + min_risk_points, tick_size)
+        };
+    }
+
+    let adjusted_risk_points = clean_tick_price((entry_price - stop_price).abs());
+    if !adjusted_risk_points.is_finite() || adjusted_risk_points <= 0.0 {
+        return None;
+    }
+
+    let raw_target_price = entry_price + direction * adjusted_risk_points * template.target_r;
+    let target_price = if direction > 0.0 {
+        ceil_to_tick(raw_target_price, tick_size)
+    } else {
+        floor_to_tick(raw_target_price, tick_size)
+    };
+    let target_result_r = ((target_price - entry_price) * direction) / adjusted_risk_points;
+    Some((
+        entry_price,
+        stop_price,
+        target_price,
+        adjusted_risk_points,
+        target_result_r,
+    ))
+}
+
+fn pullback_retest_entry(
+    setup: &PatternSetup,
+    candles: &[ForwardCandle],
+    start_index: usize,
+    direction: f64,
+) -> Option<(usize, f64)> {
+    let tick_size = tick_size_for_setup(setup);
+    let tolerance = (setup.cd_price_length.abs() * PULLBACK_RETEST_TOLERANCE_CD_MULTIPLE)
+        .max(MIN_EXECUTION_RISK_TICKS * tick_size);
+    let zone_low = setup.d_price - tolerance;
+    let zone_high = setup.d_price + tolerance;
+    let search_end = candles
+        .len()
+        .min(start_index.saturating_add(PULLBACK_RETEST_WINDOW_BARS));
+
+    for trigger_index in start_index..search_end {
+        let Some(candle) = candles.get(trigger_index) else {
+            continue;
+        };
+        let touches_zone = candle.low <= zone_high && candle.high >= zone_low;
+        let rejects_zone = if direction > 0.0 {
+            candle.close > setup.d_price
+        } else {
+            candle.close < setup.d_price
+        };
+        if touches_zone && rejects_zone {
+            let entry_index = trigger_index.saturating_add(1);
+            if entry_index >= candles.len() {
+                return None;
+            }
+            let raw_stop_price = if direction > 0.0 {
+                candle.low - tick_size
+            } else {
+                candle.high + tick_size
+            };
+            return Some((entry_index, raw_stop_price));
+        }
+    }
+
+    None
+}
+
 fn no_entry(reason: &str) -> TemplateEvaluation {
     TemplateEvaluation {
         outcome: "no_entry".to_string(),
@@ -3444,28 +3743,51 @@ fn evaluate_template(
         return no_entry("no_candles");
     }
 
+    let direction = direction_for_mode(setup, &template.direction_mode);
     let start_index = forward_start_index(setup, candles);
-    let entry_offset = template.entry_offset.max(1) as usize;
-    let entry_index = start_index.saturating_add(entry_offset - 1);
+    let (entry_index, prices) = if template.entry_kind == "pullback_retest_d" {
+        let Some((entry_index, raw_stop_price)) =
+            pullback_retest_entry(setup, candles, start_index, direction)
+        else {
+            return no_entry("pullback_retest_missing");
+        };
+        let Some(entry_candle) = candles.get(entry_index) else {
+            return no_entry("entry_offset_missing");
+        };
+        let Some(prices) = execution_prices_from_stop(
+            template,
+            setup,
+            entry_candle.open,
+            raw_stop_price,
+            direction,
+        ) else {
+            return no_entry("invalid_risk");
+        };
+        (entry_index, prices)
+    } else {
+        let entry_offset = template.entry_offset.max(1) as usize;
+        let entry_index = start_index.saturating_add(entry_offset - 1);
+        let Some(entry_candle) = candles.get(entry_index) else {
+            return no_entry("entry_offset_missing");
+        };
+        let Some(prices) = execution_prices(template, setup, entry_candle.open, direction) else {
+            return no_entry("invalid_risk");
+        };
+        (entry_index, prices)
+    };
     let Some(entry_candle) = candles.get(entry_index) else {
         return no_entry("entry_offset_missing");
     };
-
-    let cd_length = setup.cd_price_length.abs();
-    let risk_points = cd_length * template.risk_multiple;
-    if !risk_points.is_finite() || risk_points <= 0.0 {
-        return no_entry("invalid_risk");
-    }
-
-    let direction = direction_for_mode(setup, &template.direction_mode);
-    let entry_price = entry_candle.open;
-    let stop_price = entry_price - direction * risk_points;
-    let target_price = entry_price + direction * risk_points * template.target_r;
-    let max_hold_bars = setup
-        .full_pattern_length
-        .saturating_mul(template.max_hold_multiple.max(1))
-        .max(1) as usize;
-    let end_index = candles.len().min(entry_index.saturating_add(max_hold_bars));
+    let (entry_price, stop_price, target_price, risk_points, target_result_r) = prices;
+    let end_index = if template.max_hold_multiple <= 0 {
+        candles.len()
+    } else {
+        let max_hold_bars = setup
+            .full_pattern_length
+            .saturating_mul(template.max_hold_multiple)
+            .max(1) as usize;
+        candles.len().min(entry_index.saturating_add(max_hold_bars))
+    };
     if end_index <= entry_index {
         return no_entry("hold_window_missing");
     }
@@ -3496,7 +3818,7 @@ fn evaluate_template(
             return TemplateEvaluation {
                 outcome: "pass".to_string(),
                 exit_reason: "target".to_string(),
-                result_r: Some(template.target_r),
+                result_r: Some(target_result_r),
                 entry_date: Some(entry_candle.candle_date),
                 exit_date: Some(candles[candle_index].candle_date),
                 entry_price: Some(entry_price),
@@ -5328,7 +5650,8 @@ fn compute_day_trading_rows_from_trades(trades: &[PropReplayTrade]) -> DayTradin
         max_drawdown_r: 0.0,
     };
 
-    let finish_day = |rows: &mut Vec<DayTradingDailyResultRow>, row: &mut DayTradingDailyResultRow| {
+    let finish_day = |rows: &mut Vec<DayTradingDailyResultRow>,
+                      row: &mut DayTradingDailyResultRow| {
         if row.trade_date.year() != 1970 {
             rows.push(DayTradingDailyResultRow {
                 trade_date: row.trade_date,
@@ -5346,28 +5669,28 @@ fn compute_day_trading_rows_from_trades(trades: &[PropReplayTrade]) -> DayTradin
             });
         }
     };
-    let finish_month =
-        |rows: &mut Vec<DayTradingMonthlyResultRow>, row: &mut DayTradingMonthlyResultRow| {
-            if row.month_start.year() != 1970 {
-                rows.push(DayTradingMonthlyResultRow {
-                    month_start: row.month_start,
-                    trades: row.trades,
-                    wins: row.wins,
-                    losses: row.losses,
-                    no_entries: row.no_entries,
-                    gross_profit_r: row.gross_profit_r,
-                    gross_loss_r: row.gross_loss_r,
-                    net_r: row.net_r,
-                    end_equity_r: row.end_equity_r,
-                    max_drawdown_r: row.max_drawdown_r,
-                });
-            }
-        };
+    let finish_month = |rows: &mut Vec<DayTradingMonthlyResultRow>,
+                        row: &mut DayTradingMonthlyResultRow| {
+        if row.month_start.year() != 1970 {
+            rows.push(DayTradingMonthlyResultRow {
+                month_start: row.month_start,
+                trades: row.trades,
+                wins: row.wins,
+                losses: row.losses,
+                no_entries: row.no_entries,
+                gross_profit_r: row.gross_profit_r,
+                gross_loss_r: row.gross_loss_r,
+                net_r: row.net_r,
+                end_equity_r: row.end_equity_r,
+                max_drawdown_r: row.max_drawdown_r,
+            });
+        }
+    };
 
     for trade in trades {
         let trade_date = trade.event_date.date();
-        let month_start = NaiveDate::from_ymd_opt(trade_date.year(), trade_date.month(), 1)
-            .unwrap_or(trade_date);
+        let month_start =
+            NaiveDate::from_ymd_opt(trade_date.year(), trade_date.month(), 1).unwrap_or(trade_date);
 
         if current_day != Some(trade_date) {
             finish_day(&mut daily_results, &mut day);
@@ -5500,9 +5823,18 @@ fn compute_day_trading_rows_from_trades(trades: &[PropReplayTrade]) -> DayTradin
     finish_month(&mut monthly_results, &mut month);
 
     let total_trades = trade_rows.len() as i64;
-    let wins = trade_rows.iter().filter(|row| row.outcome == "pass").count() as i64;
-    let losses = trade_rows.iter().filter(|row| row.outcome == "fail").count() as i64;
-    let no_entries = trades.iter().filter(|trade| trade.outcome == "no_entry").count() as i64;
+    let wins = trade_rows
+        .iter()
+        .filter(|row| row.outcome == "pass")
+        .count() as i64;
+    let losses = trade_rows
+        .iter()
+        .filter(|row| row.outcome == "fail")
+        .count() as i64;
+    let no_entries = trades
+        .iter()
+        .filter(|trade| trade.outcome == "no_entry")
+        .count() as i64;
     let gross_profit_r = trade_rows
         .iter()
         .map(|row| row.result_r.max(0.0))
@@ -7114,6 +7446,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             None => latest_train_run_id(&pool).await?,
         },
     };
+    if args.ai_reversal_min_probability > 0.0 && args.ai_run_id.is_none() {
+        args.ai_run_id = latest_ai_reversal_run_id(&pool).await?;
+    }
+    if args.ai_reversal_min_probability > 0.0 && args.ai_run_id.is_none() {
+        return Err(
+            "AI reversal filter requested, but no pattern_reversal_ai_runs row exists. Run build_pattern_reversal_ai_scores first."
+                .into(),
+        );
+    }
+    if args.ai_reversal_min_probability > 0.0 {
+        let ai_description = format!(
+            "AI reversal score >= {:.1}% ({})",
+            args.ai_reversal_min_probability * 100.0,
+            args.ai_run_id.as_deref().unwrap_or("latest")
+        );
+        args.playbook_description = Some(match args.playbook_description.take() {
+            Some(existing) if !existing.trim().is_empty() => {
+                format!("{existing} | {ai_description}")
+            }
+            _ => ai_description,
+        });
+    }
     let router_run_id = router_run_id();
 
     println!("Building family selection model");
@@ -7127,6 +7481,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     if let Some(reuse_router_run_id) = args.reuse_router_run_id.as_deref() {
         println!("reuse_model_test_id={reuse_router_run_id}");
+    }
+    if args.ai_reversal_min_probability > 0.0 {
+        println!(
+            "ai_reversal_filter=on run={} min_probability={:.3} primary={}",
+            args.ai_run_id.as_deref().unwrap_or(""),
+            args.ai_reversal_min_probability,
+            if args.ai_reversal_primary {
+                "on"
+            } else {
+                "off"
+            }
+        );
     }
     if args.prop_filter {
         println!(
@@ -7268,6 +7634,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    let ai_primary_base_choice = if args.ai_reversal_primary {
+        choices
+            .values()
+            .filter(|choice| choice.route_status == "TRADE")
+            .max_by(|left, right| {
+                left.score
+                    .partial_cmp(&right.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .cloned()
+    } else {
+        None
+    };
+    if args.ai_reversal_primary && ai_primary_base_choice.is_none() {
+        return Err(
+            "AI reversal primary mode requires at least one TRADE template choice in the playbook."
+                .into(),
+        );
+    }
+
     let patterns = fetch_test_patterns(&pool, &args).await?;
     let raw_patterns_loaded = patterns.len() as i64;
     let event_limit = if args.limit > 0 {
@@ -7312,19 +7698,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut saw_non_trade = false;
         let mut saw_symbol_blocked = false;
-        let mut selected: Option<(&PatternSetup, &RouterChoice)> = None;
+        let mut selected: Option<(&PatternSetup, RouterChoice)> = None;
 
         for setup in live_candidates {
-            let Some(family_key) = setup.pattern_family_key.as_deref() else {
-                continue;
+            let choice = match setup
+                .pattern_family_key
+                .as_deref()
+                .and_then(|family_key| choices.get(family_key))
+            {
+                Some(choice) if choice.route_status == "TRADE" => choice.clone(),
+                Some(_) => {
+                    saw_non_trade = true;
+                    continue;
+                }
+                None if args.ai_reversal_primary => ai_primary_choice_for_setup(
+                    setup,
+                    ai_primary_base_choice
+                        .as_ref()
+                        .expect("checked AI primary choice"),
+                ),
+                None => continue,
             };
-            let Some(choice) = choices.get(family_key) else {
-                continue;
-            };
-            if choice.route_status != "TRADE" {
-                saw_non_trade = true;
-                continue;
-            }
             if args.symbol_filter {
                 let root_symbol = setup_gate_root_symbol(setup);
                 match symbol_choices.get(&root_symbol) {
@@ -7337,8 +7731,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let replace_selected = selected
+                .as_ref()
                 .map(|(selected_setup, selected_choice)| {
-                    is_better_event_candidate(setup, choice, selected_setup, selected_choice)
+                    is_better_event_candidate(setup, &choice, selected_setup, &selected_choice)
                 })
                 .unwrap_or(true);
             if replace_selected {
@@ -7357,8 +7752,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         };
 
-        let candles = fetch_forward_candles(&pool, setup).await?;
-        let evaluation = evaluate_template(&choice.template, setup, &candles);
+        let execution_max_hold_multiple =
+            if args.ai_reversal_primary && args.ai_reversal_min_probability > 0.0 {
+                0
+            } else {
+                choice.template.max_hold_multiple
+            };
+        let candles = fetch_forward_candles(&pool, setup, execution_max_hold_multiple).await?;
+        let mut execution_template = choice.template.clone();
+        if args.ai_reversal_primary && args.ai_reversal_min_probability > 0.0 {
+            execution_template.max_hold_multiple = 0;
+        }
+        let evaluation = evaluate_template(&execution_template, setup, &candles);
         let setup_root_symbol = setup_gate_root_symbol(setup);
         if args.one_trade_at_a_time {
             if let (Some(entry_date), Some(active_exit_date)) =
@@ -7414,7 +7819,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             event,
             live_candidate_count,
             setup,
-            choice,
+            &choice,
             &evaluation,
         )
         .await?;

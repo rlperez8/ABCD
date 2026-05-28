@@ -641,6 +641,14 @@ const parseEntryExitSimDailyTradeRow = (row = {}) => ({
 
 const parseEntryExitSimRawTradeRow = (row = {}) => ({
   ...parseEntryExitSimDailyTradeRow(row),
+  template_name: row?.template_name ?? '',
+  entry_kind: row?.entry_kind ?? '',
+  direction_mode: row?.direction_mode ?? '',
+  risk_basis: row?.risk_basis ?? '',
+  risk_multiple: parseOptionalFloat(row?.risk_multiple) ?? 0,
+  target_r: parseOptionalFloat(row?.target_r) ?? 0,
+  max_hold_multiple: parseOptionalInt(row?.max_hold_multiple) ?? 0,
+  rule_json: row?.rule_json ?? '',
   pattern_group_id: row?.pattern_group_id ?? '',
   event_id: row?.event_id ?? null,
   event_rank: parseOptionalInt(row?.event_rank),
@@ -2089,6 +2097,481 @@ export const fetchEntryExitBuilds = async ({ limit = 25 } = {}) => {
   } catch (error) {
     console.error(error);
     return [];
+  }
+};
+
+const parsePatternXaOutcomeRun = (run = null) => {
+  if (!run) return null;
+  return {
+    run_id: run.run_id ?? '',
+    source_scope: run.source_scope ?? '',
+    source_timeframe: run.source_timeframe ?? '',
+    scan_year_start: parseOptionalInt(run.scan_year_start) ?? 0,
+    scan_year_end: parseOptionalInt(run.scan_year_end) ?? 0,
+    scan_year_label: run.scan_year_label ?? '',
+    requested_limit: parseOptionalInt(run.requested_limit) ?? 0,
+    max_forward_multiple: parseOptionalInt(run.max_forward_multiple) ?? 0,
+    xa_multiple: parseOptionalFloat(run.xa_multiple) ?? 0,
+    patterns_scanned: parseOptionalInt(run.patterns_scanned) ?? 0,
+    reversal_count: parseOptionalInt(run.reversal_count) ?? 0,
+    continuation_count: parseOptionalInt(run.continuation_count) ?? 0,
+    ambiguous_count: parseOptionalInt(run.ambiguous_count) ?? 0,
+    none_count: parseOptionalInt(run.none_count) ?? 0,
+    elapsed_ms: parseOptionalInt(run.elapsed_ms) ?? 0,
+    created_at: run.created_at ?? null,
+  };
+};
+
+const parsePatternXaOutcomeRow = (row = {}) => ({
+  setup_id: row.setup_id ?? '',
+  pattern_id: row.pattern_id ?? '',
+  pattern_group_id: row.pattern_group_id ?? '',
+  event_id: row.event_id ?? '',
+  symbol: row.symbol ?? '',
+  root_symbol: row.root_symbol ?? '',
+  contract_symbol: row.contract_symbol ?? '',
+  source_timeframe: row.source_timeframe ?? '',
+  market: row.market ?? '',
+  pattern_family_key: row.pattern_family_key ?? '',
+  d_date: row.d_date ?? null,
+  d_confirm_date: row.d_confirm_date ?? null,
+  d_price: parseOptionalFloat(row.d_price),
+  xa_distance: parseOptionalFloat(row.xa_distance),
+  xa_multiple: parseOptionalFloat(row.xa_multiple),
+  reversal_target_price: parseOptionalFloat(row.reversal_target_price),
+  continuation_target_price: parseOptionalFloat(row.continuation_target_price),
+  outcome: row.outcome ?? '',
+  hit_date: row.hit_date ?? null,
+  bars_to_hit: parseOptionalInt(row.bars_to_hit),
+  minutes_to_hit: parseOptionalInt(row.minutes_to_hit),
+  max_reversal_excursion: parseOptionalFloat(row.max_reversal_excursion),
+  max_continuation_excursion: parseOptionalFloat(row.max_continuation_excursion),
+  candles_scanned: parseOptionalInt(row.candles_scanned) ?? 0,
+});
+
+const parsePatternXaOutcomeFamilyRow = (row = {}) => ({
+  pattern_family_key: row.pattern_family_key ?? '',
+  harmonic_type: row.harmonic_type ?? '',
+  family_bin: row.family_bin ?? '',
+  family_size_bucket: row.family_size_bucket ?? '',
+  family_time_bin: row.family_time_bin ?? '',
+  family_x_strictness: row.family_x_strictness ?? '',
+  total_count: parseOptionalInt(row.total_count) ?? 0,
+  reversal_count: parseOptionalInt(row.reversal_count) ?? 0,
+  continuation_count: parseOptionalInt(row.continuation_count) ?? 0,
+  ambiguous_count: parseOptionalInt(row.ambiguous_count) ?? 0,
+  none_count: parseOptionalInt(row.none_count) ?? 0,
+  avg_bars_to_hit: parseOptionalFloat(row.avg_bars_to_hit),
+  avg_minutes_to_hit: parseOptionalFloat(row.avg_minutes_to_hit),
+});
+
+export const fetchPatternXaOutcomes = async ({
+  runId = null,
+  limit = 300,
+  offset = 0,
+} = {}) => {
+  try {
+    const data = await postJson('/patterns/xa-outcomes', {
+      run_id: runId,
+      limit: parseOptionalInt(limit),
+      offset: parseOptionalInt(offset),
+    });
+
+    return {
+      run: parsePatternXaOutcomeRun(data?.run ?? null),
+      total_rows: parseOptionalInt(data?.total_rows) ?? 0,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      offset: parseOptionalInt(data?.offset) ?? offset,
+      family_rows: Array.isArray(data?.family_rows)
+        ? data.family_rows.map(parsePatternXaOutcomeFamilyRow)
+        : [],
+      rows: Array.isArray(data?.rows)
+        ? data.rows.map(parsePatternXaOutcomeRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { run: null, total_rows: 0, limit, offset, family_rows: [], rows: [] };
+  }
+};
+
+const parsePatternReversalAiRun = (run = null) => {
+  if (!run) return null;
+  return {
+    ai_run_id: run.ai_run_id ?? '',
+    source_xa_run_id: run.source_xa_run_id ?? '',
+    model_type: run.model_type ?? '',
+    feature_set_version: run.feature_set_version ?? '',
+    decision_threshold: parseOptionalFloat(run.decision_threshold) ?? 0,
+    score_rows: parseOptionalInt(run.score_rows) ?? 0,
+    predicted_reversal_count: parseOptionalInt(run.predicted_reversal_count) ?? 0,
+    predicted_reversal_actual_reversal_count: parseOptionalInt(run.predicted_reversal_actual_reversal_count) ?? 0,
+    baseline_reversal_rate: parseOptionalFloat(run.baseline_reversal_rate) ?? 0,
+    predicted_reversal_actual_rate: parseOptionalFloat(run.predicted_reversal_actual_rate) ?? 0,
+    lift_vs_baseline: parseOptionalFloat(run.lift_vs_baseline) ?? 0,
+    elapsed_ms: parseOptionalInt(run.elapsed_ms) ?? 0,
+    created_at: run.created_at ?? null,
+  };
+};
+
+const parsePatternReversalAiBucketRow = (row = {}) => ({
+  confidence_bucket: row.confidence_bucket ?? '',
+  row_count: parseOptionalInt(row.row_count) ?? 0,
+  actual_reversal_count: parseOptionalInt(row.actual_reversal_count) ?? 0,
+  actual_reversal_rate: parseOptionalFloat(row.actual_reversal_rate) ?? 0,
+  avg_predicted_reversal_probability: parseOptionalFloat(row.avg_predicted_reversal_probability) ?? 0,
+});
+
+const parsePatternReversalAiThresholdRow = (row = {}) => ({
+  threshold_value: parseOptionalFloat(row.threshold_value) ?? 0,
+  row_count: parseOptionalInt(row.row_count) ?? 0,
+  actual_reversal_count: parseOptionalInt(row.actual_reversal_count) ?? 0,
+  actual_reversal_rate: parseOptionalFloat(row.actual_reversal_rate) ?? 0,
+  avg_predicted_reversal_probability: parseOptionalFloat(row.avg_predicted_reversal_probability) ?? 0,
+  lift_vs_baseline: parseOptionalFloat(row.lift_vs_baseline) ?? 0,
+});
+
+const parsePatternReversalAiScoreRow = (row = {}) => ({
+  setup_id: row.setup_id ?? '',
+  pattern_id: row.pattern_id ?? '',
+  pattern_group_id: row.pattern_group_id ?? '',
+  symbol: row.symbol ?? '',
+  root_symbol: row.root_symbol ?? '',
+  market: row.market ?? '',
+  pattern_family_key: row.pattern_family_key ?? '',
+  d_confirm_date: row.d_confirm_date ?? null,
+  actual_outcome: row.actual_outcome ?? '',
+  actual_reversed: parseOptionalInt(row.actual_reversed) ?? 0,
+  predicted_reversal_probability: parseOptionalFloat(row.predicted_reversal_probability) ?? 0,
+  predicted_continuation_probability: parseOptionalFloat(row.predicted_continuation_probability) ?? 0,
+  ai_decision: row.ai_decision ?? '',
+  was_correct: parseOptionalInt(row.was_correct) ?? 0,
+  confidence_bucket: row.confidence_bucket ?? '',
+  harmonic_type: row.harmonic_type ?? '',
+  family_bin: row.family_bin ?? '',
+  family_size_bucket: row.family_size_bucket ?? '',
+  family_time_bin: row.family_time_bin ?? '',
+  family_x_strictness: row.family_x_strictness ?? '',
+});
+
+export const fetchPatternReversalAiScores = async ({
+  aiRunId = null,
+  limit = 300,
+  offset = 0,
+} = {}) => {
+  try {
+    const data = await postJson('/patterns/reversal-ai-scores', {
+      ai_run_id: aiRunId,
+      limit: parseOptionalInt(limit),
+      offset: parseOptionalInt(offset),
+    });
+
+    return {
+      run: parsePatternReversalAiRun(data?.run ?? null),
+      total_rows: parseOptionalInt(data?.total_rows) ?? 0,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      offset: parseOptionalInt(data?.offset) ?? offset,
+      thresholds: Array.isArray(data?.thresholds)
+        ? data.thresholds.map(parsePatternReversalAiThresholdRow)
+        : [],
+      buckets: Array.isArray(data?.buckets)
+        ? data.buckets.map(parsePatternReversalAiBucketRow)
+        : [],
+      rows: Array.isArray(data?.rows)
+        ? data.rows.map(parsePatternReversalAiScoreRow)
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { run: null, total_rows: 0, limit, offset, thresholds: [], buckets: [], rows: [] };
+  }
+};
+
+const parsePatternAiStage1TradeRun = (run = null) => {
+  if (!run) return null;
+  return {
+    multi_valid_eval_run_id: run.multi_valid_eval_run_id ?? '',
+    source_run_id: run.source_run_id ?? '',
+    results_table: run.results_table ?? '',
+    train_start_year: parseOptionalInt(run.train_start_year) ?? 0,
+    train_end_year: parseOptionalInt(run.train_end_year) ?? 0,
+    valid_year: parseOptionalInt(run.valid_year) ?? 0,
+    train_sample_slot: parseOptionalInt(run.train_sample_slot) ?? 0,
+    valid_sample_slots: run.valid_sample_slots ?? '',
+    train_setups: parseOptionalInt(run.train_setups) ?? 0,
+    train_rows: parseOptionalInt(run.train_rows) ?? 0,
+    iterations: parseOptionalInt(run.iterations) ?? 0,
+    depth: parseOptionalInt(run.depth) ?? 0,
+    learning_rate: parseOptionalFloat(run.learning_rate) ?? 0,
+    l2_leaf_reg: parseOptionalFloat(run.l2_leaf_reg) ?? 0,
+    random_strength: parseOptionalFloat(run.random_strength) ?? 0,
+    random_seed: parseOptionalInt(run.random_seed) ?? 0,
+    pre_feature_set: run.pre_feature_set ?? '',
+    aggregate_feature_set: run.aggregate_feature_set ?? '',
+    excluded_roots: run.excluded_roots ?? '',
+    model_path: run.model_path ?? '',
+    created_at: run.created_at ?? null,
+  };
+};
+
+const parsePatternAiStage1TradeSummary = (summary = null) => {
+  if (!summary) return null;
+  return {
+    total_trades: parseOptionalInt(summary.total_trades) ?? 0,
+    wins: parseOptionalInt(summary.wins) ?? 0,
+    losses: parseOptionalInt(summary.losses) ?? 0,
+    no_entries: parseOptionalInt(summary.no_entries) ?? 0,
+    win_rate: parseOptionalFloat(summary.win_rate) ?? 0,
+    avg_r: parseOptionalFloat(summary.avg_r) ?? 0,
+    sum_r: parseOptionalFloat(summary.sum_r) ?? 0,
+    best_r: parseOptionalFloat(summary.best_r) ?? 0,
+    worst_r: parseOptionalFloat(summary.worst_r) ?? 0,
+    first_trade_date: summary.first_trade_date ?? null,
+    last_trade_date: summary.last_trade_date ?? null,
+    slot_count: parseOptionalInt(summary.slot_count) ?? 0,
+    symbol_count: parseOptionalInt(summary.symbol_count) ?? 0,
+    family_count: parseOptionalInt(summary.family_count) ?? 0,
+    template_count: parseOptionalInt(summary.template_count) ?? 0,
+    avg_predicted_expected_r: parseOptionalFloat(summary.avg_predicted_expected_r) ?? 0,
+    avg_score_margin_top2: parseOptionalFloat(summary.avg_score_margin_top2) ?? 0,
+  };
+};
+
+const parsePatternAiStage1TemplatePerformanceRow = (row = {}) => ({
+  template_uid: row.template_uid ?? '',
+  template_name: row.template_name ?? '',
+  trades: parseOptionalInt(row.trades) ?? 0,
+  wins: parseOptionalInt(row.wins) ?? 0,
+  losses: parseOptionalInt(row.losses) ?? 0,
+  no_entries: parseOptionalInt(row.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row.worst_r) ?? 0,
+  family_count: parseOptionalInt(row.family_count) ?? 0,
+  symbol_count: parseOptionalInt(row.symbol_count) ?? 0,
+  avg_predicted_expected_r: parseOptionalFloat(row.avg_predicted_expected_r) ?? 0,
+  avg_score_margin_top2: parseOptionalFloat(row.avg_score_margin_top2) ?? 0,
+});
+
+const parsePatternAiStage1DailyRow = (row = {}) => ({
+  trade_date: row.trade_date ?? '',
+  trades: parseOptionalInt(row.trades) ?? 0,
+  wins: parseOptionalInt(row.wins) ?? 0,
+  losses: parseOptionalInt(row.losses) ?? 0,
+  no_entries: parseOptionalInt(row.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row.win_rate) ?? 0,
+  total_r: parseOptionalFloat(row.total_r) ?? 0,
+  avg_r: parseOptionalFloat(row.avg_r) ?? 0,
+  best_r: parseOptionalFloat(row.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row.worst_r) ?? 0,
+  cumulative_r: parseOptionalFloat(row.cumulative_r) ?? 0,
+});
+
+const parsePatternAiStage1HourlyRow = (row = {}) => ({
+  entry_hour: parseOptionalInt(row.entry_hour) ?? 0,
+  trades: parseOptionalInt(row.trades) ?? 0,
+  wins: parseOptionalInt(row.wins) ?? 0,
+  losses: parseOptionalInt(row.losses) ?? 0,
+  no_entries: parseOptionalInt(row.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row.worst_r) ?? 0,
+});
+
+const parsePatternAiStage1TradeCadence = (row = null) => {
+  if (!row) return null;
+  return {
+    first_trade_at: row.first_trade_at ?? null,
+    last_trade_at: row.last_trade_at ?? null,
+    trades: parseOptionalInt(row.trades) ?? 0,
+    trade_days: parseOptionalInt(row.trade_days) ?? 0,
+    active_weeks: parseOptionalInt(row.active_weeks) ?? 0,
+    active_months: parseOptionalInt(row.active_months) ?? 0,
+    gap_count: parseOptionalInt(row.gap_count) ?? 0,
+    avg_gap_minutes: parseOptionalFloat(row.avg_gap_minutes) ?? 0,
+    median_gap_minutes: parseOptionalFloat(row.median_gap_minutes) ?? 0,
+    min_gap_minutes: parseOptionalFloat(row.min_gap_minutes) ?? 0,
+    max_gap_minutes: parseOptionalFloat(row.max_gap_minutes) ?? 0,
+    max_trades_5m_window: parseOptionalInt(row.max_trades_5m_window) ?? 0,
+    max_trades_15m_window: parseOptionalInt(row.max_trades_15m_window) ?? 0,
+    gap_0_1m: parseOptionalInt(row.gap_0_1m) ?? 0,
+    gap_1_5m: parseOptionalInt(row.gap_1_5m) ?? 0,
+    gap_5_15m: parseOptionalInt(row.gap_5_15m) ?? 0,
+    gap_15_30m: parseOptionalInt(row.gap_15_30m) ?? 0,
+    gap_30_60m: parseOptionalInt(row.gap_30_60m) ?? 0,
+    gap_over_60m: parseOptionalInt(row.gap_over_60m) ?? 0,
+  };
+};
+
+const parsePatternAiStage1TradeWorkload = (row = null) => {
+  if (!row) return null;
+  return {
+    first_trade_at: row.first_trade_at ?? null,
+    last_trade_at: row.last_trade_at ?? null,
+    trades: parseOptionalInt(row.trades) ?? 0,
+    active_hours: parseOptionalInt(row.active_hours) ?? 0,
+    active_days: parseOptionalInt(row.active_days) ?? 0,
+    active_weeks: parseOptionalInt(row.active_weeks) ?? 0,
+    active_months: parseOptionalInt(row.active_months) ?? 0,
+    avg_trades_per_hour: parseOptionalFloat(row.avg_trades_per_hour) ?? 0,
+    avg_trades_per_day: parseOptionalFloat(row.avg_trades_per_day) ?? 0,
+    avg_trades_per_week: parseOptionalFloat(row.avg_trades_per_week) ?? 0,
+    avg_trades_per_month: parseOptionalFloat(row.avg_trades_per_month) ?? 0,
+    min_trades_per_day: parseOptionalInt(row.min_trades_per_day) ?? 0,
+    max_trades_per_hour: parseOptionalInt(row.max_trades_per_hour) ?? 0,
+    max_trades_per_day: parseOptionalInt(row.max_trades_per_day) ?? 0,
+    max_trades_per_week: parseOptionalInt(row.max_trades_per_week) ?? 0,
+    max_trades_per_month: parseOptionalInt(row.max_trades_per_month) ?? 0,
+    hours_over_5_trades: parseOptionalInt(row.hours_over_5_trades) ?? 0,
+    days_over_20_trades: parseOptionalInt(row.days_over_20_trades) ?? 0,
+  };
+};
+
+const parsePatternAiStage1SymbolContributionRow = (row = {}) => ({
+  root_symbol: row.root_symbol ?? '',
+  trades: parseOptionalInt(row.trades) ?? 0,
+  wins: parseOptionalInt(row.wins) ?? 0,
+  losses: parseOptionalInt(row.losses) ?? 0,
+  no_entries: parseOptionalInt(row.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row.worst_r) ?? 0,
+  family_count: parseOptionalInt(row.family_count) ?? 0,
+  template_count: parseOptionalInt(row.template_count) ?? 0,
+});
+
+const parsePatternAiStage1FamilyContributionRow = (row = {}) => ({
+  family_key: row.family_key ?? '',
+  harmonic_type: row.harmonic_type ?? '',
+  family_bin: row.family_bin ?? '',
+  family_size_bucket: row.family_size_bucket ?? '',
+  family_time_bin: row.family_time_bin ?? '',
+  family_x_strictness: row.family_x_strictness ?? '',
+  trades: parseOptionalInt(row.trades) ?? 0,
+  wins: parseOptionalInt(row.wins) ?? 0,
+  losses: parseOptionalInt(row.losses) ?? 0,
+  no_entries: parseOptionalInt(row.no_entries) ?? 0,
+  win_rate: parseOptionalFloat(row.win_rate) ?? 0,
+  avg_r: parseOptionalFloat(row.avg_r) ?? 0,
+  sum_r: parseOptionalFloat(row.sum_r) ?? 0,
+  best_r: parseOptionalFloat(row.best_r) ?? 0,
+  worst_r: parseOptionalFloat(row.worst_r) ?? 0,
+  symbol_count: parseOptionalInt(row.symbol_count) ?? 0,
+  template_count: parseOptionalInt(row.template_count) ?? 0,
+});
+
+const parsePatternAiStage1LossWindowRow = (row = {}) => ({
+  trade_date: row.trade_date ?? '',
+  entry_hour: parseOptionalInt(row.entry_hour) ?? 0,
+  trades: parseOptionalInt(row.trades) ?? 0,
+  wins: parseOptionalInt(row.wins) ?? 0,
+  losses: parseOptionalInt(row.losses) ?? 0,
+  no_entries: parseOptionalInt(row.no_entries) ?? 0,
+  loss_rate: parseOptionalFloat(row.loss_rate) ?? 0,
+  total_r: parseOptionalFloat(row.total_r) ?? 0,
+  symbol_count: parseOptionalInt(row.symbol_count) ?? 0,
+  family_count: parseOptionalInt(row.family_count) ?? 0,
+  template_count: parseOptionalInt(row.template_count) ?? 0,
+});
+
+const parsePatternAiStage1TradeRow = (row = {}) => ({
+  multi_valid_eval_run_id: row.multi_valid_eval_run_id ?? '',
+  valid_sample_slot: parseOptionalInt(row.valid_sample_slot) ?? 0,
+  setup_id: row.setup_id ?? '',
+  pattern_id: row.pattern_id ?? '',
+  pattern_group_id: row.pattern_group_id ?? '',
+  symbol: row.symbol ?? '',
+  root_symbol: row.root_symbol ?? '',
+  market: row.market ?? '',
+  pattern_family_key: row.pattern_family_key ?? '',
+  d_confirm_date: row.d_confirm_date ?? null,
+  template_uid: row.template_uid ?? '',
+  template_name: row.template_name ?? '',
+  predicted_expected_r: parseOptionalFloat(row.predicted_expected_r),
+  score_margin_top2: parseOptionalFloat(row.score_margin_top2),
+  result_r: parseOptionalFloat(row.result_r) ?? 0,
+  outcome: row.outcome ?? '',
+  oracle_template_uid: row.oracle_template_uid ?? '',
+  oracle_result_r: parseOptionalFloat(row.oracle_result_r),
+  oracle_rank: parseOptionalInt(row.oracle_rank),
+  entry_date: row.entry_date ?? null,
+  exit_date: row.exit_date ?? null,
+  entry_price: parseOptionalFloat(row.entry_price),
+  stop_price: parseOptionalFloat(row.stop_price),
+  target_price: parseOptionalFloat(row.target_price),
+  exit_price: parseOptionalFloat(row.exit_price),
+  risk_points: parseOptionalFloat(row.risk_points),
+  exit_reason: row.exit_reason ?? '',
+  trade_direction: row.trade_direction ?? '',
+  harmonic_type: row.harmonic_type ?? '',
+  family_bin: row.family_bin ?? '',
+  family_size_bucket: row.family_size_bucket ?? '',
+  family_time_bin: row.family_time_bin ?? '',
+  family_x_strictness: row.family_x_strictness ?? '',
+});
+
+export const fetchPatternAiStage1Trades = async ({
+  aiRunId = null,
+  validYear = 2026,
+  limit = 300,
+  offset = 0,
+} = {}) => {
+  try {
+    const data = await postJson('/patterns/ai-stage1-trades', {
+      ai_run_id: aiRunId,
+      valid_year: parseOptionalInt(validYear),
+      limit: parseOptionalInt(limit),
+      offset: parseOptionalInt(offset),
+    });
+
+    return {
+      run: parsePatternAiStage1TradeRun(data?.run ?? null),
+      summary: parsePatternAiStage1TradeSummary(data?.summary ?? null),
+      template_performance: Array.isArray(data?.template_performance)
+        ? data.template_performance.map(parsePatternAiStage1TemplatePerformanceRow)
+        : [],
+      daily: Array.isArray(data?.daily) ? data.daily.map(parsePatternAiStage1DailyRow) : [],
+      hourly: Array.isArray(data?.hourly) ? data.hourly.map(parsePatternAiStage1HourlyRow) : [],
+      trade_cadence: parsePatternAiStage1TradeCadence(data?.trade_cadence ?? null),
+      trade_workload: parsePatternAiStage1TradeWorkload(data?.trade_workload ?? null),
+      symbol_contribution: Array.isArray(data?.symbol_contribution)
+        ? data.symbol_contribution.map(parsePatternAiStage1SymbolContributionRow)
+        : [],
+      family_contribution: Array.isArray(data?.family_contribution)
+        ? data.family_contribution.map(parsePatternAiStage1FamilyContributionRow)
+        : [],
+      loss_windows: Array.isArray(data?.loss_windows)
+        ? data.loss_windows.map(parsePatternAiStage1LossWindowRow)
+        : [],
+      total_rows: parseOptionalInt(data?.total_rows) ?? 0,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      offset: parseOptionalInt(data?.offset) ?? offset,
+      rows: Array.isArray(data?.rows) ? data.rows.map(parsePatternAiStage1TradeRow) : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      run: null,
+      summary: null,
+      template_performance: [],
+      daily: [],
+      hourly: [],
+      trade_cadence: null,
+      trade_workload: null,
+      symbol_contribution: [],
+      family_contribution: [],
+      loss_windows: [],
+      total_rows: 0,
+      limit,
+      offset,
+      rows: [],
+    };
   }
 };
 

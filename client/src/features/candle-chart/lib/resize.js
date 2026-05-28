@@ -146,12 +146,18 @@ const getPropFocusBounds = (chartStateRef, rustPattern) => {
 
     return candle ? [candle.candle_low, candle.candle_high] : [];
   });
-  const tradeLevelPrices = [
-    Number(rustPattern?.trade_enter_price),
-    Number(rustPattern?.trade_risk_exit_price),
-    Number(rustPattern?.trade_reward_exit_price),
-    Number(rustPattern?.exit_price),
-  ].filter((value) => Number.isFinite(value));
+  const tradeLevelPrices = rustPattern?.xa_canvas_mode
+    ? [
+        Number(rustPattern?.xa_start_price),
+        Number(rustPattern?.xa_reversal_limit_price),
+        Number(rustPattern?.xa_continuation_limit_price),
+      ].filter((value) => Number.isFinite(value))
+    : [
+        Number(rustPattern?.trade_enter_price),
+        Number(rustPattern?.trade_risk_exit_price),
+        Number(rustPattern?.trade_reward_exit_price),
+        Number(rustPattern?.exit_price),
+      ].filter((value) => Number.isFinite(value));
   const focusPrices = [
     baseBounds.minPrice,
     baseBounds.maxPrice,
@@ -208,12 +214,18 @@ const getPropTradeFocusBounds = (chartStateRef, rustPattern) => {
     }
   }
 
-  const tradeLevelPrices = [
-    Number(rustPattern?.trade_enter_price),
-    Number(rustPattern?.trade_risk_exit_price),
-    Number(rustPattern?.trade_reward_exit_price),
-    Number(rustPattern?.exit_price),
-  ].filter((value) => Number.isFinite(value));
+  const tradeLevelPrices = rustPattern?.xa_canvas_mode
+    ? [
+        Number(rustPattern?.xa_start_price),
+        Number(rustPattern?.xa_reversal_limit_price),
+        Number(rustPattern?.xa_continuation_limit_price),
+      ].filter((value) => Number.isFinite(value))
+    : [
+        Number(rustPattern?.trade_enter_price),
+        Number(rustPattern?.trade_risk_exit_price),
+        Number(rustPattern?.trade_reward_exit_price),
+        Number(rustPattern?.exit_price),
+      ].filter((value) => Number.isFinite(value));
   const endpointIndexes = new Set(
     [entryIndex - 1, entryIndex, entryIndex + 1, exitIndex - 1, exitIndex, exitIndex + 1]
       .map((value) => Math.round(value))
@@ -249,20 +261,43 @@ const getPropTradeFocusBounds = (chartStateRef, rustPattern) => {
   };
 };
 
-const getGraphFocusBounds = (rustPattern) => {
+const getGraphFocusBounds = (chartStateRef, rustPattern) => {
+  const chartState = chartStateRef.current;
   const baseBounds = getPatternBounds(rustPattern);
 
   if (!baseBounds) {
     return null;
   }
 
+  const xaHitIndex = Number(rustPattern?.exit_date);
+  const xaFocusIndexes =
+    rustPattern?.xa_canvas_mode && Number.isFinite(xaHitIndex) && xaHitIndex >= 1
+      ? [
+          baseBounds.minIndex,
+          baseBounds.maxIndex,
+          Math.min(xaHitIndex, chartState?.candles?.items?.length ?? xaHitIndex),
+        ]
+      : [baseBounds.minIndex, baseBounds.maxIndex];
+  const xaHitCandle =
+    rustPattern?.xa_canvas_mode && Number.isFinite(xaHitIndex)
+      ? chartState?.candles?.items?.[Math.round(xaHitIndex) - 1]
+      : null;
   const graphPrices = [
     baseBounds.minPrice,
     baseBounds.maxPrice,
-    Number(rustPattern?.trade_enter_price),
-    Number(rustPattern?.trade_risk_exit_price),
-    Number(rustPattern?.trade_reward_exit_price),
-    Number(rustPattern?.exit_price ?? rustPattern?.target_close ?? rustPattern?.trade_current_price),
+    ...(xaHitCandle ? [Number(xaHitCandle.candle_low), Number(xaHitCandle.candle_high)] : []),
+    ...(rustPattern?.xa_canvas_mode
+      ? [
+          Number(rustPattern?.xa_start_price),
+          Number(rustPattern?.xa_reversal_limit_price),
+          Number(rustPattern?.xa_continuation_limit_price),
+        ]
+      : [
+          Number(rustPattern?.trade_enter_price),
+          Number(rustPattern?.trade_risk_exit_price),
+          Number(rustPattern?.trade_reward_exit_price),
+          Number(rustPattern?.exit_price ?? rustPattern?.target_close ?? rustPattern?.trade_current_price),
+        ]),
   ].filter((value) => Number.isFinite(value));
   const minFocusPrice = Math.min(...graphPrices);
   const maxFocusPrice = Math.max(...graphPrices);
@@ -274,9 +309,15 @@ const getGraphFocusBounds = (rustPattern) => {
   return {
     minPrice: minFocusPrice - pricePadding,
     maxPrice: maxFocusPrice + pricePadding,
-    minIndex: baseBounds.minIndex,
-    maxIndex: baseBounds.maxIndex,
-    anchorIndex: (baseBounds.minIndex + baseBounds.maxIndex) / 2,
+    minIndex: Math.max(1, Math.min(...xaFocusIndexes)),
+    maxIndex: Math.min(
+      chartState?.candles?.items?.length ?? Math.max(...xaFocusIndexes),
+      Math.max(...xaFocusIndexes)
+    ),
+    anchorIndex:
+      rustPattern?.xa_canvas_mode && Number.isFinite(xaHitIndex)
+        ? (baseBounds.minIndex + Math.min(xaHitIndex, chartState?.candles?.items?.length ?? xaHitIndex)) / 2
+        : (baseBounds.minIndex + baseBounds.maxIndex) / 2,
   };
 };
 
@@ -451,7 +492,7 @@ export const reposition_candles = (chartStateRef, rustPattern, options = {}) => 
       ? getReversalFocusBounds(chartStateRef, rustPattern, options.activeReversalFilter) ??
         getPatternBounds(rustPattern)
       : options.focusMode === 'graph'
-        ? getGraphFocusBounds(rustPattern) ?? getPatternBounds(rustPattern)
+        ? getGraphFocusBounds(chartStateRef, rustPattern) ?? getPatternBounds(rustPattern)
       : options.focusMode === 'propTrade'
         ? getPropTradeFocusBounds(chartStateRef, rustPattern) ??
           getPropFocusBounds(chartStateRef, rustPattern) ??

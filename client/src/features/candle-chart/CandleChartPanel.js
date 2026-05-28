@@ -237,8 +237,25 @@ const CandleChartPanel = ({
   const hasDistinctReversalEvent =
     isPropReversalFocus &&
     (selectedPattern?.reversal_detect ?? null) !== (selectedPattern?.d_confirm ?? null);
-  const eventRows = isPropReversalFocus
+  const eventRows = selectedPattern?.xa_canvas_mode
     ? [
+        {
+          key: 'DC',
+          label: 'D Confirm',
+          index: formatDebugInteger(selectedPattern?.d_confirm),
+          date: formatDebugDate(dConfirmDate),
+          price: formatDebugPrice(selectedPattern?.xa_start_price),
+        },
+        {
+          key: 'XA',
+          label: 'XA Hit',
+          index: formatDebugInteger(selectedPattern?.exit_date),
+          date: formatDebugDate(selectedPattern?.xa_outcome_hit_date),
+          price: formatDebugPrice(selectedPattern?.xa_outcome_price),
+        },
+      ]
+    : isPropReversalFocus
+      ? [
         {
           key: 'DC',
           label: 'D Confirm',
@@ -300,16 +317,24 @@ const CandleChartPanel = ({
     { label: 'Market', value: selectedPattern?.market ?? '--' },
     { label: 'Loaded D', value: formatDebugDate(selectedPattern?.d_date) },
     { label: 'D Confirm', value: formatDebugDate(dConfirmDate) },
-    { label: 'Entry', value: formatDebugDate(entryDate) },
+    ...(selectedPattern?.xa_canvas_mode
+      ? [{ label: 'XA Hit', value: formatDebugDate(selectedPattern?.xa_outcome_hit_date) }]
+      : [{ label: 'Entry', value: formatDebugDate(entryDate) }]),
     ...(isPropReversalFocus
       ? [{ label: 'Reversal Detect', value: formatDebugDate(reversalDetectDate ?? dConfirmDate) }]
       : []),
   ];
-  const tradeLevelFields = [
-    { label: 'Entry', value: formatDebugPrice(selectedPattern?.trade_enter_price), tone: 'entry' },
-    { label: 'Stop', value: formatDebugPrice(selectedPattern?.trade_risk_exit_price), tone: 'stop' },
-    { label: 'Target', value: formatDebugPrice(selectedPattern?.trade_reward_exit_price), tone: 'target' },
-  ];
+  const tradeLevelFields = selectedPattern?.xa_canvas_mode
+    ? [
+        { label: 'D', value: formatDebugPrice(selectedPattern?.xa_start_price), tone: 'entry' },
+        { label: 'Continuation XA', value: formatDebugPrice(selectedPattern?.xa_continuation_limit_price), tone: 'stop' },
+        { label: 'Reversal XA', value: formatDebugPrice(selectedPattern?.xa_reversal_limit_price), tone: 'target' },
+      ]
+      : [
+        { label: 'Entry', value: formatDebugPrice(selectedPattern?.trade_enter_price), tone: 'entry' },
+        { label: 'Stop', value: formatDebugPrice(selectedPattern?.trade_risk_exit_price), tone: 'stop' },
+        { label: 'Target', value: formatDebugPrice(selectedPattern?.trade_reward_exit_price), tone: 'target' },
+      ];
   const liveCandleMetrics = hoveredPriceStats.map((item) => ({
     label: item.label,
     value: item.value ?? '--',
