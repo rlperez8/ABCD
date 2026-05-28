@@ -1,0 +1,41 @@
+{
+  "artifact": {
+    "filename": "model.cbm",
+    "sha256": "2A7CD959279319568934995FDFA9A2B74E6C902D7D3AC4197AD17463E6D1C46A",
+    "size_bytes": 219264
+  },
+  "run": {
+    "multi_valid_eval_run_id": "aimv-1779936115494-235564",
+    "created_at": "2026-05-27 21:48:14",
+    "source_run_id": "eetc-1779837772298-38740",
+    "results_table": "entry_exit_template_results_eetc_1779837772298_38740"
+  },
+  "training": {
+    "train_start_year": 2021,
+    "train_end_year": 2025,
+    "valid_year": 2026,
+    "train_setups": 11000,
+    "train_rows": 422221,
+    "train_sample_slot": 0,
+    "valid_sample_slots": "0,1,2,3,4,5,6"
+  },
+  "features": {
+    "pre_feature_set": "all",
+    "aggregate_feature_set": "all",
+    "excluded_roots": "CL,ES,NQ,QM,YM"
+  },
+  "model": {
+    "library": "catboost",
+    "catboost_version": "1.2.10",
+    "depth": 6,
+    "iterations": 160,
+    "learning_rate": 0.035,
+    "l2_leaf_reg": 3.0,
+    "random_seed": 42,
+    "random_strength": 1.0
+  },
+  "source": {
+    "original_model_path": "rust_sr/abcd/tmp_logs/aimv-1779936115494-235564.cbm",
+    "code_commit_when_registered": "2dd99709aaa6d52dd12707a122c01ad1e995b9c3"
+  }
+}
