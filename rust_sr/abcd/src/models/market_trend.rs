@@ -4,33 +4,57 @@ pub const MARKET_TREND_EMA_PERIOD: usize = 21;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MarketTrendTimeframe {
+    OneMinute,
+    ThreeMinute,
     FiveMinute,
     FifteenMinute,
+    ThirtyMinute,
     OneHour,
+    FourHour,
+    TwelveHour,
+    OneDay,
 }
 
 impl MarketTrendTimeframe {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::OneMinute => "1m",
+            Self::ThreeMinute => "3m",
             Self::FiveMinute => "5m",
             Self::FifteenMinute => "15m",
+            Self::ThirtyMinute => "30m",
             Self::OneHour => "1h",
+            Self::FourHour => "4h",
+            Self::TwelveHour => "12h",
+            Self::OneDay => "1d",
         }
     }
 
     pub fn source_table(self) -> &'static str {
         match self {
+            Self::OneMinute => "futures_contract_1m_candles",
+            Self::ThreeMinute => "futures_contract_3m_candles",
             Self::FiveMinute => "futures_contract_5m_candles",
             Self::FifteenMinute => "futures_contract_15m_candles",
+            Self::ThirtyMinute => "futures_contract_30m_candles",
             Self::OneHour => "futures_contract_1h_candles",
+            Self::FourHour => "futures_contract_4h_candles",
+            Self::TwelveHour => "futures_contract_12h_candles",
+            Self::OneDay => "futures_contract_1d_candles",
         }
     }
 
     pub fn candle_minutes(self) -> i64 {
         match self {
+            Self::OneMinute => 1,
+            Self::ThreeMinute => 3,
             Self::FiveMinute => 5,
             Self::FifteenMinute => 15,
+            Self::ThirtyMinute => 30,
             Self::OneHour => 60,
+            Self::FourHour => 240,
+            Self::TwelveHour => 720,
+            Self::OneDay => 1440,
         }
     }
 

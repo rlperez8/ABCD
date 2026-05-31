@@ -61,6 +61,10 @@ NUM_FEATURES = [
     "target_r",
     "max_hold_multiple",
     "risk_points",
+    "tick_size",
+    "risk_ticks",
+    "target_ticks",
+    "stop_ticks",
     "confirm_hour",
     "confirm_day_of_week",
     "confirm_month",
@@ -153,6 +157,41 @@ NUM_FEATURES = [
     "pre_distance_to_120m_high",
     "pre_distance_to_120m_low",
 ]
+
+ROOT_TICK_SIZE = {
+    "ES": 0.25,
+    "MES": 0.25,
+    "NQ": 0.25,
+    "MNQ": 0.25,
+    "YM": 1.0,
+    "MYM": 1.0,
+    "CL": 0.01,
+    "MCL": 0.01,
+    "QM": 0.025,
+    "RTY": 0.1,
+    "M2K": 0.1,
+    "EMD": 0.1,
+    "NKD": 5.0,
+    "ZL": 0.01,
+    "GF": 0.025,
+    "LE": 0.025,
+    "HE": 0.025,
+    "QG": 0.005,
+    "NG": 0.001,
+    "HO": 0.0001,
+    "RB": 0.0001,
+    "ZS": 0.25,
+    "ZM": 0.1,
+    "ZW": 0.25,
+    "ZC": 0.25,
+    "GC": 0.1,
+    "MGC": 0.1,
+    "SI": 0.005,
+    "HG": 0.0005,
+    "PL": 0.1,
+    "ZN": 0.015625,
+    "ZB": 0.03125,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -643,11 +682,26 @@ def root_symbol(symbol: object) -> str:
     return re.sub(r"[FGHJKMNQUVXZ]\d+$", "", text)
 
 
+def root_tick_size(value: object) -> float:
+    root = root_symbol(value)
+    if root in ROOT_TICK_SIZE:
+        return ROOT_TICK_SIZE[root]
+    for candidate, tick_size in ROOT_TICK_SIZE.items():
+        if root.startswith(candidate):
+            return tick_size
+    return 0.0
+
+
 def add_candidate_structure_features(work: pd.DataFrame) -> None:
     entry = pd.to_numeric(work.get("entry_price"), errors="coerce")
     stop = pd.to_numeric(work.get("stop_price"), errors="coerce")
     target = pd.to_numeric(work.get("target_price"), errors="coerce")
     risk = pd.to_numeric(work.get("risk_points"), errors="coerce").replace(0.0, np.nan)
+    if "root_symbol" in work.columns:
+        tick = work["root_symbol"].map(root_tick_size)
+    else:
+        tick = work.get("symbol", pd.Series([""] * len(work), index=work.index)).map(root_tick_size)
+    tick = pd.to_numeric(tick, errors="coerce").replace(0.0, np.nan)
     direction = work.get("trade_direction", pd.Series([""] * len(work), index=work.index)).fillna("").astype(str).str.upper()
     is_long = direction == "LONG"
 
@@ -655,6 +709,10 @@ def add_candidate_structure_features(work: pd.DataFrame) -> None:
     stop_distance_r = ((entry - stop).abs() / risk).replace([np.inf, -np.inf], np.nan)
     work["pre_candidate_target_distance_r"] = target_distance_r
     work["pre_candidate_stop_distance_r"] = stop_distance_r
+    work["tick_size"] = tick
+    work["risk_ticks"] = (risk / tick).replace([np.inf, -np.inf], np.nan)
+    work["target_ticks"] = ((target - entry).abs() / tick).replace([np.inf, -np.inf], np.nan)
+    work["stop_ticks"] = ((entry - stop).abs() / tick).replace([np.inf, -np.inf], np.nan)
 
     for window in [60, 120]:
         high_dist = pd.to_numeric(work.get(f"pre_distance_to_{window}m_high"), errors="coerce")

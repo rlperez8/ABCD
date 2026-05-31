@@ -22,6 +22,7 @@ if str(SCRIPT_DIR) not in sys.path:
 import ai_build_ranking_eval as ranking
 import ai_build_reranker_eval as reranker
 import ai_build_search_catboost as base
+import ai_stage1_multi_valid_eval as multi_valid
 
 
 FILTER_META_FEATURES = [
@@ -58,6 +59,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--random-strength", type=float, default=1.0)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--min-selected-trades", type=int, default=250)
+    parser.add_argument("--exclude-roots", default="", help="Comma-separated root symbols to skip in train and validation rows.")
+    parser.add_argument("--slippage-entry-ticks", type=float, default=0.0)
+    parser.add_argument("--slippage-exit-ticks", type=float, default=0.0)
+    parser.add_argument("--slippage-winner-exit-ticks", type=float, default=None)
+    parser.add_argument("--slippage-loser-exit-ticks", type=float, default=None)
+    parser.add_argument("--min-target-ticks", type=float, default=0.0)
+    parser.add_argument("--min-risk-ticks", type=float, default=0.0)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--no-use-best-model", action="store_true")
     return parser.parse_args()
@@ -107,6 +115,14 @@ def ensure_tables(conn) -> None:
             """
         )
     conn.commit()
+    base.ensure_column(conn, "ai_stage1_trade_filter_eval_runs", "excluded_roots", "VARCHAR(255) NULL")
+    base.ensure_column(conn, "ai_stage1_trade_filter_eval_runs", "slippage_entry_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_trade_filter_eval_runs", "slippage_exit_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_trade_filter_eval_runs", "slippage_winner_exit_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_trade_filter_eval_runs", "slippage_loser_exit_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_trade_filter_eval_runs", "min_target_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_trade_filter_eval_runs", "min_risk_ticks", "DOUBLE NULL")
+    conn.commit()
 
 
 def build_stage1_data(args: argparse.Namespace, conn):
@@ -135,6 +151,11 @@ def build_stage1_data(args: argparse.Namespace, conn):
     )
     train_df = base.load_candidate_rows(conn, args.results_table, args.source_run_id, train_setup_ids)
     valid_df = base.load_candidate_rows(conn, args.results_table, args.source_run_id, valid_setup_ids)
+    excluded_roots = multi_valid.parse_excluded_roots(args.exclude_roots)
+    train_df = multi_valid.filter_excluded_roots(train_df, excluded_roots)
+    valid_df = multi_valid.filter_excluded_roots(valid_df, excluded_roots)
+    train_df = multi_valid.apply_trade_costs_and_filters(train_df, args)
+    valid_df = multi_valid.apply_trade_costs_and_filters(valid_df, args)
     x_train, _, train_result_r = base.prepare_features(train_df)
     x_valid, _, _ = base.prepare_features(valid_df)
     x_train = ranking.apply_pre_feature_set(x_train, args.pre_feature_set)
@@ -286,9 +307,12 @@ def main() -> int:
                 INSERT INTO ai_stage1_trade_filter_eval_runs (
                     trade_filter_run_id, source_run_id, results_table,
                     train_start_year, train_end_year, valid_year,
-                    train_setups, valid_setups, filter_label, model_path
+                    train_setups, valid_setups, filter_label,
+                    excluded_roots, slippage_entry_ticks, slippage_exit_ticks,
+                    slippage_winner_exit_ticks, slippage_loser_exit_ticks,
+                    min_target_ticks, min_risk_ticks, model_path
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     run_id,
@@ -300,6 +324,13 @@ def main() -> int:
                     len(train_setup_ids),
                     len(valid_setup_ids),
                     args.filter_label,
+                    args.exclude_roots,
+                    args.slippage_entry_ticks,
+                    args.slippage_exit_ticks,
+                    args.slippage_winner_exit_ticks,
+                    args.slippage_loser_exit_ticks,
+                    args.min_target_ticks,
+                    args.min_risk_ticks,
                     str(model_path),
                 ),
             )

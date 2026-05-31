@@ -37,6 +37,10 @@ import {
 } from '../../services/patternApi';
 import { formatPattern } from '../../utils/patternFormatting';
 
+const PATTERN_AI_STAGE1_DEFAULT_RUN_ID = 'aicw-mtf-eg1-xtight-t014-rd3-en4-v1-2m-2026';
+const PATTERN_AI_STAGE1_DEFAULT_YEAR = 2026;
+const PATTERN_AI_STAGE1_TRADE_PAGE_SIZE = 1000;
+
 const formatNumber = (value) =>
   Number.isFinite(Number(value)) ? Number(value).toLocaleString() : '0';
 
@@ -108,6 +112,14 @@ const optionalNumber = (value) => {
 
 const formatDecimal = (value, digits = 2) =>
   Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '0.00';
+
+const formatNullableDecimal = (value, digits = 2, fallback = 'N/A') => {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed.toFixed(digits) : fallback;
+};
 
 const formatSignedPercent = (value, digits = 1) => {
   if (!Number.isFinite(Number(value))) return '';
@@ -939,6 +951,70 @@ const getSimulationRawTradeKey = (trade = {}, fallbackIndex = 0) =>
     fallbackIndex,
   ].join('|');
 
+const getAiStage1TradeUid = (trade = {}) =>
+  [
+    trade.multi_valid_eval_run_id ?? trade.sim_run_id ?? '',
+    trade.setup_id ?? trade.pattern_id ?? trade.pattern_group_id ?? '',
+    trade.template_uid ?? '',
+  ]
+    .filter(Boolean)
+    .join('|');
+
+const isAiCandleWaveTrade = (trade = {}) =>
+  String(trade.template_uid ?? '').startsWith('candle_wave_') ||
+  String(trade.harmonic_type ?? '').toLowerCase() === 'candle wave' ||
+  String(trade.pattern_family_key ?? '').toLowerCase().includes('candle wave');
+
+const getAiStage1TradeTimeframe = (trade = {}) => {
+  const sourceTimeframe = String(trade.source_timeframe ?? '').trim();
+  if (sourceTimeframe && sourceTimeframe.toLowerCase() !== 'unknown') {
+    return sourceTimeframe;
+  }
+
+  const familyTimeframe = String(trade.family_time_bin ?? '').trim();
+  if (familyTimeframe) {
+    return familyTimeframe;
+  }
+
+  return isAiCandleWaveTrade(trade) ? '2m' : sourceTimeframe || null;
+};
+
+const buildAiStage1VirtualPattern = (trade = {}) => {
+  const timeframe = getAiStage1TradeTimeframe(trade);
+  const direction = String(trade.trade_direction ?? trade.market ?? '').toUpperCase();
+  const isShort = direction === 'SHORT' || direction === 'SELL';
+  const signalDate = trade.d_confirm_date ?? trade.signal_date ?? trade.entry_date ?? trade.exit_date ?? null;
+  const entryDate = trade.entry_date ?? signalDate;
+  const exitDate = trade.exit_date ?? trade.target_date ?? entryDate;
+
+  return {
+    ...trade,
+    prop_outcome_mode: 'phase1-family',
+    source_timeframe: timeframe,
+    sourceTimeframe: timeframe,
+    pattern_id: trade.pattern_id ?? trade.setup_id ?? '',
+    pattern_group_id: trade.pattern_group_id ?? trade.multi_valid_eval_run_id ?? '',
+    harmonic_type: trade.harmonic_type || 'Candle Wave',
+    market: isShort ? 'Bearish' : 'Bullish',
+    trade_direction: direction || trade.trade_direction,
+    d_date: signalDate,
+    d_confirm_date: signalDate,
+    entry_date: entryDate,
+    target_date: exitDate,
+    canvas_end_date: exitDate,
+    trade_date: exitDate,
+    trade_enter_price: trade.trade_enter_price ?? trade.entry_price,
+    trade_risk_exit_price: trade.trade_risk_exit_price ?? trade.stop_price,
+    trade_reward_exit_price: trade.trade_reward_exit_price ?? trade.target_price,
+    target_close: trade.exit_price ?? trade.trade_exit_price,
+    trade_current_price: trade.exit_price ?? trade.trade_exit_price,
+    exit_price: trade.exit_price ?? trade.trade_exit_price,
+    trade_result:
+      trade.trade_result ??
+      (Number(trade.result_r) < 0 || String(trade.outcome ?? '').toLowerCase() === 'fail' ? 2 : 1),
+  };
+};
+
 const getPatternXaOutcomeRowKey = (row = {}) =>
   [
     row.setup_id ?? '',
@@ -955,9 +1031,11 @@ const normalizeSimulationRawTradeForCanvas = (trade = {}) => {
   const exitPrice =
     trade.exit_price ??
     (isLoss ? trade.stop_price : trade.target_price);
+  const tradeUid = trade.trade_uid ?? trade.trade_id ?? trade.id ?? getAiStage1TradeUid(trade);
 
   return {
     ...trade,
+    trade_uid: tradeUid || undefined,
     prop_outcome_mode: 'phase1-family',
     entry_date: trade.entry_date ?? trade.d_confirm_date ?? trade.d_date,
     target_date: trade.exit_date ?? trade.target_date ?? trade.entry_date ?? trade.d_confirm_date,
@@ -1085,6 +1163,30 @@ const formatCandleDateForChart = (value) => {
   return formatDateTimeForServer(parsed);
 };
 
+const getTimeframePaddingMs = (timeframe) => {
+  const text = String(timeframe ?? '').trim().toLowerCase();
+  const match = text.match(/^(\d+)\s*(m|min|minute|h|hr|hour|d|day)s?$/);
+  if (!match) {
+    return 30 * 60 * 1000;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return 30 * 60 * 1000;
+  }
+
+  if (unit.startsWith('h')) {
+    return Math.max(30 * 60 * 1000, amount * 2 * 60 * 60 * 1000);
+  }
+
+  if (unit.startsWith('d')) {
+    return Math.max(30 * 60 * 1000, amount * 2 * 24 * 60 * 60 * 1000);
+  }
+
+  return Math.max(30 * 60 * 1000, amount * 3 * 60 * 1000);
+};
+
 const buildPatternCandleWindow = (pattern = {}) => {
   const dateValues = [
     pattern.x_date,
@@ -1126,8 +1228,11 @@ const buildPatternCandleWindow = (pattern = {}) => {
     startDate: formatDateTimeForServer(new Date(Math.min(...dateValues) - paddingMs)),
     endDate:
       exitTime !== null
-        ? formatDateTimeForServer(new Date(exitTime))
+        ? formatDateTimeForServer(
+            new Date(exitTime + getTimeframePaddingMs(pattern.source_timeframe ?? pattern.sourceTimeframe))
+          )
         : formatDateTimeForServer(new Date(Math.max(...dateValues) + paddingMs)),
+    sourceTimeframe: pattern.source_timeframe ?? pattern.sourceTimeframe ?? null,
   };
 };
 
@@ -1158,9 +1263,25 @@ const clipCandlesAfterCanvasEnd = (candles = [], pattern = {}) => {
     return candles;
   }
 
+  const candleTimes = candles
+    .map((candle) => getDateTimeForCompare(candle.candle_date ?? candle.date))
+    .filter((value) => value !== null);
+  const hasExactExitCandle = candleTimes.some((value) => value === exitTime);
+  const nextAfterExitTime = hasExactExitCandle
+    ? null
+    : candleTimes.reduce(
+        (nextTime, candleTime) =>
+          candleTime > exitTime && candleTime < nextTime ? candleTime : nextTime,
+        Number.POSITIVE_INFINITY
+      );
+
   return candles.filter((candle) => {
     const candleTime = getDateTimeForCompare(candle.candle_date ?? candle.date);
-    return candleTime === null || candleTime <= exitTime;
+    return (
+      candleTime === null ||
+      candleTime <= exitTime ||
+      (!hasExactExitCandle && candleTime === nextAfterExitTime)
+    );
   });
 };
 
@@ -1179,6 +1300,8 @@ const mergeRouteTradeIntoPattern = (pattern = {}, trade = null) => {
   return {
     ...pattern,
     prop_outcome_mode: pattern?.prop_outcome_mode ?? 'phase1-family',
+    source_table: trade.source_table ?? pattern.source_table,
+    source_timeframe: trade.source_timeframe ?? pattern.source_timeframe,
     entry_date: trade.entry_date ?? pattern.entry_date,
     target_date: trade.target_date ?? pattern.target_date,
     canvas_end_date: trade.canvas_end_date ?? pattern.canvas_end_date,
@@ -1195,6 +1318,9 @@ const mergeRouteTradeIntoPattern = (pattern = {}, trade = null) => {
     trade_current_price: exitPrice ?? pattern.trade_current_price,
     target_close: exitPrice ?? pattern.target_close,
     trade_result: trade.trade_result ?? pattern.trade_result,
+    trade_direction: trade.trade_direction ?? pattern.trade_direction,
+    outcome: trade.outcome ?? pattern.outcome,
+    exit_reason: trade.exit_reason ?? pattern.exit_reason,
     result_r: trade.result_r ?? pattern.result_r,
     risk_points: trade.risk_points ?? pattern.risk_points,
   };
@@ -1352,7 +1478,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     familyContribution: [],
     lossWindows: [],
     totalRows: 0,
-    limit: 300,
+    limit: PATTERN_AI_STAGE1_TRADE_PAGE_SIZE,
     offset: 0,
     rows: [],
   });
@@ -2020,7 +2146,17 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   const patternReversalAiRows = patternReversalAiData.rows;
   const patternReversalAiThresholdRows = patternReversalAiData.thresholds;
   const patternReversalAiBucketRows = patternReversalAiData.buckets;
-  const patternAiStage1TradeRows = patternAiStage1TradeData.rows;
+  const patternAiStage1TradeRows = useMemo(
+    () => {
+      const rawPatternAiStage1TradeRows = patternAiStage1TradeData.rows ?? [];
+      return rawPatternAiStage1TradeRows.filter(
+        (row) => row.multi_valid_eval_run_id === PATTERN_AI_STAGE1_DEFAULT_RUN_ID
+      );
+    },
+    [patternAiStage1TradeData.rows]
+  );
+  const isPatternAiStage1LatestRunLoaded =
+    patternAiStage1TradeData.run?.multi_valid_eval_run_id === PATTERN_AI_STAGE1_DEFAULT_RUN_ID;
   const patternAiStage1TemplatePerformanceRows = patternAiStage1TradeData.templatePerformance ?? [];
   const patternAiStage1DailyRows = patternAiStage1TradeData.daily ?? [];
   const patternAiStage1HourlyRows = patternAiStage1TradeData.hourly ?? [];
@@ -2102,6 +2238,86 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     (worst, row) => (Number(row.sum_r || 0) < Number(worst?.sum_r ?? Number.POSITIVE_INFINITY) ? row : worst),
     null
   );
+  const patternAiStage1PrimaryTemplate = patternAiStage1TemplatePerformanceRows[0] ?? null;
+  const patternAiStage1Timeframes = [
+    ...new Set(
+      patternAiStage1TradeRows
+        .map((row) => row.source_timeframe || row.family_time_bin)
+        .filter(Boolean)
+    ),
+  ];
+  const patternAiStage1Directions = [
+    ...new Set(
+      patternAiStage1TradeRows
+        .map((row) => row.trade_direction || row.market)
+        .filter(Boolean)
+        .map((value) => String(value).toUpperCase())
+    ),
+  ];
+  const patternAiStage1ExitReasons = [
+    ...new Set(patternAiStage1TradeRows.map((row) => row.exit_reason).filter(Boolean)),
+  ];
+  const patternAiStage1HasFixedTargets = patternAiStage1TradeRows.some(
+    (row) => row.target_price !== null && row.target_price !== undefined
+  );
+  const patternAiStage1RuleSummary = [
+    patternAiStage1PrimaryTemplate?.template_name || patternAiStage1TradeRows[0]?.template_name || 'Candle Wave',
+    patternAiStage1Timeframes.length ? patternAiStage1Timeframes.join(', ') : '2m',
+    patternAiStage1Directions.length ? patternAiStage1Directions.join(' / ') : 'LONG / SHORT',
+    'Market entry',
+    'Fixed SL',
+    patternAiStage1HasFixedTargets ? 'Fixed TP' : 'Dynamic exit / no fixed TP',
+  ].filter(Boolean).join(' | ');
+  const patternAiStage1OverviewItems = [
+    {
+      label: 'Model Run',
+      value: compactText(patternAiStage1TradeData.run?.multi_valid_eval_run_id || 'N/A', 30),
+      title: patternAiStage1TradeData.run?.multi_valid_eval_run_id || 'N/A',
+      wide: true,
+    },
+    {
+      label: 'Rules',
+      value: patternAiStage1RuleSummary,
+      title: patternAiStage1RuleSummary,
+      wide: true,
+    },
+    {
+      label: 'Train Years',
+      value: patternAiStage1TradeData.run
+        ? `${patternAiStage1TradeData.run.train_start_year}-${patternAiStage1TradeData.run.train_end_year}`
+        : 'N/A',
+    },
+    { label: 'Test Year', value: patternAiStage1TradeData.run?.valid_year || 'N/A' },
+    { label: 'Trades Taken', value: formatNumber(patternAiStage1TradeData.summary?.total_trades) },
+    { label: 'Wins', value: formatNumber(patternAiStage1TradeData.summary?.wins), tone: 'win' },
+    { label: 'Losses', value: formatNumber(patternAiStage1TradeData.summary?.losses), tone: 'loss' },
+    {
+      label: 'Win Rate',
+      value: `${formatDecimal(patternAiStage1TradeData.summary?.win_rate, 2)}%`,
+      tone: Number(patternAiStage1TradeData.summary?.win_rate || 0) >= 25 ? 'win' : 'loss',
+    },
+    {
+      label: 'Net R',
+      value: `${formatDecimal(patternAiStage1TradeData.summary?.sum_r, 1)}R`,
+      tone: Number(patternAiStage1TradeData.summary?.sum_r || 0) >= 0 ? 'win' : 'loss',
+    },
+    {
+      label: 'Avg R',
+      value: `${formatDecimal(patternAiStage1TradeData.summary?.avg_r, 3)}R`,
+      tone: Number(patternAiStage1TradeData.summary?.avg_r || 0) >= 0 ? 'win' : 'loss',
+    },
+    { label: 'Best R', value: `${formatDecimal(patternAiStage1TradeData.summary?.best_r, 2)}R`, tone: 'win' },
+    { label: 'Worst R', value: `${formatDecimal(patternAiStage1TradeData.summary?.worst_r, 2)}R`, tone: 'loss' },
+    { label: 'Symbols Taken', value: formatNumber(patternAiStage1TradeData.summary?.symbol_count) },
+    { label: 'Families', value: formatNumber(patternAiStage1TradeData.summary?.family_count) },
+    { label: 'Templates', value: formatNumber(patternAiStage1TradeData.summary?.template_count) },
+    {
+      label: 'Exit Rules Seen',
+      value: patternAiStage1ExitReasons.length ? patternAiStage1ExitReasons.map(formatRouteMode).join(' / ') : 'N/A',
+      title: patternAiStage1ExitReasons.join(' / ') || 'N/A',
+      wide: true,
+    },
+  ];
   const patternAiStage1TradeHasMore =
     patternAiStage1TradeRows.length < Number(patternAiStage1TradeData.totalRows || 0);
   const patternReversalAiHasMore =
@@ -2174,7 +2390,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       try {
         setPatternAiStage1TradeLoading(true);
         setPatternAiStage1TradeError('');
-        const result = await fetchPatternAiStage1Trades({ validYear: 2026, limit: 300, offset });
+        const result = await fetchPatternAiStage1Trades({
+          aiRunId: PATTERN_AI_STAGE1_DEFAULT_RUN_ID,
+          validYear: PATTERN_AI_STAGE1_DEFAULT_YEAR,
+          takenOnly: true,
+          limit: PATTERN_AI_STAGE1_TRADE_PAGE_SIZE,
+          offset,
+        });
         setPatternAiStage1TradeData((current) => ({
           run: result.run,
           summary: result.summary,
@@ -2207,7 +2429,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
             familyContribution: [],
             lossWindows: [],
             totalRows: 0,
-            limit: 300,
+            limit: PATTERN_AI_STAGE1_TRADE_PAGE_SIZE,
             offset: 0,
             rows: [],
           });
@@ -2412,6 +2634,12 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     selectedTradeSource?.target_date ??
     selectedTradeSource?.exit_date ??
     canvasPattern?.target_date;
+  const selectedTradeTimeframe =
+    selectedTradeSource?.source_timeframe ??
+    selectedTradeSource?.sourceTimeframe ??
+    canvasPattern?.source_timeframe ??
+    canvasPattern?.sourceTimeframe ??
+    'N/A';
   const selectedTradeIdValue =
     selectedTradeSource?.trade_uid ??
     selectedTradeSource?.trade_id ??
@@ -2690,6 +2918,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     },
     ...selectedTwinStats,
     { label: 'Symbol', value: selectedTradeSource?.symbol ?? canvasPattern?.symbol ?? 'N/A' },
+    { label: 'Timeframe', value: selectedTradeTimeframe || 'N/A' },
     {
       label: 'Direction',
       value: formatTradeDirection(selectedTradeSource),
@@ -3040,6 +3269,38 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     selectedPatternDetailSource?.crab_accuracy,
     selectedPatternDetailSource?.shark_accuracy,
   ].find((value) => Number.isFinite(Number(value)));
+  const loadCanvasPatternDirectly = useCallback(
+    async (chartPattern, errorMessage = 'Could not load the selected trade on the canvas.') => {
+      if (!chartPattern?.symbol) {
+        setCanvasError('This trade does not have a symbol to load on the canvas.');
+        return;
+      }
+
+      try {
+        setCanvasLoading(true);
+        setCanvasError('');
+        setCanvasPattern(chartPattern);
+
+        const [candles, snrLines] = await Promise.all([
+          getCandles(chartPattern.symbol, buildPatternCandleWindow(chartPattern)).then(normalizeCandles),
+          getSupportResistanceLines(chartPattern.symbol),
+        ]);
+
+        formatPattern(
+          clipCandlesAfterCanvasEnd(candles, chartPattern),
+          chartPattern,
+          snrLines,
+          setCanvasChartData
+        );
+      } catch (loadError) {
+        console.error(loadError);
+        setCanvasError(errorMessage);
+      } finally {
+        setCanvasLoading(false);
+      }
+    },
+    []
+  );
   const loadPatternDirectly = useCallback(
     async (patternSummary, matchingTrade = null) => {
       if (!patternSummary?.pattern_id && !patternSummary?.pattern_group_id) {
@@ -3189,7 +3450,12 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         return;
       }
 
-      const normalizedTrade = normalizeSimulationRawTradeForCanvas(trade);
+      const sourceTimeframe = getAiStage1TradeTimeframe(trade);
+      const normalizedTrade = {
+        ...normalizeSimulationRawTradeForCanvas(trade),
+        source_timeframe: sourceTimeframe,
+        sourceTimeframe,
+      };
       setSelectedPatternXaOutcomeRowKey('');
       setSelectedSimulationRawTradeKey(getSimulationRawTradeKey(trade, index));
       setSelectedSimulationRawTrade({
@@ -3198,6 +3464,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         raw_row_number: Number(patternAiStage1TradeData.offset || 0) + index + 1,
       });
       setInspectorDetailMode('trade');
+
+      if (isAiCandleWaveTrade(trade)) {
+        void loadCanvasPatternDirectly(
+          buildAiStage1VirtualPattern({ ...trade, ...normalizedTrade }),
+          'Could not load the selected AI candle-wave trade.'
+        );
+        return;
+      }
 
       void loadPatternDirectly(
         {
@@ -3208,7 +3482,12 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         normalizedTrade
       );
     },
-    [loadPatternDirectly, patternAiStage1TradeData.offset, patternAiStage1TradeData.run]
+    [
+      loadCanvasPatternDirectly,
+      loadPatternDirectly,
+      patternAiStage1TradeData.offset,
+      patternAiStage1TradeData.run,
+    ]
   );
   const handleTwinPatternClick = useCallback(
     (patternId) => {
@@ -6055,6 +6334,17 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   void entryExitTemplateDetailSections;
   const patternLibrarySections = [
     {
+      title: 'AI Model Overview',
+      wide: true,
+      items: patternAiStage1OverviewItems,
+    },
+    {
+      title: 'AI 2026 Taken Trades',
+      variant: 'patternAiStage1TradeTable',
+      wide: true,
+      tableRows: patternAiStage1TradeRows,
+    },
+    {
       title: 'XA Reversal Overview',
       wide: true,
       items: patternXaOutcomeRun
@@ -6166,12 +6456,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       tableRows: patternReversalAiRows,
     },
     {
-      title: 'AI 2026 Trades',
-      variant: 'patternAiStage1TradeTable',
-      wide: true,
-      tableRows: patternAiStage1TradeRows,
-    },
-    {
       title: 'XA Reversal Pattern Rows',
       variant: 'patternXaOutcomeTable',
       wide: true,
@@ -6232,13 +6516,18 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     const shouldLoadAiStage1Trades =
       testOverviewTab === 'patterns' ||
       (testOverviewTab === 'simTesting' && entryExitSimulationTab === 'aiTrades');
-    if (!shouldLoadAiStage1Trades || patternAiStage1TradeRows.length || isPatternAiStage1TradeLoading) {
+    if (
+      !shouldLoadAiStage1Trades ||
+      isPatternAiStage1TradeLoading ||
+      (isPatternAiStage1LatestRunLoaded && patternAiStage1TradeRows.length)
+    ) {
       return;
     }
 
     void loadPatternAiStage1Trades({ offset: 0, append: false });
   }, [
     entryExitSimulationTab,
+    isPatternAiStage1LatestRunLoaded,
     isPatternAiStage1TradeLoading,
     loadPatternAiStage1Trades,
     patternAiStage1TradeRows.length,
@@ -7791,6 +8080,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         <td>{formatNumber(Number(entryExitSimRawTradesData.offset || 0) + index + 1)}</td>
         <td>{formatShortDateTime(trade.entry_date || trade.d_confirm_date)}</td>
         <td>{trade.symbol || 'N/A'}</td>
+        <td>{trade.source_timeframe || 'N/A'}</td>
         <td title={trade.family_key}>{compactText(trade.family_key || 'N/A', 12)}</td>
         <td title={trade.template_uid}>{trade.template_label || compactText(trade.template_uid || 'N/A', 8)}</td>
         <td>{String(trade.trade_direction || 'N/A').toUpperCase()}</td>
@@ -7800,7 +8090,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         <td>{formatGapDuration(trade.duration_minutes)}</td>
         <td>{formatDecimal(trade.entry_price, 2)}</td>
         <td>{formatDecimal(trade.stop_price, 2)}</td>
-        <td>{formatDecimal(trade.target_price, 2)}</td>
+        <td title={trade.target_price === null || trade.target_price === undefined ? 'No fixed target' : ''}>
+          {formatNullableDecimal(trade.target_price, 2)}
+        </td>
         <td>{formatDecimal(trade.exit_price, 2)}</td>
         <td>{formatDecimal(trade.tp_progress_pct_after, 1)}%</td>
         <td>{formatDecimal(trade.drawdown_progress_pct_after, 1)}%</td>
@@ -8041,6 +8333,161 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       </tbody>
     </table>
   );
+  const renderAiStage1TakenTradesSection = () => (
+    <details className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-templates pattern-family-selected-simulation-chart--collapsible">
+      <summary>
+        <span>AI 2026 Taken Trades</span>
+        <small>
+          {patternAiStage1TradeData.totalRows
+            ? `${formatNumber(patternAiStage1TradeData.totalRows)} trades | showing ${formatNumber(patternAiStage1TradeRows.length)}`
+            : patternAiStage1TradeData.run?.multi_valid_eval_run_id || ''}
+        </small>
+      </summary>
+      <div className="pattern-family-entry-dashboard-raw-table pattern-family-selected-simulation-raw-trades-table pattern-family-ai-taken-trades-table">
+        {patternAiStage1TradeRows.length ? (
+          <table>
+            <colgroup>
+              <col style={{ width: '60px' }} />
+              <col style={{ width: '132px' }} />
+              <col style={{ width: '96px' }} />
+              <col style={{ width: '64px' }} />
+              <col style={{ width: '92px' }} />
+              <col style={{ width: '94px' }} />
+              <col style={{ width: '94px' }} />
+              <col style={{ width: '94px' }} />
+              <col style={{ width: '104px' }} />
+              <col style={{ width: '760px' }} />
+              <col style={{ width: '122px' }} />
+              <col style={{ width: '122px' }} />
+              <col style={{ width: '122px' }} />
+              <col style={{ width: '122px' }} />
+              <col style={{ width: '220px' }} />
+              <col style={{ width: '420px' }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Time</th>
+                <th>Symbol</th>
+                <th>TF</th>
+                <th>Side</th>
+                <th>AI R</th>
+                <th>Margin</th>
+                <th>R</th>
+                <th>Outcome</th>
+                <th>Template</th>
+                <th>Entry</th>
+                <th>Stop</th>
+                <th>Target</th>
+                <th>Exit</th>
+                <th>Family</th>
+                <th>Pattern</th>
+              </tr>
+            </thead>
+            <tbody>
+              {patternAiStage1TradeRows.map((trade, index) => {
+                const tradeKey = getSimulationRawTradeKey(trade, index);
+                const resultR = Number(trade.result_r || 0);
+                const outcomeClass =
+                  trade.outcome === 'pass'
+                    ? 'pattern-family-template-table-win'
+                    : trade.outcome === 'fail'
+                      ? 'pattern-family-template-table-loss'
+                      : 'pattern-family-template-table-skipped';
+                return (
+                  <tr
+                    className={[
+                      resultR < 0 ? 'is-loss' : 'is-win',
+                      tradeKey === selectedSimulationRawTradeKey ? 'pattern-family-selected-simulation-raw-trade-row--selected' : '',
+                    ].filter(Boolean).join(' ')}
+                    key={tradeKey}
+                    onClick={() => handlePatternAiStage1TradeClick(trade, index)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handlePatternAiStage1TradeClick(trade, index);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    title={`${trade.setup_id} | ${trade.template_uid} | ${trade.multi_valid_eval_run_id}`}
+                  >
+                    <td>{formatNumber(index + 1)}</td>
+                    <td>{formatShortDateTime(trade.entry_date || trade.d_confirm_date)}</td>
+                    <td>{trade.symbol || 'N/A'}</td>
+                    <td>{trade.source_timeframe || 'N/A'}</td>
+                    <td>{formatRouteMode(trade.trade_direction || trade.market || 'N/A')}</td>
+                    <td className={Number(trade.predicted_expected_r || 0) >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
+                      {formatDecimal(trade.predicted_expected_r, 3)}R
+                    </td>
+                    <td>{formatDecimal(trade.score_margin_top2, 3)}R</td>
+                    <td className={resultR >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
+                      {formatDecimal(resultR, 3)}R
+                    </td>
+                    <td className={outcomeClass}>{formatRouteMode(trade.outcome || trade.exit_reason || 'N/A')}</td>
+                    <td className="pattern-family-ai-taken-template-cell" title={trade.template_uid || trade.template_name}>
+                      {trade.template_name || trade.template_uid || 'N/A'}
+                    </td>
+                    <td>{formatDecimal(trade.entry_price, 4)}</td>
+                    <td>{formatDecimal(trade.stop_price, 4)}</td>
+                    <td title={trade.target_price === null || trade.target_price === undefined ? 'No fixed target' : ''}>
+                      {formatNullableDecimal(trade.target_price, 4)}
+                    </td>
+                    <td>{formatDecimal(trade.exit_price, 4)}</td>
+                    <td title={trade.pattern_family_key}>{compactText(trade.pattern_family_key || 'N/A', 12)}</td>
+                    <td className="pattern-family-template-table-run-id pattern-family-template-table-copy-cell">
+                      <span>{trade.pattern_id || trade.setup_id || 'N/A'}</span>
+                      <button
+                        aria-label="Copy pattern ID"
+                        className={[
+                          'pattern-family-table-copy-button',
+                          copiedPatternId === String(trade.pattern_id || trade.setup_id)
+                            ? 'pattern-family-table-copy-button--copied'
+                            : '',
+                        ].filter(Boolean).join(' ')}
+                        onClick={(event) => handleCopyPatternId(trade.pattern_id || trade.setup_id, event)}
+                        title={copiedPatternId === String(trade.pattern_id || trade.setup_id) ? 'Copied' : 'Copy pattern ID'}
+                        type="button"
+                      >
+                        <span aria-hidden="true" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <div className="pattern-family-selected-playbook-empty">
+            {isPatternAiStage1TradeLoading
+              ? 'Loading AI 2026 taken trades...'
+              : patternAiStage1TradeError || 'No AI 2026 taken trades loaded.'}
+          </div>
+        )}
+      </div>
+      <footer className="pattern-family-table-footer">
+        <button
+          disabled={isPatternAiStage1TradeLoading}
+          onClick={() => loadPatternAiStage1Trades({ offset: 0, append: false })}
+          type="button"
+        >
+          Refresh
+        </button>
+        <button
+          disabled={isPatternAiStage1TradeLoading || !patternAiStage1TradeHasMore}
+          onClick={() =>
+            loadPatternAiStage1Trades({
+              offset: patternAiStage1TradeRows.length,
+              append: true,
+            })
+          }
+          type="button"
+        >
+          {patternAiStage1TradeHasMore ? 'Load More' : 'All Loaded'}
+        </button>
+      </footer>
+    </details>
+  );
   const renderAiStage1TradesPanel = () => (
     <>
       <details className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-overview pattern-family-selected-simulation-chart--collapsible">
@@ -8074,6 +8521,43 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                   { label: 'Train Setups', value: formatNumber(patternAiStage1TradeData.run?.train_setups) },
                   { label: 'Train Rows', value: formatNumber(patternAiStage1TradeData.run?.train_rows) },
                   { label: 'Valid Slots', value: patternAiStage1TradeData.run?.valid_sample_slots || 'N/A' },
+                ],
+              },
+              {
+                title: 'Trade Rules',
+                items: [
+                  {
+                    label: 'Template',
+                    value: patternAiStage1PrimaryTemplate?.template_name || patternAiStage1TradeRows[0]?.template_name || 'N/A',
+                    title: patternAiStage1PrimaryTemplate?.template_uid || patternAiStage1TradeRows[0]?.template_uid || 'N/A',
+                    wide: true,
+                  },
+                  {
+                    label: 'Rule Summary',
+                    value: patternAiStage1RuleSummary,
+                    title: patternAiStage1RuleSummary,
+                    wide: true,
+                  },
+                  {
+                    label: 'Timeframe',
+                    value: patternAiStage1Timeframes.length ? patternAiStage1Timeframes.join(', ') : 'N/A',
+                  },
+                  {
+                    label: 'Sides',
+                    value: patternAiStage1Directions.length ? patternAiStage1Directions.join(' / ') : 'N/A',
+                  },
+                  {
+                    label: 'Target',
+                    value: patternAiStage1HasFixedTargets ? 'Fixed TP present' : 'No fixed TP',
+                  },
+                  {
+                    label: 'Exit Reasons',
+                    value: patternAiStage1ExitReasons.length
+                      ? patternAiStage1ExitReasons.map(formatRouteMode).join(' / ')
+                      : 'N/A',
+                    title: patternAiStage1ExitReasons.join(' / ') || 'N/A',
+                    wide: true,
+                  },
                 ],
               },
               {
@@ -8164,6 +8648,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           </div>
         )}
       </details>
+      {renderAiStage1TakenTradesSection()}
       <details className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-templates pattern-family-selected-simulation-chart--collapsible">
         <summary>
           <span>Template Performance</span>
@@ -8503,135 +8988,6 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
               : patternAiStage1TradeError || 'No family contribution rows loaded.'}
           </div>
         )}
-      </details>
-      <details className="pattern-family-selected-simulation-chart pattern-family-selected-simulation-templates pattern-family-selected-simulation-chart--collapsible">
-        <summary>
-          <span>AI 2026 Trades</span>
-          <small>
-            {patternAiStage1TradeData.totalRows
-              ? `${formatNumber(patternAiStage1TradeData.totalRows)} trades | showing ${formatNumber(patternAiStage1TradeRows.length)}`
-              : patternAiStage1TradeData.run?.multi_valid_eval_run_id || ''}
-          </small>
-        </summary>
-        <div className="pattern-family-entry-dashboard-raw-table pattern-family-selected-simulation-raw-trades-table">
-          {patternAiStage1TradeRows.length ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Time</th>
-                  <th>Symbol</th>
-                  <th>Side</th>
-                  <th>AI R</th>
-                  <th>Margin</th>
-                  <th>R</th>
-                  <th>Outcome</th>
-                  <th>Template</th>
-                  <th>Entry</th>
-                  <th>Stop</th>
-                  <th>Target</th>
-                  <th>Exit</th>
-                  <th>Family</th>
-                  <th>Pattern</th>
-                </tr>
-              </thead>
-              <tbody>
-                {patternAiStage1TradeRows.map((trade, index) => {
-                  const tradeKey = getSimulationRawTradeKey(trade, index);
-                  const resultR = Number(trade.result_r || 0);
-                  const outcomeClass =
-                    trade.outcome === 'pass'
-                      ? 'pattern-family-template-table-win'
-                      : trade.outcome === 'fail'
-                        ? 'pattern-family-template-table-loss'
-                        : 'pattern-family-template-table-skipped';
-                  return (
-                    <tr
-                      className={[
-                        resultR < 0 ? 'is-loss' : 'is-win',
-                        tradeKey === selectedSimulationRawTradeKey ? 'pattern-family-selected-simulation-raw-trade-row--selected' : '',
-                      ].filter(Boolean).join(' ')}
-                      key={tradeKey}
-                      onClick={() => handlePatternAiStage1TradeClick(trade, index)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          handlePatternAiStage1TradeClick(trade, index);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      title={`${trade.setup_id} | ${trade.template_uid} | ${trade.multi_valid_eval_run_id}`}
-                    >
-                      <td>{formatNumber(index + 1)}</td>
-                      <td>{formatShortDateTime(trade.entry_date || trade.d_confirm_date)}</td>
-                      <td>{trade.symbol || 'N/A'}</td>
-                      <td>{formatRouteMode(trade.trade_direction || trade.market || 'N/A')}</td>
-                      <td className={Number(trade.predicted_expected_r || 0) >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
-                        {formatDecimal(trade.predicted_expected_r, 3)}R
-                      </td>
-                      <td>{formatDecimal(trade.score_margin_top2, 3)}R</td>
-                      <td className={resultR >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
-                        {formatDecimal(resultR, 3)}R
-                      </td>
-                      <td className={outcomeClass}>{formatRouteMode(trade.outcome || trade.exit_reason || 'N/A')}</td>
-                      <td title={trade.template_uid}>{compactText(trade.template_name || trade.template_uid || 'N/A', 16)}</td>
-                      <td>{formatDecimal(trade.entry_price, 4)}</td>
-                      <td>{formatDecimal(trade.stop_price, 4)}</td>
-                      <td>{formatDecimal(trade.target_price, 4)}</td>
-                      <td>{formatDecimal(trade.exit_price, 4)}</td>
-                      <td title={trade.pattern_family_key}>{compactText(trade.pattern_family_key || 'N/A', 12)}</td>
-                      <td className="pattern-family-template-table-run-id pattern-family-template-table-copy-cell">
-                        <span>{compactText(trade.pattern_id || trade.setup_id, 14)}</span>
-                        <button
-                          aria-label="Copy pattern ID"
-                          className={[
-                            'pattern-family-table-copy-button',
-                            copiedPatternId === String(trade.pattern_id || trade.setup_id)
-                              ? 'pattern-family-table-copy-button--copied'
-                              : '',
-                          ].filter(Boolean).join(' ')}
-                          onClick={(event) => handleCopyPatternId(trade.pattern_id || trade.setup_id, event)}
-                          title={copiedPatternId === String(trade.pattern_id || trade.setup_id) ? 'Copied' : 'Copy pattern ID'}
-                          type="button"
-                        >
-                          <span aria-hidden="true" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          ) : (
-            <div className="pattern-family-selected-playbook-empty">
-              {isPatternAiStage1TradeLoading
-                ? 'Loading AI 2026 trades...'
-                : patternAiStage1TradeError || 'No AI 2026 trades loaded.'}
-            </div>
-          )}
-        </div>
-        <footer className="pattern-family-table-footer">
-          <button
-            disabled={isPatternAiStage1TradeLoading}
-            onClick={() => loadPatternAiStage1Trades({ offset: 0, append: false })}
-            type="button"
-          >
-            Refresh
-          </button>
-          <button
-            disabled={isPatternAiStage1TradeLoading || !patternAiStage1TradeHasMore}
-            onClick={() =>
-              loadPatternAiStage1Trades({
-                offset: patternAiStage1TradeRows.length,
-                append: true,
-              })
-            }
-            type="button"
-          >
-            {patternAiStage1TradeHasMore ? 'Load More' : 'All Loaded'}
-          </button>
-        </footer>
       </details>
     </>
   );
@@ -11323,6 +11679,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                           <th>#</th>
                                           <th>Time</th>
                                           <th>Symbol</th>
+                                          <th>TF</th>
                                           <th>Family</th>
                                           <th>Play</th>
                                           <th>Dir</th>
@@ -11827,6 +12184,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                 <table className="pattern-family-template-table pattern-family-template-table--router">
                                   <thead>
                                     <tr>
+                                      <th>#</th>
                                       <th>Time</th>
                                       <th>Symbol</th>
                                       <th>Side</th>
@@ -12138,7 +12496,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     : patternReversalAiError || 'No AI rows loaded'}
                               </small>
                             </summary>
-                            <div className="pattern-family-template-table-wrap pattern-family-template-table-wrap--xa-pattern">
+                            <div className="pattern-family-template-table-wrap pattern-family-template-table-wrap--xa-pattern pattern-family-ai-taken-trades-table">
                               {section.tableRows?.length ? (
                                 <table className="pattern-family-template-table pattern-family-template-table--router pattern-family-template-table--ai-patterns">
                                   <thead>
@@ -12229,7 +12587,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                         ) : section.variant === 'patternAiStage1TradeTable' ? (
                           <details className="pattern-family-test-overview-collapsible-section" open>
                             <summary>
-                              <span>AI 2026 Trades</span>
+                              <span>AI 2026 Taken Trades</span>
                               <small>
                                 {isPatternAiStage1TradeLoading
                                   ? 'Loading trades'
@@ -12238,13 +12596,34 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     : patternAiStage1TradeError || 'No AI trade rows loaded'}
                               </small>
                             </summary>
-                            <div className="pattern-family-template-table-wrap pattern-family-template-table-wrap--xa-pattern">
+                            <div className="pattern-family-template-table-wrap pattern-family-template-table-wrap--xa-pattern pattern-family-ai-taken-trades-table">
                               {section.tableRows?.length ? (
                                 <table className="pattern-family-template-table pattern-family-template-table--router pattern-family-template-table--ai-stage1-trades">
+                                  <colgroup>
+                                    <col style={{ width: '60px' }} />
+                                    <col style={{ width: '132px' }} />
+                                    <col style={{ width: '96px' }} />
+                                    <col style={{ width: '64px' }} />
+                                    <col style={{ width: '92px' }} />
+                                    <col style={{ width: '94px' }} />
+                                    <col style={{ width: '94px' }} />
+                                    <col style={{ width: '98px' }} />
+                                    <col style={{ width: '104px' }} />
+                                    <col style={{ width: '760px' }} />
+                                    <col style={{ width: '122px' }} />
+                                    <col style={{ width: '122px' }} />
+                                    <col style={{ width: '122px' }} />
+                                    <col style={{ width: '122px' }} />
+                                    <col style={{ width: '230px' }} />
+                                    <col style={{ width: '620px' }} />
+                                    <col style={{ width: '420px' }} />
+                                  </colgroup>
                                   <thead>
                                     <tr>
+                                      <th>#</th>
                                       <th>Time</th>
                                       <th>Symbol</th>
+                                      <th>TF</th>
                                       <th>Side</th>
                                       <th>AI R</th>
                                       <th>Margin</th>
@@ -12289,8 +12668,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                           onClick={() => handlePatternAiStage1TradeClick(row, rowIndex)}
                                           title={`${row.setup_id} | ${row.template_uid} | ${row.multi_valid_eval_run_id}`}
                                         >
+                                          <td>{formatNumber(rowIndex + 1)}</td>
                                           <td>{formatShortDateTime(row.entry_date || row.d_confirm_date)}</td>
                                           <td>{row.symbol || 'N/A'}</td>
+                                          <td>{row.source_timeframe || 'N/A'}</td>
                                           <td>{formatRouteMode(row.trade_direction || row.market || 'N/A')}</td>
                                           <td className={Number(row.predicted_expected_r || 0) >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
                                             {formatDecimal(row.predicted_expected_r, 3)}R
@@ -12300,17 +12681,19 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                             {formatDecimal(resultR, 3)}R
                                           </td>
                                           <td className={outcomeClass}>{formatRouteMode(row.outcome || row.exit_reason || 'N/A')}</td>
-                                          <td className="pattern-family-template-table-run-id" title={row.template_uid || row.template_name}>
-                                            {compactText(row.template_name || row.template_uid || 'N/A', 18)}
+                                          <td className="pattern-family-template-table-run-id pattern-family-ai-taken-template-cell" title={row.template_uid || row.template_name}>
+                                            {row.template_name || row.template_uid || 'N/A'}
                                           </td>
                                           <td>{formatDecimal(row.entry_price, 4)}</td>
                                           <td>{formatDecimal(row.stop_price, 4)}</td>
-                                          <td>{formatDecimal(row.target_price, 4)}</td>
+                                          <td title={row.target_price === null || row.target_price === undefined ? 'No fixed target' : ''}>
+                                            {formatNullableDecimal(row.target_price, 4)}
+                                          </td>
                                           <td>{formatDecimal(row.exit_price, 4)}</td>
                                           <td title={row.pattern_family_key}>{compactText(row.pattern_family_key || 'N/A', 16)}</td>
                                           <td className="pattern-family-template-table-features" title={featureText}>{featureText}</td>
                                           <td className="pattern-family-template-table-run-id pattern-family-template-table-copy-cell">
-                                            <span>{compactText(row.pattern_id || row.setup_id, 16)}</span>
+                                            <span>{row.pattern_id || row.setup_id || 'N/A'}</span>
                                             <button
                                               aria-label="Copy pattern ID"
                                               className={[
@@ -12332,14 +12715,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                   </tbody>
                                 </table>
                               ) : isPatternAiStage1TradeLoading ? (
-                                <div className="pattern-family-test-overview-empty">Loading AI 2026 trade rows...</div>
+                                <div className="pattern-family-test-overview-empty">Loading AI 2026 taken trade rows...</div>
                               ) : patternAiStage1TradeError ? (
                                 <div className="pattern-family-test-overview-empty pattern-family-test-overview-empty--error">
                                   {patternAiStage1TradeError}
                                 </div>
                               ) : (
                                 <div className="pattern-family-test-overview-empty">
-                                  No AI 2026 trade rows loaded yet.
+                                  No AI 2026 taken trade rows loaded yet.
                                 </div>
                               )}
                             </div>
@@ -15274,6 +15657,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                           <th>#</th>
                                           <th>Time</th>
                                           <th>Symbol</th>
+                                          <th>TF</th>
                                           <th>Family</th>
                                           <th>Play</th>
                                           <th>Dir</th>

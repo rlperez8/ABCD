@@ -18143,6 +18143,21 @@ button.pattern-family-trade-ticket-cell:disabled {
   min-width: 1500px;
 }
 
+.pattern-family-ai-taken-trades-table table {
+  table-layout: fixed;
+}
+
+.pattern-family-entry-dashboard-raw-table.pattern-family-ai-taken-trades-table table {
+  min-width: 2698px;
+}
+
+.pattern-family-ai-taken-trades-table th,
+.pattern-family-ai-taken-trades-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
 .pattern-family-selected-simulation-raw-trades-table tbody tr {
   cursor: pointer;
 }
@@ -18155,6 +18170,26 @@ button.pattern-family-trade-ticket-cell:disabled {
 
 .pattern-family-selected-simulation-raw-trades-table tbody tr.pattern-family-selected-simulation-raw-trade-row--selected td:first-child {
   box-shadow: inset 4px 0 0 #62d6ff;
+}
+
+.pattern-family-ai-taken-trades-table {
+  height: 420px;
+  max-height: 420px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+}
+
+.pattern-family-ai-taken-trades-table:hover,
+.pattern-family-ai-taken-trades-table:focus-within {
+  overflow-y: auto;
+}
+
+.pattern-family-ai-taken-trades-table th,
+.pattern-family-test-overview-section--xa-expanded-table .pattern-family-ai-taken-trades-table .pattern-family-template-table th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
 }
 
 .pattern-family-selected-simulation-templates {
@@ -25264,6 +25299,35 @@ button.pattern-family-trade-ticket-cell:disabled {
   overflow: visible;
 }
 
+.pattern-family-template-table-wrap.pattern-family-ai-taken-trades-table {
+  height: 420px;
+  max-height: 420px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+}
+
+.pattern-family-template-table-wrap.pattern-family-ai-taken-trades-table:hover,
+.pattern-family-template-table-wrap.pattern-family-ai-taken-trades-table:focus-within {
+  overflow-y: auto;
+}
+
+.pattern-family-test-overview-section--xa-expanded-table .pattern-family-template-table-wrap.pattern-family-ai-taken-trades-table {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.pattern-family-test-overview-section--xa-expanded-table .pattern-family-template-table-wrap.pattern-family-ai-taken-trades-table:hover,
+.pattern-family-test-overview-section--xa-expanded-table .pattern-family-template-table-wrap.pattern-family-ai-taken-trades-table:focus-within {
+  overflow-y: auto;
+}
+
+.pattern-family-test-overview-section--xa-expanded-table .pattern-family-template-table-wrap.pattern-family-ai-taken-trades-table .pattern-family-template-table th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
 .pattern-family-template-table {
   width: 100%;
   min-width: 1740px;
@@ -25298,6 +25362,40 @@ button.pattern-family-trade-ticket-cell:disabled {
 
 .pattern-family-template-table--ai-patterns {
   min-width: 1860px;
+}
+
+.pattern-family-template-table--ai-stage1-trades {
+  min-width: 3480px;
+  table-layout: fixed;
+}
+
+.pattern-family-template-table--ai-stage1-trades th,
+.pattern-family-template-table--ai-stage1-trades td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.pattern-family-template-table--ai-stage1-trades .pattern-family-template-table-run-id {
+  min-width: 0;
+  max-width: none;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.pattern-family-template-table--ai-stage1-trades .pattern-family-template-table-features {
+  min-width: 0;
+  max-width: none;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.pattern-family-template-table--ai-stage1-trades .pattern-family-template-table-copy-cell {
+  min-width: 0;
+}
+
+.pattern-family-ai-taken-template-cell {
+  white-space: nowrap;
 }
 
 .pattern-family-template-table th,

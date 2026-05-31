@@ -1,0 +1,10 @@
+{
+  "formula": "pattern_window_v1",
+  "input_result_run_id": "mwmeta-v3-v7-twin-xq3-2026",
+  "results_table": "entry_exit_template_results_mwmeta_v3_v7_twin_xq3_pw4_2026",
+  "run_id": "aimv-mwmeta-v3-v7-twin-xq3-pw4-2026",
+  "source_run_id": "aimv-mwmeta-v3-v7-twin-xq3-2026",
+  "target_result_run_id": "mwmeta-v3-v7-twin-xq3-pw4-2026",
+  "window_formula": "full_pattern_length * timeframe_minutes * window_multiple",
+  "window_multiple": 4.0
+}

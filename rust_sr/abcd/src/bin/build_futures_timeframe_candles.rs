@@ -14,12 +14,84 @@ struct TimeframeSpec {
     minutes: i64,
 }
 
-const TIMEFRAMES: [TimeframeSpec; 7] = [
+const TIMEFRAMES: [TimeframeSpec; 19] = [
+    TimeframeSpec {
+        label: "2m",
+        table_name: "futures_contract_2m_candles",
+        index_prefix: "futures_2m",
+        minutes: 2,
+    },
+    TimeframeSpec {
+        label: "3m",
+        table_name: "futures_contract_3m_candles",
+        index_prefix: "futures_3m",
+        minutes: 3,
+    },
+    TimeframeSpec {
+        label: "4m",
+        table_name: "futures_contract_4m_candles",
+        index_prefix: "futures_4m",
+        minutes: 4,
+    },
     TimeframeSpec {
         label: "5m",
         table_name: "futures_contract_5m_candles",
         index_prefix: "futures_5m",
         minutes: 5,
+    },
+    TimeframeSpec {
+        label: "6m",
+        table_name: "futures_contract_6m_candles",
+        index_prefix: "futures_6m",
+        minutes: 6,
+    },
+    TimeframeSpec {
+        label: "7m",
+        table_name: "futures_contract_7m_candles",
+        index_prefix: "futures_7m",
+        minutes: 7,
+    },
+    TimeframeSpec {
+        label: "8m",
+        table_name: "futures_contract_8m_candles",
+        index_prefix: "futures_8m",
+        minutes: 8,
+    },
+    TimeframeSpec {
+        label: "9m",
+        table_name: "futures_contract_9m_candles",
+        index_prefix: "futures_9m",
+        minutes: 9,
+    },
+    TimeframeSpec {
+        label: "10m",
+        table_name: "futures_contract_10m_candles",
+        index_prefix: "futures_10m",
+        minutes: 10,
+    },
+    TimeframeSpec {
+        label: "11m",
+        table_name: "futures_contract_11m_candles",
+        index_prefix: "futures_11m",
+        minutes: 11,
+    },
+    TimeframeSpec {
+        label: "12m",
+        table_name: "futures_contract_12m_candles",
+        index_prefix: "futures_12m",
+        minutes: 12,
+    },
+    TimeframeSpec {
+        label: "13m",
+        table_name: "futures_contract_13m_candles",
+        index_prefix: "futures_13m",
+        minutes: 13,
+    },
+    TimeframeSpec {
+        label: "14m",
+        table_name: "futures_contract_14m_candles",
+        index_prefix: "futures_14m",
+        minutes: 14,
     },
     TimeframeSpec {
         label: "15m",
@@ -113,13 +185,25 @@ fn normalize_timeframe(value: &str) -> String {
 fn parse_timeframe(value: &str) -> Option<TimeframeSpec> {
     let normalized = normalize_timeframe(value);
     match normalized.as_str() {
-        "5" | "5m" => Some(TIMEFRAMES[0]),
-        "15" | "15m" => Some(TIMEFRAMES[1]),
-        "30" | "30m" => Some(TIMEFRAMES[2]),
-        "60" | "60m" | "1h" => Some(TIMEFRAMES[3]),
-        "240" | "240m" | "4h" => Some(TIMEFRAMES[4]),
-        "720" | "720m" | "12h" => Some(TIMEFRAMES[5]),
-        "1440" | "1440m" | "24h" | "1d" | "d" | "day" | "daily" => Some(TIMEFRAMES[6]),
+        "2" | "2m" => Some(TIMEFRAMES[0]),
+        "3" | "3m" => Some(TIMEFRAMES[1]),
+        "4" | "4m" => Some(TIMEFRAMES[2]),
+        "5" | "5m" => Some(TIMEFRAMES[3]),
+        "6" | "6m" => Some(TIMEFRAMES[4]),
+        "7" | "7m" => Some(TIMEFRAMES[5]),
+        "8" | "8m" => Some(TIMEFRAMES[6]),
+        "9" | "9m" => Some(TIMEFRAMES[7]),
+        "10" | "10m" => Some(TIMEFRAMES[8]),
+        "11" | "11m" => Some(TIMEFRAMES[9]),
+        "12" | "12m" => Some(TIMEFRAMES[10]),
+        "13" | "13m" => Some(TIMEFRAMES[11]),
+        "14" | "14m" => Some(TIMEFRAMES[12]),
+        "15" | "15m" => Some(TIMEFRAMES[13]),
+        "30" | "30m" => Some(TIMEFRAMES[14]),
+        "60" | "60m" | "1h" => Some(TIMEFRAMES[15]),
+        "240" | "240m" | "4h" => Some(TIMEFRAMES[16]),
+        "720" | "720m" | "12h" => Some(TIMEFRAMES[17]),
+        "1440" | "1440m" | "24h" | "1d" | "d" | "day" | "daily" => Some(TIMEFRAMES[18]),
         _ => None,
     }
 }

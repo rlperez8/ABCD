@@ -1,0 +1,84 @@
+{
+  "artifact": {
+    "filename": "model.cbm",
+    "sha256": "66D5BC7E10381CD0C930AF5EF74796489AB89C8A1FE754452B2F7E3476494D71",
+    "size_bytes": 211048
+  },
+  "run": {
+    "multi_valid_eval_run_id": "aimv-limit-stop3-2026",
+    "created_at": "2026-05-28 15:14:40",
+    "source_run_id": "eetc-1779837772298-38740",
+    "results_table": "entry_exit_template_results_eetc_1779837772298_38740"
+  },
+  "training": {
+    "train_start_year": 2021,
+    "train_end_year": 2025,
+    "valid_year": 2026,
+    "train_setups": 11000,
+    "train_rows": 422221,
+    "train_sample_slot": 0,
+    "valid_sample_slots": "0,1,2,3,4,5,6"
+  },
+  "features": {
+    "pre_feature_set": "all",
+    "aggregate_feature_set": "all",
+    "excluded_roots": "CL,ES,NQ,QM,YM"
+  },
+  "execution_cost_model": {
+    "name": "passive-entry-stop-slippage",
+    "entry_slippage_ticks": 0.0,
+    "winner_exit_slippage_ticks": 0.0,
+    "loser_exit_slippage_ticks": 3.0,
+    "notes": "Assumes passive/limit entry and target-limit exits; stop/loss exits pay 3 ticks of adverse slippage."
+  },
+  "model": {
+    "library": "catboost",
+    "depth": 6,
+    "iterations": 160,
+    "learning_rate": 0.035,
+    "l2_leaf_reg": 3.0,
+    "random_seed": 42,
+    "random_strength": 1.0
+  },
+  "recommended_policy": {
+    "name": "top5-score-skip-historical-bad-templates",
+    "derived_policy_run_id": "aimv-limit-stop3-2026-top5tpl",
+    "score_rule": "take trades in the top 5 percent of predicted_expected_r for the scored batch",
+    "template_filter_source": "Templates with at least 20 top-5-percent trades and negative sum R across 2022-2025 validation runs.",
+    "skip_template_names": [
+      "Inverse pattern + confirmation+1 open + CD 1.006 risk + 1.50R target",
+      "Inverse pattern + confirmation+1 open + CD 3.024 risk + 4.00R target",
+      "Inverse pattern + confirmation+1 open + CD 3.135 risk + 2.00R target",
+      "Inverse pattern + confirmation+12 open + CD 1.909 risk + 4.00R target",
+      "Inverse pattern + confirmation+21 open + CD 2.024 risk + 4.00R target",
+      "Pattern direction + confirmation+1 open + CD 1.463 risk + 4.00R target",
+      "Pattern direction + confirmation+11 open + CD 1.150 risk + 4.00R target",
+      "Pattern direction + confirmation+15 open + CD 1.630 risk + 4.00R target",
+      "Pattern direction + confirmation+2 open + CD 3.408 risk + 2.00R target",
+      "Pattern direction + confirmation+24 open + CD 0.655 risk + 4.00R target",
+      "Pattern direction + confirmation+4 open + CD 0.571 risk + 3.00R target",
+      "Pattern direction + confirmation+4 open + CD 1.971 risk + 1.50R target",
+      "Pattern direction + confirmation+9 open + CD 2.000 risk + 2.00R target"
+    ]
+  },
+  "validation_summary": {
+    "raw_top5_score": [
+      {"valid_year": 2022, "trades": 508, "win_rate": 0.4075, "avg_r": 0.018, "sum_r": 9.1},
+      {"valid_year": 2023, "trades": 513, "win_rate": 0.3821, "avg_r": 0.028, "sum_r": 14.2},
+      {"valid_year": 2024, "trades": 518, "win_rate": 0.3938, "avg_r": 0.028, "sum_r": 14.3},
+      {"valid_year": 2025, "trades": 497, "win_rate": 0.4105, "avg_r": 0.060, "sum_r": 30.0},
+      {"valid_year": 2026, "trades": 267, "win_rate": 0.3296, "avg_r": 0.148, "sum_r": 39.6}
+    ],
+    "top5_score_skip_historical_bad_templates": [
+      {"valid_year": 2022, "trades": 362, "win_rate": 0.4088, "avg_r": 0.052, "sum_r": 18.7},
+      {"valid_year": 2023, "trades": 328, "win_rate": 0.3994, "avg_r": 0.112, "sum_r": 36.8},
+      {"valid_year": 2024, "trades": 336, "win_rate": 0.4018, "avg_r": 0.155, "sum_r": 52.2},
+      {"valid_year": 2025, "trades": 293, "win_rate": 0.4334, "avg_r": 0.218, "sum_r": 63.9},
+      {"valid_year": 2026, "trades": 221, "win_rate": 0.3529, "avg_r": 0.264, "sum_r": 58.4}
+    ]
+  },
+  "source": {
+    "original_model_path": "rust_sr/abcd/tmp_logs/aimv-limit-stop3-2026.cbm",
+    "code_commit_when_registered": "4db8c398868874fa7510fe7209784eb3261f1a79"
+  }
+}

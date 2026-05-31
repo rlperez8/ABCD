@@ -1,0 +1,66 @@
+{
+  "strategy_id": "market-entry-v1v2-ensemble-2026",
+  "created_at": "2026-05-28",
+  "purpose": "Market-entry AI candidate that accounts for observed slippage and favors wider/later trades.",
+  "status": "research_candidate",
+  "slippage_model": {
+    "entry_ticks": 3,
+    "winner_exit_ticks": 0,
+    "loser_exit_ticks": 3,
+    "description": "Market entry cost model from NinjaTrader slippage sampling: every trade pays 3 ticks at entry; stopped trades pay 3 additional ticks at exit."
+  },
+  "shared_filters": {
+    "excluded_roots": ["CL", "ES", "NQ", "QM", "YM"],
+    "min_risk_ticks": 120
+  },
+  "legs": [
+    {
+      "name": "v1_stable_policy_no_pullback",
+      "model_run_pattern": "aimv-mktwide-v1-risk120-full-{year}",
+      "template_source_run_id": "eetc-mktwide-v1",
+      "results_table": "entry_exit_template_results_eetc_mktwide_v1",
+      "model_file_2026": "v1_risk120_full_2026.cbm",
+      "policy": {
+        "score_quantile": 0.50,
+        "margin_quantile": 0.75,
+        "exclude_entry_kind": "pullback_retest_d"
+      }
+    },
+    {
+      "name": "v2_inverse_3r_no_ho",
+      "model_run_pattern": "aimv-mktwide-v2-risk120-full-{year}",
+      "template_source_run_id": "eetc-mktwide-v2",
+      "results_table": "entry_exit_template_results_eetc_mktwide_v2",
+      "model_file_2026": "v2_risk120_full_2026.cbm",
+      "policy": {
+        "target_r": 3.0,
+        "direction_mode": "inverse_pattern",
+        "exclude_root": "HO"
+      }
+    }
+  ],
+  "ensemble_rule": {
+    "dedupe_key": ["valid_year", "setup_id"],
+    "dedupe_priority": ["v2_inverse_3r_no_ho", "v1_stable_policy_no_pullback"]
+  },
+  "materialized_runs": {
+    "run_id_pattern": "aimv-market-entry-ensemble-{year}",
+    "source_run_id_pattern": "me-ensemble-{year}",
+    "results_table_pattern": "entry_exit_template_results_me_ensemble_{year}",
+    "years": [2022, 2023, 2024, 2025, 2026],
+    "materializer": "rust_sr/abcd/scripts/ai_stage1_materialize_ensemble_policy_run.py"
+  },
+  "walk_forward_results_after_slippage": {
+    "2022": { "trades": 422, "sum_r": 82.0, "win_rate_pct": 42.4 },
+    "2023": { "trades": 140, "sum_r": 12.6, "win_rate_pct": 42.9 },
+    "2024": { "trades": 229, "sum_r": 19.9, "win_rate_pct": 38.9 },
+    "2025": { "trades": 539, "sum_r": 99.9, "win_rate_pct": 41.4 },
+    "2026": { "trades": 355, "sum_r": 17.2, "win_rate_pct": 35.2 },
+    "total": { "trades": 1685, "sum_r": 231.5, "avg_r": 0.137 }
+  },
+  "notes": [
+    "This is not a final live model. The model legs are walk-forward trained, but the ensemble rule is a research policy selected after reviewing historical runs.",
+    "2026 remains positive as the latest holdout year, but the edge is smaller than 2024-2025.",
+    "Next validation should be a fresh holdout, paper-trading feed, or a new year/date range not used to choose the ensemble."
+  ]
+}

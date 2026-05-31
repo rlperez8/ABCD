@@ -1,0 +1,29 @@
+{
+  "action_model_run_id": "aicw-act-v1-2m-2026",
+  "base_formula": "candle_wave_2m_mtf_ema8_21_breakout_trail_market_slip_v2_eg1_xtight1",
+  "context_timeframes": [
+    "5m",
+    "15m",
+    "1h",
+    "4h"
+  ],
+  "max_energy_trades_per_day": 4,
+  "max_root_trades_per_day": 3,
+  "policy": {
+    "original_danger_margin": 1.5,
+    "original_threshold": 0.1,
+    "reverse_margin": 2.0,
+    "reverse_threshold": 0.5
+  },
+  "research_only": true,
+  "status": "research_only",
+  "target_clip_max": 10.0,
+  "target_clip_min": -3.0,
+  "threshold_year": 2025,
+  "timeframe": "2m",
+  "train_years": [
+    2024,
+    2025
+  ],
+  "valid_year": 2026
+}

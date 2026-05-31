@@ -622,6 +622,7 @@ const parseEntryExitSimDailyTradeRow = (row = {}) => ({
   template_uid: row?.template_uid ?? '',
   template_label: row?.template_label ?? '',
   symbol: row?.symbol ?? '',
+  source_timeframe: row?.source_timeframe ?? '',
   market: row?.market ?? '',
   outcome: row?.outcome ?? '',
   exit_reason: row?.exit_reason ?? '',
@@ -1172,7 +1173,10 @@ const parseSimulatorReplayResponse = (data) => ({
     : [],
 });
 
-export const getCandles = async (symbol, { startDate = null, endDate = null } = {}) => {
+export const getCandles = async (
+  symbol,
+  { startDate = null, endDate = null, sourceTimeframe = null } = {}
+) => {
   if (!symbol) {
     return [];
   }
@@ -1182,6 +1186,7 @@ export const getCandles = async (symbol, { startDate = null, endDate = null } = 
       symbol,
       start_date: startDate,
       end_date: endDate,
+      source_timeframe: sourceTimeframe || null,
     });
     return Array.isArray(candles) ? candles.map(parseCandleRecord).reverse() : [];
   } catch (error) {
@@ -2237,6 +2242,7 @@ const parsePatternReversalAiScoreRow = (row = {}) => ({
   pattern_group_id: row.pattern_group_id ?? '',
   symbol: row.symbol ?? '',
   root_symbol: row.root_symbol ?? '',
+  source_timeframe: row.source_timeframe ?? '',
   market: row.market ?? '',
   pattern_family_key: row.pattern_family_key ?? '',
   d_confirm_date: row.d_confirm_date ?? null,
@@ -2480,45 +2486,57 @@ const parsePatternAiStage1LossWindowRow = (row = {}) => ({
   template_count: parseOptionalInt(row.template_count) ?? 0,
 });
 
-const parsePatternAiStage1TradeRow = (row = {}) => ({
-  multi_valid_eval_run_id: row.multi_valid_eval_run_id ?? '',
-  valid_sample_slot: parseOptionalInt(row.valid_sample_slot) ?? 0,
-  setup_id: row.setup_id ?? '',
-  pattern_id: row.pattern_id ?? '',
-  pattern_group_id: row.pattern_group_id ?? '',
-  symbol: row.symbol ?? '',
-  root_symbol: row.root_symbol ?? '',
-  market: row.market ?? '',
-  pattern_family_key: row.pattern_family_key ?? '',
-  d_confirm_date: row.d_confirm_date ?? null,
-  template_uid: row.template_uid ?? '',
-  template_name: row.template_name ?? '',
-  predicted_expected_r: parseOptionalFloat(row.predicted_expected_r),
-  score_margin_top2: parseOptionalFloat(row.score_margin_top2),
-  result_r: parseOptionalFloat(row.result_r) ?? 0,
-  outcome: row.outcome ?? '',
-  oracle_template_uid: row.oracle_template_uid ?? '',
-  oracle_result_r: parseOptionalFloat(row.oracle_result_r),
-  oracle_rank: parseOptionalInt(row.oracle_rank),
-  entry_date: row.entry_date ?? null,
-  exit_date: row.exit_date ?? null,
-  entry_price: parseOptionalFloat(row.entry_price),
-  stop_price: parseOptionalFloat(row.stop_price),
-  target_price: parseOptionalFloat(row.target_price),
-  exit_price: parseOptionalFloat(row.exit_price),
-  risk_points: parseOptionalFloat(row.risk_points),
-  exit_reason: row.exit_reason ?? '',
-  trade_direction: row.trade_direction ?? '',
-  harmonic_type: row.harmonic_type ?? '',
-  family_bin: row.family_bin ?? '',
-  family_size_bucket: row.family_size_bucket ?? '',
-  family_time_bin: row.family_time_bin ?? '',
-  family_x_strictness: row.family_x_strictness ?? '',
-});
+const parsePatternAiStage1TradeRow = (row = {}) => {
+  const templateUid = row.template_uid ?? '';
+  const harmonicType = row.harmonic_type ?? '';
+  const familyTimeBin = row.family_time_bin ?? '';
+  const sourceTimeframe =
+    row.source_timeframe && row.source_timeframe !== 'unknown'
+      ? row.source_timeframe
+      : familyTimeBin || (String(templateUid).startsWith('candle_wave_') ? '2m' : row.source_timeframe ?? '');
+
+  return {
+    multi_valid_eval_run_id: row.multi_valid_eval_run_id ?? '',
+    valid_sample_slot: parseOptionalInt(row.valid_sample_slot) ?? 0,
+    setup_id: row.setup_id ?? '',
+    pattern_id: row.pattern_id ?? '',
+    pattern_group_id: row.pattern_group_id ?? '',
+    symbol: row.symbol ?? '',
+    root_symbol: row.root_symbol ?? '',
+    source_timeframe: sourceTimeframe,
+    market: row.market ?? '',
+    pattern_family_key: row.pattern_family_key ?? '',
+    d_confirm_date: row.d_confirm_date ?? null,
+    template_uid: templateUid,
+    template_name: row.template_name ?? '',
+    predicted_expected_r: parseOptionalFloat(row.predicted_expected_r),
+    score_margin_top2: parseOptionalFloat(row.score_margin_top2),
+    result_r: parseOptionalFloat(row.result_r) ?? 0,
+    outcome: row.outcome ?? '',
+    oracle_template_uid: row.oracle_template_uid ?? '',
+    oracle_result_r: parseOptionalFloat(row.oracle_result_r),
+    oracle_rank: parseOptionalInt(row.oracle_rank),
+    entry_date: row.entry_date ?? null,
+    exit_date: row.exit_date ?? null,
+    entry_price: parseOptionalFloat(row.entry_price),
+    stop_price: parseOptionalFloat(row.stop_price),
+    target_price: parseOptionalFloat(row.target_price),
+    exit_price: parseOptionalFloat(row.exit_price),
+    risk_points: parseOptionalFloat(row.risk_points),
+    exit_reason: row.exit_reason ?? '',
+    trade_direction: row.trade_direction ?? '',
+    harmonic_type: harmonicType,
+    family_bin: row.family_bin ?? '',
+    family_size_bucket: row.family_size_bucket ?? '',
+    family_time_bin: familyTimeBin,
+    family_x_strictness: row.family_x_strictness ?? '',
+  };
+};
 
 export const fetchPatternAiStage1Trades = async ({
   aiRunId = null,
   validYear = 2026,
+  takenOnly = false,
   limit = 300,
   offset = 0,
 } = {}) => {
@@ -2526,6 +2544,7 @@ export const fetchPatternAiStage1Trades = async ({
     const data = await postJson('/patterns/ai-stage1-trades', {
       ai_run_id: aiRunId,
       valid_year: parseOptionalInt(validYear),
+      taken_only: Boolean(takenOnly),
       limit: parseOptionalInt(limit),
       offset: parseOptionalInt(offset),
     });

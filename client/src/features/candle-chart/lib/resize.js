@@ -20,6 +20,17 @@ const getMinimumFitPriceSpan = (
   absolute = MIN_FIT_PRICE_SPAN_ABSOLUTE
 ) => Math.max(Math.abs(referencePrice) * ratio, absolute);
 
+const toFinitePrice = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return NaN;
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : NaN;
+};
+
+const finitePrices = (...values) => values.map(toFinitePrice).filter((value) => Number.isFinite(value));
+
 const REVERSAL_TYPE_TO_SIGNAL_KEY = {
   BullishKeyReversal: 'bullish_key_reversal',
   BearishKeyReversal: 'bearish_key_reversal',
@@ -147,17 +158,17 @@ const getPropFocusBounds = (chartStateRef, rustPattern) => {
     return candle ? [candle.candle_low, candle.candle_high] : [];
   });
   const tradeLevelPrices = rustPattern?.xa_canvas_mode
-    ? [
-        Number(rustPattern?.xa_start_price),
-        Number(rustPattern?.xa_reversal_limit_price),
-        Number(rustPattern?.xa_continuation_limit_price),
-      ].filter((value) => Number.isFinite(value))
-    : [
-        Number(rustPattern?.trade_enter_price),
-        Number(rustPattern?.trade_risk_exit_price),
-        Number(rustPattern?.trade_reward_exit_price),
-        Number(rustPattern?.exit_price),
-      ].filter((value) => Number.isFinite(value));
+    ? finitePrices(
+        rustPattern?.xa_start_price,
+        rustPattern?.xa_reversal_limit_price,
+        rustPattern?.xa_continuation_limit_price
+      )
+    : finitePrices(
+        rustPattern?.trade_enter_price,
+        rustPattern?.trade_risk_exit_price,
+        rustPattern?.trade_reward_exit_price,
+        rustPattern?.exit_price
+      );
   const focusPrices = [
     baseBounds.minPrice,
     baseBounds.maxPrice,
@@ -215,17 +226,17 @@ const getPropTradeFocusBounds = (chartStateRef, rustPattern) => {
   }
 
   const tradeLevelPrices = rustPattern?.xa_canvas_mode
-    ? [
-        Number(rustPattern?.xa_start_price),
-        Number(rustPattern?.xa_reversal_limit_price),
-        Number(rustPattern?.xa_continuation_limit_price),
-      ].filter((value) => Number.isFinite(value))
-    : [
-        Number(rustPattern?.trade_enter_price),
-        Number(rustPattern?.trade_risk_exit_price),
-        Number(rustPattern?.trade_reward_exit_price),
-        Number(rustPattern?.exit_price),
-      ].filter((value) => Number.isFinite(value));
+    ? finitePrices(
+        rustPattern?.xa_start_price,
+        rustPattern?.xa_reversal_limit_price,
+        rustPattern?.xa_continuation_limit_price
+      )
+    : finitePrices(
+        rustPattern?.trade_enter_price,
+        rustPattern?.trade_risk_exit_price,
+        rustPattern?.trade_reward_exit_price,
+        rustPattern?.exit_price
+      );
   const endpointIndexes = new Set(
     [entryIndex - 1, entryIndex, entryIndex + 1, exitIndex - 1, exitIndex, exitIndex + 1]
       .map((value) => Math.round(value))
@@ -287,17 +298,19 @@ const getGraphFocusBounds = (chartStateRef, rustPattern) => {
     baseBounds.maxPrice,
     ...(xaHitCandle ? [Number(xaHitCandle.candle_low), Number(xaHitCandle.candle_high)] : []),
     ...(rustPattern?.xa_canvas_mode
-      ? [
-          Number(rustPattern?.xa_start_price),
-          Number(rustPattern?.xa_reversal_limit_price),
-          Number(rustPattern?.xa_continuation_limit_price),
-        ]
-      : [
-          Number(rustPattern?.trade_enter_price),
-          Number(rustPattern?.trade_risk_exit_price),
-          Number(rustPattern?.trade_reward_exit_price),
-          Number(rustPattern?.exit_price ?? rustPattern?.target_close ?? rustPattern?.trade_current_price),
-        ]),
+      ? finitePrices(
+          rustPattern?.xa_start_price,
+          rustPattern?.xa_reversal_limit_price,
+          rustPattern?.xa_continuation_limit_price
+        )
+      : finitePrices(
+          rustPattern?.trade_enter_price,
+          rustPattern?.trade_risk_exit_price,
+          rustPattern?.trade_reward_exit_price,
+          rustPattern?.exit_price,
+          rustPattern?.target_close,
+          rustPattern?.trade_current_price
+        )),
   ].filter((value) => Number.isFinite(value));
   const minFocusPrice = Math.min(...graphPrices);
   const maxFocusPrice = Math.max(...graphPrices);

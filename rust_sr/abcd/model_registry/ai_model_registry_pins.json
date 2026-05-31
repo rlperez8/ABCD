@@ -1,0 +1,21 @@
+{
+  "active_main_candidate": {
+    "model_run_id": "aicw-mtf-eg1-xtight-t014-rd3-en4-v1-2m-2026",
+    "status": "protected",
+    "reason": "Current best balanced candle-wave run before adding any new risk-governor experiments.",
+    "metrics": {
+      "selected_trades": 402,
+      "win_rate_pct": 43.03,
+      "sum_r": 222.2,
+      "max_drawdown_r": 5.02
+    }
+  },
+  "research_only": [
+    {
+      "action_model_run_id": "aicw-act-v1-2m-2026",
+      "status": "research_only",
+      "trade_enabled": false,
+      "reason": "Reverse/action model did not validate cleanly enough for main strategy use."
+    }
+  ]
+}

@@ -39,8 +39,12 @@ export const CandleChart = ({
   const [chartReadyVersion, setChartReadyVersion] = useState(0);
   const selectedPattern = chartData?.rust_patterns ?? null;
   const hasCandles = Boolean(chartData?.candles?.length);
+  const hasPatternPivots = ['x', 'a', 'b', 'c', 'd'].every((key) => {
+    const value = Number(selectedPattern?.[key]);
+    return Number.isFinite(value) && value >= 1;
+  });
   const effectiveFocusMode =
-    presentationMode === 'graph'
+    presentationMode === 'graph' && hasPatternPivots
       ? 'graph'
       : focusMode === 'prop'
       ? propFocusScope === 'trade'
@@ -207,11 +211,16 @@ export const CandleChart = ({
         chartLayer.graphBackground(ctx, canvas);
       }
 
+      if (focusMode === 'prop') {
+        chartLayer.tradeEntryColumn(ctx, chartData.rust_patterns);
+        chartLayer.tradeExitColumn(ctx, chartData.rust_patterns);
+      }
+
       if (showCandles) {
         chartLayer.candles(ctx, chartData.rust_patterns, {
           reversalFocusOnly: is_reversal_focus,
           activeReversalFilter,
-          highlightExitCandle: focusMode === 'prop',
+          highlightTradeCandles: focusMode === 'prop',
         });
       }
       chartLayer.prices(ctx_price, cp);
@@ -245,10 +254,9 @@ export const CandleChart = ({
           presentationMode,
         });
         patternLayer.route_logic_highlight(ctx, chartData.rust_patterns, routeLogicHover);
-        if (!isGraphPresentation) {
-          patternLayer.trade_path(ctx, chartData.rust_patterns);
-          patternLayer.prop_events(ctx, chartData.rust_patterns);
-        }
+        patternLayer.trade_path(ctx, chartData.rust_patterns);
+        patternLayer.prop_events(ctx, chartData.rust_patterns);
+        patternLayer.trade_summary_badge(ctx, canvas, chartData.rust_patterns);
       }
 
       if (showPatternOverlay && focusMode !== 'prop') {

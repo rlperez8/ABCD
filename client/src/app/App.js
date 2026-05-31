@@ -238,6 +238,7 @@ const buildPatternCandleWindow = (pattern = {}) => {
       exitTime !== null
         ? formatDateTimeForServer(new Date(exitTime))
         : formatDateTimeForServer(new Date(Math.max(...dateValues) + paddingMs)),
+    sourceTimeframe: pattern.source_timeframe ?? pattern.sourceTimeframe ?? null,
   };
 };
 

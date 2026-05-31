@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 pub struct Pattern {
     pub symbol: String,
     pub pattern_id: Option<String>,
+    pub source_table: Option<String>,
+    pub source_timeframe: Option<String>,
     pub x_date: NaiveDateTime,
     pub x_open: Decimal,
     pub x_high: Decimal,

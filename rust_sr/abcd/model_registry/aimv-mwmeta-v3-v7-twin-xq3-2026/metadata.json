@@ -1,0 +1,11 @@
+{
+  "fallback_slippage_ticks": 6.0,
+  "formula": "execution_quality_floor_v1",
+  "input_result_run_id": "mwmeta-v3-v7-twin-2026",
+  "min_expected_gross_ticks": 0.0,
+  "min_slippage_multiple": 3.0,
+  "results_table": "entry_exit_template_results_mwmeta_v3_v7_twin_xq3_2026",
+  "run_id": "aimv-mwmeta-v3-v7-twin-xq3-2026",
+  "source_run_id": "aimv-mwmeta-v3-v7-twin-2026",
+  "target_result_run_id": "mwmeta-v3-v7-twin-xq3-2026"
+}

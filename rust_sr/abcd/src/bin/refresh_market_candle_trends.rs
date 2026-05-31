@@ -18,7 +18,17 @@ struct TimeframeSpec {
     source_table: &'static str,
 }
 
-const TIMEFRAMES: [TimeframeSpec; 3] = [
+const TIMEFRAMES: [TimeframeSpec; 9] = [
+    TimeframeSpec {
+        timeframe: MarketTrendTimeframe::OneMinute,
+        label: "1m",
+        source_table: "futures_contract_1m_candles",
+    },
+    TimeframeSpec {
+        timeframe: MarketTrendTimeframe::ThreeMinute,
+        label: "3m",
+        source_table: "futures_contract_3m_candles",
+    },
     TimeframeSpec {
         timeframe: MarketTrendTimeframe::FiveMinute,
         label: "5m",
@@ -30,9 +40,29 @@ const TIMEFRAMES: [TimeframeSpec; 3] = [
         source_table: "futures_contract_15m_candles",
     },
     TimeframeSpec {
+        timeframe: MarketTrendTimeframe::ThirtyMinute,
+        label: "30m",
+        source_table: "futures_contract_30m_candles",
+    },
+    TimeframeSpec {
         timeframe: MarketTrendTimeframe::OneHour,
         label: "1h",
         source_table: "futures_contract_1h_candles",
+    },
+    TimeframeSpec {
+        timeframe: MarketTrendTimeframe::FourHour,
+        label: "4h",
+        source_table: "futures_contract_4h_candles",
+    },
+    TimeframeSpec {
+        timeframe: MarketTrendTimeframe::TwelveHour,
+        label: "12h",
+        source_table: "futures_contract_12h_candles",
+    },
+    TimeframeSpec {
+        timeframe: MarketTrendTimeframe::OneDay,
+        label: "1d",
+        source_table: "futures_contract_1d_candles",
     },
 ];
 
@@ -105,9 +135,15 @@ fn normalize_timeframe(value: &str) -> String {
 
 fn parse_timeframe(value: &str) -> Option<TimeframeSpec> {
     match normalize_timeframe(value).as_str() {
-        "5" | "5m" => Some(TIMEFRAMES[0]),
-        "15" | "15m" => Some(TIMEFRAMES[1]),
-        "60" | "60m" | "1h" => Some(TIMEFRAMES[2]),
+        "1" | "1m" => Some(TIMEFRAMES[0]),
+        "3" | "3m" => Some(TIMEFRAMES[1]),
+        "5" | "5m" => Some(TIMEFRAMES[2]),
+        "15" | "15m" => Some(TIMEFRAMES[3]),
+        "30" | "30m" => Some(TIMEFRAMES[4]),
+        "60" | "60m" | "1h" => Some(TIMEFRAMES[5]),
+        "240" | "240m" | "4h" => Some(TIMEFRAMES[6]),
+        "720" | "720m" | "12h" => Some(TIMEFRAMES[7]),
+        "1440" | "1440m" | "24h" | "1d" => Some(TIMEFRAMES[8]),
         _ => None,
     }
 }
@@ -413,7 +449,7 @@ async fn print_summary(pool: &MySqlPool) -> Result<(), sqlx::Error> {
             MAX(candle_ts_utc) AS last_candle_at
         FROM {TREND_TABLE}
         GROUP BY timeframe
-        ORDER BY FIELD(timeframe, '5m', '15m', '1h'), timeframe
+        ORDER BY FIELD(timeframe, '1m', '3m', '5m', '15m', '30m', '1h', '4h', '12h', '1d'), timeframe
         "#
     ))
     .fetch_all(pool)

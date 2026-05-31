@@ -29,7 +29,7 @@ function normalizeDateTimeKey(dateStr) {
   return parsed.getTime();
 }
 
-function findIndexByDate(candles, patternDate) {
+function findIndexByDate(candles, patternDate, { fallback = 'none' } = {}) {
   if (!patternDate) return -1;
 
   if (hasTimeComponent(patternDate)) {
@@ -43,6 +43,41 @@ function findIndexByDate(candles, patternDate) {
 
     if (exactIndex >= 0) {
       return exactIndex + 1;
+    }
+
+    if (fallback === 'atOrAfter') {
+      let bestIndex = -1;
+      let bestTime = Number.POSITIVE_INFINITY;
+
+      candles.forEach((item, index) => {
+        const candleTime = normalizeDateTimeKey(item.date || item.candle_date);
+        if (candleTime !== null && candleTime >= pivotTime && candleTime < bestTime) {
+          bestTime = candleTime;
+          bestIndex = index;
+        }
+      });
+
+      if (bestIndex >= 0) {
+        return bestIndex + 1;
+      }
+    }
+
+    if (fallback === 'nearest') {
+      let bestIndex = -1;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      candles.forEach((item, index) => {
+        const candleTime = normalizeDateTimeKey(item.date || item.candle_date);
+        const distance = candleTime === null ? Number.POSITIVE_INFINITY : Math.abs(candleTime - pivotTime);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = index;
+        }
+      });
+
+      if (bestIndex >= 0) {
+        return bestIndex + 1;
+      }
     }
 
     return -1;
@@ -77,8 +112,8 @@ const buildFormattedPattern = (candles, rustPattern) => {
   const indexD = findIndexByDate(candles, rustPattern?.d_date);
   const indexDConfirm = findIndexByDate(candles, dConfirmDate);
   const indexReversalDetect = findIndexByDate(candles, reversalDetectDate);
-  const indexEntry = findIndexByDate(candles, entryDate);
-  const indexTarget = findIndexByDate(candles, effectiveTargetDate);
+  const indexEntry = findIndexByDate(candles, entryDate, { fallback: 'atOrAfter' });
+  const indexTarget = findIndexByDate(candles, effectiveTargetDate, { fallback: 'atOrAfter' });
   const resolvedDConfirm = indexDConfirm > 0 ? indexDConfirm : indexD > 1 ? indexD - 1 : -1;
   const resolvedXaScanStart =
     rustPattern?.xa_canvas_mode && resolvedDConfirm > 1 ? resolvedDConfirm - 1 : -1;
@@ -86,7 +121,7 @@ const buildFormattedPattern = (candles, rustPattern) => {
     indexReversalDetect > 0 ? indexReversalDetect : -1;
   const resolvedEntry = indexEntry > 0 ? indexEntry : -1;
   const resolvedTarget = indexTarget > 0 ? indexTarget : -1;
-  const exit = findIndexByDate(candles, effectiveExitDate);
+  const exit = findIndexByDate(candles, effectiveExitDate, { fallback: 'atOrAfter' });
   const isBearish = rustPattern?.market === 'Bearish';
   const exitPrice = rustPattern?.xa_canvas_mode
     ? rustPattern?.xa_outcome_price

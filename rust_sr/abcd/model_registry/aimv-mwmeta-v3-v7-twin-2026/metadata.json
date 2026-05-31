@@ -1,0 +1,10 @@
+{
+  "formula": "union_policy_v1",
+  "mode": "symbol_entry_direction",
+  "primary_run_id": "aimv-market-wave-meta-v3-2026",
+  "run_id": "aimv-mwmeta-v3-v7-twin-2026",
+  "secondary_run_id": "aimv-market-entry-context-v7-2026",
+  "slippage_entry_ticks": 3.0,
+  "slippage_exit_ticks": 0.0,
+  "source_run_id": "mwmeta-v3-v7-twin-2026"
+}

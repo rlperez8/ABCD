@@ -30,6 +30,7 @@ logs/
 rust_sr/server/*.log
 client/*.log
 tmp_logs/
+tmp_ai_runs/
 rust_sr/abcd/tmp_logs/
 catboost_info/
 

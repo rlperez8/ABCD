@@ -15,6 +15,7 @@ import sys
 import time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from catboost import CatBoostRegressor, Pool
 
@@ -49,6 +50,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--min-rule-trades", type=int, default=1000)
     parser.add_argument("--exclude-roots", default="", help="Comma-separated root symbols to skip in train and validation rows.")
+    parser.add_argument("--slippage-entry-ticks", type=float, default=0.0)
+    parser.add_argument("--slippage-exit-ticks", type=float, default=0.0)
+    parser.add_argument("--slippage-winner-exit-ticks", type=float, default=None)
+    parser.add_argument("--slippage-loser-exit-ticks", type=float, default=None)
+    parser.add_argument("--min-target-ticks", type=float, default=0.0)
+    parser.add_argument("--min-risk-ticks", type=float, default=0.0)
     parser.add_argument("--run-id", default=None)
     return parser.parse_args()
 
@@ -157,6 +164,12 @@ def ensure_tables(conn) -> None:
         )
     conn.commit()
     base.ensure_column(conn, "ai_stage1_multi_valid_eval_runs", "excluded_roots", "VARCHAR(255) NULL")
+    base.ensure_column(conn, "ai_stage1_multi_valid_eval_runs", "slippage_entry_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_multi_valid_eval_runs", "slippage_exit_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_multi_valid_eval_runs", "slippage_winner_exit_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_multi_valid_eval_runs", "slippage_loser_exit_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_multi_valid_eval_runs", "min_target_ticks", "DOUBLE NULL")
+    base.ensure_column(conn, "ai_stage1_multi_valid_eval_runs", "min_risk_ticks", "DOUBLE NULL")
     conn.commit()
 
 
@@ -169,6 +182,53 @@ def filter_excluded_roots(frame: pd.DataFrame, excluded_roots: set[str]) -> pd.D
         return frame
     roots = frame["symbol"].map(base.root_symbol).str.upper()
     return frame[~roots.isin(excluded_roots)].copy()
+
+
+def apply_trade_costs_and_filters(frame: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+
+    work = frame.copy()
+    work["root_symbol"] = work["symbol"].map(base.root_symbol)
+    base.add_candidate_structure_features(work)
+
+    target_ticks = pd.to_numeric(work.get("target_ticks"), errors="coerce").fillna(0.0)
+    risk_ticks = pd.to_numeric(work.get("risk_ticks"), errors="coerce").fillna(0.0)
+    if args.min_target_ticks > 0:
+        work = work[target_ticks >= args.min_target_ticks].copy()
+    if args.min_risk_ticks > 0:
+        work = work[risk_ticks >= args.min_risk_ticks].copy()
+    if work.empty:
+        return work
+
+    entry_ticks = float(args.slippage_entry_ticks or 0.0)
+    default_exit_ticks = float(args.slippage_exit_ticks or 0.0)
+    winner_exit_ticks = (
+        default_exit_ticks
+        if getattr(args, "slippage_winner_exit_ticks", None) is None
+        else float(args.slippage_winner_exit_ticks or 0.0)
+    )
+    loser_exit_ticks = (
+        default_exit_ticks
+        if getattr(args, "slippage_loser_exit_ticks", None) is None
+        else float(args.slippage_loser_exit_ticks or 0.0)
+    )
+    if max(entry_ticks, winner_exit_ticks, loser_exit_ticks) <= 0:
+        return work
+
+    tick_size = pd.to_numeric(work.get("tick_size"), errors="coerce").fillna(0.0)
+    risk_points = pd.to_numeric(work.get("risk_points"), errors="coerce").replace(0.0, np.nan)
+    clean_result_r = pd.to_numeric(work["result_r"], errors="coerce").fillna(0.0)
+    exit_ticks = np.where(clean_result_r > 0.0, winner_exit_ticks, loser_exit_ticks)
+    total_slippage_ticks = entry_ticks + exit_ticks
+    slippage_cost_r = ((total_slippage_ticks * tick_size) / risk_points).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    adjusted_result_r = clean_result_r - slippage_cost_r
+
+    work["clean_result_r"] = clean_result_r
+    work["slippage_cost_r"] = slippage_cost_r
+    work["result_r"] = adjusted_result_r
+    work["outcome"] = np.where(adjusted_result_r > 0.0, "pass", "fail")
+    return work
 
 
 def insert_slot_summary(conn, run_id: str, slot: int | None, metric_name: str, stats: dict) -> None:
@@ -349,11 +409,21 @@ def main() -> int:
 
         train_df = base.load_candidate_rows(conn, args.results_table, args.source_run_id, train_setup_ids)
         train_df = filter_excluded_roots(train_df, excluded_roots)
+        train_df = apply_trade_costs_and_filters(train_df, args)
         if train_df.empty:
             raise RuntimeError("Training rows were empty")
         print(f"Train rows: {len(train_df):,}")
         if excluded_roots:
             print(f"Excluded roots: {', '.join(sorted(excluded_roots))}")
+        if args.slippage_entry_ticks or args.slippage_exit_ticks or args.slippage_winner_exit_ticks is not None or args.slippage_loser_exit_ticks is not None:
+            winner_exit = args.slippage_exit_ticks if args.slippage_winner_exit_ticks is None else args.slippage_winner_exit_ticks
+            loser_exit = args.slippage_exit_ticks if args.slippage_loser_exit_ticks is None else args.slippage_loser_exit_ticks
+            print(
+                "Training target: net R after "
+                f"entry={args.slippage_entry_ticks:g}, winner_exit={winner_exit:g}, loser_exit={loser_exit:g} ticks"
+            )
+        if args.min_target_ticks or args.min_risk_ticks:
+            print(f"Candidate filters: min target ticks={args.min_target_ticks:g}, min risk ticks={args.min_risk_ticks:g}")
 
         train_features, train_result_r, _ = prepare_feature_frames(args, train_df, train_df.head(0).copy())
         print("\nTraining model")
@@ -379,6 +449,7 @@ def main() -> int:
             )
             valid_df = base.load_candidate_rows(conn, args.results_table, args.source_run_id, valid_setup_ids)
             valid_df = filter_excluded_roots(valid_df, excluded_roots)
+            valid_df = apply_trade_costs_and_filters(valid_df, args)
             if valid_df.empty:
                 print(f"\nSlot {slot}: no validation rows")
                 continue
@@ -414,9 +485,13 @@ def main() -> int:
                     train_sample_slot, valid_sample_slots,
                     train_setups, train_rows, iterations, depth, learning_rate,
                     l2_leaf_reg, random_strength, random_seed,
-                    pre_feature_set, aggregate_feature_set, excluded_roots, model_path
+                    pre_feature_set, aggregate_feature_set, excluded_roots,
+                    slippage_entry_ticks, slippage_exit_ticks,
+                    slippage_winner_exit_ticks, slippage_loser_exit_ticks,
+                    min_target_ticks, min_risk_ticks,
+                    model_path
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     run_id,
@@ -438,6 +513,12 @@ def main() -> int:
                     args.pre_feature_set,
                     None if args.skip_aggregate_features else args.aggregate_feature_set,
                     ",".join(sorted(excluded_roots)) if excluded_roots else None,
+                    args.slippage_entry_ticks,
+                    args.slippage_exit_ticks,
+                    args.slippage_winner_exit_ticks,
+                    args.slippage_loser_exit_ticks,
+                    args.min_target_ticks,
+                    args.min_risk_ticks,
                     str(model_path),
                 ),
             )
