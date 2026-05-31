@@ -44,6 +44,10 @@ DECISION_NUM_FEATURES = [
     "predicted_r",
     "bars_held",
     "hold_minutes_so_far",
+    "source_exit_signal_seen",
+    "bars_since_source_exit_signal",
+    "source_exit_result_seen_r",
+    "current_vs_source_exit_r",
     "current_unrealized_r",
     "current_unrealized_raw_r",
     "mfe_so_far_r",
@@ -81,6 +85,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-hold-bars", type=int, default=4)
     parser.add_argument("--decision-step-bars", type=int, default=1)
     parser.add_argument("--dynamic-max-bars", type=int, default=240)
+    parser.add_argument("--dynamic-no-signal-exit", choices=["terminal", "source"], default="terminal")
     parser.add_argument("--exit-threshold", type=float, default=None)
     parser.add_argument("--max-threshold-dd-r", type=float, default=0.0)
     parser.add_argument("--threshold-dd-penalty", type=float, default=0.0)
@@ -432,6 +437,16 @@ def build_decision_rows_for_trade(
         current_unrealized = current_raw - slippage_r
         exit_now_raw = sign * (open_next - entry_price) / risk_points
         exit_now_result = exit_now_raw - slippage_r
+        source_exit_signal_seen = (
+            1.0 if source_exit_idx is not None and source_exit_idx >= 0 and decision_idx >= source_exit_idx else 0.0
+        )
+        bars_since_source_exit_signal = (
+            max(0, decision_idx - int(source_exit_idx))
+            if source_exit_signal_seen > 0 and source_exit_idx is not None
+            else 0
+        )
+        source_exit_result_seen = baseline_result_r if source_exit_signal_seen > 0 else 0.0
+        current_vs_source_exit = current_unrealized - baseline_result_r if source_exit_signal_seen > 0 else 0.0
         last_open = safe_float(candles["open"].iloc[decision_idx])
         last_bar_r = sign * (close_price - last_open) / risk_points
         ret_3 = sign * (close_price - safe_float(close_values.iloc[max(entry_idx, decision_idx - 3)])) / risk_points
@@ -465,6 +480,10 @@ def build_decision_rows_for_trade(
             "terminal_exit_reason": terminal_exit_reason,
             "bars_held": decision_idx - entry_idx,
             "hold_minutes_so_far": (decision_idx - entry_idx) * timeframe_minutes,
+            "source_exit_signal_seen": source_exit_signal_seen,
+            "bars_since_source_exit_signal": bars_since_source_exit_signal,
+            "source_exit_result_seen_r": source_exit_result_seen,
+            "current_vs_source_exit_r": current_vs_source_exit,
             "current_unrealized_r": current_unrealized,
             "current_unrealized_raw_r": current_raw,
             "mfe_so_far_r": mfe,
@@ -648,7 +667,14 @@ def apply_overlay(trades: pd.DataFrame, decisions: pd.DataFrame, threshold: floa
         baseline_exit_date = trade.get("exit_date")
         baseline_exit_price = trade.get("exit_price")
         if chosen is None:
-            if mode == "dynamic" and group is not None and not group.empty:
+            no_signal_exit = str(getattr(args, "dynamic_no_signal_exit", "terminal") or "terminal")
+            if mode == "dynamic" and no_signal_exit == "source":
+                model_result = baseline_result
+                model_exit_date = baseline_exit_date
+                model_exit_price = baseline_exit_price
+                exit_reason = str(trade.get("exit_reason") or "source_exit")
+                exit_score = None
+            elif mode == "dynamic" and group is not None and not group.empty:
                 terminal = group.iloc[-1]
                 model_result = safe_float(terminal.get("terminal_result_r"))
                 model_exit_date = terminal.get("terminal_exit_date")
@@ -871,6 +897,7 @@ def save_run(
         "exit_threshold": threshold,
         "dynamic_max_bars": args.dynamic_max_bars,
         "decision_step_bars": args.decision_step_bars,
+        "dynamic_no_signal_exit": args.dynamic_no_signal_exit,
         "max_threshold_dd_r": args.max_threshold_dd_r,
         "threshold_dd_penalty": args.threshold_dd_penalty,
         "cat_features": EXIT_CAT_FEATURES,

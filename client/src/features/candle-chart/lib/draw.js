@@ -29,6 +29,7 @@ const TRADE_ENTRY_COLUMN_COLOR = '#38bdf8';
 const TRADE_TARGET_COLOR = '#53f0a7';
 const TRADE_STOP_COLOR = '#ff2f3f';
 const TRADE_EXIT_COLOR = '#f59e0b';
+const SOURCE_EXIT_COLOR = '#60a5fa';
 const TRADE_PROFIT_ZONE = 'rgba(83, 240, 167, 0.14)';
 const TRADE_LOSS_ZONE = 'rgba(255, 95, 109, 0.14)';
 const TREND_LINE_SERIES = [
@@ -206,6 +207,10 @@ const getActualExitColor = (pattern) => {
 const getActualExitLabel = (pattern) => {
   const resultLabel = formatResultR(pattern?.result_r);
 
+  if (pattern?.baseline_exit_date || Number(pattern?.source_exit) >= 1) {
+    return resultLabel ? `AI Exit ${resultLabel}` : 'AI Exit';
+  }
+
   if (isStopExit(pattern)) {
     return resultLabel ? `Stop Exit ${resultLabel}` : 'Stop Exit';
   }
@@ -217,10 +222,35 @@ const getActualExitLabel = (pattern) => {
   return resultLabel ? `Exit ${resultLabel}` : 'Actual Exit';
 };
 
+const getSourceExitLabel = (pattern) => {
+  const resultLabel = formatResultR(pattern?.source_result_r ?? pattern?.baseline_result_r);
+  return resultLabel ? `Source Exit ${resultLabel}` : 'Source Exit';
+};
+
+const formatLevelPrice = (price) => {
+  const numericPrice = Number(price);
+  if (!Number.isFinite(numericPrice)) {
+    return '';
+  }
+
+  const absolutePrice = Math.abs(numericPrice);
+  if (absolutePrice < 10) {
+    return numericPrice.toFixed(4);
+  }
+
+  if (absolutePrice < 100) {
+    return numericPrice.toFixed(3);
+  }
+
+  return numericPrice.toFixed(2);
+};
+
 const getTradeLevelPriority = (level) => {
   switch (level?.key) {
     case 'exit':
       return 4;
+    case 'source_exit':
+      return 3.5;
     case 'target':
     case 'stop':
       return 3;
@@ -495,6 +525,7 @@ export class Mouse {
 
     const hoveredCandle = chartState.candles.items[hoveredIndex - 1];
     const nextHoveredCandle = {
+      date: hoveredCandle?.candle_date ?? hoveredCandle?.date,
       high: hoveredCandle?.candle_high,
       close: hoveredCandle?.candle_close,
       open: hoveredCandle?.candle_open,
@@ -502,7 +533,7 @@ export class Mouse {
       threeMonth: hoveredCandle?.three_month ?? null,
       sixMonth: hoveredCandle?.six_month ?? null,
       twelveMonth: hoveredCandle?.twelve_month ?? null,
-      volume: hoveredCandle?.volume,
+      volume: hoveredCandle?.candle_volume ?? hoveredCandle?.volume,
       color:
         hoveredCandle?.candle_open > hoveredCandle?.candle_close
           ? '#ef5350'
@@ -878,8 +909,14 @@ export class Chart {
       Boolean(options?.highlightTradeCandles ?? options?.highlightExitCandle) &&
       Number.isFinite(exitIndex) &&
       exitIndex >= 1;
+    const sourceExitIndex = Number(activePattern?.source_exit);
+    const shouldHighlightSourceExitCandle =
+      Boolean(options?.highlightTradeCandles ?? options?.highlightExitCandle) &&
+      Number.isFinite(sourceExitIndex) &&
+      sourceExitIndex >= 1;
     const entryColor = PROP_ENTRY_COLOR;
     const exitColor = getActualExitColor(activePattern);
+    const sourceExitColor = SOURCE_EXIT_COLOR;
 
     for (let candleIndex = start; candleIndex <= end; candleIndex += 1) {
       const candle = chartState.candles.items[candleIndex - 1];
@@ -887,6 +924,8 @@ export class Chart {
       const isReversalSignalCandle = reversalFocusOnly && (reversalIndexes?.has(candleIndex) ?? false);
       const isEntryCandle = shouldHighlightEntryCandle && candleIndex === Math.round(entryIndex);
       const isExitCandle = shouldHighlightExitCandle && candleIndex === Math.round(exitIndex);
+      const isSourceExitCandle =
+        shouldHighlightSourceExitCandle && candleIndex === Math.round(sourceExitIndex);
 
       this.drawCandle(ctx, candle, x, {
         isPatternSpan: isReversalSignalCandle,
@@ -894,8 +933,10 @@ export class Chart {
         isReversalSignalCandle,
         isEntryCandle,
         isExitCandle,
+        isSourceExitCandle,
         entryColor,
         exitColor,
+        sourceExitColor,
         palette: patternPalette,
       });
       this.drawWick(ctx, candle, x, {
@@ -904,8 +945,10 @@ export class Chart {
         isReversalSignalCandle,
         isEntryCandle,
         isExitCandle,
+        isSourceExitCandle,
         entryColor,
         exitColor,
+        sourceExitColor,
         palette: patternPalette,
       });
     }
@@ -965,6 +1008,68 @@ export class Chart {
     ctx.stroke();
 
     ctx.fillStyle = '#dff7ff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
+    ctx.restore();
+  };
+
+  tradeSourceExitColumn = (ctx, activePattern = null) => {
+    const chartState = this.chartStateRef.current;
+    const sourceExitIndex = Number(activePattern?.source_exit);
+    const aiExitIndex = Number(activePattern?.exit_date);
+
+    if (
+      !chartState?.canvas ||
+      !Number.isFinite(sourceExitIndex) ||
+      sourceExitIndex < 1 ||
+      (Number.isFinite(aiExitIndex) && Math.round(sourceExitIndex) === Math.round(aiExitIndex))
+    ) {
+      return;
+    }
+
+    const x = getCanvasX(chartState, sourceExitIndex);
+    const bandWidth = Math.max(24, (chartState.candles.completeWidth || 8) * 2.5);
+    const leftX = x - bandWidth / 2;
+    const label = 'SOURCE';
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(96, 165, 250, 0.16)';
+    ctx.fillRect(leftX, 0, bandWidth, chartState.canvas.height);
+
+    ctx.strokeStyle = SOURCE_EXIT_COLOR;
+    ctx.lineWidth = 2.4;
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, chartState.canvas.height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(96, 165, 250, 0.42)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(leftX, 0);
+    ctx.lineTo(leftX, chartState.canvas.height);
+    ctx.moveTo(leftX + bandWidth, 0);
+    ctx.lineTo(leftX + bandWidth, chartState.canvas.height);
+    ctx.stroke();
+
+    ctx.font = '950 12px "Segoe UI"';
+    const labelWidth = Math.max(72, ctx.measureText(label).width + 18);
+    const labelHeight = 22;
+    const labelX = clamp(x - labelWidth / 2, 8, chartState.canvas.width - labelWidth - 8);
+    const labelY = Math.max(8, Math.min(chartState.canvas.height - labelHeight - 8, 96));
+
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(8, 28, 52, 0.92)';
+    ctx.strokeStyle = SOURCE_EXIT_COLOR;
+    ctx.lineWidth = 1;
+    ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#dbeafe';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
@@ -1053,12 +1158,19 @@ export class Chart {
       isReversalSignalCandle = false,
       isEntryCandle = false,
       isExitCandle = false,
+      isSourceExitCandle = false,
       entryColor = null,
       exitColor = null,
+      sourceExitColor = SOURCE_EXIT_COLOR,
       palette = BULLISH_PALETTE,
     } = highlight;
-    const isTradeEndpointCandle = isEntryCandle || isExitCandle;
-    const endpointColor = isExitCandle && exitColor ? exitColor : entryColor;
+    const isTradeEndpointCandle = isEntryCandle || isExitCandle || isSourceExitCandle;
+    const endpointColor =
+      isExitCandle && exitColor
+        ? exitColor
+        : isSourceExitCandle && sourceExitColor
+          ? sourceExitColor
+          : entryColor;
 
     ctx.save();
     ctx.fillStyle = isReversalSignalCandle
@@ -1112,12 +1224,19 @@ export class Chart {
       isReversalSignalCandle = false,
       isEntryCandle = false,
       isExitCandle = false,
+      isSourceExitCandle = false,
       entryColor = null,
       exitColor = null,
+      sourceExitColor = SOURCE_EXIT_COLOR,
       palette = BULLISH_PALETTE,
     } = highlight;
-    const isTradeEndpointCandle = isEntryCandle || isExitCandle;
-    const endpointColor = isExitCandle && exitColor ? exitColor : entryColor;
+    const isTradeEndpointCandle = isEntryCandle || isExitCandle || isSourceExitCandle;
+    const endpointColor =
+      isExitCandle && exitColor
+        ? exitColor
+        : isSourceExitCandle && sourceExitColor
+          ? sourceExitColor
+          : entryColor;
 
     ctx.save();
     ctx.strokeStyle = isReversalSignalCandle
@@ -1705,8 +1824,10 @@ export class ABCD {
     const chartState = this.chartStateRef.current;
     const entryIndex = Number(pattern?.entry);
     const exitIndex = Number(pattern?.exit_date);
+    const sourceExitIndex = Number(pattern?.source_exit);
     const entryPrice = toFinitePrice(pattern?.trade_enter_price);
     const exitPrice = firstFinitePrice(pattern?.exit_price, pattern?.trade_current_price);
+    const sourceExitPrice = toFinitePrice(pattern?.source_exit_price);
 
     if (
       !Number.isFinite(entryIndex) ||
@@ -1719,6 +1840,11 @@ export class ABCD {
       return;
     }
 
+    const hasSourceExit =
+      Number.isFinite(sourceExitIndex) &&
+      sourceExitIndex >= 1 &&
+      Number.isFinite(sourceExitPrice) &&
+      (Math.round(sourceExitIndex) !== Math.round(exitIndex) || Math.abs(sourceExitPrice - exitPrice) > 0.0000001);
     const entryPoint = {
       x: getCanvasX(chartState, entryIndex),
       y: getCanvasY(chartState, entryPrice),
@@ -1730,6 +1856,31 @@ export class ABCD {
     const pathColor = getActualExitColor(pattern);
 
     ctx.save();
+    if (hasSourceExit) {
+      const sourceExitPoint = {
+        x: getCanvasX(chartState, sourceExitIndex),
+        y: getCanvasY(chartState, sourceExitPrice),
+      };
+      ctx.beginPath();
+      ctx.strokeStyle = SOURCE_EXIT_COLOR;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.88;
+      ctx.setLineDash([3, 5]);
+      ctx.moveTo(entryPoint.x, entryPoint.y);
+      ctx.lineTo(sourceExitPoint.x, sourceExitPoint.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+
+      ctx.beginPath();
+      ctx.fillStyle = SOURCE_EXIT_COLOR;
+      ctx.strokeStyle = LABEL_BACKGROUND;
+      ctx.lineWidth = 2;
+      ctx.arc(sourceExitPoint.x, sourceExitPoint.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
     ctx.beginPath();
     ctx.strokeStyle = pathColor;
     ctx.lineWidth = 3;
@@ -1754,13 +1905,28 @@ export class ABCD {
   prop_events = (ctx, pattern) => {
     const entryIndex = Number(pattern?.entry);
     const exitIndex = Number(pattern?.exit_date);
+    const sourceExitIndex = Number(pattern?.source_exit);
 
     if (Number.isFinite(entryIndex) && entryIndex >= 1) {
       this.drawEventMarker(ctx, pattern, {
         index: entryIndex,
         label: 'Entry',
         color: PROP_ENTRY_COLOR,
+        stackOrder: 2,
+      });
+    }
+
+    if (
+      Number.isFinite(sourceExitIndex) &&
+      sourceExitIndex >= 1 &&
+      (!Number.isFinite(exitIndex) || Math.round(sourceExitIndex) !== Math.round(exitIndex))
+    ) {
+      this.drawEventMarker(ctx, pattern, {
+        index: sourceExitIndex,
+        label: getSourceExitLabel(pattern),
+        color: SOURCE_EXIT_COLOR,
         stackOrder: 1,
+        showStem: false,
       });
     }
 
@@ -1941,6 +2107,7 @@ export class ABCD {
     );
     const actualExitColor = getActualExitColor(pattern);
     const actualExitLabel = getActualExitLabel(pattern);
+    const sourceExitPrice = toFinitePrice(pattern?.source_exit_price);
     const levels = pattern?.xa_canvas_mode
       ? [
           {
@@ -2004,6 +2171,16 @@ export class ABCD {
             dash: isStopExit(pattern) ? [7, 7] : [5, 5],
             lineWidth: isStopExit(pattern) ? 2.5 : 3,
           },
+          {
+            key: 'source_exit',
+            label: getSourceExitLabel(pattern),
+            price: sourceExitPrice,
+            color: SOURCE_EXIT_COLOR,
+            labelTextColor: SOURCE_EXIT_COLOR,
+            labelBackground: 'rgba(8, 28, 52, 0.9)',
+            dash: [3, 5],
+            lineWidth: 2.2,
+          },
         ];
     if (!chartState?.canvas) {
       return;
@@ -2040,7 +2217,13 @@ export class ABCD {
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
 
-      if (level.key === 'entry' || level.key === 'stop' || level.key === 'target' || level.key === 'exit') {
+      if (
+        level.key === 'entry' ||
+        level.key === 'stop' ||
+        level.key === 'target' ||
+        level.key === 'exit' ||
+        level.key === 'source_exit'
+      ) {
         const label = level.label;
         ctx.font = '900 12px "Segoe UI"';
         const labelWidth = Math.max(66, ctx.measureText(label).width + 20);
@@ -2083,6 +2266,7 @@ export class ABCD {
         ? pattern?.trade_risk_exit_price
         : pattern?.trade_reward_exit_price
     );
+    const sourceExitPrice = toFinitePrice(pattern?.source_exit_price);
     const levels = pattern?.xa_canvas_mode
       ? [
           {
@@ -2139,6 +2323,14 @@ export class ABCD {
                   color: getActualExitColor(pattern),
                   dash: isStopExit(pattern) ? [7, 6] : [5, 5],
                   lineWidth: isStopExit(pattern) ? 2.2 : 2.8,
+                },
+                {
+                  key: 'source_exit',
+                  label: getSourceExitLabel(pattern),
+                  price: sourceExitPrice,
+                  color: SOURCE_EXIT_COLOR,
+                  dash: [3, 5],
+                  lineWidth: 2,
                 },
               ]
             : []),
@@ -2273,7 +2465,7 @@ export class ABCD {
 
       ctxPrice.fillStyle = level.color;
       ctxPrice.font = '950 16px "Segoe UI"';
-      ctxPrice.fillText(level.price.toFixed(2), tagX + tagWidth / 2, level.tagY + tagHeight / 2);
+      ctxPrice.fillText(formatLevelPrice(level.price), tagX + tagWidth / 2, level.tagY + tagHeight / 2);
     });
 
     ctxPrice.restore();

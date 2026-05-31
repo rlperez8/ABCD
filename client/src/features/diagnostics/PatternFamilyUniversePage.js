@@ -22,6 +22,7 @@ import {
   fetchEntryExitSimTradeWorkload,
   fetchEntryExitTemplates,
   fetchPatternDetail,
+  fetchPatternAiExitModelTrades,
   fetchPatternAiStage1Trades,
   fetchPatternFamilies,
   fetchPatternReversalAiScores,
@@ -40,6 +41,8 @@ import { formatPattern } from '../../utils/patternFormatting';
 const PATTERN_AI_STAGE1_DEFAULT_RUN_ID = 'aicw-mtf-eg1-xtight-t014-rd3-en4-v1-2m-2026';
 const PATTERN_AI_STAGE1_DEFAULT_YEAR = 2026;
 const PATTERN_AI_STAGE1_TRADE_PAGE_SIZE = 1000;
+const PATTERN_AI_EXIT_MAIN_RUN_ID = 'aicw-exit-dyn180s2-srcfb-v1-2m-2026';
+const PATTERN_AI_EXIT_TRADE_PAGE_SIZE = 300;
 
 const formatNumber = (value) =>
   Number.isFinite(Number(value)) ? Number(value).toLocaleString() : '0';
@@ -358,6 +361,60 @@ const formatTradeDirection = (trade = null) => {
   if (side === 'LONG') return '↑ LONG';
   if (side === 'SHORT') return '↓ SHORT';
   return 'N/A';
+};
+
+const formatInspectorHoverDate = (value) => {
+  if (!value) return '--';
+
+  const textValue = String(value);
+  const textMatch = textValue.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  if (textMatch) {
+    return `${textMatch[1]} ${textMatch[2]}`;
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return textValue;
+  }
+
+  const year = parsedDate.getFullYear();
+  const month = `${parsedDate.getMonth() + 1}`.padStart(2, '0');
+  const day = `${parsedDate.getDate()}`.padStart(2, '0');
+  const hour = `${parsedDate.getHours()}`.padStart(2, '0');
+  const minute = `${parsedDate.getMinutes()}`.padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+};
+
+const formatInspectorHoverPrice = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return '--';
+  }
+
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return '--';
+  }
+
+  const absoluteValue = Math.abs(numericValue);
+  if (absoluteValue < 10) {
+    return numericValue.toFixed(4);
+  }
+
+  if (absoluteValue < 100) {
+    return numericValue.toFixed(3);
+  }
+
+  return numericValue.toFixed(2);
+};
+
+const formatInspectorHoverVolume = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return '--';
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toLocaleString() : '--';
 };
 
 const getDirectionalEntryAction = (entryMode = '', market = '', trade = null) => {
@@ -986,6 +1043,7 @@ const buildAiStage1VirtualPattern = (trade = {}) => {
   const signalDate = trade.d_confirm_date ?? trade.signal_date ?? trade.entry_date ?? trade.exit_date ?? null;
   const entryDate = trade.entry_date ?? signalDate;
   const exitDate = trade.exit_date ?? trade.target_date ?? entryDate;
+  const canvasEndDate = getAiExitAuditCanvasEndDate(trade, timeframe, entryDate, exitDate);
 
   return {
     ...trade,
@@ -1001,7 +1059,7 @@ const buildAiStage1VirtualPattern = (trade = {}) => {
     d_confirm_date: signalDate,
     entry_date: entryDate,
     target_date: exitDate,
-    canvas_end_date: exitDate,
+    canvas_end_date: canvasEndDate,
     trade_date: exitDate,
     trade_enter_price: trade.trade_enter_price ?? trade.entry_price,
     trade_risk_exit_price: trade.trade_risk_exit_price ?? trade.stop_price,
@@ -1185,6 +1243,68 @@ const getTimeframePaddingMs = (timeframe) => {
   }
 
   return Math.max(30 * 60 * 1000, amount * 3 * 60 * 1000);
+};
+
+const getTimeframeMs = (timeframe) => {
+  const text = String(timeframe ?? '').trim().toLowerCase();
+  const match = text.match(/^(\d+)\s*(m|min|minute|h|hr|hour|d|day)s?$/);
+  if (!match) {
+    return 60 * 1000;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return 60 * 1000;
+  }
+
+  if (unit.startsWith('h')) {
+    return amount * 60 * 60 * 1000;
+  }
+
+  if (unit.startsWith('d')) {
+    return amount * 24 * 60 * 60 * 1000;
+  }
+
+  return amount * 60 * 1000;
+};
+
+const addTimeframeBars = (value, timeframe, bars) => {
+  const parsed = new Date(value);
+  const barCount = Number(bars);
+  if (Number.isNaN(parsed.getTime()) || !Number.isFinite(barCount)) {
+    return null;
+  }
+
+  return formatDateTimeForServer(new Date(parsed.getTime() + getTimeframeMs(timeframe) * barCount));
+};
+
+const getExitModelWindowBars = (trade = {}) => {
+  const runId = String(trade.exit_model_run_id ?? '').toLowerCase();
+  const match = runId.match(/dyn(\d+)s\d+/);
+  return match ? Number(match[1]) : 120;
+};
+
+const getAiExitAuditCanvasEndDate = (trade = {}, timeframe, entryDate, exitDate) => {
+  if (!trade.exit_model_run_id) {
+    return exitDate;
+  }
+
+  const modelWindowBars = getExitModelWindowBars(trade);
+  const modelWindowEnd = addTimeframeBars(entryDate, timeframe, modelWindowBars);
+  const postExitEnd = addTimeframeBars(exitDate, timeframe, Math.max(30, Math.round(modelWindowBars / 2)));
+  const candidates = [modelWindowEnd, postExitEnd, exitDate]
+    .map((value) => {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    })
+    .filter(Boolean);
+
+  if (!candidates.length) {
+    return exitDate;
+  }
+
+  return formatDateTimeForServer(new Date(Math.max(...candidates.map((date) => date.getTime()))));
 };
 
 const buildPatternCandleWindow = (pattern = {}) => {
@@ -1484,6 +1604,16 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   });
   const [isPatternAiStage1TradeLoading, setPatternAiStage1TradeLoading] = useState(false);
   const [patternAiStage1TradeError, setPatternAiStage1TradeError] = useState('');
+  const [patternAiExitModelTradeData, setPatternAiExitModelTradeData] = useState({
+    run: null,
+    summary: null,
+    totalRows: 0,
+    limit: PATTERN_AI_EXIT_TRADE_PAGE_SIZE,
+    offset: 0,
+    rows: [],
+  });
+  const [isPatternAiExitModelTradeLoading, setPatternAiExitModelTradeLoading] = useState(false);
+  const [patternAiExitModelTradeError, setPatternAiExitModelTradeError] = useState('');
   const [dataCenterCollapsedSections, setDataCenterCollapsedSections] = useState({});
   const [selectedPatternXaOutcomeRowKey, setSelectedPatternXaOutcomeRowKey] = useState('');
   const patternXaOutcomeTableWrapRef = useRef(null);
@@ -1634,6 +1764,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   const [patternRouteTradeError, setPatternRouteTradeError] = useState('');
   const [canvasChartData, setCanvasChartData] = useState({ candles: [], rust_patterns: null });
   const [canvasPattern, setCanvasPattern] = useState(null);
+  const [inspectorHoveredCandle, setInspectorHoveredCandle] = useState(null);
   const [isCanvasLoading, setCanvasLoading] = useState(false);
   const [canvasError, setCanvasError] = useState('');
   const [isCanvasExpanded, setCanvasExpanded] = useState(false);
@@ -2157,6 +2288,48 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   );
   const isPatternAiStage1LatestRunLoaded =
     patternAiStage1TradeData.run?.multi_valid_eval_run_id === PATTERN_AI_STAGE1_DEFAULT_RUN_ID;
+  const patternAiExitModelTradeRows = patternAiExitModelTradeData.rows ?? [];
+  const isPatternAiExitModelMainLoaded =
+    patternAiExitModelTradeData.run?.exit_model_run_id === PATTERN_AI_EXIT_MAIN_RUN_ID;
+  const patternAiExitModelOverviewItems = [
+    {
+      label: 'Exit Model',
+      value: compactText(patternAiExitModelTradeData.run?.exit_model_run_id || PATTERN_AI_EXIT_MAIN_RUN_ID, 34),
+      title: patternAiExitModelTradeData.run?.exit_model_run_id || PATTERN_AI_EXIT_MAIN_RUN_ID,
+      wide: true,
+    },
+    {
+      label: 'Source',
+      value: compactText(patternAiExitModelTradeData.run?.source_model_run_id || 'N/A', 30),
+      title: patternAiExitModelTradeData.run?.source_model_run_id || 'N/A',
+      wide: true,
+    },
+    { label: 'Changed Trades', value: formatNumber(patternAiExitModelTradeData.summary?.changed_trades) },
+    { label: 'Held Longer', value: formatNumber(patternAiExitModelTradeData.summary?.held_longer_trades), tone: 'win' },
+    { label: 'Early Exits', value: formatNumber(patternAiExitModelTradeData.summary?.early_exit_trades) },
+    {
+      label: 'Source R',
+      value: `${formatDecimal(patternAiExitModelTradeData.run?.baseline_sum_r, 1)}R`,
+    },
+    {
+      label: 'AI Exit R',
+      value: `${formatDecimal(patternAiExitModelTradeData.run?.sum_r, 1)}R`,
+      tone: 'win',
+    },
+    {
+      label: 'Delta',
+      value: `${formatDecimal(patternAiExitModelTradeData.summary?.delta_sum_r, 1)}R`,
+      tone: Number(patternAiExitModelTradeData.summary?.delta_sum_r || 0) >= 0 ? 'win' : 'loss',
+    },
+    {
+      label: 'Source DD',
+      value: `${formatDecimal(patternAiExitModelTradeData.run?.baseline_max_drawdown_r, 2)}R`,
+    },
+    {
+      label: 'AI DD',
+      value: `${formatDecimal(patternAiExitModelTradeData.run?.max_drawdown_r, 2)}R`,
+    },
+  ];
   const patternAiStage1TemplatePerformanceRows = patternAiStage1TradeData.templatePerformance ?? [];
   const patternAiStage1DailyRows = patternAiStage1TradeData.daily ?? [];
   const patternAiStage1HourlyRows = patternAiStage1TradeData.hourly ?? [];
@@ -2440,6 +2613,46 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     },
     []
   );
+  const loadPatternAiExitModelTrades = useCallback(
+    async ({ offset = 0, append = false } = {}) => {
+      try {
+        setPatternAiExitModelTradeLoading(true);
+        setPatternAiExitModelTradeError('');
+        const result = await fetchPatternAiExitModelTrades({
+          exitModelRunId: PATTERN_AI_EXIT_MAIN_RUN_ID,
+          validYear: PATTERN_AI_STAGE1_DEFAULT_YEAR,
+          changedOnly: true,
+          heldLongerOnly: false,
+          limit: PATTERN_AI_EXIT_TRADE_PAGE_SIZE,
+          offset,
+        });
+        setPatternAiExitModelTradeData((current) => ({
+          run: result.run,
+          summary: result.summary,
+          totalRows: result.total_rows,
+          limit: result.limit,
+          offset: result.offset,
+          rows: append ? [...current.rows, ...(result.rows ?? [])] : result.rows ?? [],
+        }));
+      } catch (error) {
+        console.error(error);
+        setPatternAiExitModelTradeError('Could not load AI exit model rows.');
+        if (!append) {
+          setPatternAiExitModelTradeData({
+            run: null,
+            summary: null,
+            totalRows: 0,
+            limit: PATTERN_AI_EXIT_TRADE_PAGE_SIZE,
+            offset: 0,
+            rows: [],
+          });
+        }
+      } finally {
+        setPatternAiExitModelTradeLoading(false);
+      }
+    },
+    []
+  );
   const toggleDataCenterSection = useCallback((sectionKey) => {
     setDataCenterCollapsedSections((current) => ({
       ...current,
@@ -2609,6 +2822,28 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         ? 'loss'
         : 'win'
     : '';
+  const selectedTradeSideLabel = getTradeSide(selectedTradeSource);
+  const selectedTradeSummaryOutcome = selectedTradeHasTrade
+    ? selectedTradeIsSkipped
+      ? 'SKIPPED'
+      : selectedTradeIsLoss
+        ? 'LOSS'
+        : 'PROFIT'
+    : 'NO TRADE';
+  const selectedTradeSummaryLabel = selectedTradeHasTrade
+    ? [selectedTradeSideLabel, selectedTradeSummaryOutcome].filter(Boolean).join(' ')
+    : selectedTradeSummaryOutcome;
+  const selectedTradeSummaryR = Number.isFinite(selectedTradeResultR)
+    ? `${formatDecimal(selectedTradeResultR, 2)}R`
+    : 'R N/A';
+  const inspectorHoveredCandleStats = [
+    { label: 'Candle', value: formatInspectorHoverDate(inspectorHoveredCandle?.date), wide: true },
+    { label: 'O', value: formatInspectorHoverPrice(inspectorHoveredCandle?.open) },
+    { label: 'H', value: formatInspectorHoverPrice(inspectorHoveredCandle?.high) },
+    { label: 'L', value: formatInspectorHoverPrice(inspectorHoveredCandle?.low) },
+    { label: 'C', value: formatInspectorHoverPrice(inspectorHoveredCandle?.close) },
+    { label: 'V', value: formatInspectorHoverVolume(inspectorHoveredCandle?.volume) },
+  ];
   const selectedTradeEntryPrice =
     selectedTradeSource?.trade_enter_price ??
     selectedTradeSource?.entry_price ??
@@ -6339,6 +6574,17 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       items: patternAiStage1OverviewItems,
     },
     {
+      title: 'AI Exit Model Overview',
+      wide: true,
+      items: patternAiExitModelOverviewItems,
+    },
+    {
+      title: 'AI Exit Main 180-Bar Changed Trades',
+      variant: 'patternAiExitModelTradeTable',
+      wide: true,
+      tableRows: patternAiExitModelTradeRows,
+    },
+    {
       title: 'AI 2026 Taken Trades',
       variant: 'patternAiStage1TradeTable',
       wide: true,
@@ -6512,6 +6758,28 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     patternReversalAiRows.length,
     testOverviewTab,
   ]);
+  useEffect(() => {
+    const shouldLoadAiExitTrades =
+      testOverviewTab === 'patterns' ||
+      (testOverviewTab === 'simTesting' && entryExitSimulationTab === 'aiTrades');
+    if (
+      !shouldLoadAiExitTrades ||
+      isPatternAiExitModelTradeLoading ||
+      (isPatternAiExitModelMainLoaded && patternAiExitModelTradeRows.length)
+    ) {
+      return;
+    }
+
+    void loadPatternAiExitModelTrades({ offset: 0, append: false });
+  }, [
+    entryExitSimulationTab,
+    isPatternAiExitModelMainLoaded,
+    isPatternAiExitModelTradeLoading,
+    loadPatternAiExitModelTrades,
+    patternAiExitModelTradeRows.length,
+    testOverviewTab,
+  ]);
+
   useEffect(() => {
     const shouldLoadAiStage1Trades =
       testOverviewTab === 'patterns' ||
@@ -12020,7 +12288,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                         </div>
                       ) : null}
                       {activeTestOverviewSections.map((section) => {
-                        const usesNativeDetails = ['patternXaOutcomeTable', 'patternXaFamilyTable', 'patternReversalAiTable', 'patternReversalAiBuckets', 'patternReversalAiThresholds', 'patternAiStage1TradeTable'].includes(section.variant);
+                        const usesNativeDetails = ['patternXaOutcomeTable', 'patternXaFamilyTable', 'patternReversalAiTable', 'patternReversalAiBuckets', 'patternReversalAiThresholds', 'patternAiStage1TradeTable', 'patternAiExitModelTradeTable'].includes(section.variant);
                         const sectionCollapseKey = `${testOverviewTab}:${section.variant || 'cards'}:${section.title}`;
                         const isDataCenterSectionCollapsed = dataCenterCollapsedSections[sectionCollapseKey] === true;
                         const dataCenterSectionStatus =
@@ -12060,6 +12328,12 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                         : section.tableRows?.length
                                           ? `${formatNumber(section.tableRows.length)} loaded / ${formatNumber(patternAiStage1TradeData.totalRows)} total`
                                           : patternAiStage1TradeError || 'No AI trade rows loaded'
+                                    : section.variant === 'patternAiExitModelTradeTable'
+                                      ? isPatternAiExitModelTradeLoading
+                                        ? 'Loading exit audit'
+                                        : section.tableRows?.length
+                                          ? `${formatNumber(section.tableRows.length)} changed / ${formatNumber(patternAiExitModelTradeData.totalRows)} total`
+                                          : patternAiExitModelTradeError || 'No exit model rows loaded'
                                     : '';
                         return (
                         <section
@@ -12068,9 +12342,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                             isDataCenterSectionCollapsed ? 'pattern-family-test-overview-section--collapsed' : '',
                             section.wide ? 'pattern-family-test-overview-section--wide' : '',
                             ['templateTable', 'routerRunTable', 'familyRouterTable'].includes(section.variant) ? 'pattern-family-test-overview-section--table' : '',
-                            ['patternXaOutcomeTable', 'patternXaFamilyTable', 'patternReversalAiTable', 'patternReversalAiBuckets', 'patternReversalAiThresholds', 'patternAiStage1TradeTable'].includes(section.variant) ? 'pattern-family-test-overview-section--table pattern-family-test-overview-section--collapsible' : '',
-                            ['patternXaOutcomeTable', 'patternXaFamilyTable', 'patternReversalAiTable', 'patternReversalAiBuckets', 'patternReversalAiThresholds', 'patternAiStage1TradeTable'].includes(section.variant) ? 'pattern-family-test-overview-section--summary-only' : '',
-                            ['patternXaOutcomeTable', 'patternXaFamilyTable', 'patternReversalAiTable', 'patternReversalAiBuckets', 'patternReversalAiThresholds', 'patternAiStage1TradeTable'].includes(section.variant) ? 'pattern-family-test-overview-section--xa-expanded-table' : '',
+                            ['patternXaOutcomeTable', 'patternXaFamilyTable', 'patternReversalAiTable', 'patternReversalAiBuckets', 'patternReversalAiThresholds', 'patternAiStage1TradeTable', 'patternAiExitModelTradeTable'].includes(section.variant) ? 'pattern-family-test-overview-section--table pattern-family-test-overview-section--collapsible' : '',
+                            ['patternXaOutcomeTable', 'patternXaFamilyTable', 'patternReversalAiTable', 'patternReversalAiBuckets', 'patternReversalAiThresholds', 'patternAiStage1TradeTable', 'patternAiExitModelTradeTable'].includes(section.variant) ? 'pattern-family-test-overview-section--summary-only' : '',
+                            ['patternXaOutcomeTable', 'patternXaFamilyTable', 'patternReversalAiTable', 'patternReversalAiBuckets', 'patternReversalAiThresholds', 'patternAiStage1TradeTable', 'patternAiExitModelTradeTable'].includes(section.variant) ? 'pattern-family-test-overview-section--xa-expanded-table' : '',
                             section.variant === 'templateTable' ? 'pattern-family-test-overview-section--scan' : '',
                             section.variant === 'familyRouterTable' ? 'pattern-family-test-overview-section--playbook' : '',
                           ].filter(Boolean).join(' ')}
@@ -12199,7 +12473,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                       <th>Rev Max</th>
                                       <th>Cont Max</th>
                                       <th>Family</th>
-                                      <th>Pattern</th>
+                                      <th>Trade ID</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -12584,6 +12858,170 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                               </button>
                             </footer>
                           </details>
+                        ) : section.variant === 'patternAiExitModelTradeTable' ? (
+                          <details className="pattern-family-test-overview-collapsible-section" open>
+                            <summary>
+                              <span>AI Exit Main 180-Bar Changed Trades</span>
+                              <small>
+                                {isPatternAiExitModelTradeLoading
+                                  ? 'Loading exit audit'
+                                  : section.tableRows?.length
+                                    ? `${formatNumber(section.tableRows.length)} changed rows`
+                                    : patternAiExitModelTradeError || 'No changed rows loaded'}
+                              </small>
+                            </summary>
+                            <div className="pattern-family-template-table-wrap pattern-family-template-table-wrap--xa-pattern pattern-family-ai-taken-trades-table">
+                              {section.tableRows?.length ? (
+                                <table className="pattern-family-template-table pattern-family-template-table--router pattern-family-template-table--ai-stage1-trades">
+                                  <colgroup>
+                                    <col style={{ width: '60px' }} />
+                                    <col style={{ width: '132px' }} />
+                                    <col style={{ width: '96px' }} />
+                                    <col style={{ width: '64px' }} />
+                                    <col style={{ width: '86px' }} />
+                                    <col style={{ width: '94px' }} />
+                                    <col style={{ width: '94px' }} />
+                                    <col style={{ width: '94px' }} />
+                                    <col style={{ width: '112px' }} />
+                                    <col style={{ width: '112px' }} />
+                                    <col style={{ width: '112px' }} />
+                                    <col style={{ width: '112px' }} />
+                                    <col style={{ width: '122px' }} />
+                                    <col style={{ width: '122px' }} />
+                                    <col style={{ width: '122px' }} />
+                                    <col style={{ width: '140px' }} />
+                                    <col style={{ width: '420px' }} />
+                                  </colgroup>
+                                  <thead>
+                                    <tr>
+                                      <th>#</th>
+                                      <th>Entry</th>
+                                      <th>Symbol</th>
+                                      <th>TF</th>
+                                      <th>Side</th>
+                                      <th>Source R</th>
+                                      <th>AI R</th>
+                                      <th>Delta</th>
+                                      <th>Source Exit</th>
+                                      <th>AI Exit</th>
+                                      <th>Source Hold</th>
+                                      <th>AI Hold</th>
+                                      <th>Entry Px</th>
+                                      <th>SL</th>
+                                      <th>AI Exit Px</th>
+                                      <th>Change</th>
+                                      <th>Trade ID</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {section.tableRows.map((row, rowIndex) => {
+                                      const rowKey = getSimulationRawTradeKey(row, rowIndex);
+                                      const deltaR = Number(row.delta_r || 0);
+                                      const resultR = Number(row.result_r || 0);
+                                      const changeClass =
+                                        row.exit_change === 'held_longer'
+                                          ? 'pattern-family-template-table-win'
+                                          : row.exit_change === 'early_exit'
+                                            ? 'pattern-family-template-table-skipped'
+                                            : '';
+                                      const auditTradeId =
+                                        getAiStage1TradeUid(row) ||
+                                        row.trade_uid ||
+                                        row.candidate_uid ||
+                                        row.pattern_id ||
+                                        'N/A';
+                                      return (
+                                        <tr
+                                          className={
+                                            rowKey === selectedSimulationRawTradeKey
+                                              ? 'pattern-family-template-table-row--selected'
+                                              : ''
+                                          }
+                                          key={rowKey}
+                                          onClick={() => handlePatternAiStage1TradeClick(row, rowIndex)}
+                                          title={auditTradeId}
+                                        >
+                                          <td>{formatNumber(rowIndex + 1)}</td>
+                                          <td>{formatShortDateTime(row.entry_date || row.d_confirm_date)}</td>
+                                          <td>{row.symbol || 'N/A'}</td>
+                                          <td>{row.source_timeframe || 'N/A'}</td>
+                                          <td>{formatRouteMode(row.trade_direction || 'N/A')}</td>
+                                          <td className={Number(row.baseline_result_r || 0) >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
+                                            {formatDecimal(row.baseline_result_r, 3)}R
+                                          </td>
+                                          <td className={resultR >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
+                                            {formatDecimal(resultR, 3)}R
+                                          </td>
+                                          <td className={deltaR >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
+                                            {deltaR >= 0 ? '+' : ''}{formatDecimal(deltaR, 3)}R
+                                          </td>
+                                          <td>{formatShortDateTime(row.baseline_exit_date)}</td>
+                                          <td>{formatShortDateTime(row.exit_date)}</td>
+                                          <td>{formatGapDuration(row.baseline_hold_minutes)}</td>
+                                          <td>{formatGapDuration(row.model_hold_minutes)}</td>
+                                          <td>{formatDecimal(row.entry_price, 4)}</td>
+                                          <td>{formatDecimal(row.stop_price, 4)}</td>
+                                          <td>{formatDecimal(row.exit_price, 4)}</td>
+                                          <td className={changeClass}>{formatRouteMode(row.exit_change || row.exit_reason || 'N/A')}</td>
+                                          <td className="pattern-family-template-table-run-id pattern-family-template-table-copy-cell">
+                                            <span>{auditTradeId}</span>
+                                            <button
+                                              aria-label="Copy trade ID"
+                                              className={[
+                                                'pattern-family-table-copy-button',
+                                                copiedPatternId === String(auditTradeId)
+                                                  ? 'pattern-family-table-copy-button--copied'
+                                                  : '',
+                                              ].filter(Boolean).join(' ')}
+                                              onClick={(event) => handleCopyPatternId(auditTradeId, event)}
+                                              title={copiedPatternId === String(auditTradeId) ? 'Copied' : 'Copy trade ID'}
+                                              type="button"
+                                            >
+                                              <span aria-hidden="true" />
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              ) : isPatternAiExitModelTradeLoading ? (
+                                <div className="pattern-family-test-overview-empty">Loading AI exit model rows...</div>
+                              ) : patternAiExitModelTradeError ? (
+                                <div className="pattern-family-test-overview-empty pattern-family-test-overview-empty--error">
+                                  {patternAiExitModelTradeError}
+                                </div>
+                              ) : (
+                                <div className="pattern-family-test-overview-empty">
+                                  No changed exit rows loaded yet.
+                                </div>
+                              )}
+                            </div>
+                            <footer className="pattern-family-table-footer">
+                              <button
+                                disabled={isPatternAiExitModelTradeLoading}
+                                onClick={() => loadPatternAiExitModelTrades({ offset: 0, append: false })}
+                                type="button"
+                              >
+                                Refresh
+                              </button>
+                              <button
+                                disabled={
+                                  isPatternAiExitModelTradeLoading ||
+                                  patternAiExitModelTradeRows.length >= Number(patternAiExitModelTradeData.totalRows || 0)
+                                }
+                                onClick={() =>
+                                  loadPatternAiExitModelTrades({
+                                    offset: patternAiExitModelTradeRows.length,
+                                    append: true,
+                                  })
+                                }
+                                type="button"
+                              >
+                                {patternAiExitModelTradeRows.length < Number(patternAiExitModelTradeData.totalRows || 0) ? 'Load More' : 'All Loaded'}
+                              </button>
+                            </footer>
+                          </details>
                         ) : section.variant === 'patternAiStage1TradeTable' ? (
                           <details className="pattern-family-test-overview-collapsible-section" open>
                             <summary>
@@ -12657,6 +13095,12 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                           : row.outcome === 'fail'
                                             ? 'pattern-family-template-table-loss'
                                             : 'pattern-family-template-table-skipped';
+                                      const auditTradeId =
+                                        getAiStage1TradeUid(row) ||
+                                        row.trade_uid ||
+                                        row.pattern_id ||
+                                        row.setup_id ||
+                                        'N/A';
                                       return (
                                         <tr
                                           className={
@@ -12693,17 +13137,17 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                           <td title={row.pattern_family_key}>{compactText(row.pattern_family_key || 'N/A', 16)}</td>
                                           <td className="pattern-family-template-table-features" title={featureText}>{featureText}</td>
                                           <td className="pattern-family-template-table-run-id pattern-family-template-table-copy-cell">
-                                            <span>{row.pattern_id || row.setup_id || 'N/A'}</span>
+                                            <span>{auditTradeId}</span>
                                             <button
-                                              aria-label="Copy pattern ID"
+                                              aria-label="Copy trade ID"
                                               className={[
                                                 'pattern-family-table-copy-button',
-                                                copiedPatternId === String(row.pattern_id || row.setup_id)
+                                                copiedPatternId === String(auditTradeId)
                                                   ? 'pattern-family-table-copy-button--copied'
                                                   : '',
                                               ].filter(Boolean).join(' ')}
-                                              onClick={(event) => handleCopyPatternId(row.pattern_id || row.setup_id, event)}
-                                              title={copiedPatternId === String(row.pattern_id || row.setup_id) ? 'Copied' : 'Copy pattern ID'}
+                                              onClick={(event) => handleCopyPatternId(auditTradeId, event)}
+                                              title={copiedPatternId === String(auditTradeId) ? 'Copied' : 'Copy trade ID'}
                                               type="button"
                                             >
                                               <span aria-hidden="true" />
@@ -16006,11 +16450,31 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
               <span>Trade Inspector</span>
             </div>
 
-            <div className="pattern-family-inspector-status">
-              <span className={selectedTradeIsSkipped ? 'phase1-route-trade-skipped' : selectedTradeIsLoss ? 'pattern-family-inspector-loss' : 'pattern-family-inspector-win'}>
-                {selectedTradeHasTrade ? selectedTradeOutcomeLabel : 'No Trade'}
-              </span>
-              <strong>{Number.isFinite(selectedTradeResultR) ? `${formatDecimal(selectedTradeResultR, 2)}R` : 'R N/A'}</strong>
+            <div
+              className={[
+                'pattern-family-inspector-trade-chip',
+                selectedTradeTone ? `pattern-family-inspector-trade-chip--${selectedTradeTone}` : '',
+              ].filter(Boolean).join(' ')}
+            >
+              <span>{selectedTradeSummaryLabel}</span>
+              <strong>{selectedTradeSummaryR}</strong>
+            </div>
+
+            <div className="pattern-family-inspector-hover-strip" aria-label="Hovered candle">
+              {inspectorHoveredCandleStats.map((item) => (
+                <div
+                  className={[
+                    'pattern-family-inspector-hover-cell',
+                    item.wide ? 'pattern-family-inspector-hover-cell--wide' : '',
+                  ].filter(Boolean).join(' ')}
+                  key={item.label}
+                >
+                  <span>{item.label}</span>
+                  <strong style={item.label !== 'Candle' ? { color: inspectorHoveredCandle?.color } : undefined}>
+                    {item.value}
+                  </strong>
+                </div>
+              ))}
             </div>
 
             <button
@@ -16181,6 +16645,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                         showCandles={showCanvasCandles}
                         presentationMode="graph"
                         routeLogicHover={routeLogicHover}
+                        onHoveredCandleChange={setInspectorHoveredCandle}
                       />
                     </div>
                     {isCanvasLoading ? (

@@ -965,6 +965,16 @@ struct PatternAiStage1TradeParams {
     taken_only: Option<bool>,
 }
 
+#[derive(Deserialize, Debug)]
+struct PatternAiExitModelTradeParams {
+    exit_model_run_id: Option<String>,
+    valid_year: Option<i64>,
+    changed_only: Option<bool>,
+    held_longer_only: Option<bool>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
 #[derive(Clone, sqlx::FromRow, Serialize)]
 struct PatternAiStage1TradeRunRecord {
     multi_valid_eval_run_id: String,
@@ -986,6 +996,33 @@ struct PatternAiStage1TradeRunRecord {
     pre_feature_set: String,
     aggregate_feature_set: Option<String>,
     excluded_roots: Option<String>,
+    model_path: Option<String>,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Clone, sqlx::FromRow, Serialize)]
+struct PatternAiExitModelRunRecord {
+    exit_model_run_id: String,
+    source_model_run_id: String,
+    timeframe: String,
+    train_years: String,
+    threshold_year: i64,
+    valid_year: i64,
+    exit_threshold: Option<f64>,
+    train_trades: i64,
+    train_decision_rows: i64,
+    threshold_trades: i64,
+    threshold_decision_rows: i64,
+    valid_trades: i64,
+    early_exits: i64,
+    wins: i64,
+    losses: i64,
+    win_rate: f64,
+    avg_r: f64,
+    sum_r: f64,
+    max_drawdown_r: f64,
+    baseline_sum_r: f64,
+    baseline_max_drawdown_r: f64,
     model_path: Option<String>,
     created_at: Option<NaiveDateTime>,
 }
@@ -1029,6 +1066,54 @@ struct PatternAiStage1TradeRow {
 }
 
 #[derive(sqlx::FromRow, Serialize)]
+struct PatternAiExitModelTradeRow {
+    exit_model_run_id: String,
+    source_model_run_id: String,
+    selected_index: i64,
+    candidate_uid: String,
+    setup_id: String,
+    pattern_id: String,
+    pattern_group_id: String,
+    symbol: Option<String>,
+    root_symbol: Option<String>,
+    source_timeframe: Option<String>,
+    d_confirm_date: Option<NaiveDateTime>,
+    entry_date: Option<NaiveDateTime>,
+    baseline_exit_date: Option<NaiveDateTime>,
+    exit_date: Option<NaiveDateTime>,
+    trade_direction: Option<String>,
+    baseline_exit_reason: Option<String>,
+    exit_reason: Option<String>,
+    baseline_result_r: f64,
+    result_r: f64,
+    delta_r: f64,
+    baseline_exit_price: Option<f64>,
+    exit_price: Option<f64>,
+    entry_price: Option<f64>,
+    stop_price: Option<f64>,
+    target_price: Option<f64>,
+    risk_points: Option<f64>,
+    risk_ticks: Option<f64>,
+    tick_size: Option<f64>,
+    predicted_expected_r: Option<f64>,
+    exit_score_r: Option<f64>,
+    baseline_hold_minutes: Option<i64>,
+    model_hold_minutes: Option<i64>,
+    hold_delta_minutes: Option<i64>,
+    outcome: String,
+    exit_change: String,
+    template_uid: String,
+    template_name: String,
+    harmonic_type: String,
+    market: Option<String>,
+    pattern_family_key: String,
+    family_bin: String,
+    family_size_bucket: String,
+    family_time_bin: String,
+    family_x_strictness: String,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
 struct PatternAiStage1TradeSummaryRecord {
     total_trades: i64,
     wins: i64,
@@ -1047,6 +1132,20 @@ struct PatternAiStage1TradeSummaryRecord {
     template_count: i64,
     avg_predicted_expected_r: f64,
     avg_score_margin_top2: f64,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct PatternAiExitModelSummaryRecord {
+    total_trades: i64,
+    changed_trades: i64,
+    held_longer_trades: i64,
+    early_exit_trades: i64,
+    unchanged_trades: i64,
+    improved_trades: i64,
+    worsened_trades: i64,
+    delta_sum_r: f64,
+    positive_delta_r: f64,
+    negative_delta_r: f64,
 }
 
 #[derive(sqlx::FromRow, Serialize)]
@@ -1210,6 +1309,16 @@ struct PatternAiStage1TradeResponse {
     limit: i64,
     offset: i64,
     rows: Vec<PatternAiStage1TradeRow>,
+}
+
+#[derive(Serialize)]
+struct PatternAiExitModelTradeResponse {
+    run: Option<PatternAiExitModelRunRecord>,
+    summary: Option<PatternAiExitModelSummaryRecord>,
+    total_rows: i64,
+    limit: i64,
+    offset: i64,
+    rows: Vec<PatternAiExitModelTradeRow>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -5149,6 +5258,279 @@ async fn fetch_pattern_ai_stage1_trades(
         symbol_contribution,
         family_contribution,
         loss_windows,
+        total_rows,
+        limit,
+        offset,
+        rows,
+    })
+}
+
+#[route("/patterns/ai-exit-model-trades", method = "GET", method = "POST")]
+async fn fetch_pattern_ai_exit_model_trades(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<PatternAiExitModelTradeParams>,
+) -> impl Responder {
+    let limit = params.limit.unwrap_or(300).clamp(1, 1000);
+    let offset = params.offset.unwrap_or(0).max(0);
+    let valid_year = params.valid_year.unwrap_or(2026);
+
+    let has_runs = match table_exists(pool.get_ref(), "ai_candle_wave_exit_model_runs").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("AI exit model run table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let has_trades = match table_exists(pool.get_ref(), "ai_candle_wave_exit_model_trades").await {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("AI exit model trade table lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if !has_runs || !has_trades {
+        return HttpResponse::Ok().json(PatternAiExitModelTradeResponse {
+            run: None,
+            summary: None,
+            total_rows: 0,
+            limit,
+            offset,
+            rows: Vec::new(),
+        });
+    }
+
+    let run = if let Some(run_id) = params
+        .exit_model_run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        sqlx::query_as::<_, PatternAiExitModelRunRecord>(
+            r#"
+            SELECT
+                exit_model_run_id,
+                source_model_run_id,
+                timeframe,
+                train_years,
+                CAST(threshold_year AS SIGNED) AS threshold_year,
+                CAST(valid_year AS SIGNED) AS valid_year,
+                CAST(exit_threshold AS DOUBLE) AS exit_threshold,
+                CAST(train_trades AS SIGNED) AS train_trades,
+                CAST(train_decision_rows AS SIGNED) AS train_decision_rows,
+                CAST(threshold_trades AS SIGNED) AS threshold_trades,
+                CAST(threshold_decision_rows AS SIGNED) AS threshold_decision_rows,
+                CAST(valid_trades AS SIGNED) AS valid_trades,
+                CAST(early_exits AS SIGNED) AS early_exits,
+                CAST(wins AS SIGNED) AS wins,
+                CAST(losses AS SIGNED) AS losses,
+                CAST(win_rate AS DOUBLE) AS win_rate,
+                CAST(avg_r AS DOUBLE) AS avg_r,
+                CAST(sum_r AS DOUBLE) AS sum_r,
+                CAST(max_drawdown_r AS DOUBLE) AS max_drawdown_r,
+                CAST(baseline_sum_r AS DOUBLE) AS baseline_sum_r,
+                CAST(baseline_max_drawdown_r AS DOUBLE) AS baseline_max_drawdown_r,
+                model_path,
+                CAST(created_at AS DATETIME) AS created_at
+            FROM ai_candle_wave_exit_model_runs
+            WHERE exit_model_run_id = ?
+            LIMIT 1
+            "#,
+        )
+        .bind(run_id)
+        .fetch_optional(pool.get_ref())
+        .await
+    } else {
+        sqlx::query_as::<_, PatternAiExitModelRunRecord>(
+            r#"
+            SELECT
+                exit_model_run_id,
+                source_model_run_id,
+                timeframe,
+                train_years,
+                CAST(threshold_year AS SIGNED) AS threshold_year,
+                CAST(valid_year AS SIGNED) AS valid_year,
+                CAST(exit_threshold AS DOUBLE) AS exit_threshold,
+                CAST(train_trades AS SIGNED) AS train_trades,
+                CAST(train_decision_rows AS SIGNED) AS train_decision_rows,
+                CAST(threshold_trades AS SIGNED) AS threshold_trades,
+                CAST(threshold_decision_rows AS SIGNED) AS threshold_decision_rows,
+                CAST(valid_trades AS SIGNED) AS valid_trades,
+                CAST(early_exits AS SIGNED) AS early_exits,
+                CAST(wins AS SIGNED) AS wins,
+                CAST(losses AS SIGNED) AS losses,
+                CAST(win_rate AS DOUBLE) AS win_rate,
+                CAST(avg_r AS DOUBLE) AS avg_r,
+                CAST(sum_r AS DOUBLE) AS sum_r,
+                CAST(max_drawdown_r AS DOUBLE) AS max_drawdown_r,
+                CAST(baseline_sum_r AS DOUBLE) AS baseline_sum_r,
+                CAST(baseline_max_drawdown_r AS DOUBLE) AS baseline_max_drawdown_r,
+                model_path,
+                CAST(created_at AS DATETIME) AS created_at
+            FROM ai_candle_wave_exit_model_runs
+            WHERE valid_year = ?
+            ORDER BY created_at DESC, exit_model_run_id DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(valid_year)
+        .fetch_optional(pool.get_ref())
+        .await
+    };
+
+    let run = match run {
+        Ok(run) => run,
+        Err(error) => {
+            eprintln!("AI exit model run fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    let Some(run) = run else {
+        return HttpResponse::Ok().json(PatternAiExitModelTradeResponse {
+            run: None,
+            summary: None,
+            total_rows: 0,
+            limit,
+            offset,
+            rows: Vec::new(),
+        });
+    };
+
+    let changed_filter = if params.held_longer_only.unwrap_or(false) {
+        "AND e.model_exit_date > e.baseline_exit_date"
+    } else if params.changed_only.unwrap_or(true) {
+        "AND ABS(e.delta_r) > 0.000000001"
+    } else {
+        ""
+    };
+
+    let summary_sql = format!(
+        r#"
+        SELECT
+            CAST(COUNT(*) AS SIGNED) AS total_trades,
+            CAST(COALESCE(SUM(CASE WHEN ABS(e.delta_r) > 0.000000001 THEN 1 ELSE 0 END), 0) AS SIGNED) AS changed_trades,
+            CAST(COALESCE(SUM(CASE WHEN e.model_exit_date > e.baseline_exit_date THEN 1 ELSE 0 END), 0) AS SIGNED) AS held_longer_trades,
+            CAST(COALESCE(SUM(CASE WHEN e.model_exit_date < e.baseline_exit_date THEN 1 ELSE 0 END), 0) AS SIGNED) AS early_exit_trades,
+            CAST(COALESCE(SUM(CASE WHEN ABS(e.delta_r) <= 0.000000001 THEN 1 ELSE 0 END), 0) AS SIGNED) AS unchanged_trades,
+            CAST(COALESCE(SUM(CASE WHEN e.delta_r > 0 THEN 1 ELSE 0 END), 0) AS SIGNED) AS improved_trades,
+            CAST(COALESCE(SUM(CASE WHEN e.delta_r < 0 THEN 1 ELSE 0 END), 0) AS SIGNED) AS worsened_trades,
+            CAST(COALESCE(SUM(e.delta_r), 0) AS DOUBLE) AS delta_sum_r,
+            CAST(COALESCE(SUM(CASE WHEN e.delta_r > 0 THEN e.delta_r ELSE 0 END), 0) AS DOUBLE) AS positive_delta_r,
+            CAST(COALESCE(SUM(CASE WHEN e.delta_r < 0 THEN e.delta_r ELSE 0 END), 0) AS DOUBLE) AS negative_delta_r
+        FROM ai_candle_wave_exit_model_trades e
+        WHERE e.exit_model_run_id = ?
+        {changed_filter}
+        "#
+    );
+    let summary = match sqlx::query_as::<_, PatternAiExitModelSummaryRecord>(&summary_sql)
+        .bind(&run.exit_model_run_id)
+        .fetch_optional(pool.get_ref())
+        .await
+    {
+        Ok(summary) => summary,
+        Err(error) => {
+            eprintln!("AI exit model summary fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let total_rows_sql = format!(
+        r#"
+        SELECT COUNT(*)
+        FROM ai_candle_wave_exit_model_trades e
+        WHERE e.exit_model_run_id = ?
+        {changed_filter}
+        "#
+    );
+    let total_rows = match sqlx::query_scalar::<_, i64>(&total_rows_sql)
+        .bind(&run.exit_model_run_id)
+        .fetch_one(pool.get_ref())
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("AI exit model trade count failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let rows_sql = format!(
+        r#"
+        SELECT
+            e.exit_model_run_id,
+            e.source_model_run_id,
+            CAST(e.selected_index AS SIGNED) AS selected_index,
+            e.candidate_uid,
+            e.candidate_uid AS setup_id,
+            e.candidate_uid AS pattern_id,
+            e.source_model_run_id AS pattern_group_id,
+            e.symbol,
+            e.root_symbol,
+            e.timeframe AS source_timeframe,
+            CAST(s.signal_date AS DATETIME) AS d_confirm_date,
+            CAST(e.entry_date AS DATETIME) AS entry_date,
+            CAST(e.baseline_exit_date AS DATETIME) AS baseline_exit_date,
+            CAST(e.model_exit_date AS DATETIME) AS exit_date,
+            e.direction AS trade_direction,
+            e.baseline_exit_reason,
+            e.model_exit_reason AS exit_reason,
+            CAST(e.baseline_result_r AS DOUBLE) AS baseline_result_r,
+            CAST(e.model_result_r AS DOUBLE) AS result_r,
+            CAST(e.delta_r AS DOUBLE) AS delta_r,
+            CAST(e.baseline_exit_price AS DOUBLE) AS baseline_exit_price,
+            CAST(e.model_exit_price AS DOUBLE) AS exit_price,
+            CAST(e.entry_price AS DOUBLE) AS entry_price,
+            CAST(e.stop_price AS DOUBLE) AS stop_price,
+            CAST(NULL AS DOUBLE) AS target_price,
+            CAST(e.risk_points AS DOUBLE) AS risk_points,
+            CAST(e.risk_ticks AS DOUBLE) AS risk_ticks,
+            CAST(e.tick_size AS DOUBLE) AS tick_size,
+            CAST(e.predicted_r AS DOUBLE) AS predicted_expected_r,
+            CAST(e.exit_score_r AS DOUBLE) AS exit_score_r,
+            CAST(e.baseline_hold_minutes AS SIGNED) AS baseline_hold_minutes,
+            CAST(e.model_hold_minutes AS SIGNED) AS model_hold_minutes,
+            CAST(COALESCE(e.model_hold_minutes, 0) - COALESCE(e.baseline_hold_minutes, 0) AS SIGNED) AS hold_delta_minutes,
+            CASE WHEN e.model_result_r > 0 THEN 'pass' ELSE 'fail' END AS outcome,
+            CASE
+                WHEN e.model_exit_date > e.baseline_exit_date THEN 'held_longer'
+                WHEN e.model_exit_date < e.baseline_exit_date THEN 'early_exit'
+                ELSE 'unchanged'
+            END AS exit_change,
+            'candle_wave_exit_model_120_bar' AS template_uid,
+            'Candle Wave Exit 120 Bar' AS template_name,
+            'Candle Wave' AS harmonic_type,
+            CASE WHEN e.direction = 'SHORT' THEN 'Bearish' ELSE 'Bullish' END AS market,
+            CONCAT('Candle Wave | ', COALESCE(e.root_symbol, 'Unknown'), ' | ', e.timeframe, ' | Exit 120') AS pattern_family_key,
+            COALESCE(e.root_symbol, 'Unknown') AS family_bin,
+            'Exit Overlay' AS family_size_bucket,
+            e.timeframe AS family_time_bin,
+            '120 Bar Source Fallback' AS family_x_strictness
+        FROM ai_candle_wave_exit_model_trades e
+        LEFT JOIN ai_candle_wave_selected_trades s
+          ON s.model_run_id = e.source_model_run_id
+         AND s.candidate_uid = e.candidate_uid
+        WHERE e.exit_model_run_id = ?
+        {changed_filter}
+        ORDER BY ABS(e.delta_r) DESC, e.selected_index ASC
+        LIMIT ? OFFSET ?
+        "#
+    );
+    let rows = match sqlx::query_as::<_, PatternAiExitModelTradeRow>(&rows_sql)
+        .bind(&run.exit_model_run_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool.get_ref())
+        .await
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("AI exit model trade rows fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(PatternAiExitModelTradeResponse {
+        run: Some(run),
+        summary,
         total_rows,
         limit,
         offset,
@@ -10124,6 +10506,7 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_pattern_xa_outcomes)
             .service(fetch_pattern_reversal_ai_scores)
             .service(fetch_pattern_ai_stage1_trades)
+            .service(fetch_pattern_ai_exit_model_trades)
             .service(ingest_ninjatrader_execution)
             .service(fetch_ninjatrader_slippage)
             .service(create_ninjatrader_signal)

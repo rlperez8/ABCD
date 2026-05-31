@@ -213,6 +213,7 @@ export const CandleChart = ({
 
       if (focusMode === 'prop') {
         chartLayer.tradeEntryColumn(ctx, chartData.rust_patterns);
+        chartLayer.tradeSourceExitColumn(ctx, chartData.rust_patterns);
         chartLayer.tradeExitColumn(ctx, chartData.rust_patterns);
       }
 
@@ -256,7 +257,6 @@ export const CandleChart = ({
         patternLayer.route_logic_highlight(ctx, chartData.rust_patterns, routeLogicHover);
         patternLayer.trade_path(ctx, chartData.rust_patterns);
         patternLayer.prop_events(ctx, chartData.rust_patterns);
-        patternLayer.trade_summary_badge(ctx, canvas, chartData.rust_patterns);
       }
 
       if (showPatternOverlay && focusMode !== 'prop') {

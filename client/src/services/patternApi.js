@@ -2533,6 +2533,99 @@ const parsePatternAiStage1TradeRow = (row = {}) => {
   };
 };
 
+const parsePatternAiExitModelRun = (run = null) => {
+  if (!run) return null;
+  return {
+    exit_model_run_id: run.exit_model_run_id ?? '',
+    source_model_run_id: run.source_model_run_id ?? '',
+    timeframe: run.timeframe ?? '',
+    train_years: run.train_years ?? '',
+    threshold_year: parseOptionalInt(run.threshold_year) ?? 0,
+    valid_year: parseOptionalInt(run.valid_year) ?? 0,
+    exit_threshold: parseOptionalFloat(run.exit_threshold),
+    train_trades: parseOptionalInt(run.train_trades) ?? 0,
+    train_decision_rows: parseOptionalInt(run.train_decision_rows) ?? 0,
+    threshold_trades: parseOptionalInt(run.threshold_trades) ?? 0,
+    threshold_decision_rows: parseOptionalInt(run.threshold_decision_rows) ?? 0,
+    valid_trades: parseOptionalInt(run.valid_trades) ?? 0,
+    early_exits: parseOptionalInt(run.early_exits) ?? 0,
+    wins: parseOptionalInt(run.wins) ?? 0,
+    losses: parseOptionalInt(run.losses) ?? 0,
+    win_rate: parseOptionalFloat(run.win_rate) ?? 0,
+    avg_r: parseOptionalFloat(run.avg_r) ?? 0,
+    sum_r: parseOptionalFloat(run.sum_r) ?? 0,
+    max_drawdown_r: parseOptionalFloat(run.max_drawdown_r) ?? 0,
+    baseline_sum_r: parseOptionalFloat(run.baseline_sum_r) ?? 0,
+    baseline_max_drawdown_r: parseOptionalFloat(run.baseline_max_drawdown_r) ?? 0,
+    model_path: run.model_path ?? '',
+    created_at: run.created_at ?? null,
+  };
+};
+
+const parsePatternAiExitModelSummary = (summary = null) => {
+  if (!summary) return null;
+  return {
+    total_trades: parseOptionalInt(summary.total_trades) ?? 0,
+    changed_trades: parseOptionalInt(summary.changed_trades) ?? 0,
+    held_longer_trades: parseOptionalInt(summary.held_longer_trades) ?? 0,
+    early_exit_trades: parseOptionalInt(summary.early_exit_trades) ?? 0,
+    unchanged_trades: parseOptionalInt(summary.unchanged_trades) ?? 0,
+    improved_trades: parseOptionalInt(summary.improved_trades) ?? 0,
+    worsened_trades: parseOptionalInt(summary.worsened_trades) ?? 0,
+    delta_sum_r: parseOptionalFloat(summary.delta_sum_r) ?? 0,
+    positive_delta_r: parseOptionalFloat(summary.positive_delta_r) ?? 0,
+    negative_delta_r: parseOptionalFloat(summary.negative_delta_r) ?? 0,
+  };
+};
+
+const parsePatternAiExitModelTradeRow = (row = {}) => ({
+  exit_model_run_id: row.exit_model_run_id ?? '',
+  source_model_run_id: row.source_model_run_id ?? '',
+  multi_valid_eval_run_id: row.exit_model_run_id ?? '',
+  selected_index: parseOptionalInt(row.selected_index) ?? 0,
+  candidate_uid: row.candidate_uid ?? '',
+  setup_id: row.setup_id ?? row.candidate_uid ?? '',
+  pattern_id: row.pattern_id ?? row.candidate_uid ?? '',
+  pattern_group_id: row.pattern_group_id ?? row.source_model_run_id ?? '',
+  symbol: row.symbol ?? '',
+  root_symbol: row.root_symbol ?? '',
+  source_timeframe: row.source_timeframe ?? '',
+  d_confirm_date: row.d_confirm_date ?? null,
+  entry_date: row.entry_date ?? null,
+  baseline_exit_date: row.baseline_exit_date ?? null,
+  exit_date: row.exit_date ?? null,
+  trade_direction: row.trade_direction ?? '',
+  baseline_exit_reason: row.baseline_exit_reason ?? '',
+  exit_reason: row.exit_reason ?? '',
+  baseline_result_r: parseOptionalFloat(row.baseline_result_r) ?? 0,
+  result_r: parseOptionalFloat(row.result_r) ?? 0,
+  delta_r: parseOptionalFloat(row.delta_r) ?? 0,
+  baseline_exit_price: parseOptionalFloat(row.baseline_exit_price),
+  exit_price: parseOptionalFloat(row.exit_price),
+  entry_price: parseOptionalFloat(row.entry_price),
+  stop_price: parseOptionalFloat(row.stop_price),
+  target_price: parseOptionalFloat(row.target_price),
+  risk_points: parseOptionalFloat(row.risk_points),
+  risk_ticks: parseOptionalFloat(row.risk_ticks),
+  tick_size: parseOptionalFloat(row.tick_size),
+  predicted_expected_r: parseOptionalFloat(row.predicted_expected_r),
+  exit_score_r: parseOptionalFloat(row.exit_score_r),
+  baseline_hold_minutes: parseOptionalInt(row.baseline_hold_minutes),
+  model_hold_minutes: parseOptionalInt(row.model_hold_minutes),
+  hold_delta_minutes: parseOptionalInt(row.hold_delta_minutes),
+  outcome: row.outcome ?? '',
+  exit_change: row.exit_change ?? '',
+  template_uid: row.template_uid ?? '',
+  template_name: row.template_name ?? '',
+  harmonic_type: row.harmonic_type ?? 'Candle Wave',
+  market: row.market ?? '',
+  pattern_family_key: row.pattern_family_key ?? '',
+  family_bin: row.family_bin ?? '',
+  family_size_bucket: row.family_size_bucket ?? '',
+  family_time_bin: row.family_time_bin ?? '',
+  family_x_strictness: row.family_x_strictness ?? '',
+});
+
 export const fetchPatternAiStage1Trades = async ({
   aiRunId = null,
   validYear = 2026,
@@ -2591,6 +2684,38 @@ export const fetchPatternAiStage1Trades = async ({
       offset,
       rows: [],
     };
+  }
+};
+
+export const fetchPatternAiExitModelTrades = async ({
+  exitModelRunId = null,
+  validYear = 2026,
+  changedOnly = true,
+  heldLongerOnly = false,
+  limit = 300,
+  offset = 0,
+} = {}) => {
+  try {
+    const data = await postJson('/patterns/ai-exit-model-trades', {
+      exit_model_run_id: exitModelRunId,
+      valid_year: parseOptionalInt(validYear),
+      changed_only: Boolean(changedOnly),
+      held_longer_only: Boolean(heldLongerOnly),
+      limit: parseOptionalInt(limit),
+      offset: parseOptionalInt(offset),
+    });
+
+    return {
+      run: parsePatternAiExitModelRun(data?.run ?? null),
+      summary: parsePatternAiExitModelSummary(data?.summary ?? null),
+      total_rows: parseOptionalInt(data?.total_rows) ?? 0,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      offset: parseOptionalInt(data?.offset) ?? offset,
+      rows: Array.isArray(data?.rows) ? data.rows.map(parsePatternAiExitModelTradeRow) : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return { run: null, summary: null, total_rows: 0, limit, offset, rows: [] };
   }
 };
 

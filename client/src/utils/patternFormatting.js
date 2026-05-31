@@ -98,9 +98,10 @@ const buildFormattedPattern = (candles, rustPattern) => {
   const dConfirmDate = rustPattern?.d_confirm_date ?? null;
   const reversalDetectDate = rustPattern?.reversal_detect_date ?? null;
   const entryDate = rustPattern?.entry_date ?? null;
-  const effectiveTargetDate = rustPattern?.canvas_end_date ?? rustPattern?.xa_outcome_hit_date ?? rustPattern?.target_date ?? null;
+  const canvasEndDate = rustPattern?.canvas_end_date ?? null;
+  const sourceExitDate = rustPattern?.baseline_exit_date ?? rustPattern?.source_exit_date ?? null;
+  const effectiveTargetDate = rustPattern?.xa_outcome_hit_date ?? rustPattern?.target_date ?? rustPattern?.trade_date ?? null;
   const effectiveExitDate =
-    rustPattern?.canvas_end_date ??
     rustPattern?.xa_outcome_hit_date ??
     rustPattern?.target_date ??
     rustPattern?.trade_date ??
@@ -114,6 +115,8 @@ const buildFormattedPattern = (candles, rustPattern) => {
   const indexReversalDetect = findIndexByDate(candles, reversalDetectDate);
   const indexEntry = findIndexByDate(candles, entryDate, { fallback: 'atOrAfter' });
   const indexTarget = findIndexByDate(candles, effectiveTargetDate, { fallback: 'atOrAfter' });
+  const indexCanvasEnd = findIndexByDate(candles, canvasEndDate, { fallback: 'atOrAfter' });
+  const indexSourceExit = findIndexByDate(candles, sourceExitDate, { fallback: 'atOrAfter' });
   const resolvedDConfirm = indexDConfirm > 0 ? indexDConfirm : indexD > 1 ? indexD - 1 : -1;
   const resolvedXaScanStart =
     rustPattern?.xa_canvas_mode && resolvedDConfirm > 1 ? resolvedDConfirm - 1 : -1;
@@ -144,6 +147,10 @@ const buildFormattedPattern = (candles, rustPattern) => {
     reversal_detect: resolvedReversalDetect,
     entry: resolvedEntry,
     target: resolvedTarget,
+    canvas_end: indexCanvasEnd > 0 ? indexCanvasEnd : -1,
+    source_exit: indexSourceExit > 0 ? indexSourceExit : -1,
+    source_exit_price: parseFloat(rustPattern.baseline_exit_price ?? rustPattern.source_exit_price),
+    source_result_r: parseFloat(rustPattern.baseline_result_r ?? rustPattern.source_result_r),
     x_price: parseFloat(isBearish ? rustPattern.x_high : rustPattern.x_low),
     a_price: parseFloat(isBearish ? rustPattern.a_low : rustPattern.a_high),
     b_price: parseFloat(isBearish ? rustPattern.b_high : rustPattern.b_low),

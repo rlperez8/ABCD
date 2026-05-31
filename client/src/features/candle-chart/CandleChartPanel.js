@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CandleChart } from './CandleChart';
 import PatternTable from '../../components/PatternTable';
 import Section from '../../components/Section';
@@ -41,6 +41,38 @@ const formatDebugPrice = (value) => {
 const formatDebugInteger = (value) => {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? `${numericValue}` : '--';
+};
+
+const formatHoverPrice = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return '--';
+  }
+
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return '--';
+  }
+
+  const absoluteValue = Math.abs(numericValue);
+  if (absoluteValue < 10) {
+    return numericValue.toFixed(4);
+  }
+
+  if (absoluteValue < 100) {
+    return numericValue.toFixed(3);
+  }
+
+  return numericValue.toFixed(2);
+};
+
+const formatHoverVolume = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return '--';
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toLocaleString() : '--';
 };
 
 const splitDebugDateTime = (value) => {
@@ -138,6 +170,7 @@ const CandleChartPanel = ({
   showCandles = true,
   presentationMode = 'chart',
   routeLogicHover = null,
+  onHoveredCandleChange = null,
 }) => {
   const isPropFocus = focusMode === 'prop';
   const [isAbcdPattern, setAbcdPattern] = useState(
@@ -154,15 +187,20 @@ const CandleChartPanel = ({
   const [isExpandedChart, setExpandedChart] = useState(false);
   const [propFocusScope, setPropFocusScope] = useState('trade');
   const [hoveredCandle, setHoveredCandle] = useState({
-    high: 0,
-    close: 0,
-    open: 0,
-    low: 0,
+    date: null,
+    high: null,
+    close: null,
+    open: null,
+    low: null,
+    volume: null,
     threeMonth: null,
     sixMonth: null,
     twelveMonth: null,
     color: 'white',
   });
+  const handleHoveredCandleChange = useCallback((nextValueOrUpdater) => {
+    setHoveredCandle(nextValueOrUpdater);
+  }, []);
   const marketTone = market === 'Bearish' ? 'chart-market-bearish' : 'chart-market-bullish';
   const selectedPattern = chartData?.rust_patterns ?? null;
   const trendLineToggles = useMemo(
@@ -174,11 +212,11 @@ const CandleChartPanel = ({
     [isTrend3M, isTrend6M, isTrend12M]
   );
   const hoveredPriceStats = [
-    { label: 'H', value: hoveredCandle.high?.toFixed(2), color: hoveredCandle.color },
-    { label: 'C', value: hoveredCandle.close?.toFixed(2), color: hoveredCandle.color },
-    { label: 'O', value: hoveredCandle.open?.toFixed(2), color: hoveredCandle.color },
-    { label: 'L', value: hoveredCandle.low?.toFixed(2), color: hoveredCandle.color },
-    { label: 'V', value: hoveredCandle.volume?.toFixed(0), color: hoveredCandle.color },
+    { label: 'O', value: formatHoverPrice(hoveredCandle.open), color: hoveredCandle.color },
+    { label: 'H', value: formatHoverPrice(hoveredCandle.high), color: hoveredCandle.color },
+    { label: 'C', value: formatHoverPrice(hoveredCandle.close), color: hoveredCandle.color },
+    { label: 'L', value: formatHoverPrice(hoveredCandle.low), color: hoveredCandle.color },
+    { label: 'V', value: formatHoverVolume(hoveredCandle.volume), color: hoveredCandle.color },
   ];
   const legBarStats = [
     { label: 'X Bars', value: selectedPattern?.x_length },
@@ -434,6 +472,10 @@ const CandleChartPanel = ({
   ) : null;
 
   useEffect(() => {
+    onHoveredCandleChange?.(hoveredCandle);
+  }, [hoveredCandle, onHoveredCandleChange]);
+
+  useEffect(() => {
     if (focusMode === 'reversal') {
       setAbcdPattern(false);
       setPriceLevels(false);
@@ -603,7 +645,7 @@ const CandleChartPanel = ({
               propFocusScope={propFocusScope}
               market={market}
               activeReversalFilter={activeReversalFilter}
-              set_hovered_candle={setHoveredCandle}
+              set_hovered_candle={handleHoveredCandleChange}
               showCandles={showCandles}
               presentationMode={presentationMode}
               routeLogicHover={routeLogicHover}

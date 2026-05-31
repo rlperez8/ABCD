@@ -174,6 +174,42 @@ Exit-model phase two:
 - Dynamic 60-bar uncapped run:
   - Started, but MySQL shut down during threshold decision-row generation.
   - The run did not materialize.
+- Dynamic 60-bar uncapped rerun:
+  - Run: `aicw-exit-dyn60s2-uncapped-v1-2m-2026`.
+  - Calibration disabled the overlay.
+  - 2026 stayed identical to source: 222.24R, 5.02R DD.
+
+Exit-model phase three:
+
+- Added source-anchored dynamic mode via `--dynamic-no-signal-exit source`.
+  - The old dynamic behavior forced every no-signal trade to the dynamic terminal exit.
+  - Source-anchored mode keeps the source/champion exit unless the exit model fires.
+  - Added live-safe source-exit-state features: whether the source exit signal has appeared, bars since that signal, source-exit result once known, and current result versus that source exit.
+- Source-anchored 2026 sweep against protected source:
+
+| Run | Max Bars / Step | Trades | Source Sum / DD | Exit Sum / DD | Model Exits | Early / Late | Read |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `aicw-exit-dyn30s2-srcfb-v1-2m-2026` | 30 / 2 | 402 | 222.24R / 5.02R | 225.68R / 5.21R | 103 | 12 / 91 | Too short; tiny gain. |
+| `aicw-exit-dyn60s2-srcfallback-v1-2m-2026` | 60 / 2 | 402 | 222.24R / 5.02R | 261.13R / 5.17R | 93 | 6 / 87 | First useful result. |
+| `aicw-exit-dyn90s2-srcfb-v1-2m-2026` | 90 / 2 | 402 | 222.24R / 5.02R | 281.59R / 5.82R | 84 | 3 / 81 | Better return, more DD. |
+| `aicw-exit-dyn120s2-srcfb-v1-2m-2026` | 120 / 2 | 402 | 222.24R / 5.02R | 299.52R / 5.05R | 64 | 2 / 61 | Best balance so far. |
+| `aicw-exit-dyn180s2-srcfb-v1-2m-2026` | 180 / 2 | 402 | 222.24R / 5.02R | 339.85R / 5.58R | 90 | 7 / 83 | Best return so far. |
+| `aicw-exit-dyn240s4-srcfb-v1-2m-2026` | 240 / 4 | 402 | 222.24R / 5.02R | 335.99R / 5.11R | 85 | 4 / 80 | Good, but did not beat 180 return. |
+
+- Source-anchored walk-forward checks against 2025 source run:
+
+| Run | Max Bars / Step | Trades | Source Sum / DD | Exit Sum / DD | Model Exits | Early / Late | Read |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `aicw-exit-dyn60s2-srcfallback-wf25-v1-2m-2025` | 60 / 2 | 2,068 | 99.06R / 21.70R | 308.31R / 12.68R | 585 | 33 / 548 | Validated directionally. |
+| `aicw-exit-dyn120s2-srcfb-wf25-v1-2m-2025` | 120 / 2 | 2,068 | 99.06R / 21.70R | 474.09R / 10.10R | 481 | 35 / 438 | Strongest balance on 2025. |
+| `aicw-exit-dyn180s2-srcfb-wf25-v1-2m-2025` | 180 / 2 | 2,068 | 99.06R / 21.70R | 614.53R / 11.77R | 639 | 72 / 550 | Strongest return on 2025. |
+
+- Phase-three read:
+  - Source-anchoring appears to be the missing safety rail for dynamic exits.
+  - The useful edge is mostly "hold past the old trailing/source exit when the model says the wave still has value," not early panic exits.
+  - 120 bars is the cleanest balance so far; 180 bars has the highest return but a slightly larger 2026 drawdown.
+  - The 2026 improvement is not concentrated in the suspicious SI mega-winner. On the 60-bar run, 54 trades improved, 38 worsened, and 310 stayed unchanged; gains were mostly spread through EMD, RB, HO, and NQ.
+  - Do not promote yet without auditing 120-bar and 180-bar trade rows visually and deciding whether the longer post-source holds are realistic live behavior.
 
 Phase-two read:
 
@@ -199,3 +235,6 @@ Temporary recommendation:
 - Before promotion, add or decide a pre-entry liquidity gate and manually audit sparse metal-contract winners.
 - Treat `aicw-research-t014-rd3en5-v1-2m-2026` as the simpler alternate if we do not want a conditional extra-slot rule.
 - Treat `aicw-research-t0141-rd3en4-v1-2m-2026` as the conservative alternate.
+- Treat `aicw-exit-dyn180s2-srcfb-v1-2m-2026` as the promoted main exit-overlay candidate for now after reviewing the 180-only changes: +41.22R improved, -5.33R worsened, +35.89R net.
+- Keep `aicw-exit-dyn120s2-srcfb-v1-2m-2026` as the cleaner balance fallback if 180-bar visual audit shows too many late trend-death exits.
+- Do not replace the pinned source model with an exit overlay until the changed trades are visually audited in the UI/canvas.

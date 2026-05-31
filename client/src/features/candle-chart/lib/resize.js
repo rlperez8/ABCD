@@ -167,7 +167,8 @@ const getPropFocusBounds = (chartStateRef, rustPattern) => {
         rustPattern?.trade_enter_price,
         rustPattern?.trade_risk_exit_price,
         rustPattern?.trade_reward_exit_price,
-        rustPattern?.exit_price
+        rustPattern?.exit_price,
+        rustPattern?.source_exit_price
       );
   const focusPrices = [
     baseBounds.minPrice,
@@ -200,15 +201,20 @@ const getPropTradeFocusBounds = (chartStateRef, rustPattern) => {
   const chartState = chartStateRef.current;
   const entryIndex = Number(rustPattern?.entry);
   const exitIndex = Number(rustPattern?.exit_date);
+  const canvasEndIndex = Number(rustPattern?.canvas_end);
 
   if (!Number.isFinite(entryIndex) || !Number.isFinite(exitIndex)) {
     return null;
   }
 
+  const windowEndIndex =
+    Number.isFinite(canvasEndIndex) && canvasEndIndex >= 1
+      ? Math.max(entryIndex, exitIndex, canvasEndIndex)
+      : Math.max(entryIndex, exitIndex);
   const minTradeIndex = Math.max(1, Math.min(entryIndex, exitIndex));
   const maxTradeIndex = Math.min(
-    chartState?.candles?.items?.length ?? Math.max(entryIndex, exitIndex),
-    Math.max(entryIndex, exitIndex)
+    chartState?.candles?.items?.length ?? windowEndIndex,
+    windowEndIndex
   );
   const minIndex = Math.max(1, minTradeIndex - 3);
   const maxIndex = Math.min(
@@ -235,7 +241,8 @@ const getPropTradeFocusBounds = (chartStateRef, rustPattern) => {
         rustPattern?.trade_enter_price,
         rustPattern?.trade_risk_exit_price,
         rustPattern?.trade_reward_exit_price,
-        rustPattern?.exit_price
+        rustPattern?.exit_price,
+        rustPattern?.source_exit_price
       );
   const endpointIndexes = new Set(
     [entryIndex - 1, entryIndex, entryIndex + 1, exitIndex - 1, exitIndex, exitIndex + 1]
@@ -308,6 +315,7 @@ const getGraphFocusBounds = (chartStateRef, rustPattern) => {
           rustPattern?.trade_risk_exit_price,
           rustPattern?.trade_reward_exit_price,
           rustPattern?.exit_price,
+          rustPattern?.source_exit_price,
           rustPattern?.target_close,
           rustPattern?.trade_current_price
         )),
