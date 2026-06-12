@@ -1,4 +1,22 @@
-const API_BASE_URL = 'http://localhost:8080';
+const getApiBaseUrl = () => {
+  const configuredBaseUrl = process.env.REACT_APP_API_BASE_URL;
+  if (configuredBaseUrl) {
+    return configuredBaseUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const { hostname } = window.location;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+
+    if (!isLocalhost) {
+      return `http://${hostname}:8080`;
+    }
+  }
+
+  return 'http://localhost:8080';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 const DEFAULT_PROP_OUTCOME_MODE = 'reversal';
 
 const parseOptionalFloat = (value) => {
@@ -21,6 +39,19 @@ const parseOptionalInt = (value) => {
 
 const parseBooleanFlag = (value) =>
   value === true || value === 1 || value === '1' || value === 'true';
+
+const parseJsonRecord = (value) => {
+  if (!value || typeof value !== 'string') {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+};
 
 const normalizeTradeResult = (value) => {
   if (value === 0 || value === '0' || value === 'Open') return 0;
@@ -1175,7 +1206,14 @@ const parseSimulatorReplayResponse = (data) => ({
 
 export const getCandles = async (
   symbol,
-  { startDate = null, endDate = null, sourceTimeframe = null } = {}
+  {
+    startDate = null,
+    endDate = null,
+    sourceTimeframe = null,
+    rootSymbol = null,
+    allContracts = false,
+    limit = null,
+  } = {}
 ) => {
   if (!symbol) {
     return [];
@@ -1184,14 +1222,326 @@ export const getCandles = async (
   try {
     const candles = await postJson('/candles', {
       symbol,
+      root_symbol: rootSymbol,
       start_date: startDate,
       end_date: endDate,
       source_timeframe: sourceTimeframe || null,
+      all_contracts: allContracts,
+      limit,
     });
     return Array.isArray(candles) ? candles.map(parseCandleRecord).reverse() : [];
   } catch (error) {
     console.error(error);
     return [];
+  }
+};
+
+export const fetchNinjaTraderTrendEvents = async ({
+  rootSymbol = null,
+  timeframe = null,
+  instrument = null,
+  runId = null,
+  startDate = null,
+  endDate = null,
+  includeRejected = false,
+  limit = 40,
+} = {}) => {
+  try {
+    const data = await postJson('/ninjatrader/trend-events', {
+      root_symbol: rootSymbol,
+      timeframe,
+      instrument,
+      run_id: runId,
+      start_date: startDate,
+      end_date: endDate,
+      include_rejected: includeRejected,
+      limit,
+    });
+
+    return {
+      runId: data?.run_id ?? null,
+      rootSymbol: data?.root_symbol ?? rootSymbol ?? null,
+      timeframe: data?.timeframe ?? timeframe ?? null,
+      totalRows: parseOptionalInt(data?.total_rows) ?? 0,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      rows: Array.isArray(data?.rows)
+        ? data.rows.map((row) => ({
+            ...row,
+            id: parseOptionalInt(row?.id) ?? 0,
+            candle_time: row?.candle_time ?? null,
+            ts_utc: row?.ts_utc ?? null,
+            paper_entry_candle_time: row?.paper_entry_candle_time ?? null,
+            paper_entry_ts_utc: row?.paper_entry_ts_utc ?? null,
+            paper_entry_status: row?.paper_entry_status ?? null,
+            paper_exit_status: row?.paper_exit_status ?? null,
+            paper_exit_candle_time: row?.paper_exit_candle_time ?? null,
+            paper_exit_ts_utc: row?.paper_exit_ts_utc ?? null,
+            paper_exit_reason: row?.paper_exit_reason ?? null,
+            level2_score: parseOptionalFloat(row?.level2_score),
+            stage2_score: parseOptionalFloat(row?.stage2_score),
+            entry_price: parseOptionalFloat(row?.entry_price),
+            stop_price: parseOptionalFloat(row?.stop_price),
+            risk_ticks: parseOptionalFloat(row?.risk_ticks),
+            paper_entry_price: parseOptionalFloat(row?.paper_entry_price),
+            paper_stop_price: parseOptionalFloat(row?.paper_stop_price),
+            paper_risk_ticks: parseOptionalFloat(row?.paper_risk_ticks),
+            paper_exit_price: parseOptionalFloat(row?.paper_exit_price),
+            paper_result_r: parseOptionalFloat(row?.paper_result_r),
+            paper_raw_result_r: parseOptionalFloat(row?.paper_raw_result_r),
+            paper_slippage_r: parseOptionalFloat(row?.paper_slippage_r),
+            details: parseJsonRecord(row?.details_json),
+            details_json: row?.details_json ?? null,
+            created_at: row?.created_at ?? null,
+          }))
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      runId: null,
+      rootSymbol,
+      timeframe,
+      totalRows: 0,
+      limit,
+      rows: [],
+      error: error.message || 'Could not load trend events.',
+    };
+  }
+};
+
+export const fetchNinjaTraderSignalHistory = async ({
+  accountName = null,
+  instrument = null,
+  rootSymbol = null,
+  expectedAiRunId = null,
+  includeCancelled = false,
+  limit = 50,
+} = {}) => {
+  try {
+    const data = await postJson('/ninjatrader/signals/history', {
+      account_name: accountName,
+      instrument,
+      root_symbol: rootSymbol,
+      expected_ai_run_id: expectedAiRunId,
+      include_cancelled: includeCancelled,
+      limit,
+    });
+
+    return {
+      totalRows: parseOptionalInt(data?.total_rows) ?? 0,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      summary: data?.summary
+        ? {
+            trades_taken: parseOptionalInt(data.summary.trades_taken) ?? 0,
+            completed_trades: parseOptionalInt(data.summary.completed_trades) ?? 0,
+            open_trades: parseOptionalInt(data.summary.open_trades) ?? 0,
+            wins: parseOptionalInt(data.summary.wins) ?? 0,
+            losses: parseOptionalInt(data.summary.losses) ?? 0,
+            flats: parseOptionalInt(data.summary.flats) ?? 0,
+            total_accounting_pnl: parseOptionalFloat(data.summary.total_accounting_pnl),
+            total_execution_pnl: parseOptionalFloat(data.summary.total_execution_pnl),
+          }
+        : null,
+      rows: Array.isArray(data?.rows)
+        ? data.rows.map((row) => ({
+            ...row,
+            id: parseOptionalInt(row?.id) ?? 0,
+            quantity: parseOptionalInt(row?.quantity) ?? 0,
+            expected_price: parseOptionalFloat(row?.expected_price),
+            stop_price: parseOptionalFloat(row?.stop_price),
+            target_price: parseOptionalFloat(row?.target_price),
+            tick_size: parseOptionalFloat(row?.tick_size),
+            actual_trigger_price: parseOptionalFloat(row?.actual_trigger_price),
+            accounting_tick_value: parseOptionalFloat(row?.accounting_tick_value),
+            accounting_size_ratio: parseOptionalFloat(row?.accounting_size_ratio),
+            accounting_risk_dollars: parseOptionalFloat(row?.accounting_risk_dollars),
+            execution_tick_value: parseOptionalFloat(row?.execution_tick_value),
+            execution_risk_dollars: parseOptionalFloat(row?.execution_risk_dollars),
+            exit_price: parseOptionalFloat(row?.exit_price),
+            realized_ticks: parseOptionalFloat(row?.realized_ticks),
+            realized_execution_dollars: parseOptionalFloat(row?.realized_execution_dollars),
+            realized_accounting_dollars: parseOptionalFloat(row?.realized_accounting_dollars),
+            expected_time: row?.expected_time ?? null,
+            created_at: row?.created_at ?? null,
+            updated_at: row?.updated_at ?? null,
+            claimed_at: row?.claimed_at ?? null,
+            triggered_at: row?.triggered_at ?? null,
+            exit_received_at: row?.exit_received_at ?? null,
+            result_label: row?.result_label ?? null,
+          }))
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      totalRows: 0,
+      limit,
+      summary: null,
+      rows: [],
+      error: error.message || 'Could not load live trade signals.',
+    };
+  }
+};
+
+export const fetchNinjaTraderLiveBarSnapshot = async ({
+  rootSymbol = null,
+  timeframe = null,
+  instrument = null,
+} = {}) => {
+  try {
+    const data = await postJson('/ninjatrader/live-bar-snapshot/latest', {
+      root_symbol: rootSymbol,
+      timeframe,
+      instrument,
+    });
+    const snapshot = data?.snapshot ?? null;
+
+    return snapshot
+      ? {
+          ...snapshot,
+          id: parseOptionalInt(snapshot?.id) ?? 0,
+          bars_period_value: parseOptionalInt(snapshot?.bars_period_value),
+          candle_time: snapshot?.candle_time ?? null,
+          candle_time_utc: snapshot?.candle_time_utc ?? null,
+          bucket_time_utc: snapshot?.bucket_time_utc ?? null,
+          snapshot_time_utc: snapshot?.snapshot_time_utc ?? null,
+          open: parseOptionalFloat(snapshot?.open),
+          high: parseOptionalFloat(snapshot?.high),
+          low: parseOptionalFloat(snapshot?.low),
+          close: parseOptionalFloat(snapshot?.close),
+          last_price: parseOptionalFloat(snapshot?.last_price),
+          volume: parseOptionalInt(snapshot?.volume),
+          tick_size: parseOptionalFloat(snapshot?.tick_size),
+          point_value: parseOptionalFloat(snapshot?.point_value),
+          is_realtime: parseBooleanFlag(snapshot?.is_realtime),
+          is_closed: parseBooleanFlag(snapshot?.is_closed),
+          received_at: snapshot?.received_at ?? null,
+          updated_at: snapshot?.updated_at ?? null,
+        }
+      : null;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
+export const fetchNinjaTraderScannerActivity = async ({
+  rootSymbol = null,
+  timeframe = null,
+  instrument = null,
+  runId = null,
+  startDate = null,
+  endDate = null,
+  limit = 120,
+} = {}) => {
+  try {
+    const data = await postJson('/ninjatrader/scanner-activity', {
+      root_symbol: rootSymbol,
+      timeframe,
+      instrument,
+      run_id: runId,
+      start_date: startDate,
+      end_date: endDate,
+      limit,
+    });
+
+    return {
+      runId: data?.run_id ?? null,
+      rootSymbol: data?.root_symbol ?? rootSymbol ?? null,
+      timeframe: data?.timeframe ?? timeframe ?? null,
+      totalRows: parseOptionalInt(data?.total_rows) ?? 0,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      rows: Array.isArray(data?.rows)
+        ? data.rows.map((row) => ({
+            ...row,
+            id: parseOptionalInt(row?.id) ?? 0,
+            candle_time: row?.candle_time ?? null,
+            ts_utc: row?.ts_utc ?? null,
+            level2_score: parseOptionalFloat(row?.level2_score),
+            stage2_score: parseOptionalFloat(row?.stage2_score),
+            entry_price: parseOptionalFloat(row?.entry_price),
+            stop_price: parseOptionalFloat(row?.stop_price),
+            risk_ticks: parseOptionalFloat(row?.risk_ticks),
+            details: parseJsonRecord(row?.details_json),
+            details_json: row?.details_json ?? null,
+            created_at: row?.created_at ?? null,
+          }))
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      runId: null,
+      rootSymbol,
+      timeframe,
+      totalRows: 0,
+      limit,
+      rows: [],
+      error: error.message || 'Could not load scanner activity.',
+    };
+  }
+};
+
+export const fetchNinjaTraderOracleTrends = async ({
+  rootSymbol = null,
+  symbol = null,
+  timeframe = null,
+  runId = null,
+  startDate = null,
+  endDate = null,
+  limit = 80,
+} = {}) => {
+  try {
+    const data = await postJson('/ninjatrader/oracle-trends', {
+      root_symbol: rootSymbol,
+      symbol,
+      timeframe,
+      run_id: runId,
+      start_date: startDate,
+      end_date: endDate,
+      limit,
+    });
+
+    return {
+      runId: data?.run_id ?? runId ?? null,
+      rootSymbol: data?.root_symbol ?? rootSymbol ?? null,
+      symbol: data?.symbol ?? symbol ?? null,
+      timeframe: data?.timeframe ?? timeframe ?? null,
+      totalRows: parseOptionalInt(data?.total_rows) ?? 0,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      rows: Array.isArray(data?.rows)
+        ? data.rows.map((row) => ({
+            ...row,
+            valid_year: parseOptionalInt(row?.valid_year) ?? null,
+            entry_idx: parseOptionalInt(row?.entry_idx) ?? null,
+            exit_idx: parseOptionalInt(row?.exit_idx) ?? null,
+            duration_bars: parseOptionalInt(row?.duration_bars) ?? null,
+            duration_minutes: parseOptionalInt(row?.duration_minutes) ?? null,
+            entry_price: parseOptionalFloat(row?.entry_price),
+            exit_price: parseOptionalFloat(row?.exit_price),
+            stop_price: parseOptionalFloat(row?.stop_price),
+            target_price: parseOptionalFloat(row?.target_price),
+            risk_ticks: parseOptionalFloat(row?.risk_ticks),
+            result_r: parseOptionalFloat(row?.result_r),
+            max_favorable_r: parseOptionalFloat(row?.max_favorable_r),
+            max_adverse_r: parseOptionalFloat(row?.max_adverse_r),
+            efficiency: parseOptionalFloat(row?.efficiency),
+            quality_score: parseOptionalFloat(row?.quality_score),
+          }))
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      runId: null,
+      rootSymbol,
+      symbol,
+      timeframe,
+      totalRows: 0,
+      limit,
+      rows: [],
+      error: error.message || 'Could not load oracle trends.',
+    };
   }
 };
 

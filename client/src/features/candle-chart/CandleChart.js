@@ -11,9 +11,65 @@ import {
   startPriceDrag,
   zoomCandleWidth,
 } from './lib/interactions.js';
+import { getCanvasX, getCanvasY } from './lib/geometry.js';
 
 const hasRenderablePattern = (chartData) =>
   Boolean(chartData?.candles?.length && chartData?.rust_patterns);
+
+const getChartLayoutKey = ({ canvasWidth, canvasHeight, priceWidth, priceHeight, dateWidth, dateHeight }) =>
+  [
+    canvasWidth,
+    canvasHeight,
+    priceWidth,
+    priceHeight,
+    dateWidth,
+    dateHeight,
+  ].join('x');
+
+const getChartStateLayoutKey = (chartState) =>
+  chartState
+    ? getChartLayoutKey({
+        canvasWidth: chartState.canvas?.width,
+        canvasHeight: chartState.canvas?.height,
+        priceWidth: chartState.canvas?.priceWidth,
+        priceHeight: chartState.canvas?.priceHeight,
+        dateWidth: chartState.canvas?.dateWidth,
+        dateHeight: chartState.canvas?.dateHeight,
+      })
+    : '';
+
+const restoreRawViewport = (nextState, previousState, { prependCandleCount = 0 } = {}) => {
+  if (!nextState || !previousState) {
+    return;
+  }
+
+  nextState.candles.width = previousState.candles.width;
+  nextState.candles.spacing = previousState.candles.spacing;
+  nextState.candles.completeWidth = previousState.candles.completeWidth;
+  nextState.viewport.xGridIncrement = previousState.viewport.xGridIncrement;
+  nextState.viewport.xGridWidth = previousState.viewport.xGridWidth;
+  nextState.viewport.xOrigin = previousState.viewport.xOrigin;
+  nextState.viewport.prevXOrigin = previousState.viewport.prevXOrigin;
+  nextState.viewport.gridWidth = previousState.viewport.gridWidth;
+  nextState.viewport.baselineY = previousState.viewport.baselineY;
+  nextState.viewport.prevBaselineY = previousState.viewport.prevBaselineY;
+  nextState.viewport.startingBaselineY = previousState.viewport.startingBaselineY;
+  nextState.price.unitAmount = previousState.price.unitAmount;
+  nextState.price.startingPixelsPerGrid = previousState.price.startingPixelsPerGrid;
+  nextState.price.pixelsPerGrid = previousState.price.pixelsPerGrid;
+  nextState.price.priceUnitPixelSize = previousState.price.priceUnitPixelSize;
+  nextState.price.prevPixelsPerGrid = previousState.price.prevPixelsPerGrid;
+  nextState.price.currentMidPrice = previousState.price.currentMidPrice;
+  nextState.price.prevMidPrice = previousState.price.prevMidPrice;
+  nextState.price.staticMidPrice = previousState.price.staticMidPrice;
+
+  const prependCount = Number(prependCandleCount);
+  if (Number.isFinite(prependCount) && prependCount > 0) {
+    const xOffset = nextState.candles.completeWidth * prependCount;
+    nextState.viewport.xOrigin -= xOffset;
+    nextState.viewport.prevXOrigin -= xOffset;
+  }
+};
 
 export const CandleChart = ({
   chartData,
@@ -30,21 +86,29 @@ export const CandleChart = ({
   showCandles = true,
   presentationMode = 'chart',
   routeLogicHover = null,
+  onRawCandleViewportEdge = null,
 }) => {
   const canvasDatesRef = useRef(null);
   const canvasPriceRef = useRef(null);
   const canvasChartRef = useRef(null);
   const hoveredCandleIndexRef = useRef(1);
   const chartStateRef = useRef(null);
+  const rawViewportKeyRef = useRef('');
+  const manualRawViewportRef = useRef(false);
+  const manualRawCursorRef = useRef(false);
+  const touchGestureRef = useRef({ distance: 0 });
+  const priceAxisGestureRef = useRef({ y: 0, carry: 0 });
   const [chartReadyVersion, setChartReadyVersion] = useState(0);
   const selectedPattern = chartData?.rust_patterns ?? null;
+  const isRawCandleView = Boolean(selectedPattern?.raw_candle_view);
   const hasCandles = Boolean(chartData?.candles?.length);
   const hasPatternPivots = ['x', 'a', 'b', 'c', 'd'].every((key) => {
     const value = Number(selectedPattern?.[key]);
     return Number.isFinite(value) && value >= 1;
   });
+  const canDrawPatternGeometry = hasPatternPivots && !isRawCandleView;
   const effectiveFocusMode =
-    presentationMode === 'graph' && hasPatternPivots
+    presentationMode === 'graph' && canDrawPatternGeometry
       ? 'graph'
       : focusMode === 'prop'
       ? propFocusScope === 'trade'
@@ -88,20 +152,40 @@ export const CandleChart = ({
         return false;
       }
 
-      const layoutKey = [
+      const layoutKey = getChartLayoutKey({
         canvasWidth,
         canvasHeight,
         priceWidth,
         priceHeight,
         dateWidth,
         dateHeight,
-      ].join('x');
+      });
 
       if (!force && layoutKey === lastInitializedLayoutKey) {
         return true;
       }
 
       lastInitializedLayoutKey = layoutKey;
+      const previousChartState = chartStateRef.current;
+      const rawViewportKey = selectedPattern?.raw_viewport_key ?? '';
+      const rawViewportKeyChanged = rawViewportKeyRef.current !== rawViewportKey;
+      if (rawViewportKeyChanged) {
+        manualRawViewportRef.current = false;
+        manualRawCursorRef.current = false;
+      }
+      const candleCountMatches =
+        previousChartState?.candles?.items?.length === chartData.candles.length;
+      const canPreserveRawViewportAcrossCountChange =
+        Boolean(selectedPattern?.raw_preserve_viewport_on_count_change);
+      const shouldFollowLatest =
+        Boolean(selectedPattern?.raw_follow_latest) && !manualRawViewportRef.current;
+      const shouldRestoreRawViewport =
+        isRawCandleView &&
+        !shouldFollowLatest &&
+        getChartStateLayoutKey(previousChartState) === layoutKey &&
+        (candleCountMatches || canPreserveRawViewportAcrossCountChange) &&
+        rawViewportKeyRef.current === rawViewportKey;
+
       canvasTools.reset_candle_canvas(canvasChartRef);
       canvasTools.reset_price_canvas(canvasPriceRef);
       canvasTools.reset_date_canvas(canvasDatesRef);
@@ -111,10 +195,27 @@ export const CandleChart = ({
         canvasHeight,
         candles: chartData.candles,
       });
-      resize.reposition_candles(chartStateRef, chartData.rust_patterns, {
-        focusMode: effectiveFocusMode,
-        activeReversalFilter,
-      });
+      chartStateRef.current.canvas.priceWidth = priceWidth;
+      chartStateRef.current.canvas.priceHeight = priceHeight;
+      chartStateRef.current.canvas.dateWidth = dateWidth;
+      chartStateRef.current.canvas.dateHeight = dateHeight;
+
+      if (manualRawCursorRef.current && previousChartState?.mouse) {
+        chartStateRef.current.mouse.pos = { ...previousChartState.mouse.pos };
+        chartStateRef.current.mouse.down = { ...previousChartState.mouse.down };
+      }
+
+      if (shouldRestoreRawViewport) {
+        restoreRawViewport(chartStateRef.current, previousChartState, {
+          prependCandleCount: selectedPattern?.raw_prepend_candle_count,
+        });
+      } else {
+        resize.reposition_candles(chartStateRef, chartData.rust_patterns, {
+          focusMode: effectiveFocusMode,
+          activeReversalFilter,
+        });
+      }
+      rawViewportKeyRef.current = rawViewportKey;
       setChartReadyVersion((current) => current + 1);
       return true;
     };
@@ -155,10 +256,22 @@ export const CandleChart = ({
       resizeObserver?.disconnect();
       window.removeEventListener('resize', requestInitializeChartState);
     };
-  }, [activeReversalFilter, chartData, effectiveFocusMode]);
+  }, [
+    activeReversalFilter,
+    chartData,
+    effectiveFocusMode,
+    isRawCandleView,
+    selectedPattern?.raw_prepend_candle_count,
+    selectedPattern?.raw_preserve_viewport_on_count_change,
+    selectedPattern?.raw_follow_latest,
+    selectedPattern?.raw_viewport_key,
+  ]);
 
   useEffect(() => {
     if (!hasCandles || !selectedPattern || !chartStateRef.current) {
+      return;
+    }
+    if (selectedPattern.raw_candle_view) {
       return;
     }
 
@@ -184,14 +297,16 @@ export const CandleChart = ({
     const { canvas, ctx } = candleReset;
     const { cp, ctx_price } = priceReset;
     const { canvas_date, ctx_date } = dateReset;
+    const canvasElement = canvas.element ?? canvasChartRef.current;
+    const priceElement = cp.element ?? canvasPriceRef.current;
 
     const mouseLayer = new Mouse(chartStateRef);
     const chartLayer = new Chart(chartStateRef);
     const patternLayer = new ABCD(chartStateRef);
-    const showPatternOverlay = is_abcd_pattern;
-    const showRetracementOverlay = is_retracement;
-    const showPriceLevelRays = is_price_levels;
-    const showPriceLevelTags = focusMode === 'prop' || is_price_levels;
+    const showPatternOverlay = is_abcd_pattern && canDrawPatternGeometry;
+    const showRetracementOverlay = is_retracement && canDrawPatternGeometry;
+    const showPriceLevelRays = is_price_levels && !isRawCandleView;
+    const showPriceLevelTags = (focusMode === 'prop' || is_price_levels) && !isRawCandleView;
     const isGraphPresentation = presentationMode === 'graph';
 
     let animationFrameId = null;
@@ -199,6 +314,70 @@ export const CandleChart = ({
     const requestDraw = () => {
       if (!animationFrameId) {
         animationFrameId = requestAnimationFrame(draw);
+      }
+    };
+
+    const markManualRawViewport = () => {
+      if (isRawCandleView && chartData.rust_patterns?.raw_follow_latest) {
+        manualRawViewportRef.current = true;
+      }
+    };
+
+    const markManualRawCursor = () => {
+      if (isRawCandleView && chartData.rust_patterns?.raw_follow_latest) {
+        manualRawCursorRef.current = true;
+      }
+    };
+
+    const markManualRawChartInteraction = () => {
+      markManualRawViewport();
+      markManualRawCursor();
+    };
+
+    const pinRawCursorToLatestCandle = () => {
+      const chartState = chartStateRef.current;
+
+      if (
+        !chartState ||
+        !isRawCandleView ||
+        !chartData.rust_patterns?.raw_follow_latest ||
+        manualRawCursorRef.current
+      ) {
+        return;
+      }
+
+      const latestIndex = 1;
+      const latestCandle = chartState.candles.items[latestIndex - 1];
+      const latestPrice = Number(
+        latestCandle?.candle_close ??
+          latestCandle?.close ??
+          latestCandle?.candle_open ??
+          latestCandle?.open
+      );
+
+      chartState.mouse.pos.x = getCanvasX(chartState, latestIndex);
+      chartState.mouse.pos.y = Number.isFinite(latestPrice)
+        ? getCanvasY(chartState, latestPrice)
+        : chartState.canvas.height / 2;
+    };
+
+    const notifyRawCandleViewportEdge = () => {
+      if (!isRawCandleView || !onRawCandleViewportEdge || !chartStateRef.current) {
+        return;
+      }
+
+      const chartLayer = new Chart(chartStateRef);
+      const range = chartLayer.getVisibleCandleRange(canvas.width, 0);
+      const total = chartStateRef.current.candles.items.length;
+      const threshold = Math.max(80, Math.floor((range.end - range.start + 1) * 0.18));
+
+      if (range.end >= total - threshold) {
+        onRawCandleViewportEdge({
+          edge: 'older',
+          start: range.start,
+          end: range.end,
+          total,
+        });
       }
     };
 
@@ -243,6 +422,7 @@ export const CandleChart = ({
         patternLayer.xa_scan_start_beam(ctx, chartData.rust_patterns);
       }
 
+      pinRawCursorToLatestCandle();
       mouseLayer.mouse_Y(canvas, ctx);
       mouseLayer.mouse_X(canvas, ctx, hoveredCandleIndexRef, set_hovered_candle);
       mouseLayer.price_background(cp, ctx_price);
@@ -287,13 +467,24 @@ export const CandleChart = ({
         });
       }
 
+      if (isRawCandleView) {
+        patternLayer.raw_watching_trends(ctx, chartData.rust_patterns);
+        patternLayer.raw_trend_event(ctx, chartData.rust_patterns);
+      }
+
+      chartLayer.last_price_line(ctx, canvas);
+      chartLayer.last_price_axis(ctx_price, cp);
+      notifyRawCandleViewportEdge();
+
       animationFrameId = null;
     };
 
     const handleMouseMove = (event) => {
-      setMousePosition(chartStateRef.current, canvas, event);
+      setMousePosition(chartStateRef.current, canvasElement, event);
+      markManualRawCursor();
 
       if (chartStateRef.current.mouse.isPressed) {
+        markManualRawChartInteraction();
         const pixelsMovedX =
           chartStateRef.current.mouse.down.x - chartStateRef.current.mouse.pos.x;
 
@@ -305,8 +496,135 @@ export const CandleChart = ({
       requestDraw();
     };
 
+    const updateDragFromPoint = (point) => {
+      setMousePosition(chartStateRef.current, canvasElement, point);
+      markManualRawCursor();
+
+      if (chartStateRef.current.mouse.isPressed) {
+        markManualRawChartInteraction();
+        const pixelsMovedX =
+          chartStateRef.current.mouse.down.x - chartStateRef.current.mouse.pos.x;
+
+        chartStateRef.current.viewport.xOrigin =
+          chartStateRef.current.viewport.prevXOrigin + pixelsMovedX;
+        resize.chart_Y_movement(chartStateRef);
+      }
+
+      requestDraw();
+    };
+
+    const getTouchDistance = (touches) => {
+      if (!touches || touches.length < 2) {
+        return 0;
+      }
+
+      return Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY
+      );
+    };
+
+    const getTouchMidpoint = (touches) => ({
+      clientX: (touches[0].clientX + touches[1].clientX) / 2,
+      clientY: (touches[0].clientY + touches[1].clientY) / 2,
+    });
+
+    const handleCanvasTouchStart = (event) => {
+      if (!chartStateRef.current) {
+        return;
+      }
+
+      if (event.touches.length === 1) {
+        event.preventDefault();
+        markManualRawChartInteraction();
+        touchGestureRef.current = { distance: 0 };
+        setMousePosition(chartStateRef.current, canvasElement, event.touches[0]);
+        startChartDrag(chartStateRef.current);
+        requestDraw();
+        return;
+      }
+
+      if (event.touches.length >= 2) {
+        event.preventDefault();
+        markManualRawChartInteraction();
+        endChartDrag(chartStateRef.current);
+        touchGestureRef.current = { distance: getTouchDistance(event.touches) };
+        setMousePosition(
+          chartStateRef.current,
+          canvasElement,
+          getTouchMidpoint(event.touches)
+        );
+        requestDraw();
+      }
+    };
+
+    const handleCanvasTouchMove = (event) => {
+      if (!chartStateRef.current) {
+        return;
+      }
+
+      if (event.touches.length >= 2) {
+        event.preventDefault();
+        const nextDistance = getTouchDistance(event.touches);
+        const previousDistance = touchGestureRef.current.distance || nextDistance;
+        const distanceDelta = nextDistance - previousDistance;
+
+        setMousePosition(
+          chartStateRef.current,
+          canvasElement,
+          getTouchMidpoint(event.touches)
+        );
+
+        if (Math.abs(distanceDelta) >= 3) {
+          markManualRawChartInteraction();
+          zoomCandleWidth(
+            chartStateRef.current,
+            -distanceDelta,
+            hoveredCandleIndexRef.current,
+            chartData.rust_patterns?.target ??
+              chartData.rust_patterns?.reversal_detect ??
+              chartData.rust_patterns?.d_confirm ??
+              chartData.rust_patterns?.a ??
+              1
+          );
+          touchGestureRef.current.distance = nextDistance;
+        }
+
+        requestDraw();
+        return;
+      }
+
+      if (event.touches.length === 1) {
+        event.preventDefault();
+        markManualRawChartInteraction();
+        updateDragFromPoint(event.touches[0]);
+      }
+    };
+
+    const handleCanvasTouchEnd = (event) => {
+      if (!chartStateRef.current) {
+        return;
+      }
+
+      if (event.touches.length === 0) {
+        touchGestureRef.current = { distance: 0 };
+        endChartDrag(chartStateRef.current);
+        requestDraw();
+        return;
+      }
+
+      if (event.touches.length === 1) {
+        touchGestureRef.current = { distance: 0 };
+        markManualRawChartInteraction();
+        setMousePosition(chartStateRef.current, canvasElement, event.touches[0]);
+        startChartDrag(chartStateRef.current);
+        requestDraw();
+      }
+    };
+
     const handlePriceZoom = (event) => {
       event.preventDefault();
+      markManualRawViewport();
 
       const threshold = Math.floor(chartStateRef.current.price.startingPixelsPerGrid * 0.5);
       const expandThreshold = Math.floor(chartStateRef.current.price.startingPixelsPerGrid * 1.5);
@@ -320,8 +638,66 @@ export const CandleChart = ({
       requestDraw();
     };
 
+    const applyPriceAxisDragZoom = (deltaY) => {
+      if (!chartStateRef.current || !Number.isFinite(deltaY)) {
+        return;
+      }
+
+      markManualRawViewport();
+      if (Math.abs(deltaY) < 0.2) {
+        return;
+      }
+
+      const dragSensitivity = 1 / 68;
+      const rawMultiplier = Math.exp(-deltaY * dragSensitivity);
+      const zoomMultiplier = Math.min(Math.max(rawMultiplier, 0.72), 1.38);
+      resize.scale_price_axis(chartStateRef, zoomMultiplier);
+
+      requestDraw();
+    };
+
+    const handlePriceTouchStart = (event) => {
+      if (!chartStateRef.current || !event.touches.length) {
+        return;
+      }
+
+      event.preventDefault();
+      markManualRawViewport();
+      const touch = event.touches[0];
+      startPriceDrag(chartStateRef.current);
+      priceAxisGestureRef.current = { y: touch.clientY, carry: 0 };
+      requestDraw();
+    };
+
+    const handlePriceTouchMove = (event) => {
+      if (!chartStateRef.current || !event.touches.length) {
+        return;
+      }
+
+      event.preventDefault();
+      markManualRawViewport();
+      const touch = event.touches[0];
+      const previousY = priceAxisGestureRef.current.y || touch.clientY;
+      const deltaY = touch.clientY - previousY;
+      priceAxisGestureRef.current.y = touch.clientY;
+      applyPriceAxisDragZoom(deltaY);
+    };
+
+    const handlePriceTouchEnd = (event) => {
+      if (!chartStateRef.current) {
+        return;
+      }
+
+      if (!event.touches.length) {
+        priceAxisGestureRef.current = { y: 0, carry: 0 };
+        endPriceDrag(chartStateRef.current);
+        requestDraw();
+      }
+    };
+
     const handleWidthZoom = (event) => {
       event.preventDefault();
+      markManualRawChartInteraction();
       zoomCandleWidth(
         chartStateRef.current,
         event.deltaY,
@@ -343,9 +719,17 @@ export const CandleChart = ({
       animationFrameId = requestAnimationFrame(draw);
     };
 
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('wheel', handleWidthZoom, { passive: false });
-    cp.addEventListener('wheel', handlePriceZoom, { passive: false });
+    canvasElement.addEventListener('mousemove', handleMouseMove);
+    canvasElement.addEventListener('wheel', handleWidthZoom, { passive: false });
+    canvasElement.addEventListener('touchstart', handleCanvasTouchStart, { passive: false });
+    canvasElement.addEventListener('touchmove', handleCanvasTouchMove, { passive: false });
+    canvasElement.addEventListener('touchend', handleCanvasTouchEnd, { passive: false });
+    canvasElement.addEventListener('touchcancel', handleCanvasTouchEnd, { passive: false });
+    priceElement.addEventListener('wheel', handlePriceZoom, { passive: false });
+    priceElement.addEventListener('touchstart', handlePriceTouchStart, { passive: false });
+    priceElement.addEventListener('touchmove', handlePriceTouchMove, { passive: false });
+    priceElement.addEventListener('touchend', handlePriceTouchEnd, { passive: false });
+    priceElement.addEventListener('touchcancel', handlePriceTouchEnd, { passive: false });
     window.addEventListener('resize', handleWindowResize);
 
     draw();
@@ -355,15 +739,25 @@ export const CandleChart = ({
         cancelAnimationFrame(animationFrameId);
       }
 
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('wheel', handleWidthZoom);
-      cp.removeEventListener('wheel', handlePriceZoom);
+      canvasElement.removeEventListener('mousemove', handleMouseMove);
+      canvasElement.removeEventListener('wheel', handleWidthZoom);
+      canvasElement.removeEventListener('touchstart', handleCanvasTouchStart);
+      canvasElement.removeEventListener('touchmove', handleCanvasTouchMove);
+      canvasElement.removeEventListener('touchend', handleCanvasTouchEnd);
+      canvasElement.removeEventListener('touchcancel', handleCanvasTouchEnd);
+      priceElement.removeEventListener('wheel', handlePriceZoom);
+      priceElement.removeEventListener('touchstart', handlePriceTouchStart);
+      priceElement.removeEventListener('touchmove', handlePriceTouchMove);
+      priceElement.removeEventListener('touchend', handlePriceTouchEnd);
+      priceElement.removeEventListener('touchcancel', handlePriceTouchEnd);
       window.removeEventListener('resize', handleWindowResize);
     };
   }, [
     chartData,
+    canDrawPatternGeometry,
     is_abcd_pattern,
     is_price_levels,
+    isRawCandleView,
     is_retracement,
     is_reversal_focus,
     trend_line_toggles,
@@ -376,14 +770,20 @@ export const CandleChart = ({
     set_hovered_candle,
     showCandles,
     routeLogicHover,
+    onRawCandleViewportEdge,
     chartReadyVersion,
   ]);
 
-  const handleChartMouseDown = () => {
+  const handleChartMouseDown = (event) => {
     if (!chartStateRef.current) {
       return;
     }
 
+    if (isRawCandleView && selectedPattern?.raw_follow_latest) {
+      manualRawViewportRef.current = true;
+      manualRawCursorRef.current = true;
+    }
+    setMousePosition(chartStateRef.current, canvasChartRef.current, event);
     startChartDrag(chartStateRef.current);
   };
 
@@ -395,11 +795,14 @@ export const CandleChart = ({
     endChartDrag(chartStateRef.current);
   };
 
-  const handlePriceMouseDown = () => {
+  const handlePriceMouseDown = (event) => {
     if (!chartStateRef.current) {
       return;
     }
 
+    if (isRawCandleView && selectedPattern?.raw_follow_latest) {
+      manualRawViewportRef.current = true;
+    }
     startPriceDrag(chartStateRef.current);
   };
 

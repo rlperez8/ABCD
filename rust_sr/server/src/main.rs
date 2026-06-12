@@ -11,7 +11,7 @@ use actix_web::dev::Service;
 use actix_web::route;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
-use sqlx::{MySqlPool, Row};
+use sqlx::{mysql::MySqlPoolOptions, MySqlPool, Row};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -21,8 +21,9 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
 
-const CANDLE_STORAGE_TABLES: [&str; 9] = [
+const CANDLE_STORAGE_TABLES: [&str; 10] = [
     "futures_contract_1m_candles",
+    "futures_contract_2m_candles",
     "futures_contract_3m_candles",
     "futures_contract_5m_candles",
     "futures_contract_15m_candles",
@@ -1431,6 +1432,117 @@ struct NinjaTraderSlippageResponse {
 }
 
 #[derive(Deserialize, Debug)]
+struct NinjaTraderTrendEventParams {
+    root_symbol: Option<String>,
+    timeframe: Option<String>,
+    instrument: Option<String>,
+    run_id: Option<String>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    include_rejected: Option<bool>,
+    limit: Option<i64>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct NinjaTraderTrendEventRow {
+    id: i64,
+    run_id: String,
+    event_uid: String,
+    event_type: String,
+    instrument: Option<String>,
+    root_symbol: Option<String>,
+    model_symbol: Option<String>,
+    timeframe: Option<String>,
+    candle_time: Option<NaiveDateTime>,
+    ts_utc: Option<NaiveDateTime>,
+    direction: Option<String>,
+    level2_score: Option<f64>,
+    stage2_score: Option<f64>,
+    entry_price: Option<f64>,
+    stop_price: Option<f64>,
+    risk_ticks: Option<f64>,
+    status: Option<String>,
+    paper_entry_status: Option<String>,
+    paper_entry_candle_time: Option<NaiveDateTime>,
+    paper_entry_ts_utc: Option<NaiveDateTime>,
+    paper_entry_price: Option<f64>,
+    paper_stop_price: Option<f64>,
+    paper_risk_ticks: Option<f64>,
+    paper_exit_status: Option<String>,
+    paper_exit_candle_time: Option<NaiveDateTime>,
+    paper_exit_ts_utc: Option<NaiveDateTime>,
+    paper_exit_price: Option<f64>,
+    paper_exit_reason: Option<String>,
+    paper_result_r: Option<f64>,
+    paper_raw_result_r: Option<f64>,
+    paper_slippage_r: Option<f64>,
+    details_json: Option<String>,
+    created_at: Option<NaiveDateTime>,
+}
+
+#[derive(Serialize)]
+struct NinjaTraderTrendEventsResponse {
+    run_id: Option<String>,
+    root_symbol: String,
+    timeframe: String,
+    total_rows: i64,
+    limit: i64,
+    rows: Vec<NinjaTraderTrendEventRow>,
+}
+
+#[derive(Deserialize, Debug)]
+struct NinjaTraderOracleTrendParams {
+    root_symbol: Option<String>,
+    symbol: Option<String>,
+    timeframe: Option<String>,
+    run_id: Option<String>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    limit: Option<i64>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct NinjaTraderOracleTrendRow {
+    run_id: String,
+    oracle_trade_id: String,
+    timeframe: String,
+    valid_year: i64,
+    root_symbol: Option<String>,
+    symbol: String,
+    direction: String,
+    entry_idx: i64,
+    exit_idx: i64,
+    entry_date: NaiveDateTime,
+    exit_date: NaiveDateTime,
+    entry_price: f64,
+    exit_price: f64,
+    stop_price: f64,
+    target_price: f64,
+    risk_ticks: f64,
+    result_r: f64,
+    max_favorable_r: f64,
+    max_adverse_r: f64,
+    duration_bars: i64,
+    duration_minutes: i64,
+    efficiency: f64,
+    quality_score: f64,
+    start_pivot_type: Option<String>,
+    end_pivot_type: Option<String>,
+    outcome: Option<String>,
+}
+
+#[derive(Serialize)]
+struct NinjaTraderOracleTrendsResponse {
+    run_id: String,
+    root_symbol: String,
+    symbol: Option<String>,
+    timeframe: String,
+    total_rows: i64,
+    limit: i64,
+    rows: Vec<NinjaTraderOracleTrendRow>,
+}
+
+#[derive(Deserialize, Debug)]
 struct NinjaTraderSignalCreateParams {
     signal_uid: Option<String>,
     account_name: Option<String>,
@@ -1455,6 +1567,16 @@ struct NinjaTraderSignalPendingParams {
     account_name: Option<String>,
     instrument: Option<String>,
     client_id: Option<String>,
+    limit: Option<i64>,
+}
+
+#[derive(Deserialize, Debug)]
+struct NinjaTraderSignalHistoryParams {
+    account_name: Option<String>,
+    instrument: Option<String>,
+    root_symbol: Option<String>,
+    expected_ai_run_id: Option<String>,
+    include_cancelled: Option<bool>,
     limit: Option<i64>,
 }
 
@@ -1506,6 +1628,183 @@ struct NinjaTraderSignalResponse {
 #[derive(Serialize)]
 struct NinjaTraderSignalsResponse {
     signals: Vec<NinjaTraderOrderSignalRow>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct NinjaTraderSignalHistoryRow {
+    id: i64,
+    signal_uid: String,
+    status: String,
+    account_name: Option<String>,
+    instrument: Option<String>,
+    root_symbol: Option<String>,
+    exchange_name: Option<String>,
+    side: String,
+    quantity: i64,
+    expected_price: f64,
+    expected_time: Option<NaiveDateTime>,
+    stop_price: Option<f64>,
+    target_price: Option<f64>,
+    tick_size: Option<f64>,
+    expected_ai_run_id: Option<String>,
+    expected_setup_id: Option<String>,
+    expected_template_uid: Option<String>,
+    client_id: Option<String>,
+    order_id: Option<String>,
+    actual_trigger_price: Option<f64>,
+    accounting_instrument: Option<String>,
+    accounting_root_symbol: Option<String>,
+    accounting_tick_value: Option<f64>,
+    accounting_size_ratio: Option<f64>,
+    accounting_risk_dollars: Option<f64>,
+    execution_tick_value: Option<f64>,
+    execution_risk_dollars: Option<f64>,
+    exit_order_id: Option<String>,
+    exit_price: Option<f64>,
+    exit_action: Option<String>,
+    exit_order_name: Option<String>,
+    exit_received_at: Option<NaiveDateTime>,
+    realized_ticks: Option<f64>,
+    realized_execution_dollars: Option<f64>,
+    realized_accounting_dollars: Option<f64>,
+    status_message: Option<String>,
+    notes: Option<String>,
+    created_at: Option<NaiveDateTime>,
+    updated_at: Option<NaiveDateTime>,
+    claimed_at: Option<NaiveDateTime>,
+    triggered_at: Option<NaiveDateTime>,
+    result_label: Option<String>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct NinjaTraderSignalHistorySummary {
+    trades_taken: i64,
+    completed_trades: i64,
+    open_trades: i64,
+    wins: i64,
+    losses: i64,
+    flats: i64,
+    total_accounting_pnl: Option<f64>,
+    total_execution_pnl: Option<f64>,
+}
+
+#[derive(Serialize)]
+struct NinjaTraderSignalHistoryResponse {
+    total_rows: i64,
+    limit: i64,
+    summary: Option<NinjaTraderSignalHistorySummary>,
+    rows: Vec<NinjaTraderSignalHistoryRow>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct NinjaTraderCandleIngestParams {
+    source: Option<String>,
+    bridge_version: Option<String>,
+    client_id: Option<String>,
+    instrument: Option<String>,
+    root_symbol: Option<String>,
+    exchange_name: Option<String>,
+    timeframe: Option<String>,
+    bars_period_type: Option<String>,
+    bars_period_value: Option<i64>,
+    candle_time: Option<String>,
+    open: Option<f64>,
+    high: Option<f64>,
+    low: Option<f64>,
+    close: Option<f64>,
+    volume: Option<f64>,
+    tick_size: Option<f64>,
+    point_value: Option<f64>,
+    is_realtime: Option<bool>,
+}
+
+#[derive(Serialize)]
+struct NinjaTraderCandleIngestResponse {
+    ok: bool,
+    candle_id: i64,
+    duplicate: bool,
+    instrument: Option<String>,
+    root_symbol: Option<String>,
+    timeframe: Option<String>,
+    candle_time: Option<NaiveDateTime>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct NinjaTraderLiveBarSnapshotParams {
+    source: Option<String>,
+    bridge_version: Option<String>,
+    client_id: Option<String>,
+    instrument: Option<String>,
+    root_symbol: Option<String>,
+    exchange_name: Option<String>,
+    timeframe: Option<String>,
+    bars_period_type: Option<String>,
+    bars_period_value: Option<i64>,
+    candle_time: Option<String>,
+    candle_time_utc: Option<String>,
+    bucket_time_utc: Option<String>,
+    snapshot_time_utc: Option<String>,
+    open: Option<f64>,
+    high: Option<f64>,
+    low: Option<f64>,
+    close: Option<f64>,
+    last_price: Option<f64>,
+    volume: Option<f64>,
+    tick_size: Option<f64>,
+    point_value: Option<f64>,
+    is_realtime: Option<bool>,
+    is_closed: Option<bool>,
+}
+
+#[derive(sqlx::FromRow, Serialize)]
+struct NinjaTraderLiveBarSnapshotRow {
+    id: i64,
+    instrument: Option<String>,
+    root_symbol: Option<String>,
+    exchange_name: Option<String>,
+    timeframe: Option<String>,
+    bars_period_type: Option<String>,
+    bars_period_value: Option<i64>,
+    candle_time: Option<NaiveDateTime>,
+    candle_time_utc: Option<NaiveDateTime>,
+    bucket_time_utc: Option<NaiveDateTime>,
+    snapshot_time_utc: Option<NaiveDateTime>,
+    open: Option<f64>,
+    high: Option<f64>,
+    low: Option<f64>,
+    close: Option<f64>,
+    last_price: Option<f64>,
+    volume: Option<f64>,
+    tick_size: Option<f64>,
+    point_value: Option<f64>,
+    is_realtime: Option<i64>,
+    is_closed: Option<i64>,
+    received_at: Option<NaiveDateTime>,
+    updated_at: Option<NaiveDateTime>,
+}
+
+#[derive(Serialize)]
+struct NinjaTraderLiveBarSnapshotIngestResponse {
+    ok: bool,
+    snapshot_id: i64,
+    duplicate: bool,
+    instrument: Option<String>,
+    root_symbol: Option<String>,
+    timeframe: Option<String>,
+    candle_time: Option<NaiveDateTime>,
+    bucket_time_utc: Option<NaiveDateTime>,
+}
+
+#[derive(Deserialize, Debug)]
+struct NinjaTraderLiveBarSnapshotLatestParams {
+    root_symbol: Option<String>,
+    timeframe: Option<String>,
+    instrument: Option<String>,
+}
+
+#[derive(Serialize)]
+struct NinjaTraderLiveBarSnapshotLatestResponse {
+    snapshot: Option<NinjaTraderLiveBarSnapshotRow>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -3001,9 +3300,12 @@ struct PatternDiscoveryResponse {
 #[derive(Deserialize, Debug)]
 pub struct CandleParams {
     symbol: String,
+    root_symbol: Option<String>,
     start_date: Option<String>,
     end_date: Option<String>,
     source_timeframe: Option<String>,
+    all_contracts: Option<bool>,
+    limit: Option<i64>,
 }
 
 fn accuracy_column_for_harmonic_type(harmonic_type: &str) -> Option<&'static str> {
@@ -3077,6 +3379,7 @@ fn futures_candle_table_for_timeframe(value: Option<&str>) -> Option<&'static st
         .as_deref()
     {
         Some("1m") => Some("futures_contract_1m_candles"),
+        Some("2m") => Some("futures_contract_2m_candles"),
         Some("3m") => Some("futures_contract_3m_candles"),
         Some("5m") => Some("futures_contract_5m_candles"),
         Some("15m") => Some("futures_contract_15m_candles"),
@@ -3085,6 +3388,26 @@ fn futures_candle_table_for_timeframe(value: Option<&str>) -> Option<&'static st
         Some("4h") => Some("futures_contract_4h_candles"),
         Some("12h") => Some("futures_contract_12h_candles"),
         Some("1d") => Some("futures_contract_1d_candles"),
+        _ => None,
+    }
+}
+
+fn futures_candle_root_ts_index_for_timeframe(value: Option<&str>) -> Option<&'static str> {
+    match value
+        .map(str::trim)
+        .filter(|item| !item.is_empty() && !item.eq_ignore_ascii_case("all"))
+        .map(|item| item.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("2m") => Some("idx_futures_2m_root_ts"),
+        Some("3m") => Some("idx_futures_3m_root_ts"),
+        Some("5m") => Some("idx_futures_5m_root_ts"),
+        Some("15m") => Some("idx_futures_15m_root_ts"),
+        Some("30m") => Some("idx_futures_30m_root_ts"),
+        Some("1h") => Some("idx_futures_1h_root_ts"),
+        Some("4h") => Some("idx_futures_4h_root_ts"),
+        Some("12h") => Some("idx_futures_12h_root_ts"),
+        Some("1d") => Some("idx_futures_1d_root_ts"),
         _ => None,
     }
 }
@@ -4772,7 +5095,10 @@ async fn fetch_pattern_ai_stage1_trades(
     };
 
     let Some(quoted_results_table) = quoted_identifier(&run.results_table) else {
-        eprintln!("AI Stage 1 run has unsafe result table name: {}", run.results_table);
+        eprintln!(
+            "AI Stage 1 run has unsafe result table name: {}",
+            run.results_table
+        );
         return HttpResponse::InternalServerError().finish();
     };
     match table_exists(pool.get_ref(), &run.results_table).await {
@@ -4840,7 +5166,8 @@ async fn fetch_pattern_ai_stage1_trades(
 
     if selected_total_rows > 0 && (params.refresh.unwrap_or(false) || needs_refresh) {
         if let Err(error) =
-            refresh_pattern_ai_stage1_trade_tables(pool.get_ref(), &run, &quoted_results_table).await
+            refresh_pattern_ai_stage1_trade_tables(pool.get_ref(), &run, &quoted_results_table)
+                .await
         {
             eprintln!("AI Stage 1 trade table refresh failed: {:?}", error);
             return HttpResponse::InternalServerError().finish();
@@ -4913,7 +5240,10 @@ async fn fetch_pattern_ai_stage1_trades(
     {
         Ok(rows) => rows,
         Err(error) => {
-            eprintln!("AI Stage 1 template performance table fetch failed: {:?}", error);
+            eprintln!(
+                "AI Stage 1 template performance table fetch failed: {:?}",
+                error
+            );
             return HttpResponse::InternalServerError().finish();
         }
     };
@@ -5080,7 +5410,10 @@ async fn fetch_pattern_ai_stage1_trades(
     {
         Ok(rows) => rows,
         Err(error) => {
-            eprintln!("AI Stage 1 symbol contribution table fetch failed: {:?}", error);
+            eprintln!(
+                "AI Stage 1 symbol contribution table fetch failed: {:?}",
+                error
+            );
             return HttpResponse::InternalServerError().finish();
         }
     };
@@ -5117,7 +5450,10 @@ async fn fetch_pattern_ai_stage1_trades(
     {
         Ok(rows) => rows,
         Err(error) => {
-            eprintln!("AI Stage 1 family contribution table fetch failed: {:?}", error);
+            eprintln!(
+                "AI Stage 1 family contribution table fetch failed: {:?}",
+                error
+            );
             return HttpResponse::InternalServerError().finish();
         }
     };
@@ -5234,11 +5570,11 @@ async fn fetch_pattern_ai_stage1_trades(
         "#
     );
     let rows = match sqlx::query_as::<_, PatternAiStage1TradeRow>(&rows_sql)
-    .bind(&run.multi_valid_eval_run_id)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(pool.get_ref())
-    .await
+        .bind(&run.multi_valid_eval_run_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool.get_ref())
+        .await
     {
         Ok(rows) => rows,
         Err(error) => {
@@ -5402,6 +5738,12 @@ async fn fetch_pattern_ai_exit_model_trades(
     } else {
         ""
     };
+    let order_clause =
+        if params.changed_only.unwrap_or(true) || params.held_longer_only.unwrap_or(false) {
+            "ORDER BY ABS(e.delta_r) DESC, e.selected_index ASC"
+        } else {
+            "ORDER BY e.selected_index ASC"
+        };
 
     let summary_sql = format!(
         r#"
@@ -5495,22 +5837,56 @@ async fn fetch_pattern_ai_exit_model_trades(
                 WHEN e.model_exit_date < e.baseline_exit_date THEN 'early_exit'
                 ELSE 'unchanged'
             END AS exit_change,
-            'candle_wave_exit_model_120_bar' AS template_uid,
-            'Candle Wave Exit 120 Bar' AS template_name,
+            CASE
+                WHEN e.exit_model_run_id LIKE '%dyn180%' THEN 'candle_wave_exit_model_180_bar'
+                WHEN e.exit_model_run_id LIKE '%dyn120%' THEN 'candle_wave_exit_model_120_bar'
+                WHEN e.exit_model_run_id LIKE '%dyn90%' THEN 'candle_wave_exit_model_90_bar'
+                WHEN e.exit_model_run_id LIKE '%dyn60%' THEN 'candle_wave_exit_model_60_bar'
+                WHEN e.exit_model_run_id LIKE '%dyn30%' THEN 'candle_wave_exit_model_30_bar'
+                ELSE 'candle_wave_exit_model_dynamic'
+            END AS template_uid,
+            CASE
+                WHEN e.exit_model_run_id LIKE '%dyn180%' THEN 'Candle Wave Exit 180 Bar'
+                WHEN e.exit_model_run_id LIKE '%dyn120%' THEN 'Candle Wave Exit 120 Bar'
+                WHEN e.exit_model_run_id LIKE '%dyn90%' THEN 'Candle Wave Exit 90 Bar'
+                WHEN e.exit_model_run_id LIKE '%dyn60%' THEN 'Candle Wave Exit 60 Bar'
+                WHEN e.exit_model_run_id LIKE '%dyn30%' THEN 'Candle Wave Exit 30 Bar'
+                ELSE 'Candle Wave Dynamic Exit'
+            END AS template_name,
             'Candle Wave' AS harmonic_type,
             CASE WHEN e.direction = 'SHORT' THEN 'Bearish' ELSE 'Bullish' END AS market,
-            CONCAT('Candle Wave | ', COALESCE(e.root_symbol, 'Unknown'), ' | ', e.timeframe, ' | Exit 120') AS pattern_family_key,
+            CONCAT(
+                'Candle Wave | ',
+                COALESCE(e.root_symbol, 'Unknown'),
+                ' | ',
+                e.timeframe,
+                CASE
+                    WHEN e.exit_model_run_id LIKE '%dyn180%' THEN ' | Exit 180'
+                    WHEN e.exit_model_run_id LIKE '%dyn120%' THEN ' | Exit 120'
+                    WHEN e.exit_model_run_id LIKE '%dyn90%' THEN ' | Exit 90'
+                    WHEN e.exit_model_run_id LIKE '%dyn60%' THEN ' | Exit 60'
+                    WHEN e.exit_model_run_id LIKE '%dyn30%' THEN ' | Exit 30'
+                    ELSE ' | Dynamic Exit'
+                END
+            ) AS pattern_family_key,
             COALESCE(e.root_symbol, 'Unknown') AS family_bin,
             'Exit Overlay' AS family_size_bucket,
             e.timeframe AS family_time_bin,
-            '120 Bar Source Fallback' AS family_x_strictness
+            CASE
+                WHEN e.exit_model_run_id LIKE '%dyn180%' THEN '180 Bar Source Fallback'
+                WHEN e.exit_model_run_id LIKE '%dyn120%' THEN '120 Bar Source Fallback'
+                WHEN e.exit_model_run_id LIKE '%dyn90%' THEN '90 Bar Source Fallback'
+                WHEN e.exit_model_run_id LIKE '%dyn60%' THEN '60 Bar Source Fallback'
+                WHEN e.exit_model_run_id LIKE '%dyn30%' THEN '30 Bar Source Fallback'
+                ELSE 'Dynamic Source Fallback'
+            END AS family_x_strictness
         FROM ai_candle_wave_exit_model_trades e
         LEFT JOIN ai_candle_wave_selected_trades s
           ON s.model_run_id = e.source_model_run_id
          AND s.candidate_uid = e.candidate_uid
         WHERE e.exit_model_run_id = ?
         {changed_filter}
-        ORDER BY ABS(e.delta_r) DESC, e.selected_index ASC
+        {order_clause}
         LIMIT ? OFFSET ?
         "#
     );
@@ -5632,14 +6008,15 @@ fn exchange_for_futures_root(root_symbol: Option<&str>) -> Option<&'static str> 
     };
 
     match normalized.as_str() {
-        "6A" | "6B" | "6C" | "6E" | "6J" | "6M" | "6N" | "6S" | "BTC" | "EMD"
-        | "ES" | "GF" | "HE" | "LE" | "M2K" | "MES" | "MNQ" | "NKD" | "NQ" | "RTY" => {
-            Some("CME")
+        "6A" | "6B" | "6C" | "6E" | "6J" | "6M" | "6N" | "6S" | "BTC" | "EMD" | "ES" | "GF"
+        | "HE" | "LE" | "M2K" | "MES" | "MNQ" | "NKD" | "NQ" | "RTY" => Some("CME"),
+        "KE" | "UB" | "YM" | "ZB" | "ZC" | "ZF" | "ZL" | "ZM" | "ZN" | "ZS" | "ZT" | "ZW" => {
+            Some("CBOT")
         }
-        "KE" | "UB" | "YM" | "ZB" | "ZC" | "ZF" | "ZL" | "ZM" | "ZN" | "ZS" | "ZT"
-        | "ZW" => Some("CBOT"),
         "GC" | "HG" | "MGC" | "SI" => Some("COMEX"),
-        "CL" | "HO" | "MCL" | "NG" | "PA" | "PL" | "QG" | "QM" | "RB" => Some("NYMEX"),
+        "CL" | "HO" | "MCL" | "MHO" | "MRB" | "NG" | "PA" | "PL" | "QG" | "QM" | "RB" => {
+            Some("NYMEX")
+        }
         _ => None,
     }
 }
@@ -5675,8 +6052,8 @@ fn compute_slippage_ticks(slippage_points: Option<f64>, tick_size: Option<f64>) 
 }
 
 fn build_ninjatrader_execution_key(params: &NinjaTraderExecutionIngestParams) -> String {
-    let source = trim_optional_string(params.source.as_deref())
-        .unwrap_or_else(|| "ninjatrader".to_string());
+    let source =
+        trim_optional_string(params.source.as_deref()).unwrap_or_else(|| "ninjatrader".to_string());
     let account_name = trim_optional_string(params.account_name.as_deref())
         .unwrap_or_else(|| "unknown-account".to_string());
     let execution_id = trim_optional_string(params.execution_id.as_deref())
@@ -5709,10 +6086,16 @@ fn normalize_order_side(value: Option<&str>) -> Option<String> {
 }
 
 fn normalize_signal_status(value: Option<&str>) -> String {
-    match value.unwrap_or_default().trim().to_ascii_lowercase().as_str() {
+    match value
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "queued" => "queued".to_string(),
         "claimed" => "claimed".to_string(),
         "triggered" => "triggered".to_string(),
+        "completed" => "completed".to_string(),
         "cancelled" => "cancelled".to_string(),
         "failed" => "failed".to_string(),
         _ => "queued".to_string(),
@@ -5758,6 +6141,52 @@ async fn ensure_ninjatrader_signal_tables(pool: &MySqlPool) -> Result<(), sqlx::
     )
     .execute(pool)
     .await?;
+
+    Ok(())
+}
+
+async fn ensure_ninjatrader_signal_history_columns(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    ensure_ninjatrader_signal_tables(pool).await?;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT COLUMN_NAME
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = 'ninjatrader_order_signals'
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+    let existing: HashSet<String> = rows
+        .iter()
+        .filter_map(|row| row.try_get::<String, _>("COLUMN_NAME").ok())
+        .collect();
+    let columns = [
+        ("accounting_instrument", "VARCHAR(64) NULL"),
+        ("accounting_root_symbol", "VARCHAR(32) NULL"),
+        ("accounting_tick_value", "DOUBLE NULL"),
+        ("accounting_size_ratio", "DOUBLE NULL"),
+        ("accounting_risk_dollars", "DOUBLE NULL"),
+        ("execution_tick_value", "DOUBLE NULL"),
+        ("execution_risk_dollars", "DOUBLE NULL"),
+        ("exit_order_id", "VARCHAR(128) NULL"),
+        ("exit_price", "DOUBLE NULL"),
+        ("exit_action", "VARCHAR(32) NULL"),
+        ("exit_order_name", "VARCHAR(255) NULL"),
+        ("exit_received_at", "DATETIME(6) NULL"),
+        ("realized_ticks", "DOUBLE NULL"),
+        ("realized_execution_dollars", "DOUBLE NULL"),
+        ("realized_accounting_dollars", "DOUBLE NULL"),
+    ];
+
+    for (name, definition) in columns {
+        if existing.contains(name) {
+            continue;
+        }
+        let sql = format!("ALTER TABLE ninjatrader_order_signals ADD COLUMN {name} {definition}");
+        sqlx::query(&sql).execute(pool).await?;
+    }
 
     Ok(())
 }
@@ -5859,6 +6288,491 @@ async fn ensure_ninjatrader_slippage_tables(pool: &MySqlPool) -> Result<(), sqlx
     Ok(())
 }
 
+fn build_ninjatrader_candle_key(
+    source: &str,
+    instrument: Option<&str>,
+    timeframe: Option<&str>,
+    candle_time: Option<NaiveDateTime>,
+) -> String {
+    let instrument = instrument
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .unwrap_or("unknown-instrument");
+    let timeframe = timeframe
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .unwrap_or("unknown-timeframe");
+    let candle_time = candle_time
+        .map(|value| value.format("%Y-%m-%d %H:%M:%S%.6f").to_string())
+        .unwrap_or_else(|| "unknown-time".to_string());
+
+    format!("{source}|{instrument}|{timeframe}|{candle_time}")
+}
+
+async fn ensure_ninjatrader_candle_tables(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ninjatrader_live_candles (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            external_key VARCHAR(255) NOT NULL,
+            source VARCHAR(64) NOT NULL DEFAULT 'ninjatrader',
+            bridge_version VARCHAR(32) NULL,
+            client_id VARCHAR(128) NULL,
+            instrument VARCHAR(64) NULL,
+            root_symbol VARCHAR(32) NULL,
+            exchange_name VARCHAR(32) NULL,
+            timeframe VARCHAR(32) NULL,
+            bars_period_type VARCHAR(32) NULL,
+            bars_period_value BIGINT NULL,
+            candle_time DATETIME(6) NULL,
+            open DOUBLE NULL,
+            high DOUBLE NULL,
+            low DOUBLE NULL,
+            close DOUBLE NULL,
+            volume DOUBLE NULL,
+            tick_size DOUBLE NULL,
+            point_value DOUBLE NULL,
+            is_realtime TINYINT NULL,
+            raw_payload_json LONGTEXT NULL,
+            received_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+            updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+            UNIQUE KEY uq_nt_live_candle_external_key (external_key),
+            INDEX idx_nt_live_candle_instrument_time (instrument, timeframe, candle_time),
+            INDEX idx_nt_live_candle_root_time (root_symbol, timeframe, candle_time),
+            INDEX idx_nt_live_candle_received (received_at)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_ninjatrader_live_bar_snapshot_tables(
+    pool: &MySqlPool,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ninjatrader_live_bar_snapshots (
+            id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            external_key VARCHAR(255) NOT NULL,
+            source VARCHAR(64) NOT NULL DEFAULT 'ninjatrader',
+            bridge_version VARCHAR(32) NULL,
+            client_id VARCHAR(128) NULL,
+            instrument VARCHAR(64) NULL,
+            root_symbol VARCHAR(32) NULL,
+            exchange_name VARCHAR(32) NULL,
+            timeframe VARCHAR(32) NULL,
+            bars_period_type VARCHAR(32) NULL,
+            bars_period_value BIGINT NULL,
+            candle_time DATETIME(6) NULL,
+            candle_time_utc DATETIME(6) NULL,
+            bucket_time_utc DATETIME(6) NULL,
+            snapshot_time_utc DATETIME(6) NULL,
+            open DOUBLE NULL,
+            high DOUBLE NULL,
+            low DOUBLE NULL,
+            close DOUBLE NULL,
+            last_price DOUBLE NULL,
+            volume DOUBLE NULL,
+            tick_size DOUBLE NULL,
+            point_value DOUBLE NULL,
+            is_realtime TINYINT NULL,
+            is_closed TINYINT NULL,
+            raw_payload_json LONGTEXT NULL,
+            received_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+            updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+            UNIQUE KEY uq_nt_live_bar_snapshot_external_key (external_key),
+            INDEX idx_nt_live_bar_snapshot_root_time (root_symbol, timeframe, bucket_time_utc),
+            INDEX idx_nt_live_bar_snapshot_instrument_time (instrument, timeframe, bucket_time_utc),
+            INDEX idx_nt_live_bar_snapshot_received (received_at),
+            INDEX idx_nt_live_bar_snapshot_updated (updated_at)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+#[route("/ninjatrader/candles", method = "POST")]
+async fn ingest_ninjatrader_candle(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<NinjaTraderCandleIngestParams>,
+) -> impl Responder {
+    if let Err(error) = ensure_ninjatrader_candle_tables(pool.get_ref()).await {
+        eprintln!("NinjaTrader candle table ensure failed: {:?}", error);
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    let source =
+        trim_optional_string(params.source.as_deref()).unwrap_or_else(|| "ninjatrader".to_string());
+    let instrument =
+        trim_optional_string(params.instrument.as_deref()).map(|item| item.to_ascii_uppercase());
+    let root_symbol =
+        normalize_ninjatrader_root_symbol(instrument.as_deref(), params.root_symbol.as_deref());
+    let exchange_name = trim_optional_string(params.exchange_name.as_deref())
+        .or_else(|| exchange_for_futures_root(root_symbol.as_deref()).map(str::to_string));
+    let timeframe = trim_optional_string(params.timeframe.as_deref())
+        .or_else(|| {
+            params
+                .bars_period_value
+                .map(|value| format!("{}m", value.max(1)))
+        })
+        .map(|item| item.to_ascii_lowercase());
+    let candle_time = parse_bridge_datetime(params.candle_time.as_deref());
+
+    if candle_time.is_none() {
+        return HttpResponse::BadRequest().body("candle_time is required");
+    }
+    if params.open.is_none()
+        || params.high.is_none()
+        || params.low.is_none()
+        || params.close.is_none()
+    {
+        return HttpResponse::BadRequest().body("open/high/low/close are required");
+    }
+
+    let external_key = build_ninjatrader_candle_key(
+        &source,
+        instrument.as_deref(),
+        timeframe.as_deref(),
+        candle_time,
+    );
+    let raw_payload_json = serde_json::to_string(&params.0).ok();
+
+    let result = match sqlx::query(
+        r#"
+        INSERT INTO ninjatrader_live_candles (
+            external_key,
+            source,
+            bridge_version,
+            client_id,
+            instrument,
+            root_symbol,
+            exchange_name,
+            timeframe,
+            bars_period_type,
+            bars_period_value,
+            candle_time,
+            open,
+            high,
+            low,
+            close,
+            volume,
+            tick_size,
+            point_value,
+            is_realtime,
+            raw_payload_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            bridge_version = VALUES(bridge_version),
+            client_id = VALUES(client_id),
+            instrument = VALUES(instrument),
+            root_symbol = VALUES(root_symbol),
+            exchange_name = VALUES(exchange_name),
+            timeframe = VALUES(timeframe),
+            bars_period_type = VALUES(bars_period_type),
+            bars_period_value = VALUES(bars_period_value),
+            candle_time = VALUES(candle_time),
+            open = VALUES(open),
+            high = VALUES(high),
+            low = VALUES(low),
+            close = VALUES(close),
+            volume = VALUES(volume),
+            tick_size = VALUES(tick_size),
+            point_value = VALUES(point_value),
+            is_realtime = VALUES(is_realtime),
+            raw_payload_json = VALUES(raw_payload_json),
+            id = LAST_INSERT_ID(id)
+        "#,
+    )
+    .bind(&external_key)
+    .bind(&source)
+    .bind(trim_optional_string(params.bridge_version.as_deref()))
+    .bind(trim_optional_string(params.client_id.as_deref()))
+    .bind(&instrument)
+    .bind(&root_symbol)
+    .bind(&exchange_name)
+    .bind(&timeframe)
+    .bind(trim_optional_string(params.bars_period_type.as_deref()))
+    .bind(params.bars_period_value)
+    .bind(candle_time)
+    .bind(params.open)
+    .bind(params.high)
+    .bind(params.low)
+    .bind(params.close)
+    .bind(params.volume)
+    .bind(params.tick_size)
+    .bind(params.point_value)
+    .bind(
+        params
+            .is_realtime
+            .map(|value| if value { 1_i64 } else { 0_i64 }),
+    )
+    .bind(raw_payload_json)
+    .execute(pool.get_ref())
+    .await
+    {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("NinjaTrader candle insert failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(NinjaTraderCandleIngestResponse {
+        ok: true,
+        candle_id: result.last_insert_id() as i64,
+        duplicate: result.rows_affected() != 1,
+        instrument,
+        root_symbol,
+        timeframe,
+        candle_time,
+    })
+}
+
+#[route("/ninjatrader/live-bar-snapshot", method = "POST")]
+async fn ingest_ninjatrader_live_bar_snapshot(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<NinjaTraderLiveBarSnapshotParams>,
+) -> impl Responder {
+    if let Err(error) = ensure_ninjatrader_live_bar_snapshot_tables(pool.get_ref()).await {
+        eprintln!("NinjaTrader live snapshot table ensure failed: {:?}", error);
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    let source =
+        trim_optional_string(params.source.as_deref()).unwrap_or_else(|| "ninjatrader".to_string());
+    let instrument =
+        trim_optional_string(params.instrument.as_deref()).map(|item| item.to_ascii_uppercase());
+    let root_symbol =
+        normalize_ninjatrader_root_symbol(instrument.as_deref(), params.root_symbol.as_deref());
+    let exchange_name = trim_optional_string(params.exchange_name.as_deref())
+        .or_else(|| exchange_for_futures_root(root_symbol.as_deref()).map(str::to_string));
+    let timeframe = trim_optional_string(params.timeframe.as_deref())
+        .or_else(|| {
+            params
+                .bars_period_value
+                .map(|value| format!("{}m", value.max(1)))
+        })
+        .map(|item| item.to_ascii_lowercase());
+    let candle_time = parse_bridge_datetime(params.candle_time.as_deref());
+    let candle_time_utc = parse_bridge_datetime(params.candle_time_utc.as_deref());
+    let bucket_time_utc = parse_bridge_datetime(params.bucket_time_utc.as_deref());
+    let snapshot_time_utc = parse_bridge_datetime(params.snapshot_time_utc.as_deref());
+
+    if candle_time.is_none() && candle_time_utc.is_none() && bucket_time_utc.is_none() {
+        return HttpResponse::BadRequest().body("candle_time, candle_time_utc, or bucket_time_utc is required");
+    }
+    if params.open.is_none()
+        || params.high.is_none()
+        || params.low.is_none()
+        || params.close.is_none()
+    {
+        return HttpResponse::BadRequest().body("open/high/low/close are required");
+    }
+
+    let key_time = bucket_time_utc
+        .or(candle_time_utc)
+        .or(candle_time)
+        .map(|value| value.format("%Y-%m-%d %H:%M:%S%.6f").to_string())
+        .unwrap_or_else(|| "unknown-time".to_string());
+    let external_key = format!(
+        "{}|{}|{}|{}|live-bar-snapshot",
+        source,
+        instrument.as_deref().unwrap_or("unknown-instrument"),
+        timeframe.as_deref().unwrap_or("unknown-timeframe"),
+        key_time
+    );
+    let raw_payload_json = serde_json::to_string(&params.0).ok();
+
+    let result = match sqlx::query(
+        r#"
+        INSERT INTO ninjatrader_live_bar_snapshots (
+            external_key,
+            source,
+            bridge_version,
+            client_id,
+            instrument,
+            root_symbol,
+            exchange_name,
+            timeframe,
+            bars_period_type,
+            bars_period_value,
+            candle_time,
+            candle_time_utc,
+            bucket_time_utc,
+            snapshot_time_utc,
+            open,
+            high,
+            low,
+            close,
+            last_price,
+            volume,
+            tick_size,
+            point_value,
+            is_realtime,
+            is_closed,
+            raw_payload_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            bridge_version = VALUES(bridge_version),
+            client_id = VALUES(client_id),
+            instrument = VALUES(instrument),
+            root_symbol = VALUES(root_symbol),
+            exchange_name = VALUES(exchange_name),
+            timeframe = VALUES(timeframe),
+            bars_period_type = VALUES(bars_period_type),
+            bars_period_value = VALUES(bars_period_value),
+            candle_time = VALUES(candle_time),
+            candle_time_utc = VALUES(candle_time_utc),
+            bucket_time_utc = VALUES(bucket_time_utc),
+            snapshot_time_utc = VALUES(snapshot_time_utc),
+            open = VALUES(open),
+            high = VALUES(high),
+            low = VALUES(low),
+            close = VALUES(close),
+            last_price = VALUES(last_price),
+            volume = VALUES(volume),
+            tick_size = VALUES(tick_size),
+            point_value = VALUES(point_value),
+            is_realtime = VALUES(is_realtime),
+            is_closed = VALUES(is_closed),
+            raw_payload_json = VALUES(raw_payload_json),
+            id = LAST_INSERT_ID(id)
+        "#,
+    )
+    .bind(&external_key)
+    .bind(&source)
+    .bind(trim_optional_string(params.bridge_version.as_deref()))
+    .bind(trim_optional_string(params.client_id.as_deref()))
+    .bind(&instrument)
+    .bind(&root_symbol)
+    .bind(&exchange_name)
+    .bind(&timeframe)
+    .bind(trim_optional_string(params.bars_period_type.as_deref()))
+    .bind(params.bars_period_value)
+    .bind(candle_time)
+    .bind(candle_time_utc)
+    .bind(bucket_time_utc)
+    .bind(snapshot_time_utc)
+    .bind(params.open)
+    .bind(params.high)
+    .bind(params.low)
+    .bind(params.close)
+    .bind(params.last_price.or(params.close))
+    .bind(params.volume)
+    .bind(params.tick_size)
+    .bind(params.point_value)
+    .bind(
+        params
+            .is_realtime
+            .map(|value| if value { 1_i64 } else { 0_i64 }),
+    )
+    .bind(
+        params
+            .is_closed
+            .map(|value| if value { 1_i64 } else { 0_i64 }),
+    )
+    .bind(raw_payload_json)
+    .execute(pool.get_ref())
+    .await
+    {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("NinjaTrader live snapshot insert failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(NinjaTraderLiveBarSnapshotIngestResponse {
+        ok: true,
+        snapshot_id: result.last_insert_id() as i64,
+        duplicate: result.rows_affected() != 1,
+        instrument,
+        root_symbol,
+        timeframe,
+        candle_time,
+        bucket_time_utc,
+    })
+}
+
+#[route("/ninjatrader/live-bar-snapshot/latest", method = "GET", method = "POST")]
+async fn fetch_ninjatrader_live_bar_snapshot_latest(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<NinjaTraderLiveBarSnapshotLatestParams>,
+) -> impl Responder {
+    if let Err(error) = ensure_ninjatrader_live_bar_snapshot_tables(pool.get_ref()).await {
+        eprintln!("NinjaTrader live snapshot table ensure failed: {:?}", error);
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    let root_symbol = trim_optional_string(params.root_symbol.as_deref())
+        .map(|item| item.to_ascii_uppercase());
+    let timeframe = trim_optional_string(params.timeframe.as_deref())
+        .map(|item| item.to_ascii_lowercase());
+    let instrument = trim_optional_string(params.instrument.as_deref())
+        .map(|item| item.to_ascii_uppercase());
+
+    let row = match sqlx::query_as::<_, NinjaTraderLiveBarSnapshotRow>(
+        r#"
+        SELECT
+            id,
+            instrument,
+            root_symbol,
+            exchange_name,
+            timeframe,
+            bars_period_type,
+            bars_period_value,
+            candle_time,
+            candle_time_utc,
+            bucket_time_utc,
+            snapshot_time_utc,
+            open,
+            high,
+            low,
+            close,
+            last_price,
+            volume,
+            tick_size,
+            point_value,
+            is_realtime,
+            is_closed,
+            received_at,
+            updated_at
+        FROM ninjatrader_live_bar_snapshots
+        WHERE (? IS NULL OR root_symbol = ?)
+          AND (? IS NULL OR timeframe = ?)
+          AND (? IS NULL OR instrument = ?)
+        ORDER BY COALESCE(snapshot_time_utc, candle_time_utc, bucket_time_utc, candle_time, updated_at) DESC,
+                 id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&root_symbol)
+    .bind(&root_symbol)
+    .bind(&timeframe)
+    .bind(&timeframe)
+    .bind(&instrument)
+    .bind(&instrument)
+    .fetch_optional(pool.get_ref())
+    .await
+    {
+        Ok(row) => row,
+        Err(error) => {
+            eprintln!("NinjaTrader live snapshot latest fetch failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(NinjaTraderLiveBarSnapshotLatestResponse { snapshot: row })
+}
+
 #[route("/ninjatrader/executions", method = "POST")]
 async fn ingest_ninjatrader_execution(
     pool: web::Data<MySqlPool>,
@@ -5869,8 +6783,8 @@ async fn ingest_ninjatrader_execution(
         return HttpResponse::InternalServerError().finish();
     }
 
-    let source = trim_optional_string(params.source.as_deref())
-        .unwrap_or_else(|| "ninjatrader".to_string());
+    let source =
+        trim_optional_string(params.source.as_deref()).unwrap_or_else(|| "ninjatrader".to_string());
     let external_key = build_ninjatrader_execution_key(&params);
     let instrument =
         trim_optional_string(params.instrument.as_deref()).map(|item| item.to_ascii_uppercase());
@@ -6179,6 +7093,794 @@ async fn fetch_ninjatrader_slippage(
     })
 }
 
+async fn latest_ninjatrader_trend_run_id(
+    pool: &MySqlPool,
+    root_symbol: &str,
+    timeframe: &str,
+    instrument: Option<&str>,
+) -> Result<Option<String>, sqlx::Error> {
+    if let Some(instrument) = instrument {
+        let row = sqlx::query(
+            r#"
+            SELECT run_id
+            FROM ninjatrader_trend_model_events
+            WHERE root_symbol = ?
+              AND timeframe = ?
+              AND instrument = ?
+            GROUP BY run_id
+            ORDER BY MAX(COALESCE(ts_utc, candle_time, created_at)) DESC, MAX(id) DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(root_symbol)
+        .bind(timeframe)
+        .bind(instrument)
+        .fetch_optional(pool)
+        .await?;
+
+        return Ok(row.and_then(|item| item.try_get::<String, _>("run_id").ok()));
+    }
+
+    let row = sqlx::query(
+        r#"
+        SELECT run_id
+        FROM ninjatrader_trend_model_events
+        WHERE root_symbol = ?
+          AND timeframe = ?
+        GROUP BY run_id
+        ORDER BY MAX(COALESCE(ts_utc, candle_time, created_at)) DESC, MAX(id) DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(root_symbol)
+    .bind(timeframe)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.and_then(|item| item.try_get::<String, _>("run_id").ok()))
+}
+
+#[route("/ninjatrader/trend-events", method = "GET", method = "POST")]
+async fn fetch_ninjatrader_trend_events(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<NinjaTraderTrendEventParams>,
+) -> impl Responder {
+    let root_symbol =
+        trim_optional_string(params.root_symbol.as_deref()).unwrap_or_else(|| "HO".to_string());
+    let timeframe =
+        trim_optional_string(params.timeframe.as_deref()).unwrap_or_else(|| "2m".to_string());
+    let limit = params.limit.unwrap_or(40).clamp(1, 500);
+
+    match table_exists(pool.get_ref(), "ninjatrader_trend_model_events").await {
+        Ok(true) => {}
+        Ok(false) => {
+            return HttpResponse::Ok().json(NinjaTraderTrendEventsResponse {
+                run_id: None,
+                root_symbol,
+                timeframe,
+                total_rows: 0,
+                limit,
+                rows: Vec::new(),
+            });
+        }
+        Err(error) => {
+            eprintln!("NinjaTrader trend event table check failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let instrument = trim_optional_string(params.instrument.as_deref());
+    let include_rejected = params.include_rejected.unwrap_or(false);
+    let start_date = trim_optional_string(params.start_date.as_deref());
+    let end_date = trim_optional_string(params.end_date.as_deref());
+
+    let run_id = match trim_optional_string(params.run_id.as_deref()) {
+        Some(run_id) => Some(run_id),
+        None => match latest_ninjatrader_trend_run_id(
+            pool.get_ref(),
+            &root_symbol,
+            &timeframe,
+            instrument.as_deref(),
+        )
+        .await
+        {
+            Ok(run_id) => run_id,
+            Err(error) if is_missing_table_error(&error) => None,
+            Err(error) => {
+                eprintln!("NinjaTrader trend latest run lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        },
+    };
+
+    let Some(run_id) = run_id else {
+        return HttpResponse::Ok().json(NinjaTraderTrendEventsResponse {
+            run_id: None,
+            root_symbol,
+            timeframe,
+            total_rows: 0,
+            limit,
+            rows: Vec::new(),
+        });
+    };
+
+    let mut filters = String::from(
+        "trend.run_id = ? AND trend.root_symbol = ? AND trend.timeframe = ? AND trend.event_type = 'trend_confirmed'",
+    );
+    if !include_rejected {
+        filters.push_str(" AND trend.status = 'confirmed'");
+    }
+    if instrument.is_some() {
+        filters.push_str(" AND trend.instrument = ?");
+    }
+    if start_date.is_some() {
+        filters.push_str(" AND trend.candle_time >= ?");
+    }
+    if end_date.is_some() {
+        filters.push_str(" AND trend.candle_time <= ?");
+    }
+
+    let count_sql = format!(
+        r#"
+        SELECT COUNT(*) AS total_rows
+        FROM ninjatrader_trend_model_events trend
+        WHERE {filters}
+        "#,
+    );
+    let mut count_query = sqlx::query(&count_sql)
+        .bind(&run_id)
+        .bind(&root_symbol)
+        .bind(&timeframe);
+    if let Some(instrument) = instrument.as_deref() {
+        count_query = count_query.bind(instrument);
+    }
+    if let Some(start_date) = start_date.as_deref() {
+        count_query = count_query.bind(start_date);
+    }
+    if let Some(end_date) = end_date.as_deref() {
+        count_query = count_query.bind(end_date);
+    }
+    let total_rows = match count_query.fetch_one(pool.get_ref()).await {
+        Ok(row) => row.try_get::<i64, _>("total_rows").unwrap_or(0),
+        Err(error) if is_missing_table_error(&error) => 0,
+        Err(error) => {
+            eprintln!("NinjaTrader trend count failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let rows_sql = format!(
+        r#"
+        SELECT *
+        FROM (
+            SELECT
+                CAST(trend.id AS SIGNED) AS id,
+                trend.run_id,
+                trend.event_uid,
+                trend.event_type,
+                trend.instrument,
+                trend.root_symbol,
+                trend.model_symbol,
+                trend.timeframe,
+                CAST(trend.candle_time AS DATETIME) AS candle_time,
+                CAST(trend.ts_utc AS DATETIME) AS ts_utc,
+                trend.direction,
+                CAST(trend.level2_score AS DOUBLE) AS level2_score,
+                CAST(trend.stage2_score AS DOUBLE) AS stage2_score,
+                CAST(trend.entry_price AS DOUBLE) AS entry_price,
+                CAST(trend.stop_price AS DOUBLE) AS stop_price,
+                CAST(trend.risk_ticks AS DOUBLE) AS risk_ticks,
+                trend.status,
+                paper.status AS paper_entry_status,
+                CAST(paper.candle_time AS DATETIME) AS paper_entry_candle_time,
+                CAST(paper.ts_utc AS DATETIME) AS paper_entry_ts_utc,
+                CAST(paper.entry_price AS DOUBLE) AS paper_entry_price,
+                CAST(paper.stop_price AS DOUBLE) AS paper_stop_price,
+                CAST(paper.risk_ticks AS DOUBLE) AS paper_risk_ticks,
+                paper_exit.status AS paper_exit_status,
+                CAST(paper_exit.candle_time AS DATETIME) AS paper_exit_candle_time,
+                CAST(paper_exit.ts_utc AS DATETIME) AS paper_exit_ts_utc,
+                CAST(paper_exit.entry_price AS DOUBLE) AS paper_exit_price,
+                CAST(JSON_UNQUOTE(JSON_EXTRACT(paper_exit.details_json, '$.exit_reason')) AS CHAR) AS paper_exit_reason,
+                CAST(JSON_UNQUOTE(JSON_EXTRACT(paper_exit.details_json, '$.result_r')) AS DOUBLE) AS paper_result_r,
+                CAST(JSON_UNQUOTE(JSON_EXTRACT(paper_exit.details_json, '$.raw_result_r')) AS DOUBLE) AS paper_raw_result_r,
+                CAST(JSON_UNQUOTE(JSON_EXTRACT(paper_exit.details_json, '$.slippage_r')) AS DOUBLE) AS paper_slippage_r,
+                trend.details_json,
+                CAST(trend.created_at AS DATETIME) AS created_at
+            FROM ninjatrader_trend_model_events trend
+            LEFT JOIN ninjatrader_trend_model_events paper
+              ON paper.run_id = trend.run_id
+             AND paper.event_type = 'paper_entry_audit'
+             AND JSON_UNQUOTE(JSON_EXTRACT(paper.details_json, '$.candidate_uid')) =
+                 JSON_UNQUOTE(JSON_EXTRACT(trend.details_json, '$.candidate_uid'))
+            LEFT JOIN ninjatrader_trend_model_events paper_exit
+              ON paper_exit.run_id = trend.run_id
+             AND paper_exit.event_type = 'paper_exit_audit'
+             AND JSON_UNQUOTE(JSON_EXTRACT(paper_exit.details_json, '$.candidate_uid')) =
+                 JSON_UNQUOTE(JSON_EXTRACT(trend.details_json, '$.candidate_uid'))
+            WHERE {filters}
+            ORDER BY trend.candle_time DESC, trend.id DESC
+            LIMIT ?
+        ) latest_trends
+        ORDER BY candle_time ASC, id ASC
+        "#,
+    );
+    let mut rows_query = sqlx::query_as::<_, NinjaTraderTrendEventRow>(&rows_sql)
+        .bind(&run_id)
+        .bind(&root_symbol)
+        .bind(&timeframe);
+    if let Some(instrument) = instrument.as_deref() {
+        rows_query = rows_query.bind(instrument);
+    }
+    if let Some(start_date) = start_date.as_deref() {
+        rows_query = rows_query.bind(start_date);
+    }
+    if let Some(end_date) = end_date.as_deref() {
+        rows_query = rows_query.bind(end_date);
+    }
+    rows_query = rows_query.bind(limit);
+
+    let rows = match rows_query.fetch_all(pool.get_ref()).await {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("NinjaTrader trend event lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(NinjaTraderTrendEventsResponse {
+        run_id: Some(run_id),
+        root_symbol,
+        timeframe,
+        total_rows,
+        limit,
+        rows,
+    })
+}
+
+#[route("/ninjatrader/scanner-activity", method = "GET", method = "POST")]
+async fn fetch_ninjatrader_scanner_activity(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<NinjaTraderTrendEventParams>,
+) -> impl Responder {
+    let root_symbol =
+        trim_optional_string(params.root_symbol.as_deref()).unwrap_or_else(|| "HO".to_string());
+    let timeframe =
+        trim_optional_string(params.timeframe.as_deref()).unwrap_or_else(|| "2m".to_string());
+    let limit = params.limit.unwrap_or(120).clamp(1, 500);
+
+    match table_exists(pool.get_ref(), "ninjatrader_trend_model_events").await {
+        Ok(true) => {}
+        Ok(false) => {
+            return HttpResponse::Ok().json(NinjaTraderTrendEventsResponse {
+                run_id: None,
+                root_symbol,
+                timeframe,
+                total_rows: 0,
+                limit,
+                rows: Vec::new(),
+            });
+        }
+        Err(error) => {
+            eprintln!("NinjaTrader scanner activity table check failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let instrument = trim_optional_string(params.instrument.as_deref());
+    let start_date = trim_optional_string(params.start_date.as_deref());
+    let end_date = trim_optional_string(params.end_date.as_deref());
+
+    let run_id = match trim_optional_string(params.run_id.as_deref()) {
+        Some(run_id) => Some(run_id),
+        None => match latest_ninjatrader_trend_run_id(
+            pool.get_ref(),
+            &root_symbol,
+            &timeframe,
+            instrument.as_deref(),
+        )
+        .await
+        {
+            Ok(run_id) => run_id,
+            Err(error) if is_missing_table_error(&error) => None,
+            Err(error) => {
+                eprintln!("NinjaTrader scanner activity latest run lookup failed: {:?}", error);
+                return HttpResponse::InternalServerError().finish();
+            }
+        },
+    };
+
+    let Some(run_id) = run_id else {
+        return HttpResponse::Ok().json(NinjaTraderTrendEventsResponse {
+            run_id: None,
+            root_symbol,
+            timeframe,
+            total_rows: 0,
+            limit,
+            rows: Vec::new(),
+        });
+    };
+
+    let mut filters = String::from(
+        "evt.run_id = ? AND evt.root_symbol = ? AND evt.timeframe = ? AND evt.event_type IN ('cycle_scored', 'level2_pick', 'trend_confirmed', 'stage2_expired', 'order_signal', 'heartbeat', 'feed_stale', 'feed_restored', 'feed_gap_detected', 'feed_backlog_reset')",
+    );
+    if instrument.is_some() {
+        filters.push_str(" AND evt.instrument = ?");
+    }
+    if start_date.is_some() {
+        filters.push_str(" AND COALESCE(evt.candle_time, evt.ts_utc, evt.created_at) >= ?");
+    }
+    if end_date.is_some() {
+        filters.push_str(" AND COALESCE(evt.candle_time, evt.ts_utc, evt.created_at) <= ?");
+    }
+
+    let count_sql = format!(
+        r#"
+        SELECT COUNT(*) AS total_rows
+        FROM ninjatrader_trend_model_events evt
+        WHERE {filters}
+        "#,
+    );
+    let mut count_query = sqlx::query(&count_sql)
+        .bind(&run_id)
+        .bind(&root_symbol)
+        .bind(&timeframe);
+    if let Some(instrument) = instrument.as_deref() {
+        count_query = count_query.bind(instrument);
+    }
+    if let Some(start_date) = start_date.as_deref() {
+        count_query = count_query.bind(start_date);
+    }
+    if let Some(end_date) = end_date.as_deref() {
+        count_query = count_query.bind(end_date);
+    }
+    let total_rows = match count_query.fetch_one(pool.get_ref()).await {
+        Ok(row) => row.try_get::<i64, _>("total_rows").unwrap_or(0),
+        Err(error) if is_missing_table_error(&error) => 0,
+        Err(error) => {
+            eprintln!("NinjaTrader scanner activity count failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let rows_sql = format!(
+        r#"
+        SELECT *
+        FROM (
+            SELECT
+                CAST(evt.id AS SIGNED) AS id,
+                evt.run_id,
+                evt.event_uid,
+                evt.event_type,
+                evt.instrument,
+                evt.root_symbol,
+                evt.model_symbol,
+                evt.timeframe,
+                CAST(evt.candle_time AS DATETIME) AS candle_time,
+                CAST(evt.ts_utc AS DATETIME) AS ts_utc,
+                evt.direction,
+                CAST(evt.level2_score AS DOUBLE) AS level2_score,
+                CAST(evt.stage2_score AS DOUBLE) AS stage2_score,
+                CAST(evt.entry_price AS DOUBLE) AS entry_price,
+                CAST(evt.stop_price AS DOUBLE) AS stop_price,
+                CAST(evt.risk_ticks AS DOUBLE) AS risk_ticks,
+                evt.status,
+                CAST(NULL AS CHAR) AS paper_entry_status,
+                CAST(NULL AS DATETIME) AS paper_entry_candle_time,
+                CAST(NULL AS DATETIME) AS paper_entry_ts_utc,
+                CAST(NULL AS DOUBLE) AS paper_entry_price,
+                CAST(NULL AS DOUBLE) AS paper_stop_price,
+                CAST(NULL AS DOUBLE) AS paper_risk_ticks,
+                CAST(NULL AS CHAR) AS paper_exit_status,
+                CAST(NULL AS DATETIME) AS paper_exit_candle_time,
+                CAST(NULL AS DATETIME) AS paper_exit_ts_utc,
+                CAST(NULL AS DOUBLE) AS paper_exit_price,
+                CAST(NULL AS CHAR) AS paper_exit_reason,
+                CAST(NULL AS DOUBLE) AS paper_result_r,
+                CAST(NULL AS DOUBLE) AS paper_raw_result_r,
+                CAST(NULL AS DOUBLE) AS paper_slippage_r,
+                evt.details_json,
+                CAST(evt.created_at AS DATETIME) AS created_at
+            FROM ninjatrader_trend_model_events evt
+            WHERE {filters}
+            ORDER BY COALESCE(evt.candle_time, evt.ts_utc, evt.created_at) DESC, evt.id DESC
+            LIMIT ?
+        ) latest_activity
+        ORDER BY COALESCE(candle_time, ts_utc, created_at) ASC, id ASC
+        "#,
+    );
+    let mut rows_query = sqlx::query_as::<_, NinjaTraderTrendEventRow>(&rows_sql)
+        .bind(&run_id)
+        .bind(&root_symbol)
+        .bind(&timeframe);
+    if let Some(instrument) = instrument.as_deref() {
+        rows_query = rows_query.bind(instrument);
+    }
+    if let Some(start_date) = start_date.as_deref() {
+        rows_query = rows_query.bind(start_date);
+    }
+    if let Some(end_date) = end_date.as_deref() {
+        rows_query = rows_query.bind(end_date);
+    }
+    rows_query = rows_query.bind(limit);
+
+    let rows = match rows_query.fetch_all(pool.get_ref()).await {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("NinjaTrader scanner activity lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(NinjaTraderTrendEventsResponse {
+        run_id: Some(run_id),
+        root_symbol,
+        timeframe,
+        total_rows,
+        limit,
+        rows,
+    })
+}
+
+#[route("/ninjatrader/oracle-trends", method = "GET", method = "POST")]
+async fn fetch_ninjatrader_oracle_trends(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<NinjaTraderOracleTrendParams>,
+) -> impl Responder {
+    let root_symbol =
+        trim_optional_string(params.root_symbol.as_deref()).unwrap_or_else(|| "HO".to_string());
+    let timeframe =
+        trim_optional_string(params.timeframe.as_deref()).unwrap_or_else(|| "2m".to_string());
+    let run_id = trim_optional_string(params.run_id.as_deref())
+        .unwrap_or_else(|| "oracle-perfect-trends-tfspec-v1-2m-2024_2026".to_string());
+    let symbol = trim_optional_string(params.symbol.as_deref()).map(|value| value.to_uppercase());
+    let start_date = trim_optional_string(params.start_date.as_deref());
+    let end_date = trim_optional_string(params.end_date.as_deref());
+    let limit = params.limit.unwrap_or(80).clamp(1, 20_000);
+
+    match table_exists(pool.get_ref(), "ai_oracle_trend_trades").await {
+        Ok(true) => {}
+        Ok(false) => {
+            return HttpResponse::Ok().json(NinjaTraderOracleTrendsResponse {
+                run_id,
+                root_symbol,
+                symbol,
+                timeframe,
+                total_rows: 0,
+                limit,
+                rows: Vec::new(),
+            });
+        }
+        Err(error) => {
+            eprintln!("Oracle trend table check failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    }
+
+    let mut filters = String::from("run_id = ? AND root_symbol = ? AND timeframe = ?");
+    if symbol.is_some() {
+        filters.push_str(" AND symbol = ?");
+    }
+    if start_date.is_some() {
+        filters.push_str(" AND exit_date >= ?");
+    }
+    if end_date.is_some() {
+        filters.push_str(" AND entry_date <= ?");
+    }
+
+    let count_sql = format!(
+        r#"
+        SELECT COUNT(*) AS total_rows
+        FROM ai_oracle_trend_trades
+        WHERE {filters}
+        "#,
+    );
+    let mut count_query = sqlx::query(&count_sql)
+        .bind(&run_id)
+        .bind(&root_symbol)
+        .bind(&timeframe);
+    if let Some(symbol) = symbol.as_deref() {
+        count_query = count_query.bind(symbol);
+    }
+    if let Some(start_date) = start_date.as_deref() {
+        count_query = count_query.bind(start_date);
+    }
+    if let Some(end_date) = end_date.as_deref() {
+        count_query = count_query.bind(end_date);
+    }
+
+    let total_rows = match count_query.fetch_one(pool.get_ref()).await {
+        Ok(row) => row.try_get::<i64, _>("total_rows").unwrap_or(0),
+        Err(error) if is_missing_table_error(&error) => 0,
+        Err(error) => {
+            eprintln!("Oracle trend count failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let rows_sql = format!(
+        r#"
+        SELECT *
+        FROM (
+            SELECT
+                run_id,
+                oracle_trade_id,
+                timeframe,
+                CAST(valid_year AS SIGNED) AS valid_year,
+                root_symbol,
+                symbol,
+                direction,
+                CAST(entry_idx AS SIGNED) AS entry_idx,
+                CAST(exit_idx AS SIGNED) AS exit_idx,
+                CAST(entry_date AS DATETIME) AS entry_date,
+                CAST(exit_date AS DATETIME) AS exit_date,
+                CAST(entry_price AS DOUBLE) AS entry_price,
+                CAST(exit_price AS DOUBLE) AS exit_price,
+                CAST(stop_price AS DOUBLE) AS stop_price,
+                CAST(target_price AS DOUBLE) AS target_price,
+                CAST(risk_ticks AS DOUBLE) AS risk_ticks,
+                CAST(result_r AS DOUBLE) AS result_r,
+                CAST(max_favorable_r AS DOUBLE) AS max_favorable_r,
+                CAST(max_adverse_r AS DOUBLE) AS max_adverse_r,
+                CAST(duration_bars AS SIGNED) AS duration_bars,
+                CAST(duration_minutes AS SIGNED) AS duration_minutes,
+                CAST(efficiency AS DOUBLE) AS efficiency,
+                CAST(quality_score AS DOUBLE) AS quality_score,
+                start_pivot_type,
+                end_pivot_type,
+                outcome
+            FROM ai_oracle_trend_trades
+            WHERE {filters}
+            ORDER BY entry_date DESC, oracle_trade_id DESC
+            LIMIT ?
+        ) latest_oracle_trends
+        ORDER BY entry_date ASC, oracle_trade_id ASC
+        "#,
+    );
+    let mut rows_query = sqlx::query_as::<_, NinjaTraderOracleTrendRow>(&rows_sql)
+        .bind(&run_id)
+        .bind(&root_symbol)
+        .bind(&timeframe);
+    if let Some(symbol) = symbol.as_deref() {
+        rows_query = rows_query.bind(symbol);
+    }
+    if let Some(start_date) = start_date.as_deref() {
+        rows_query = rows_query.bind(start_date);
+    }
+    if let Some(end_date) = end_date.as_deref() {
+        rows_query = rows_query.bind(end_date);
+    }
+    rows_query = rows_query.bind(limit);
+
+    let rows = match rows_query.fetch_all(pool.get_ref()).await {
+        Ok(rows) => rows,
+        Err(error) if is_missing_table_error(&error) => Vec::new(),
+        Err(error) => {
+            eprintln!("Oracle trend lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(NinjaTraderOracleTrendsResponse {
+        run_id,
+        root_symbol,
+        symbol,
+        timeframe,
+        total_rows,
+        limit,
+        rows,
+    })
+}
+
+#[route("/ninjatrader/signals/history", method = "GET", method = "POST")]
+async fn fetch_ninjatrader_signal_history(
+    pool: web::Data<MySqlPool>,
+    params: web::Json<NinjaTraderSignalHistoryParams>,
+) -> impl Responder {
+    if let Err(error) = ensure_ninjatrader_signal_history_columns(pool.get_ref()).await {
+        eprintln!("NinjaTrader signal history table ensure failed: {:?}", error);
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    let limit = params.limit.unwrap_or(50).clamp(1, 200);
+    let include_cancelled = params.include_cancelled.unwrap_or(false);
+    let account_name = trim_optional_string(params.account_name.as_deref());
+    let instrument =
+        trim_optional_string(params.instrument.as_deref()).map(|item| item.to_ascii_uppercase());
+    let root_symbol = trim_optional_string(params.root_symbol.as_deref())
+        .map(|item| item.to_ascii_uppercase());
+    let expected_ai_run_id = trim_optional_string(params.expected_ai_run_id.as_deref());
+
+    let mut filters = String::from("1 = 1");
+    if !include_cancelled {
+        filters.push_str(" AND status IN ('triggered', 'completed')");
+    }
+    if account_name.is_some() {
+        filters.push_str(" AND account_name = ?");
+    }
+    if instrument.is_some() {
+        filters.push_str(" AND instrument = ?");
+    }
+    if root_symbol.is_some() {
+        filters.push_str(" AND root_symbol = ?");
+    }
+    if expected_ai_run_id.is_some() {
+        filters.push_str(" AND expected_ai_run_id = ?");
+    }
+
+    let count_sql = format!(
+        r#"
+        SELECT COUNT(*) AS total_rows
+        FROM ninjatrader_order_signals
+        WHERE {filters}
+        "#,
+    );
+    let mut count_query = sqlx::query(&count_sql);
+    if let Some(account_name) = account_name.as_deref() {
+        count_query = count_query.bind(account_name);
+    }
+    if let Some(instrument) = instrument.as_deref() {
+        count_query = count_query.bind(instrument);
+    }
+    if let Some(root_symbol) = root_symbol.as_deref() {
+        count_query = count_query.bind(root_symbol);
+    }
+    if let Some(expected_ai_run_id) = expected_ai_run_id.as_deref() {
+        count_query = count_query.bind(expected_ai_run_id);
+    }
+
+    let total_rows = match count_query.fetch_one(pool.get_ref()).await {
+        Ok(row) => row.try_get::<i64, _>("total_rows").unwrap_or(0),
+        Err(error) => {
+            eprintln!("NinjaTrader signal history count failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let summary_sql = format!(
+        r#"
+        SELECT
+            CAST(COUNT(*) AS SIGNED) AS trades_taken,
+            CAST(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS SIGNED) AS completed_trades,
+            CAST(SUM(CASE WHEN status IN ('queued', 'claimed', 'triggered') THEN 1 ELSE 0 END) AS SIGNED) AS open_trades,
+            CAST(SUM(CASE
+                WHEN status = 'completed'
+                 AND COALESCE(realized_accounting_dollars, realized_execution_dollars, realized_ticks) > 0
+                THEN 1 ELSE 0 END
+            ) AS SIGNED) AS wins,
+            CAST(SUM(CASE
+                WHEN status = 'completed'
+                 AND COALESCE(realized_accounting_dollars, realized_execution_dollars, realized_ticks) < 0
+                THEN 1 ELSE 0 END
+            ) AS SIGNED) AS losses,
+            CAST(SUM(CASE
+                WHEN status = 'completed'
+                 AND COALESCE(realized_accounting_dollars, realized_execution_dollars, realized_ticks) = 0
+                THEN 1 ELSE 0 END
+            ) AS SIGNED) AS flats,
+            CAST(SUM(realized_accounting_dollars) AS DOUBLE) AS total_accounting_pnl,
+            CAST(SUM(realized_execution_dollars) AS DOUBLE) AS total_execution_pnl
+        FROM ninjatrader_order_signals
+        WHERE {filters}
+        "#,
+    );
+    let mut summary_query = sqlx::query_as::<_, NinjaTraderSignalHistorySummary>(&summary_sql);
+    if let Some(account_name) = account_name.as_deref() {
+        summary_query = summary_query.bind(account_name);
+    }
+    if let Some(instrument) = instrument.as_deref() {
+        summary_query = summary_query.bind(instrument);
+    }
+    if let Some(root_symbol) = root_symbol.as_deref() {
+        summary_query = summary_query.bind(root_symbol);
+    }
+    if let Some(expected_ai_run_id) = expected_ai_run_id.as_deref() {
+        summary_query = summary_query.bind(expected_ai_run_id);
+    }
+    let summary = match summary_query.fetch_optional(pool.get_ref()).await {
+        Ok(summary) => summary,
+        Err(error) => {
+            eprintln!("NinjaTrader signal history summary failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let rows_sql = format!(
+        r#"
+        SELECT
+            CAST(id AS SIGNED) AS id,
+            signal_uid,
+            status,
+            account_name,
+            instrument,
+            root_symbol,
+            exchange_name,
+            side,
+            CAST(quantity AS SIGNED) AS quantity,
+            CAST(expected_price AS DOUBLE) AS expected_price,
+            CAST(expected_time AS DATETIME) AS expected_time,
+            CAST(stop_price AS DOUBLE) AS stop_price,
+            CAST(target_price AS DOUBLE) AS target_price,
+            CAST(tick_size AS DOUBLE) AS tick_size,
+            expected_ai_run_id,
+            expected_setup_id,
+            expected_template_uid,
+            client_id,
+            order_id,
+            CAST(actual_trigger_price AS DOUBLE) AS actual_trigger_price,
+            accounting_instrument,
+            accounting_root_symbol,
+            CAST(accounting_tick_value AS DOUBLE) AS accounting_tick_value,
+            CAST(accounting_size_ratio AS DOUBLE) AS accounting_size_ratio,
+            CAST(accounting_risk_dollars AS DOUBLE) AS accounting_risk_dollars,
+            CAST(execution_tick_value AS DOUBLE) AS execution_tick_value,
+            CAST(execution_risk_dollars AS DOUBLE) AS execution_risk_dollars,
+            exit_order_id,
+            CAST(exit_price AS DOUBLE) AS exit_price,
+            exit_action,
+            exit_order_name,
+            CAST(exit_received_at AS DATETIME) AS exit_received_at,
+            CAST(realized_ticks AS DOUBLE) AS realized_ticks,
+            CAST(realized_execution_dollars AS DOUBLE) AS realized_execution_dollars,
+            CAST(realized_accounting_dollars AS DOUBLE) AS realized_accounting_dollars,
+            status_message,
+            notes,
+            CAST(created_at AS DATETIME) AS created_at,
+            CAST(updated_at AS DATETIME) AS updated_at,
+            CAST(claimed_at AS DATETIME) AS claimed_at,
+            CAST(triggered_at AS DATETIME) AS triggered_at,
+            CASE
+                WHEN status = 'completed'
+                 AND COALESCE(realized_accounting_dollars, realized_execution_dollars, realized_ticks) > 0
+                THEN 'Win'
+                WHEN status = 'completed'
+                 AND COALESCE(realized_accounting_dollars, realized_execution_dollars, realized_ticks) < 0
+                THEN 'Loss'
+                WHEN status = 'completed'
+                THEN 'Flat'
+                WHEN status = 'triggered'
+                THEN 'Open'
+                ELSE status
+            END AS result_label
+        FROM ninjatrader_order_signals
+        WHERE {filters}
+        ORDER BY COALESCE(triggered_at, created_at) DESC, id DESC
+        LIMIT ?
+        "#,
+    );
+    let mut rows_query = sqlx::query_as::<_, NinjaTraderSignalHistoryRow>(&rows_sql);
+    if let Some(account_name) = account_name.as_deref() {
+        rows_query = rows_query.bind(account_name);
+    }
+    if let Some(instrument) = instrument.as_deref() {
+        rows_query = rows_query.bind(instrument);
+    }
+    if let Some(root_symbol) = root_symbol.as_deref() {
+        rows_query = rows_query.bind(root_symbol);
+    }
+    if let Some(expected_ai_run_id) = expected_ai_run_id.as_deref() {
+        rows_query = rows_query.bind(expected_ai_run_id);
+    }
+    rows_query = rows_query.bind(limit);
+
+    let rows = match rows_query.fetch_all(pool.get_ref()).await {
+        Ok(rows) => rows,
+        Err(error) => {
+            eprintln!("NinjaTrader signal history lookup failed: {:?}", error);
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    HttpResponse::Ok().json(NinjaTraderSignalHistoryResponse {
+        total_rows,
+        limit,
+        summary,
+        rows,
+    })
+}
+
 #[route("/ninjatrader/signals", method = "POST")]
 async fn create_ninjatrader_signal(
     pool: web::Data<MySqlPool>,
@@ -6268,7 +7970,9 @@ async fn create_ninjatrader_signal(
     .bind(params.tick_size)
     .bind(trim_optional_string(params.expected_ai_run_id.as_deref()))
     .bind(trim_optional_string(params.expected_setup_id.as_deref()))
-    .bind(trim_optional_string(params.expected_template_uid.as_deref()))
+    .bind(trim_optional_string(
+        params.expected_template_uid.as_deref(),
+    ))
     .bind(trim_optional_string(params.notes.as_deref()))
     .execute(pool.get_ref())
     .await
@@ -6394,7 +8098,10 @@ async fn update_ninjatrader_signal_status(
             status = ?,
             client_id = COALESCE(?, client_id),
             order_id = COALESCE(?, order_id),
-            actual_trigger_price = COALESCE(?, actual_trigger_price),
+            actual_trigger_price = CASE
+                WHEN ? IN ('claimed', 'triggered') THEN COALESCE(?, actual_trigger_price)
+                ELSE actual_trigger_price
+            END,
             status_message = COALESCE(?, status_message),
             claimed_at = CASE WHEN ? = 'claimed' AND claimed_at IS NULL THEN CURRENT_TIMESTAMP(6) ELSE claimed_at END,
             triggered_at = CASE WHEN ? = 'triggered' AND triggered_at IS NULL THEN CURRENT_TIMESTAMP(6) ELSE triggered_at END
@@ -6404,6 +8111,7 @@ async fn update_ninjatrader_signal_status(
     .bind(&status)
     .bind(trim_optional_string(params.client_id.as_deref()))
     .bind(trim_optional_string(params.order_id.as_deref()))
+    .bind(&status)
     .bind(params.actual_trigger_price)
     .bind(trim_optional_string(params.status_message.as_deref()))
     .bind(&status)
@@ -10462,7 +12170,12 @@ async fn main() -> std::io::Result<()> {
     // --- Connect to local DB ---
     let database_url = "mysql://rperezkc:Nar8uto!@localhost:3306/abcd";
 
-    let pool = match MySqlPool::connect(database_url).await {
+    let pool = match MySqlPoolOptions::new()
+        .min_connections(2)
+        .max_connections(12)
+        .connect(database_url)
+        .await
+    {
         Ok(pool) => {
             println!("✅ Connected to local DB");
             pool
@@ -10480,7 +12193,18 @@ async fn main() -> std::io::Result<()> {
             .app_data(pool.clone())
             .wrap(
                 Cors::default()
-                    .allowed_origin("http://localhost:3000")
+                    .allowed_origin_fn(|origin, _req_head| {
+                        origin
+                            .to_str()
+                            .map(|origin| {
+                                origin == "http://localhost:3000"
+                                    || origin == "http://127.0.0.1:3000"
+                                    || (origin.starts_with("http://192.168.") && origin.ends_with(":3000"))
+                                    || (origin.starts_with("http://10.") && origin.ends_with(":3000"))
+                                    || (origin.starts_with("http://172.") && origin.ends_with(":3000"))
+                            })
+                            .unwrap_or(false)
+                    })
                     .allowed_methods(vec!["GET", "POST"])
                     .allowed_headers(vec![actix_web::http::header::CONTENT_TYPE])
                     .max_age(3600),
@@ -10507,8 +12231,15 @@ async fn main() -> std::io::Result<()> {
             .service(fetch_pattern_reversal_ai_scores)
             .service(fetch_pattern_ai_stage1_trades)
             .service(fetch_pattern_ai_exit_model_trades)
+            .service(ingest_ninjatrader_candle)
+            .service(ingest_ninjatrader_live_bar_snapshot)
+            .service(fetch_ninjatrader_live_bar_snapshot_latest)
             .service(ingest_ninjatrader_execution)
             .service(fetch_ninjatrader_slippage)
+            .service(fetch_ninjatrader_trend_events)
+            .service(fetch_ninjatrader_scanner_activity)
+            .service(fetch_ninjatrader_oracle_trends)
+            .service(fetch_ninjatrader_signal_history)
             .service(create_ninjatrader_signal)
             .service(fetch_ninjatrader_pending_signals)
             .service(update_ninjatrader_signal_status)
@@ -16569,6 +18300,7 @@ async fn fetch_entry_exit_sim_loss_clustering(
 
 fn phase1_futures_candle_table(source_table: Option<&str>) -> &'static str {
     match source_table {
+        Some("futures_contract_2m_candles") => "futures_contract_2m_candles",
         Some("futures_contract_3m_candles") => "futures_contract_3m_candles",
         Some("futures_contract_5m_candles") => "futures_contract_5m_candles",
         Some("futures_contract_15m_candles") => "futures_contract_15m_candles",
@@ -18270,33 +20002,78 @@ async fn fetch_candles(
     }
 
     if let Some(futures_table) = futures_candle_table_for_timeframe(source_timeframe) {
-        let sql = format!(
+        let root_symbol = trim_optional_string(params.root_symbol.as_deref());
+        let all_contracts = params.all_contracts.unwrap_or(false);
+        let use_root_history = all_contracts && root_symbol.is_some();
+        let limit = params.limit.unwrap_or(0).clamp(0, 100_000);
+        let candle_symbol_filter = if use_root_history {
+            "root_symbol = ?"
+        } else {
+            "symbol = ?"
+        };
+        let root_history_index_hint = if use_root_history {
+            futures_candle_root_ts_index_for_timeframe(source_timeframe)
+                .map(|index_name| format!(" FORCE INDEX ({index_name})"))
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let select_sql = format!(
             r#"
-            SELECT
-                symbol,
-                ts_utc AS date,
-                CAST(open AS DOUBLE) AS open,
-                CAST(high AS DOUBLE) AS high,
-                CAST(low AS DOUBLE) AS low,
-                CAST(close AS DOUBLE) AS close,
-                volume,
-                CAST(NULL AS SIGNED) AS three_month,
-                CAST(NULL AS SIGNED) AS six_month,
-                CAST(NULL AS SIGNED) AS twelve_month
-            FROM {futures_table}
-            WHERE symbol = ?
-              {futures_date_filters}
-            ORDER BY date
+                SELECT
+                    symbol,
+                    ts_utc AS date,
+                    CAST(open AS DOUBLE) AS open,
+                    CAST(high AS DOUBLE) AS high,
+                    CAST(low AS DOUBLE) AS low,
+                    CAST(close AS DOUBLE) AS close,
+                    volume,
+                    CAST(NULL AS SIGNED) AS three_month,
+                    CAST(NULL AS SIGNED) AS six_month,
+                    CAST(NULL AS SIGNED) AS twelve_month
+                FROM {futures_table}{root_history_index_hint}
+                WHERE {candle_symbol_filter}
+                  {futures_date_filters}
             "#,
             futures_table = futures_table,
+            root_history_index_hint = root_history_index_hint,
+            candle_symbol_filter = candle_symbol_filter,
             futures_date_filters = futures_date_filters
         );
-        let mut query = sqlx::query_as::<_, Candle>(&sql).bind(params.symbol.clone());
+        let sql = if limit > 0 {
+            format!(
+                r#"
+                SELECT *
+                FROM (
+                    {select_sql}
+                    ORDER BY date DESC
+                    LIMIT ?
+                ) limited_candles
+                ORDER BY date, symbol
+                "#
+            )
+        } else {
+            format!(
+                r#"
+                {select_sql}
+                ORDER BY date, symbol
+                "#
+            )
+        };
+        let mut query = sqlx::query_as::<_, Candle>(&sql).bind(
+            root_symbol
+                .as_deref()
+                .filter(|_| use_root_history)
+                .unwrap_or(params.symbol.as_str()),
+        );
         if let Some(start_date) = params.start_date.as_deref() {
             query = query.bind(start_date);
         }
         if let Some(end_date) = params.end_date.as_deref() {
             query = query.bind(end_date);
+        }
+        if limit > 0 {
+            query = query.bind(limit);
         }
 
         let candles: Vec<Candle> = match query.fetch_all(pool.get_ref()).await {

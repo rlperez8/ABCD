@@ -87,11 +87,11 @@ def clamp_window_end(value: date, maximum: date) -> datetime:
 
 def generate_contract_candidates(root: str, start: date, end: date) -> list[str]:
     years = range(start.year - 1, end.year + 2)
-    symbols = [
-        f"{root}{month_code}{str(year)[-1]}"
-        for year in years
-        for month_code in MONTH_CODES
-    ]
+    symbols = []
+    for year in years:
+        for month_code in MONTH_CODES:
+            symbols.append(f"{root}{month_code}{str(year)[-1]}")
+            symbols.append(f"{root}{month_code}{str(year)[-2:]}")
     return sorted(set(symbols))
 
 

@@ -650,7 +650,7 @@ const parseStrategyMaxDaysOpen = (value) => {
 };
 
 const App = () => {
-  const [activeAppView, setActiveAppView] = useState(APP_VIEW_FAMILY_UNIVERSE);
+  const [activeAppView] = useState(APP_VIEW_FAMILY_UNIVERSE);
   const [currentSetups, setCurrentSetups] = useState([]);
   const [isLoadingCurrentSetups, setLoadingCurrentSetups] = useState(false);
   const strategyMode = STRATEGY_MODE_PROP;
@@ -2017,44 +2017,6 @@ const App = () => {
     <div className="App">
       <div className="app-inner">
         <div className="main">
-          <div className="app-header" ref={headerRef}>
-            <div className="station-switcher" aria-label="Main workspace">
-              <button
-                type="button"
-                className={
-                  activeAppView === APP_VIEW_FAMILY_UNIVERSE
-                    ? 'station-button station-button--active'
-                    : 'station-button'
-                }
-                onClick={() => setActiveAppView(APP_VIEW_FAMILY_UNIVERSE)}
-              >
-                Family Universe
-              </button>
-              <button
-                type="button"
-                className={
-                  activeAppView === APP_VIEW_STORAGE
-                    ? 'station-button station-button--active'
-                    : 'station-button'
-                }
-                onClick={() => setActiveAppView(APP_VIEW_STORAGE)}
-              >
-                Storage
-              </button>
-              <button
-                type="button"
-                className={
-                  activeAppView === APP_VIEW_ADMIN
-                    ? 'station-button station-button--active'
-                    : 'station-button'
-                }
-                onClick={() => setActiveAppView(APP_VIEW_ADMIN)}
-              >
-                Admin
-              </button>
-            </div>
-          </div>
-
           {activeAppView === APP_VIEW_STORAGE ? (
             <StorageDashboardPage />
           ) : activeAppView === APP_VIEW_ADMIN ? (

@@ -171,6 +171,7 @@ const CandleChartPanel = ({
   presentationMode = 'chart',
   routeLogicHover = null,
   onHoveredCandleChange = null,
+  onRawCandleViewportEdge = null,
 }) => {
   const isPropFocus = focusMode === 'prop';
   const [isAbcdPattern, setAbcdPattern] = useState(
@@ -649,6 +650,7 @@ const CandleChartPanel = ({
               showCandles={showCandles}
               presentationMode={presentationMode}
               routeLogicHover={routeLogicHover}
+              onRawCandleViewportEdge={onRawCandleViewportEdge}
             />
           </div>
         </div>

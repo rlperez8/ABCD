@@ -14202,6 +14202,41 @@ button:focus-visible {
   padding: 4px;
 }
 
+.pattern-family-terminal .pattern-family-workspace.pattern-family-workspace--canvas-only {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.pattern-family-terminal .pattern-family-workspace.pattern-family-workspace--canvas-only > .pattern-family-table-stack,
+.pattern-family-terminal .pattern-family-workspace.pattern-family-workspace--canvas-only > .pattern-family-canvas-collapse-workspace {
+  display: none;
+}
+
+.pattern-family-terminal .pattern-family-workspace.pattern-family-workspace--canvas-only > .pattern-family-inspector {
+  grid-column: 1;
+  grid-row: 1;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  transform: none;
+}
+
+.pattern-family-workspace--canvas-only .pattern-family-inspector-collapse-rail,
+.pattern-family-workspace--canvas-only .pattern-family-inspector-head,
+.pattern-family-workspace--canvas-only .pattern-family-trade-ticket {
+  display: none;
+}
+
+.pattern-family-workspace--canvas-only .pattern-family-inspector-content,
+.pattern-family-workspace--canvas-only .pattern-family-inspector-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+}
+
+.pattern-family-workspace--canvas-only .pattern-family-chart-bay {
+  border: 0;
+}
+
 .pattern-family-left-rail {
   display: grid;
   grid-template-rows: 126px 118px 156px;
@@ -16186,6 +16221,403 @@ button.pattern-family-trade-ticket-cell:disabled {
   min-width: 0;
   min-height: 0;
   height: 100%;
+}
+
+.pattern-family-live-canvas-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pattern-family-live-canvas-layout--raw {
+  grid-template-columns: clamp(400px, 30vw, 460px) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.pattern-family-live-chart-area {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pattern-family-live-chart-area > .pattern-family-full-chart {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.pattern-family-live-trends-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #263034;
+  background:
+    linear-gradient(180deg, rgba(56, 189, 248, 0.08), transparent 34%),
+    #080b0c;
+  overflow: hidden;
+}
+
+.pattern-family-live-trends-panel header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 7px 9px;
+  border-bottom: 1px solid #222b2f;
+  background: linear-gradient(180deg, #151b1d, #0f1213);
+}
+
+.pattern-family-live-trends-panel header div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pattern-family-live-trends-panel header span,
+.pattern-family-live-trends-meta span {
+  color: #87939b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pattern-family-live-trends-panel header strong {
+  color: #eef7fb;
+  font-family: var(--mono-font);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.pattern-family-live-trends-panel header small {
+  color: #b7c5ce;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.pattern-family-live-trends-headline {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pattern-family-live-trends-panel .pattern-family-live-trends-headline strong {
+  padding: 4px 8px;
+  border: 1px solid rgba(74, 222, 128, 0.28);
+  border-radius: 6px;
+  background: rgba(20, 83, 45, 0.28);
+  color: #bbf7d0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pattern-family-live-trends-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border-bottom: 1px solid #20282c;
+  background: #0b0e0f;
+}
+
+.pattern-family-live-status-card {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 7px;
+  background: #101415;
+}
+
+.pattern-family-live-status-card span {
+  min-width: 0;
+  overflow: hidden;
+  color: #87939b;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pattern-family-live-status-card strong,
+.pattern-family-live-status-card .pattern-family-live-trends-toggle {
+  min-width: 0;
+  overflow: hidden;
+  color: #e5f0f5;
+  font-family: var(--mono-font);
+  font-size: 12px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pattern-family-live-status-card--run {
+  grid-column: span 2;
+}
+
+.pattern-family-live-status-card--feed {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.pattern-family-live-status-card--price strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.pattern-family-live-status-card--win strong {
+  color: #86efac;
+}
+
+.pattern-family-live-status-card--loss strong {
+  color: #fca5a5;
+}
+
+.pattern-family-live-status-card--flat strong {
+  color: #dbeafe;
+}
+
+.pattern-family-live-trends-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 8px;
+  min-width: 0;
+  padding: 8px 9px;
+  border-bottom: 1px solid #20282c;
+  background: #0b0e0f;
+}
+
+.pattern-family-live-trends-meta strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #dbe7ee;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pattern-family-live-trends-toggle {
+  width: fit-content;
+  min-width: 0;
+  padding: 3px 7px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: #111719;
+  color: #cbd5df;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.pattern-family-live-trends-toggle:hover,
+.pattern-family-live-trends-toggle:focus-visible {
+  border-color: rgba(125, 211, 252, 0.5);
+  color: #e0f2fe;
+  outline: none;
+}
+
+.pattern-family-live-trends-toggle--active {
+  border-color: rgba(245, 193, 92, 0.36);
+  background: rgba(106, 73, 21, 0.24);
+  color: #f8d895;
+}
+
+.pattern-family-live-trends-table {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.pattern-family-live-trends-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(82px, 1.05fr) 48px 58px 46px 66px 62px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  background: #0c1011;
+  color: #d9e5eb;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  text-align: left;
+}
+
+.pattern-family-live-trends-row--oracle {
+  grid-template-columns: minmax(86px, 1fr) 48px 48px minmax(86px, 1fr) 44px 62px;
+}
+
+.pattern-family-live-trends-row--trade {
+  grid-template-columns: minmax(82px, 1fr) 50px 50px 74px 48px minmax(72px, 0.8fr) 54px;
+}
+
+.pattern-family-live-trends-row--scanner {
+  grid-template-columns: minmax(82px, 1fr) minmax(78px, 0.95fr) 42px 48px 48px minmax(66px, 0.8fr);
+}
+
+.pattern-family-live-trends-row--scanner-signal {
+  background:
+    linear-gradient(90deg, rgba(74, 222, 128, 0.16), transparent),
+    #0d1512;
+}
+
+button.pattern-family-live-trends-row {
+  appearance: none;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  cursor: pointer;
+}
+
+button.pattern-family-live-trends-row:hover,
+button.pattern-family-live-trends-row:focus-visible {
+  background: #162024;
+  outline: none;
+}
+
+.pattern-family-live-trends-row:nth-child(even):not(.pattern-family-live-trends-row--head):not(.pattern-family-live-trends-row--selected) {
+  background: #101516;
+}
+
+.pattern-family-live-trends-row--selected {
+  border-bottom-color: rgba(125, 211, 252, 0.5);
+  background:
+    linear-gradient(90deg, rgba(56, 189, 248, 0.26), rgba(56, 189, 248, 0.06)),
+    #111a1e;
+  box-shadow: inset 4px 0 0 #38bdf8;
+}
+
+.pattern-family-live-trends-row--head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 28px;
+  border-bottom-color: #2a353a;
+  background: #151b1d;
+  color: #91a0a9;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pattern-family-live-trends-row span,
+.pattern-family-live-trends-row strong,
+.pattern-family-live-trends-row em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pattern-family-live-trends-row strong {
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.pattern-family-live-trends-score {
+  color: #ffd166;
+  font-weight: 950;
+}
+
+.pattern-family-live-trends-row--long strong {
+  color: #7dd3fc;
+}
+
+.pattern-family-live-trends-row--short strong {
+  color: #fca5a5;
+}
+
+.pattern-family-live-trends-entry {
+  justify-self: start;
+  min-height: 20px;
+  padding: 3px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: #111719;
+  color: #cbd5df;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.pattern-family-live-trends-entry--accepted {
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(22, 101, 52, 0.22);
+  color: #a7f3bf;
+}
+
+.pattern-family-live-trends-entry--rejected_risk {
+  border-color: rgba(245, 193, 92, 0.3);
+  background: rgba(106, 73, 21, 0.22);
+  color: #f8d895;
+}
+
+.pattern-family-live-trends-state {
+  color: #cbd5df;
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.pattern-family-live-trends-state--closed {
+  color: #86efac;
+}
+
+.pattern-family-live-trends-state--open {
+  color: #facc15;
+}
+
+.pattern-family-live-trends-state--skipped {
+  color: #94a3b8;
+}
+
+.pattern-family-live-trends-result {
+  color: #cbd5df;
+  font-weight: 950;
+  text-align: right;
+}
+
+.pattern-family-live-trends-result--win {
+  color: #86efac;
+}
+
+.pattern-family-live-trends-result--loss {
+  color: #fca5a5;
+}
+
+.pattern-family-live-trends-empty {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  padding: 14px;
+  color: #8f9da5;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
 }
 
 .pattern-family-route-win-profile {
@@ -24484,13 +24916,21 @@ button.pattern-family-trade-ticket-cell:disabled {
 
 .pattern-family-inspector-chart .candle_chart_container {
   grid-template-columns: minmax(0, 1fr) 70px;
+  grid-template-rows: minmax(0, 1fr) 36px;
   gap: 1px;
   padding: 0;
 }
 
 .pattern-family-inspector-chart .candle_chart_wrapper {
+  grid-column: 1;
+  grid-row: 1 / 3;
   grid-template-rows: minmax(0, 1fr) 36px;
   gap: 1px;
+}
+
+.pattern-family-inspector-chart .canvas_prices {
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .pattern-family-inspector-chart .canvas_dates {
@@ -24549,6 +24989,118 @@ button.pattern-family-trade-ticket-cell:disabled {
 .pattern-family-chart-error-badge {
   border-color: rgba(237, 55, 63, 0.48);
   color: #ffb7bb;
+}
+
+.pattern-family-chart-live-status {
+  position: absolute;
+  top: 8px;
+  right: 84px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  max-width: min(520px, calc(100% - 118px));
+  height: auto;
+  min-height: 24px;
+  max-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid rgba(35, 209, 139, 0.38);
+  background: rgba(5, 11, 10, 0.86);
+  color: #dffdf0;
+  font-family: var(--mono-font);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.pattern-family-chart-live-status > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #23d18b;
+  box-shadow: 0 0 12px rgba(35, 209, 139, 0.78);
+}
+
+.pattern-family-chart-live-status strong {
+  color: #eafff5;
+  font-size: 11px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.pattern-family-chart-live-status small {
+  color: rgba(223, 253, 240, 0.78);
+  font-size: 11px;
+  font-weight: 850;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pattern-family-chart-live-status--refreshing > span {
+  background: #f4d35e;
+  box-shadow: 0 0 12px rgba(244, 211, 94, 0.75);
+}
+
+.pattern-family-chart-live-status--error {
+  border-color: rgba(237, 55, 63, 0.5);
+  color: #ffd0d3;
+}
+
+.pattern-family-chart-live-status--error > span {
+  background: #ed373f;
+  box-shadow: 0 0 12px rgba(237, 55, 63, 0.72);
+}
+
+.pattern-family-chart-hover-status {
+  position: absolute;
+  top: 48px;
+  left: 8px;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: minmax(126px, 1.45fr) repeat(5, minmax(50px, 0.48fr));
+  align-items: stretch;
+  gap: 4px;
+  width: min(500px, calc(100% - 24px));
+  max-width: calc(100% - 24px);
+  height: 34px;
+  padding: 3px;
+  border: 1px solid rgba(180, 190, 196, 0.22);
+  background: rgba(5, 7, 8, 0.84);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+  pointer-events: none;
+}
+
+.pattern-family-chart-hover-status__cell {
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 2px 5px;
+  border: 1px solid rgba(70, 80, 84, 0.54);
+  background: rgba(12, 17, 18, 0.82);
+  overflow: hidden;
+}
+
+.pattern-family-chart-hover-status__cell span {
+  color: #9aa6a8;
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.pattern-family-chart-hover-status__cell strong {
+  min-width: 0;
+  color: #f5fbff;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pattern-family-inspector-foot {
@@ -25456,7 +26008,7 @@ button.pattern-family-trade-ticket-cell:disabled {
 }
 
 .pattern-family-template-table--ai-stage1-trades {
-  min-width: 3480px;
+  min-width: 3800px;
   table-layout: fixed;
 }
 
@@ -25478,6 +26030,14 @@ button.pattern-family-trade-ticket-cell:disabled {
   min-width: 0;
   max-width: none;
   overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.pattern-family-template-table--ai-stage1-trades .pattern-family-template-table-family-key {
+  min-width: 0;
+  max-width: none;
+  overflow-wrap: normal;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -25936,4 +26496,1384 @@ button.pattern-family-trade-ticket-cell:disabled {
     grid-template-rows: repeat(3, minmax(120px, auto));
   }
 
+}
+
+/* Live trading cockpit: canvas + trades only. */
+.pattern-family-page--live-cockpit.pattern-family-terminal {
+  gap: 0;
+  height: 100vh;
+  min-height: 100vh;
+  padding: 8px;
+  background: #040505;
+  color: #e7eeee;
+  overflow: hidden;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-terminal-bar,
+.pattern-family-page--live-cockpit .pattern-family-table-stack,
+.pattern-family-page--live-cockpit .pattern-family-canvas-collapse-workspace,
+.pattern-family-page--live-cockpit .pattern-family-inspector-collapse-rail,
+.pattern-family-page--live-cockpit .pattern-family-inspector-head,
+.pattern-family-page--live-cockpit .pattern-family-trade-ticket {
+  display: none;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-error {
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  z-index: 20;
+  max-width: min(520px, calc(100vw - 36px));
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 107, 107, 0.55);
+  border-radius: 8px;
+  background: rgba(30, 7, 9, 0.94);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.36);
+}
+
+.pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-workspace--canvas-only {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-workspace--canvas-only > .pattern-family-inspector {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-inspector-content,
+.pattern-family-page--live-cockpit .pattern-family-inspector-body,
+.pattern-family-page--live-cockpit .pattern-family-chart-bay,
+.pattern-family-page--live-cockpit .pattern-family-chart-stage,
+.pattern-family-page--live-cockpit .pattern-family-live-canvas-layout,
+.pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-inspector-content,
+.pattern-family-page--live-cockpit .pattern-family-inspector-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-chart-bay {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-canvas-layout--raw {
+  grid-template-columns: clamp(480px, 34vw, 600px) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-panel,
+.pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+  border: 1px solid rgba(127, 144, 132, 0.28);
+  border-radius: 8px;
+  background: #070807;
+  box-shadow:
+    0 22px 54px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  overflow: hidden;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-panel {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  border-color: rgba(82, 105, 91, 0.5);
+  background: #080a09;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-panel header {
+  min-height: 66px;
+  padding: 12px 13px;
+  border-bottom: 1px solid rgba(127, 144, 132, 0.22);
+  background: #0e1110;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-panel header span {
+  color: #87928d;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-panel header strong {
+  color: #f3faf6;
+  font-family: var(--mono-font);
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-panel header small {
+  justify-self: end;
+  padding: 7px 9px;
+  border: 1px solid rgba(39, 188, 116, 0.38);
+  border-radius: 8px;
+  background: rgba(12, 48, 31, 0.54);
+  color: #b9f5d2;
+  font-size: 12px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-headline {
+  justify-self: end;
+  justify-items: end;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-headline span {
+  color: #7f8b86;
+  font-size: 10px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-panel .pattern-family-live-trends-headline strong {
+  min-height: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(120, 209, 166, 0.42);
+  border-radius: 8px;
+  background: #102019;
+  color: #b9f5d2;
+  font-family: var(--mono-font);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-dashboard {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(127, 144, 132, 0.18);
+  background: #070907;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-status-card {
+  min-height: 54px;
+  padding: 8px;
+  border-color: rgba(127, 144, 132, 0.16);
+  border-radius: 7px;
+  background: #0e120f;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-status-card--run {
+  grid-column: span 2;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-status-card span {
+  color: #7f8b86;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-status-card strong,
+.pattern-family-page--live-cockpit .pattern-family-live-status-card .pattern-family-live-trends-toggle {
+  color: #e0ebe5;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-status-card--price strong {
+  color: #f7fbff;
+  font-size: 15px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-status-card--win strong {
+  color: #9af0b9;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-status-card--loss strong {
+  color: #ffadad;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-meta {
+  grid-template-columns: minmax(52px, 0.4fr) minmax(0, 1fr) minmax(52px, 0.4fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid rgba(127, 144, 132, 0.18);
+  background: #090c0a;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-meta span {
+  align-self: center;
+  color: #7f8b86;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-meta strong,
+.pattern-family-page--live-cockpit .pattern-family-live-trends-toggle {
+  min-height: 28px;
+  padding: 7px 8px;
+  border: 1px solid rgba(127, 144, 132, 0.2);
+  border-radius: 6px;
+  background: #0f1210;
+  color: #e0ebe5;
+  font-family: var(--mono-font);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-table {
+  align-content: start;
+  padding: 6px;
+  background: #050605;
+  overflow: auto;
+  scrollbar-color: rgba(135, 153, 142, 0.42) transparent;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-row {
+  grid-template-columns: minmax(92px, 1.05fr) 54px 78px 50px minmax(78px, 0.9fr) 52px;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 9px;
+  border: 1px solid rgba(127, 144, 132, 0.13);
+  border-radius: 6px;
+  background: #0b0e0c;
+  color: #dce7e1;
+  font-size: 12px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade {
+  grid-template-columns: minmax(92px, 1.05fr) 50px 50px 76px 48px minmax(78px, 0.9fr) 52px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-row + .pattern-family-live-trends-row {
+  margin-top: 5px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-row:nth-child(even):not(.pattern-family-live-trends-row--head):not(.pattern-family-live-trends-row--selected) {
+  background: #101411;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-row--head {
+  top: 0;
+  z-index: 3;
+  min-height: 32px;
+  border-color: rgba(127, 144, 132, 0.24);
+  background: #151a16;
+  color: #a8b5ae;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pattern-family-page--live-cockpit button.pattern-family-live-trends-row:hover,
+.pattern-family-page--live-cockpit button.pattern-family-live-trends-row:focus-visible {
+  border-color: rgba(120, 209, 166, 0.5);
+  background: #142018;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-row--selected {
+  border-color: rgba(255, 209, 102, 0.72);
+  background: #1a180d;
+  box-shadow:
+    inset 4px 0 0 #ffd166,
+    0 0 0 1px rgba(255, 209, 102, 0.1);
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-row strong {
+  font-size: 12px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-row--long strong {
+  color: #8dd8ff;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-row--short strong {
+  color: #ff9f9f;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-entry {
+  min-height: 24px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-state,
+.pattern-family-page--live-cockpit .pattern-family-live-trends-result {
+  font-size: 11px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-trends-empty {
+  min-height: 180px;
+  margin: 6px;
+  border: 1px dashed rgba(127, 144, 132, 0.22);
+  border-radius: 8px;
+  background: #0b0d0b;
+  color: #a1ada7;
+  font-size: 13px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+  background: #020303;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-live-chart-area > .pattern-family-full-chart,
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart,
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart .charts_container,
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart .chart-panel-shell,
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart .chart-workspace,
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart .chart-canvas-stage,
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_container,
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_wrapper {
+  background: #020303;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_container {
+  grid-template-columns: minmax(0, 1fr) 74px;
+  grid-template-rows: minmax(0, 1fr) 34px;
+  gap: 0;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_wrapper {
+  grid-template-rows: minmax(0, 1fr) 34px;
+  gap: 0;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-inspector-chart .canvas_dates {
+  height: 34px;
+  min-height: 34px;
+  border-top: 1px solid rgba(127, 144, 132, 0.16);
+  background: #050605;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-chart-live-status {
+  top: 10px;
+  right: 10px;
+  max-width: min(720px, calc(100% - 20px));
+  min-height: 38px;
+  max-height: none;
+  padding: 8px 10px;
+  border-color: rgba(39, 188, 116, 0.5);
+  border-radius: 8px;
+  background: rgba(4, 7, 5, 0.91);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+}
+
+.pattern-family-page--live-cockpit .pattern-family-chart-live-status strong {
+  font-size: 12px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-chart-live-status small {
+  color: rgba(225, 244, 234, 0.86);
+  font-size: 12px;
+}
+
+.pattern-family-page--live-cockpit .pattern-family-chart-loading-badge,
+.pattern-family-page--live-cockpit .pattern-family-chart-error-badge {
+  top: 10px;
+  left: 10px;
+  min-height: 34px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(4, 7, 5, 0.92);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+}
+
+@media (max-width: 1120px) {
+  .pattern-family-page--live-cockpit.pattern-family-terminal {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-workspace--canvas-only {
+    min-height: calc(100vh - 16px);
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout--raw {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(260px, 34vh) minmax(540px, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .pattern-family-page--live-cockpit.pattern-family-terminal {
+    height: auto;
+    min-height: 100dvh;
+    padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    overflow: auto;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-workspace--canvas-only {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    height: auto;
+    min-height: calc(100dvh - 12px);
+    align-content: start;
+    overflow: visible;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-inspector,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-content,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-body,
+  .pattern-family-page--live-cockpit .pattern-family-chart-bay,
+  .pattern-family-page--live-cockpit .pattern-family-chart-stage,
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout {
+    height: auto;
+    overflow: visible;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout--raw {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(320px, 44dvh) minmax(520px, 62dvh);
+    gap: 8px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel,
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+    border-radius: 8px;
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.34);
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel {
+    min-height: 320px;
+    max-height: 48dvh;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+    min-height: 520px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel header {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    gap: 8px;
+    padding: 11px 12px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel header strong {
+    font-size: 18px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel header small {
+    justify-self: start;
+    font-size: 11px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta {
+    grid-template-columns: 58px minmax(0, 1fr);
+    gap: 6px 8px;
+    padding: 8px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta span {
+    font-size: 10px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta strong,
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-toggle {
+    min-height: 26px;
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-table {
+    padding: 6px;
+    overflow: auto;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--head.pattern-family-live-trends-row--trade {
+    display: none;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: repeat(4, minmax(22px, auto));
+    align-content: center;
+    gap: 5px 10px;
+    min-height: 112px;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    color: #f1f8f4;
+    font-size: 13px;
+    font-weight: 850;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > strong {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    justify-self: end;
+    font-size: 13px;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(3) {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+    color: #ffd166;
+    font-weight: 950;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(4) {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+    justify-self: end;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > em {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(6) {
+    grid-column: 2;
+    grid-row: 3;
+    justify-self: end;
+    color: #e6eee9;
+    font-size: 15px;
+    text-align: right;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(6)::before {
+    content: "P/L ";
+    color: #7f8b86;
+    font-size: 10px;
+    font-weight: 850;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(7) {
+    grid-column: 2;
+    grid-row: 4;
+    justify-self: end;
+    color: #cbd8d1;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(7)::after {
+    content: " ticks";
+    color: #7f8b86;
+    font-size: 10px;
+    font-weight: 850;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-empty {
+    min-height: 140px;
+    margin: 0;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-live-status {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 6px;
+    max-width: none;
+    min-height: 0;
+    padding: 7px 8px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-live-status strong {
+    font-size: 11px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-live-status small {
+    font-size: 10px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-loading-badge,
+  .pattern-family-page--live-cockpit .pattern-family-chart-error-badge {
+    left: 8px;
+    top: 56px;
+    max-width: calc(100% - 16px);
+    font-size: 11px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_container {
+    grid-template-columns: minmax(0, 1fr) 58px;
+    grid-template-rows: minmax(0, 1fr) 32px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_wrapper {
+    grid-template-rows: minmax(0, 1fr) 32px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .canvas_dates {
+    height: 32px;
+    min-height: 32px;
+  }
+}
+
+@media (max-width: 420px) {
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout--raw {
+    grid-template-rows: minmax(330px, 46dvh) minmax(500px, 60dvh);
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel {
+    max-height: 50dvh;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade {
+    min-height: 88px;
+    padding: 8px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-live-status {
+    grid-template-columns: auto auto;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-live-status small {
+    grid-column: 1 / -1;
+    line-height: 1.25;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 720px) {
+  .pattern-family-page--live-cockpit.pattern-family-terminal {
+    padding: 4px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-workspace--canvas-only {
+    min-height: calc(100dvh - 8px);
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout--raw {
+    grid-template-rows: minmax(390px, 47dvh) minmax(560px, 64dvh);
+    gap: 6px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel {
+    min-height: 390px;
+    max-height: 49dvh;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    padding: 7px 8px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel header strong {
+    font-size: 15px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel header small {
+    justify-self: end;
+    padding: 5px 7px;
+    font-size: 10px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta {
+    grid-template-columns: 42px minmax(0, 1fr) 42px minmax(0, 1fr);
+    gap: 5px 6px;
+    padding: 6px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta span {
+    font-size: 9px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta strong,
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-toggle {
+    min-height: 22px;
+    padding: 5px 6px;
+    font-size: 10px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-table {
+    padding: 4px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--head.pattern-family-live-trends-row--trade {
+    display: grid;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row,
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade,
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade {
+    grid-template-columns: minmax(72px, 1fr) 36px 42px 58px 34px minmax(58px, 0.86fr) 38px;
+    grid-template-rows: none;
+    gap: 4px;
+    min-height: 38px;
+    padding: 0 6px;
+    font-size: 10px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row + .pattern-family-live-trends-row {
+    margin-top: 3px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--head {
+    min-height: 25px;
+    font-size: 9px;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span,
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > strong,
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > em {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: center;
+    justify-self: stretch;
+    font-size: 10px;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(1) {
+    color: #f1f8f4;
+    font-size: 10px;
+    font-weight: 850;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > strong {
+    justify-self: start;
+    font-size: 10px;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > em {
+    justify-self: start;
+    min-height: 19px;
+    padding: 4px 5px;
+    font-size: 9px;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(6) {
+    justify-self: stretch;
+    color: #e6eee9;
+    font-size: 10px;
+    text-align: right;
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(6)::before,
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(7)::after {
+    content: "";
+  }
+
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade > span:nth-child(7) {
+    justify-self: stretch;
+    color: #cbd8d1;
+    text-align: right;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+    min-height: 560px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .canvas,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .canvas canvas {
+    touch-action: none;
+    overscroll-behavior: contain;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-live-status {
+    left: 6px;
+    right: 6px;
+    top: 6px;
+    padding: 5px 6px;
+  }
+}
+
+@media (max-width: 460px) {
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row,
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade,
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade {
+    grid-template-columns: minmax(68px, 1fr) 34px 39px 52px 32px minmax(52px, 0.82fr) 36px;
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 720px) {
+  .pattern-family-page--live-cockpit.pattern-family-terminal {
+    --live-mobile-bottom-clearance: 0px;
+    padding-bottom: 0;
+    scroll-padding-bottom: 0;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-workspace--canvas-only,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-content,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-body,
+  .pattern-family-page--live-cockpit .pattern-family-chart-bay,
+  .pattern-family-page--live-cockpit .pattern-family-chart-stage,
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout {
+    padding-bottom: 0;
+    scroll-padding-bottom: 0;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .pattern-family-page--live-cockpit.pattern-family-terminal {
+    --live-mobile-safe-bottom: max(4px, env(safe-area-inset-bottom, 0px));
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    min-height: 0;
+    max-height: 100dvh;
+    padding: 4px 4px var(--live-mobile-safe-bottom);
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-workspace--canvas-only,
+  .pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-one-page,
+  .pattern-family-page--live-cockpit .pattern-family-inspector,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-content,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-body,
+  .pattern-family-page--live-cockpit .pattern-family-chart-bay,
+  .pattern-family-page--live-cockpit .pattern-family-chart-stage,
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    padding-bottom: 0;
+    overflow: hidden;
+    scroll-padding-bottom: 0;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout--raw {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: clamp(230px, 36dvh, 330px) minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel,
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+    min-height: 0;
+    max-height: none;
+    margin-bottom: 0;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel {
+    height: 100%;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+    height: 100%;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-table {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+    align-items: start;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row,
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade,
+  .pattern-family-page--live-cockpit button.pattern-family-live-trends-row--trade {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    justify-self: stretch;
+    height: 38px;
+    min-height: 38px;
+    max-height: 38px;
+    overflow: hidden;
+    grid-template-columns:
+      minmax(0, 1.18fr)
+      minmax(0, 0.5fr)
+      minmax(0, 0.54fr)
+      minmax(0, 0.76fr)
+      minmax(0, 0.48fr)
+      minmax(0, 0.84fr)
+      minmax(0, 0.48fr);
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row > span,
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row > strong,
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row > em {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade {
+    display: grid !important;
+    align-items: center;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > * {
+    grid-row: 1 !important;
+    align-self: center !important;
+    justify-self: stretch !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100%;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(1) {
+    grid-column: 1 !important;
+    text-align: left;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(2) {
+    grid-column: 2 !important;
+    text-align: left;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(3) {
+    grid-column: 3 !important;
+    text-align: left;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(4) {
+    grid-column: 4 !important;
+    text-align: left;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(5) {
+    grid-column: 5 !important;
+    text-align: left;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(6) {
+    grid-column: 6 !important;
+    text-align: right;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(7) {
+    grid-column: 7 !important;
+    text-align: right;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .charts_container,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .chart-panel-shell,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .chart-workspace,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .chart-canvas-stage,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_container,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_wrapper {
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 720px) {
+  html:has(.pattern-family-page--live-cockpit),
+  body:has(.pattern-family-page--live-cockpit),
+  #root:has(.pattern-family-page--live-cockpit) {
+    height: var(--live-mobile-vh, 100dvh) !important;
+    max-height: var(--live-mobile-vh, 100dvh) !important;
+    overflow: hidden !important;
+  }
+
+  .pattern-family-page--live-cockpit.pattern-family-terminal {
+    position: fixed !important;
+    inset: 0 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    width: 100vw !important;
+    height: var(--live-mobile-vh, 100dvh) !important;
+    min-height: 0 !important;
+    max-height: var(--live-mobile-vh, 100dvh) !important;
+    padding: 3px 3px max(3px, env(safe-area-inset-bottom, 0px)) !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-workspace--canvas-only,
+  .pattern-family-page--live-cockpit .pattern-family-workspace.pattern-family-one-page,
+  .pattern-family-page--live-cockpit .pattern-family-inspector,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-content,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-body,
+  .pattern-family-page--live-cockpit .pattern-family-chart-bay,
+  .pattern-family-page--live-cockpit .pattern-family-chart-stage,
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-canvas-layout--raw {
+    grid-template-rows: minmax(168px, 34%) minmax(0, 1fr) !important;
+    gap: 4px !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel {
+    display: grid !important;
+    grid-template-rows: 34px 84px minmax(0, 1fr) !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel header {
+    min-height: 0 !important;
+    height: 34px !important;
+    padding: 3px 6px !important;
+    gap: 4px !important;
+    overflow: hidden !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel header span {
+    display: none !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel header strong {
+    font-size: 12px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-headline {
+    display: grid !important;
+    justify-items: end !important;
+    min-width: 0 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-panel .pattern-family-live-trends-headline strong {
+    padding: 3px 5px !important;
+    font-size: 9px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-dashboard {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
+    height: 84px !important;
+    min-height: 0 !important;
+    padding: 4px !important;
+    gap: 4px !important;
+    overflow: hidden !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-status-card {
+    display: grid !important;
+    align-content: center !important;
+    gap: 2px !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    padding: 4px 5px !important;
+    border-radius: 5px !important;
+    overflow: hidden !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-status-card--run {
+    grid-column: span 1 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-status-card span,
+  .pattern-family-page--live-cockpit .pattern-family-live-status-card strong,
+  .pattern-family-page--live-cockpit .pattern-family-live-status-card .pattern-family-live-trends-toggle {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    line-height: 1 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-status-card span {
+    font-size: 8px !important;
+    font-weight: 850 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-status-card strong,
+  .pattern-family-page--live-cockpit .pattern-family-live-status-card .pattern-family-live-trends-toggle {
+    font-size: 10px !important;
+    font-weight: 850 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-status-card--price strong {
+    font-size: 11px !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-rows: 11px 16px 11px 16px !important;
+    height: 58px !important;
+    min-height: 0 !important;
+    padding: 4px !important;
+    gap: 2px 4px !important;
+    overflow: hidden !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > * {
+    display: block !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    line-height: 1 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > span {
+    align-self: end !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #7f8b86 !important;
+    font-size: 8px !important;
+    font-weight: 850 !important;
+    text-transform: none !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > strong {
+    align-self: start !important;
+    display: block !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #e0ebe5 !important;
+    font-size: 10px !important;
+    font-weight: 850 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(1) { grid-column: 1 !important; grid-row: 1 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(2) { grid-column: 1 !important; grid-row: 2 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(3) { grid-column: 2 !important; grid-row: 1 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(4) { grid-column: 2 !important; grid-row: 2 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(5) { grid-column: 3 !important; grid-row: 1 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(6) { grid-column: 3 !important; grid-row: 2 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(7) { grid-column: 1 !important; grid-row: 3 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(8) { grid-column: 1 !important; grid-row: 4 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(9) { grid-column: 2 !important; grid-row: 3 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(10) { grid-column: 2 !important; grid-row: 4 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(11) { grid-column: 3 !important; grid-row: 3 !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-meta > :nth-child(12) { grid-column: 3 !important; grid-row: 4 !important; }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-table {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-content: start !important;
+    justify-items: stretch !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 3px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade {
+    display: grid !important;
+    grid-template-columns:
+      minmax(0, 1.18fr)
+      minmax(0, 0.5fr)
+      minmax(0, 0.54fr)
+      minmax(0, 0.72fr)
+      minmax(0, 0.46fr)
+      minmax(0, 0.82fr)
+      minmax(0, 0.46fr) !important;
+    grid-template-rows: 1fr !important;
+    align-items: center !important;
+    width: 100% !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    gap: 3px !important;
+    margin: 0 0 3px !important;
+    padding: 0 5px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    font-size: 9px !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--head.pattern-family-live-trends-row--trade {
+    display: grid !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    max-height: 22px !important;
+    font-size: 8px !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > * {
+    grid-row: 1 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    line-height: 1 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(1) { grid-column: 1 !important; text-align: left !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(2) { grid-column: 2 !important; text-align: left !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(3) { grid-column: 3 !important; text-align: left !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(4) { grid-column: 4 !important; text-align: left !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(5) { grid-column: 5 !important; text-align: left !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(6) { grid-column: 6 !important; text-align: right !important; }
+  .pattern-family-page--live-cockpit .pattern-family-live-trends-row--trade > :nth-child(7) { grid-column: 7 !important; text-align: right !important; }
+
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .charts_container,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .margin-,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .chart-panel-shell,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .chart-workspace,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .chart-canvas-stage,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_container,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_wrapper {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_container {
+    grid-template-columns: minmax(0, 1fr) 52px !important;
+    grid-template-rows: minmax(0, 1fr) 28px !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .candle_chart_wrapper {
+    grid-template-rows: minmax(0, 1fr) 28px !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-live-status {
+    left: 5px !important;
+    right: 5px !important;
+    top: 5px !important;
+    min-height: 0 !important;
+    padding: 4px 5px !important;
+    font-size: 9px !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-hover-status {
+    left: 5px !important;
+    right: 5px !important;
+    top: 37px !important;
+    display: grid !important;
+    grid-template-columns: minmax(88px, 1.35fr) repeat(5, minmax(0, 0.72fr)) !important;
+    gap: 2px !important;
+    width: auto !important;
+    max-width: none !important;
+    height: 30px !important;
+    min-height: 0 !important;
+    padding: 2px !important;
+    overflow: hidden !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-hover-status__cell {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding: 2px 3px !important;
+    overflow: hidden !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-hover-status__cell span {
+    font-size: 7px !important;
+    line-height: 1 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-hover-status__cell strong {
+    font-size: 9px !important;
+    line-height: 1 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .canvas_prices,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .pricesb,
+  .pattern-family-page--live-cockpit .pattern-family-inspector-chart .canvas_prices canvas {
+    touch-action: none !important;
+    overscroll-behavior: contain !important;
+  }
+}
+
+/* Final live-cockpit chart placement. Keep this at the end so it wins over the
+   older mobile overrides above. */
+.pattern-family-live-chart-area {
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+}
+
+.pattern-family-chart-hover-status {
+  top: 8px;
+}
+
+@media (max-width: 720px) {
+  .pattern-family-page--live-cockpit .pattern-family-live-chart-area {
+    display: grid !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    gap: 0 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-full-chart.pattern-family-inspector-chart {
+    grid-row: 1 !important;
+  }
+
+  .pattern-family-page--live-cockpit .pattern-family-chart-hover-status {
+    top: 5px !important;
+  }
 }

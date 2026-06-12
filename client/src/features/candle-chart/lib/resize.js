@@ -12,6 +12,7 @@ const PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO = 0.00005;
 const GRAPH_MIN_FIT_PRICE_SPAN_RATIO = 0.00001;
 const MIN_FIT_PRICE_SPAN_ABSOLUTE = 0.01;
 const MIN_FIT_COMPLETE_CANDLE_WIDTH = 0.18;
+const MIN_RAW_ALL_FIT_COMPLETE_CANDLE_WIDTH = 0.001;
 const MAX_FIT_COMPLETE_CANDLE_WIDTH = 180;
 
 const getMinimumFitPriceSpan = (
@@ -342,6 +343,99 @@ const getGraphFocusBounds = (chartStateRef, rustPattern) => {
   };
 };
 
+const getRawCandleFocusBounds = (chartStateRef, rustPattern) => {
+  const chartState = chartStateRef.current;
+  const candles = chartState?.candles?.items ?? [];
+  const rawVisibleCandles = rustPattern?.raw_visible_candles;
+  const showAllCandles = String(rawVisibleCandles ?? '').trim().toLowerCase() === 'all';
+  const visibleCount = showAllCandles
+    ? candles.length
+    : Math.max(
+        20,
+        Math.min(candles.length, Number(rawVisibleCandles) || 240)
+      );
+
+  if (!candles.length || visibleCount <= 0) {
+    return null;
+  }
+
+  const rawFocusIndex = Number(rustPattern?.raw_focus_index);
+  const hasFocusIndex =
+    Number.isFinite(rawFocusIndex) && rawFocusIndex >= 1 && rawFocusIndex <= candles.length;
+  const focusCandle = hasFocusIndex ? candles[Math.round(rawFocusIndex) - 1] : null;
+  const focusPrice = toFinitePrice(
+    focusCandle?.candle_close ??
+      focusCandle?.close ??
+      focusCandle?.candle_open ??
+      focusCandle?.open
+  );
+  const halfWindow = Math.floor(visibleCount / 2);
+  let minIndex = 1;
+  let maxIndex = visibleCount;
+
+  if (hasFocusIndex && !showAllCandles) {
+    minIndex = Math.max(1, Math.round(rawFocusIndex) - halfWindow);
+    maxIndex = Math.min(candles.length, minIndex + visibleCount - 1);
+    minIndex = Math.max(1, maxIndex - visibleCount + 1);
+  }
+
+  let minPrice = Number.POSITIVE_INFINITY;
+  let maxPrice = Number.NEGATIVE_INFINITY;
+  let priceCount = 0;
+
+  const addFocusPrice = (value) => {
+    const price = toFinitePrice(value);
+    if (!Number.isFinite(price)) {
+      return;
+    }
+
+    minPrice = Math.min(minPrice, price);
+    maxPrice = Math.max(maxPrice, price);
+    priceCount += 1;
+  };
+
+  for (let index = minIndex; index <= maxIndex; index += 1) {
+    const candle = candles[index - 1];
+    addFocusPrice(candle?.candle_low);
+    addFocusPrice(candle?.candle_high);
+  }
+
+  [
+    rustPattern?.trade_enter_price,
+    rustPattern?.trade_risk_exit_price,
+    rustPattern?.trade_reward_exit_price,
+    rustPattern?.trade_exit_price,
+    rustPattern?.exit_price,
+  ].forEach(addFocusPrice);
+
+  if (!priceCount) {
+    return null;
+  }
+
+  const pricePadding = Math.max(
+    (maxPrice - minPrice) * 0.06,
+    getMinimumFitPriceSpan(maxPrice, PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO)
+  );
+
+  return {
+    minPrice: minPrice - pricePadding,
+    maxPrice: maxPrice + pricePadding,
+    minIndex,
+    maxIndex,
+    anchorIndex: showAllCandles
+      ? (minIndex + maxIndex) / 2
+      : hasFocusIndex
+        ? rawFocusIndex
+        : Math.max(1, visibleCount / 2),
+    centerFocusAtMidpoint: Boolean(rustPattern?.raw_center_focus_at_midpoint && hasFocusIndex),
+    centerPriceAtMidpoint: Boolean(
+      rustPattern?.raw_center_focus_at_midpoint && Number.isFinite(focusPrice)
+    ),
+    anchorPrice: focusPrice,
+    minCompleteCandleWidth: showAllCandles ? MIN_RAW_ALL_FIT_COMPLETE_CANDLE_WIDTH : undefined,
+  };
+};
+
 const applyHorizontalFit = (chartStateRef, minIndex, maxIndex, options = {}) => {
   const chartState = chartStateRef.current;
   const isGraphFocus = options.focusMode === 'graph';
@@ -361,7 +455,7 @@ const applyHorizontalFit = (chartStateRef, minIndex, maxIndex, options = {}) => 
   const spanInCandles = Math.max(coreSpanInCandles + edgeBufferCandles * 2, 1);
   const completeWidth = clamp(
     drawableWidth / spanInCandles,
-    MIN_FIT_COMPLETE_CANDLE_WIDTH,
+    options.minCompleteCandleWidth ?? MIN_FIT_COMPLETE_CANDLE_WIDTH,
     MAX_FIT_COMPLETE_CANDLE_WIDTH
   );
   const spacing = completeWidth <= 1.1 ? 0 : Math.min(completeWidth * 0.16, 3);
@@ -387,9 +481,11 @@ const applyHorizontalFit = (chartStateRef, minIndex, maxIndex, options = {}) => 
     chartState.candles.completeWidth / 2 -
     chartState.canvas.width / 2;
   chartState.viewport.xOrigin =
-    lowerBoundXOrigin <= upperBoundXOrigin
-      ? clamp(centeredXOrigin, lowerBoundXOrigin, upperBoundXOrigin)
-      : centeredXOrigin;
+    options.centerFocusAtMidpoint
+      ? centeredXOrigin
+      : lowerBoundXOrigin <= upperBoundXOrigin
+        ? clamp(centeredXOrigin, lowerBoundXOrigin, upperBoundXOrigin)
+        : centeredXOrigin;
   chartState.viewport.prevXOrigin = chartState.viewport.xOrigin;
 };
 
@@ -433,9 +529,13 @@ const applyVerticalFit = (chartStateRef, minPrice, maxPrice, options = {}) => {
   chartState.price.priceUnitPixelSize = basePixelsPerGrid;
 
   const priceScale = getPriceScale(chartState);
-  chartState.viewport.baselineY = isGraphFocus
-    ? verticalTopPadding + availableHeight / 2 + ((minPrice + maxPrice) / 2) * priceScale
-    : verticalTopPadding + maxPrice * priceScale;
+  const anchorPrice = toFinitePrice(options.anchorPrice);
+  chartState.viewport.baselineY =
+    options.centerPriceAtMidpoint && Number.isFinite(anchorPrice)
+      ? chartState.canvas.height / 2 + anchorPrice * priceScale
+      : isGraphFocus
+        ? verticalTopPadding + availableHeight / 2 + ((minPrice + maxPrice) / 2) * priceScale
+        : verticalTopPadding + maxPrice * priceScale;
   chartState.viewport.prevBaselineY = chartState.viewport.baselineY;
 
   const midPrice = utilities.get_mid_price(chartStateRef);
@@ -449,6 +549,22 @@ const syncBaselineToMidPrice = (chartStateRef) => {
     chartState.viewport.startingBaselineY / 2 +
     chartState.price.currentMidPrice * getPriceScale(chartState);
   chartState.viewport.prevBaselineY = chartState.viewport.baselineY;
+};
+
+const applyVerticalZoomMultiplier = (chartStateRef, multiplier) => {
+  const chartState = chartStateRef.current;
+  const parsedMultiplier = Number(multiplier);
+
+  if (!chartState || !Number.isFinite(parsedMultiplier) || parsedMultiplier <= 1) {
+    return;
+  }
+
+  const zoomMultiplier = Math.min(parsedMultiplier, 8);
+  chartState.price.pixelsPerGrid *= zoomMultiplier;
+  chartState.price.prevPixelsPerGrid *= zoomMultiplier;
+  chartState.price.startingPixelsPerGrid *= zoomMultiplier;
+  chartState.price.priceUnitPixelSize *= zoomMultiplier;
+  syncBaselineToMidPrice(chartStateRef);
 };
 
 export const chart_Y_movement = (chartStateRef) => {
@@ -492,6 +608,28 @@ export const chart_zoom_out = (chartStateRef, threshold) => {
   syncBaselineToMidPrice(chartStateRef);
 };
 
+export const scale_price_axis = (chartStateRef, multiplier) => {
+  const chartState = chartStateRef.current;
+  const parsedMultiplier = Number(multiplier);
+
+  if (!chartState || !Number.isFinite(parsedMultiplier) || parsedMultiplier <= 0) {
+    return;
+  }
+
+  const nextPixelsPerGrid = clamp(
+    chartState.price.pixelsPerGrid * parsedMultiplier,
+    Math.max(chartState.price.startingPixelsPerGrid * 0.12, 2),
+    Math.max(chartState.price.startingPixelsPerGrid * 24, 24)
+  );
+  const appliedMultiplier = nextPixelsPerGrid / chartState.price.pixelsPerGrid;
+
+  chartState.price.pixelsPerGrid = nextPixelsPerGrid;
+  chartState.price.prevPixelsPerGrid *= appliedMultiplier;
+  chartState.price.priceUnitPixelSize = Math.max(1, chartState.price.priceUnitPixelSize * appliedMultiplier);
+
+  syncBaselineToMidPrice(chartStateRef);
+};
+
 export const chart_zoom_in = (chartStateRef, threshold) => {
   const chartState = chartStateRef.current;
   chartState.price.pixelsPerGrid += 1;
@@ -509,7 +647,9 @@ export const chart_zoom_in = (chartStateRef, threshold) => {
 
 export const reposition_candles = (chartStateRef, rustPattern, options = {}) => {
   const bounds =
-    options.focusMode === 'reversal'
+    rustPattern?.raw_candle_view
+      ? getRawCandleFocusBounds(chartStateRef, rustPattern)
+    : options.focusMode === 'reversal'
       ? getReversalFocusBounds(chartStateRef, rustPattern, options.activeReversalFilter) ??
         getPatternBounds(rustPattern)
       : options.focusMode === 'graph'
@@ -534,9 +674,18 @@ export const reposition_candles = (chartStateRef, rustPattern, options = {}) => 
     return;
   }
 
-  applyVerticalFit(chartStateRef, bounds.minPrice, bounds.maxPrice, options);
+  applyVerticalFit(chartStateRef, bounds.minPrice, bounds.maxPrice, {
+    ...options,
+    centerPriceAtMidpoint: bounds.centerPriceAtMidpoint,
+    anchorPrice: bounds.anchorPrice,
+  });
+  if (rustPattern?.raw_candle_view) {
+    applyVerticalZoomMultiplier(chartStateRef, rustPattern?.raw_vertical_zoom);
+  }
   applyHorizontalFit(chartStateRef, bounds.minIndex, bounds.maxIndex, {
     ...options,
+    minCompleteCandleWidth: bounds.minCompleteCandleWidth,
+    centerFocusAtMidpoint: bounds.centerFocusAtMidpoint,
     anchorIndex:
       bounds.anchorIndex ??
       (options.focusMode === 'reversal' && Number.isFinite(reversalAnchorIndex)

@@ -1,33 +1,59 @@
 
-export const reset_candle_canvas = (canvas_chart) => {
-    const canvas = canvas_chart.current;
+const getCanvasSize = (canvas) => {
+    const bounds = canvas.getBoundingClientRect();
+    return {
+        width: Math.max(1, Math.round(bounds.width || canvas.offsetWidth || 1)),
+        height: Math.max(1, Math.round(bounds.height || canvas.offsetHeight || 1)),
+    };
+};
+
+const reset_canvas = (canvas) => {
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) return null;
+
+    const { width, height } = getCanvasSize(canvas);
+    const pixelRatio = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+    const backingWidth = Math.max(1, Math.round(width * pixelRatio));
+    const backingHeight = Math.max(1, Math.round(height * pixelRatio));
+
     canvas.style.width = '100%';
     canvas.style.height = '100%';
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-    return { canvas, ctx };
+
+    if (canvas.width !== backingWidth) {
+        canvas.width = backingWidth;
+    }
+    if (canvas.height !== backingHeight) {
+        canvas.height = backingHeight;
+    }
+
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+
+    return {
+        ctx,
+        surface: {
+            element: canvas,
+            width,
+            height,
+            pixelRatio,
+        },
+    };
+};
+
+export const reset_candle_canvas = (canvas_chart) => {
+    const reset = reset_canvas(canvas_chart.current);
+    if (!reset) return;
+    return { canvas: reset.surface, ctx: reset.ctx };
 }
 export const reset_price_canvas = (canvas_price) => {
-    const cp = canvas_price.current;
-    const ctx_price = cp.getContext('2d');
-    if (!ctx_price) return;
-    cp.style.width = '100%';
-    cp.style.height = '100%';
-    cp.width = cp.offsetWidth;
-    cp.height = cp.offsetHeight;
-    return { cp, ctx_price };
+    const reset = reset_canvas(canvas_price.current);
+    if (!reset) return;
+    return { cp: reset.surface, ctx_price: reset.ctx };
 }
 export const reset_date_canvas = (canvas_dates) => {
-    const canvas_date = canvas_dates.current;
-    const ctx_date = canvas_date.getContext('2d');
-    if (!ctx_date) return;
-    canvas_date.style.width = '100%';
-    canvas_date.style.height = '100%';
-    canvas_date.width = canvas_date.offsetWidth;
-    canvas_date.height = canvas_date.offsetHeight;
-    return { canvas_date, ctx_date }
+    const reset = reset_canvas(canvas_dates.current);
+    if (!reset) return;
+    return { canvas_date: reset.surface, ctx_date: reset.ctx }
 }
 export const handle_BaselineY = (candleChartRef) => {
 

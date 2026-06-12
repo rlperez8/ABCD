@@ -27,6 +27,11 @@ import {
   fetchPatternFamilies,
   fetchPatternReversalAiScores,
   fetchPatternXaOutcomes,
+  fetchNinjaTraderOracleTrends,
+  fetchNinjaTraderLiveBarSnapshot,
+  fetchNinjaTraderScannerActivity,
+  fetchNinjaTraderSignalHistory,
+  fetchNinjaTraderTrendEvents,
   fetchPhase1FamilyPatterns,
   fetchPhase1Leaderboard,
   fetchPhase1PatternRouteReplay,
@@ -43,6 +48,50 @@ const PATTERN_AI_STAGE1_DEFAULT_YEAR = 2026;
 const PATTERN_AI_STAGE1_TRADE_PAGE_SIZE = 1000;
 const PATTERN_AI_EXIT_MAIN_RUN_ID = 'aicw-exit-dyn180s2-srcfb-v1-2m-2026';
 const PATTERN_AI_EXIT_TRADE_PAGE_SIZE = 300;
+const PATTERN_AI_EXIT_TAKEN_TRADE_PAGE_SIZE = 1000;
+const LIVE_CANVAS_ROOT = 'HO';
+const LIVE_CANVAS_SYMBOL = 'HO';
+const LIVE_CANVAS_TIMEFRAME = '2m';
+const LIVE_CANVAS_TREND_RUN_ID = 'ho-mho-audit-full-2m-v1-20210425-20260608';
+const LIVE_CANVAS_SIGNAL_RUN_ID = 'nt-live-ho-5k-demo-20260610-v2';
+const LIVE_CANVAS_ACCOUNT_NAME = 'DEMO5859105';
+const LIVE_CANVAS_SIGNAL_INSTRUMENT = 'HO JUL26';
+const LIVE_CANVAS_ORACLE_RUN_ID = 'oracle-long-trends-v3-10r-2m-HO-2024_2026';
+const LIVE_CANVAS_DISPLAY_TIME_ZONE = 'America/Chicago';
+const LIVE_CANVAS_START_DATE = null;
+const LIVE_CANVAS_END_DATE = null;
+const LIVE_CANVAS_CURRENT_VISIBLE_CANDLES = 56;
+const LIVE_CANVAS_TREND_VISIBLE_CANDLES = 900;
+const LIVE_CANVAS_CURRENT_VERTICAL_ZOOM = 3.25;
+const LIVE_CANVAS_ALL_CONTRACTS = true;
+const LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT = 1500;
+const LIVE_CANVAS_CANDLE_PAGE_LIMIT = 3000;
+const LIVE_CANVAS_TREND_CONTEXT_PRE_BARS = 900;
+const LIVE_CANVAS_TREND_CONTEXT_POST_BARS = 420;
+const LIVE_CANVAS_TREND_WINDOW_MIN_LIMIT = 2200;
+const LIVE_CANVAS_TREND_WINDOW_MAX_LIMIT = 20000;
+const LIVE_CANVAS_RECENT_REFRESH_LIMIT = 600;
+const LIVE_CANVAS_POLL_MS = 5000;
+const LIVE_CANVAS_SNAPSHOT_POLL_MS = 1000;
+const LIVE_CANVAS_TREND_LIMIT = 80;
+const LIVE_CANVAS_ORACLE_LIMIT = 10000;
+const LIVE_CANVAS_SCANNER_LIMIT = 120;
+const LIVE_CANVAS_FIXED_HISTORY_WINDOW = Boolean(LIVE_CANVAS_START_DATE || LIVE_CANVAS_END_DATE);
+const NINJATRADER_MONTH_CODES = {
+  JAN: 'F',
+  FEB: 'G',
+  MAR: 'H',
+  APR: 'J',
+  MAY: 'K',
+  JUN: 'M',
+  JUL: 'N',
+  AUG: 'Q',
+  SEP: 'U',
+  OCT: 'V',
+  NOV: 'X',
+  DEC: 'Z',
+};
+const CANVAS_ONLY_MODE = true;
 
 const formatNumber = (value) =>
   Number.isFinite(Number(value)) ? Number(value).toLocaleString() : '0';
@@ -61,6 +110,42 @@ const formatTime = (value) => {
   const text = String(value);
   const timePart = text.includes('T') ? text.split('T')[1] : text.split(' ')[1];
   return timePart ? timePart.slice(0, 5) : text.slice(11, 16) || 'N/A';
+};
+
+const parseServerUtcDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+  const text = String(value);
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?/);
+  if (match) {
+    const parsed = new Date(Date.UTC(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4] ?? 0),
+      Number(match[5] ?? 0),
+      Number(match[6] ?? 0)
+    ));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatLiveCanvasNtTime = (value) => {
+  const parsed = parseServerUtcDate(value);
+  if (!parsed) return 'N/A';
+  return parsed.toLocaleString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+    minute: '2-digit',
+    timeZone: LIVE_CANVAS_DISPLAY_TIME_ZONE,
+    timeZoneName: 'short',
+  });
 };
 
 const formatShortDateTime = (value) => {
@@ -116,12 +201,23 @@ const optionalNumber = (value) => {
 const formatDecimal = (value, digits = 2) =>
   Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '0.00';
 
+const formatSignedR = (value, digits = 2) => {
+  if (!Number.isFinite(Number(value))) return 'N/A';
+  const parsed = Number(value);
+  return `${parsed > 0 ? '+' : ''}${parsed.toFixed(digits)}R`;
+};
+
 const formatNullableDecimal = (value, digits = 2, fallback = 'N/A') => {
   if (value === null || value === undefined || value === '') {
     return fallback;
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed.toFixed(digits) : fallback;
+};
+
+const formatScorePercent = (value, digits = 1) => {
+  if (!Number.isFinite(Number(value))) return 'N/A';
+  return `${formatDecimal(Number(value) * 100, digits)}%`;
 };
 
 const formatSignedPercent = (value, digits = 1) => {
@@ -1365,6 +1461,481 @@ const normalizeCandles = (candles = []) =>
       candle_date: formatCandleDateForChart(item.candle_date),
     }));
 
+const addLiveCanvasDisplayDates = (candles = []) =>
+  candles.map((candle) => ({
+    ...candle,
+    // The model table stores the 2m bucket/open timestamp. NinjaTrader labels the same bar at close time.
+    candle_display_date:
+      addTimeframeBars(candle.candle_date, LIVE_CANVAS_TIMEFRAME, 1) ?? candle.candle_date,
+    candle_display_timezone: LIVE_CANVAS_DISPLAY_TIME_ZONE,
+  }));
+
+const getLiveCanvasDisplayDate = (candle) =>
+  candle?.candle_display_date ?? candle?.candle_date ?? null;
+
+const deriveNinjaTraderModelSymbol = (instrument = '', rootSymbol = LIVE_CANVAS_ROOT) => {
+  const root = String(rootSymbol || LIVE_CANVAS_ROOT).toUpperCase();
+  const text = String(instrument || '').toUpperCase().trim();
+  const monthNameMatch = text.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2,4})\b/);
+  if (monthNameMatch) {
+    return `${root}${NINJATRADER_MONTH_CODES[monthNameMatch[1]]}${monthNameMatch[2].slice(-1)}`;
+  }
+  const compactMatch = text.match(/\b([FGHJKMNQUVXZ])(\d{1,2})\b/);
+  if (compactMatch) {
+    return `${root}${compactMatch[1]}${compactMatch[2].slice(-1)}`;
+  }
+  return root;
+};
+
+const mapLiveBarSnapshotToCanvasCandle = (snapshot = null) => {
+  if (!snapshot) {
+    return null;
+  }
+
+  const bucketTime =
+    snapshot.bucket_time_utc ??
+    addTimeframeBars(snapshot.candle_time_utc ?? snapshot.candle_time, LIVE_CANVAS_TIMEFRAME, -1);
+  const candleDate = formatCandleDateForChart(bucketTime);
+  const open = Number(snapshot.open);
+  const high = Number(snapshot.high);
+  const low = Number(snapshot.low);
+  const close = Number(snapshot.close ?? snapshot.last_price);
+
+  if (!candleDate || !Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)) {
+    return null;
+  }
+
+  const displayDate =
+    formatCandleDateForChart(snapshot.candle_time_utc) ??
+    addTimeframeBars(candleDate, LIVE_CANVAS_TIMEFRAME, 1) ??
+    candleDate;
+  const rootSymbol = String(snapshot.root_symbol || LIVE_CANVAS_ROOT).toUpperCase();
+  const symbol = deriveNinjaTraderModelSymbol(snapshot.instrument, rootSymbol);
+
+  return {
+    symbol,
+    root_symbol: rootSymbol,
+    candle_date: candleDate,
+    candle_display_date: displayDate,
+    candle_display_timezone: LIVE_CANVAS_DISPLAY_TIME_ZONE,
+    open,
+    high,
+    low,
+    close,
+    volume: Number.isFinite(Number(snapshot.volume)) ? Number(snapshot.volume) : null,
+    candle_open: open,
+    candle_high: high,
+    candle_low: low,
+    candle_close: close,
+    candle_volume: Number.isFinite(Number(snapshot.volume)) ? Number(snapshot.volume) : null,
+    candle_is_live_snapshot: true,
+    candle_snapshot_time: snapshot.snapshot_time_utc ?? snapshot.updated_at ?? snapshot.received_at ?? null,
+    candle_last_price: Number.isFinite(Number(snapshot.last_price)) ? Number(snapshot.last_price) : close,
+  };
+};
+
+const getTrendEventKey = (trend) => String(trend?.event_uid ?? trend?.id ?? '');
+const getOracleTrendKey = (trend) => `oracle:${trend?.oracle_trade_id ?? trend?.symbol ?? 'trend'}:${trend?.entry_date ?? ''}`;
+
+const mapOracleTrendToLiveCanvasTrend = (trend = {}) => ({
+  raw_source: 'oracle',
+  event_uid: getOracleTrendKey(trend),
+  event_type: 'oracle_trend',
+  model_symbol: trend.symbol ?? null,
+  root_symbol: trend.root_symbol ?? LIVE_CANVAS_ROOT,
+  timeframe: trend.timeframe ?? LIVE_CANVAS_TIMEFRAME,
+  candle_time: trend.entry_date ?? null,
+  ts_utc: trend.entry_date ?? null,
+  direction: trend.direction ?? null,
+  level2_score: null,
+  stage2_score: trend.quality_score ?? null,
+  status: 'oracle',
+  paper_entry_status: 'accepted',
+  paper_exit_status: 'closed',
+  paper_entry_candle_time: trend.entry_date ?? null,
+  paper_entry_ts_utc: trend.entry_date ?? null,
+  paper_exit_candle_time: trend.exit_date ?? null,
+  paper_exit_ts_utc: trend.exit_date ?? null,
+  entry_price: trend.entry_price ?? null,
+  stop_price: trend.stop_price ?? null,
+  risk_ticks: trend.risk_ticks ?? null,
+  paper_entry_price: trend.entry_price ?? null,
+  paper_stop_price: trend.stop_price ?? null,
+  paper_risk_ticks: trend.risk_ticks ?? null,
+  paper_exit_price: trend.exit_price ?? null,
+  paper_exit_reason: trend.outcome ?? 'oracle',
+  paper_result_r: trend.result_r ?? null,
+  oracle_trade_id: trend.oracle_trade_id ?? null,
+  oracle_quality_score: trend.quality_score ?? null,
+});
+
+const getLiveTradeSignalKey = (trade) => `signal:${trade?.signal_uid ?? trade?.id ?? ''}`;
+
+const getLiveTradeSignalResultLabel = (trade = {}) => {
+  const explicitLabel = String(trade.result_label || '').trim();
+  if (explicitLabel) {
+    return explicitLabel;
+  }
+  const pnl = Number(trade.realized_accounting_dollars ?? trade.realized_execution_dollars ?? trade.realized_ticks);
+  if (String(trade.status || '').toLowerCase() === 'completed' && Number.isFinite(pnl)) {
+    if (pnl > 0) return 'Win';
+    if (pnl < 0) return 'Loss';
+    return 'Flat';
+  }
+  if (String(trade.status || '').toLowerCase() === 'triggered') {
+    return 'Open';
+  }
+  return trade.status || 'N/A';
+};
+
+const getLiveTradeSignalResultTone = (trade = {}) => {
+  const label = getLiveTradeSignalResultLabel(trade).toLowerCase();
+  if (label === 'win') return 'win';
+  if (label === 'loss') return 'loss';
+  if (label === 'open') return 'open';
+  return '';
+};
+
+const formatLiveMoney = (value) =>
+  Number.isFinite(Number(value))
+    ? Number(value).toLocaleString('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : 'N/A';
+
+const formatSignedLiveMoney = (value) => {
+  if (!Number.isFinite(Number(value))) {
+    return 'N/A';
+  }
+  const parsed = Number(value);
+  const formatted = formatLiveMoney(Math.abs(parsed));
+  return `${parsed > 0 ? '+' : parsed < 0 ? '-' : ''}${formatted}`;
+};
+
+const parseLiveTradeNotes = (trade = {}) => {
+  const notes = trade.notes;
+  if (!notes || typeof notes !== 'string') {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(notes);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+};
+
+const getLiveTradeStage2Score = (trade = {}) => {
+  const notes = parseLiveTradeNotes(trade);
+  return trade.stage2_score ?? notes.stage2_score ?? trade.level2_score ?? notes.level2_score ?? null;
+};
+
+const mapLiveTradeSignalToCanvasTrend = (trade = {}) => {
+  const notes = parseLiveTradeNotes(trade);
+  const direction = String(trade.side || '').toUpperCase();
+  const entryPrice = trade.actual_trigger_price ?? trade.expected_price ?? null;
+  const stopPrice = trade.stop_price ?? null;
+  const tickSize = Number(trade.tick_size);
+  const riskTicks =
+    Number.isFinite(Number(entryPrice)) && Number.isFinite(Number(stopPrice)) && Number.isFinite(tickSize) && tickSize > 0
+      ? Math.abs(Number(entryPrice) - Number(stopPrice)) / tickSize
+      : null;
+  const resultR =
+    Number.isFinite(Number(trade.realized_ticks)) && Number.isFinite(Number(riskTicks)) && Number(riskTicks) > 0
+      ? Number(trade.realized_ticks) / Number(riskTicks)
+      : null;
+
+  return {
+    raw_source: 'live_signal',
+    event_uid: getLiveTradeSignalKey(trade),
+    event_type: 'live_trade_signal',
+    model_symbol: trade.instrument ?? LIVE_CANVAS_SIGNAL_INSTRUMENT,
+    root_symbol: trade.root_symbol ?? LIVE_CANVAS_ROOT,
+    timeframe: LIVE_CANVAS_TIMEFRAME,
+    candle_time: trade.triggered_at ?? trade.expected_time ?? trade.created_at ?? null,
+    ts_utc: trade.triggered_at ?? trade.expected_time ?? trade.created_at ?? null,
+    direction,
+    level2_score: trade.level2_score ?? notes.level2_score ?? null,
+    stage2_score: trade.stage2_score ?? notes.stage2_score ?? null,
+    status: trade.status ?? null,
+    paper_entry_status: String(trade.status || '').toLowerCase() === 'completed' ? 'accepted' : trade.status ?? null,
+    paper_exit_status: String(trade.status || '').toLowerCase() === 'completed' ? 'closed' : trade.status ?? null,
+    paper_entry_candle_time: trade.triggered_at ?? trade.expected_time ?? trade.created_at ?? null,
+    paper_entry_ts_utc: trade.triggered_at ?? trade.expected_time ?? trade.created_at ?? null,
+    paper_exit_candle_time: trade.exit_received_at ?? null,
+    paper_exit_ts_utc: trade.exit_received_at ?? null,
+    entry_price: entryPrice,
+    stop_price: stopPrice,
+    risk_ticks: riskTicks,
+    paper_entry_price: entryPrice,
+    paper_stop_price: stopPrice,
+    paper_risk_ticks: riskTicks,
+    paper_exit_price: trade.exit_price ?? null,
+    paper_exit_reason: getLiveTradeSignalResultLabel(trade),
+    paper_result_r: resultR,
+    signal_uid: trade.signal_uid ?? null,
+  };
+};
+
+const getDateMinuteKey = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  return String(value).replace('T', ' ').slice(0, 16);
+};
+
+const getNearestCandleIndexByTime = (candles = [], value, timeframe = LIVE_CANVAS_TIMEFRAME) => {
+  const targetTime = getDateTimeForCompare(value);
+  const timeframeMs = getTimeframeMs(timeframe);
+  const maxDistanceMs = Math.max(timeframeMs, 60 * 1000);
+
+  if (targetTime === null) {
+    return null;
+  }
+
+  let bestIndex = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  candles.forEach((candle, index) => {
+    const candleTime = getDateTimeForCompare(candle?.candle_date);
+    if (candleTime === null) {
+      return;
+    }
+
+    const distance = Math.abs(candleTime - targetTime);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index + 1;
+    }
+  });
+
+  return bestDistance <= maxDistanceMs ? bestIndex : null;
+};
+
+const findCandleIndexByTime = (candles = [], value) => {
+  const targetKey = getDateMinuteKey(value);
+
+  if (!targetKey) {
+    return null;
+  }
+
+  const matchIndex = candles.findIndex((candle) => getDateMinuteKey(candle?.candle_date) === targetKey);
+  return matchIndex >= 0
+    ? matchIndex + 1
+    : getNearestCandleIndexByTime(candles, value, LIVE_CANVAS_TIMEFRAME);
+};
+
+const findCandleIndexByTimes = (candles = [], values = []) => {
+  for (const value of values) {
+    const matchIndex = findCandleIndexByTime(candles, value);
+
+    if (matchIndex !== null) {
+      return matchIndex;
+    }
+  }
+
+  return null;
+};
+
+const buildLiveCanvasPattern = (candles = [], selectedTrend = null, canvasSymbol = LIVE_CANVAS_SYMBOL) => {
+  const latestCandle = candles[0] ?? null;
+  const confirmIndex = selectedTrend
+    ? findCandleIndexByTimes(candles, [selectedTrend.ts_utc, selectedTrend.candle_time])
+    : null;
+  const entryIndex = selectedTrend
+    ? findCandleIndexByTimes(candles, [
+        selectedTrend.paper_entry_ts_utc,
+        selectedTrend.paper_entry_candle_time,
+        selectedTrend.ts_utc,
+        selectedTrend.candle_time,
+      ])
+    : null;
+  const exitIndex = selectedTrend
+    ? findCandleIndexByTimes(candles, [
+        selectedTrend.paper_exit_ts_utc,
+        selectedTrend.paper_exit_candle_time,
+      ])
+    : null;
+  const centerLatestCandle = !selectedTrend && Boolean(candles.length);
+  const focusIndex = entryIndex ?? confirmIndex ?? exitIndex ?? (centerLatestCandle ? 1 : null);
+  const direction = String(selectedTrend?.direction ?? '').toUpperCase();
+  const trendKey = getTrendEventKey(selectedTrend);
+
+  return {
+    raw_candle_view: true,
+    raw_visible_candles: centerLatestCandle
+      ? LIVE_CANVAS_CURRENT_VISIBLE_CANDLES
+      : LIVE_CANVAS_TREND_VISIBLE_CANDLES,
+    raw_focus_index: focusIndex,
+    raw_center_focus_at_midpoint: centerLatestCandle,
+    raw_follow_latest: centerLatestCandle,
+    raw_vertical_zoom: centerLatestCandle ? LIVE_CANVAS_CURRENT_VERTICAL_ZOOM : 1,
+    raw_viewport_key: trendKey || `${LIVE_CANVAS_ROOT}-${LIVE_CANVAS_TIMEFRAME}-live`,
+    raw_selected_trend: Boolean(selectedTrend),
+    raw_trend_source: selectedTrend?.raw_source ?? 'model',
+    trend_confirm_index: confirmIndex,
+    trend_event_uid: trendKey || null,
+    trend_stage2_score: selectedTrend?.stage2_score ?? null,
+    trend_level2_score: selectedTrend?.level2_score ?? null,
+    trend_entry_status: selectedTrend?.paper_entry_status ?? selectedTrend?.status ?? null,
+    pattern_group_id: `${LIVE_CANVAS_ROOT}-${canvasSymbol}-${LIVE_CANVAS_TIMEFRAME}-live`,
+    pattern_id: `${LIVE_CANVAS_ROOT}-${canvasSymbol}-${LIVE_CANVAS_TIMEFRAME}-live-candles`,
+    symbol: canvasSymbol,
+    root_symbol: LIVE_CANVAS_ROOT,
+    source_timeframe: LIVE_CANVAS_TIMEFRAME,
+    harmonic_type: 'Live Candles',
+    market: direction === 'SHORT' ? 'Bearish' : 'Bullish',
+    trade_direction: direction || null,
+    prop_outcome_mode: 'live-candles',
+    d_date: latestCandle?.candle_date ?? null,
+    d_confirm_date: latestCandle?.candle_date ?? null,
+    entry: entryIndex,
+    exit_date: exitIndex,
+    trade_enter_price: selectedTrend?.paper_entry_price ?? selectedTrend?.entry_price ?? null,
+    trade_risk_exit_price: selectedTrend?.paper_stop_price ?? selectedTrend?.stop_price ?? null,
+    trade_exit_price: selectedTrend?.paper_exit_price ?? null,
+    exit_price: selectedTrend?.paper_exit_price ?? null,
+    result_r: selectedTrend?.paper_result_r ?? null,
+    exit_reason: selectedTrend?.paper_exit_reason ?? null,
+    pattern_ABCD_bar_length: candles.length,
+  };
+};
+
+const getLiveCanvasSignature = (candles = []) => {
+  const latestCandle = candles[0] ?? {};
+  return [
+    candles.length,
+    latestCandle.candle_date ?? '',
+    latestCandle.candle_open ?? '',
+    latestCandle.candle_high ?? '',
+    latestCandle.candle_low ?? '',
+    latestCandle.candle_close ?? '',
+    latestCandle.candle_volume ?? '',
+  ].join('|');
+};
+
+const getLiveCanvasCandleKey = (candle = {}) =>
+  `${String(candle.symbol ?? candle.root_symbol ?? '').toUpperCase()}|${getDateMinuteKey(candle.candle_date)}`;
+
+const formatScannerCount = (value) =>
+  Number.isFinite(Number(value)) ? formatNumber(Number(value)) : '-';
+
+const formatScannerScore = (value) =>
+  Number.isFinite(Number(value)) ? formatScorePercent(value, 0) : '-';
+
+const getScannerActivityLabel = (row = {}) => {
+  const eventType = String(row.event_type || '').toLowerCase();
+  if (eventType === 'cycle_scored') return 'Candle Check';
+  if (eventType === 'level2_pick') return 'L2 Pick';
+  if (eventType === 'trend_confirmed') return 'Stage 2';
+  if (eventType === 'stage2_expired') return 'Expired';
+  if (eventType === 'order_signal') return 'Order';
+  if (eventType === 'heartbeat') return 'Heartbeat';
+  if (eventType === 'feed_stale') return 'Feed Paused';
+  if (eventType === 'feed_restored') return 'Feed Restored';
+  if (eventType === 'feed_gap_detected') return 'Feed Gap';
+  if (eventType === 'feed_backlog_reset') return 'Backlog Reset';
+  return formatRouteMode(row.event_type || 'Event');
+};
+
+const getScannerActivityState = (row = {}) => {
+  const details = row.details ?? {};
+  const eventType = String(row.event_type || '').toLowerCase();
+  if (eventType === 'cycle_scored') {
+    const confirms = Number(details.trend_confirms ?? 0);
+    const picks = Number(details.level2_picks ?? 0);
+    if (confirms > 0) return `${formatNumber(confirms)} confirm`;
+    if (picks > 0) return `${formatNumber(picks)} watch`;
+    return 'Scored';
+  }
+  if (eventType.startsWith('feed_')) {
+    const outageCount = Number(details.feed_outage_count ?? 0);
+    const status = formatRouteMode(row.status || row.event_type || 'Seen');
+    return outageCount > 0 ? `${status} #${formatNumber(outageCount)}` : status;
+  }
+  return formatRouteMode(row.status || row.event_type || 'Seen');
+};
+
+const getScannerActivityTone = (row = {}) => {
+  const eventType = String(row.event_type || '').toLowerCase();
+  const status = String(row.status || '').toLowerCase();
+  if (eventType === 'cycle_scored') return 'open';
+  if (eventType === 'heartbeat') return 'open';
+  if (eventType === 'feed_restored') return 'win';
+  if (eventType === 'feed_stale' || eventType === 'feed_gap_detected' || eventType === 'feed_backlog_reset') return 'loss';
+  if (status.includes('confirmed') || status.includes('queued')) return 'win';
+  if (status.includes('rejected') || status.includes('expired') || status.includes('blocked') || status.includes('failed')) {
+    return 'loss';
+  }
+  return '';
+};
+
+const getScannerCandidateUid = (row = {}) =>
+  String(row?.details?.candidate_uid ?? row?.candidate_uid ?? '').trim();
+
+const getWatchingTrendMarkerSignature = (markers = []) =>
+  markers
+    .map((marker) => [
+      marker.candidate_uid,
+      marker.index,
+      marker.direction,
+      marker.level2_score,
+      marker.status,
+    ].join(':'))
+    .join('|');
+
+const buildWatchingTrendMarkers = (candles = [], rows = []) =>
+  rows
+    .map((row) => {
+      const details = row.details ?? {};
+      const index = findCandleIndexByTimes(candles, [
+        details.signal_date,
+        row.ts_utc,
+        row.candle_time,
+      ]);
+
+      if (!index) {
+        return null;
+      }
+
+      return {
+        event_uid: row.event_uid ?? null,
+        candidate_uid: getScannerCandidateUid(row),
+        index,
+        direction: row.direction ?? null,
+        level2_score: row.level2_score ?? null,
+        stage2_score: row.stage2_score ?? null,
+        status: row.status ?? 'watching_stage2',
+        candle_time: row.candle_time ?? row.ts_utc ?? null,
+      };
+    })
+    .filter(Boolean);
+
+const mergeLiveCanvasCandles = (...candleSets) => {
+  const merged = new Map();
+
+  candleSets.flat().forEach((candle) => {
+    const key = getLiveCanvasCandleKey(candle);
+    if (key && key !== '|') {
+      merged.set(key, candle);
+    }
+  });
+
+  return [...merged.values()].sort((left, right) => {
+    const leftTime = new Date(left.candle_date).getTime();
+    const rightTime = new Date(right.candle_date).getTime();
+    if (leftTime !== rightTime) {
+      return rightTime - leftTime;
+    }
+    return String(right.symbol ?? '').localeCompare(String(left.symbol ?? ''));
+  });
+};
+
 const getDateTimeForCompare = (value) => {
   const formattedValue = formatDateTimeForServer(value);
   if (!formattedValue) {
@@ -1373,6 +1944,77 @@ const getDateTimeForCompare = (value) => {
 
   const parsed = new Date(formattedValue.replace(' ', 'T'));
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+};
+
+const clampServerDateText = (value, minValue = null, maxValue = null) => {
+  const formatted = formatDateTimeForServer(value);
+  if (!formatted) {
+    return null;
+  }
+
+  const valueTime = getDateTimeForCompare(formatted);
+  const minTime = minValue ? getDateTimeForCompare(minValue) : null;
+  const maxTime = maxValue ? getDateTimeForCompare(maxValue) : null;
+
+  if (minValue && valueTime !== null && minTime !== null && valueTime < minTime) {
+    return minValue;
+  }
+
+  if (maxValue && valueTime !== null && maxTime !== null && valueTime > maxTime) {
+    return maxValue;
+  }
+
+  return formatted;
+};
+
+const getTrendEntryDate = (trend = {}) =>
+  trend.paper_entry_ts_utc ??
+  trend.paper_entry_candle_time ??
+  trend.ts_utc ??
+  trend.candle_time ??
+  null;
+
+const getTrendExitDate = (trend = {}) =>
+  trend.paper_exit_ts_utc ??
+  trend.paper_exit_candle_time ??
+  trend.target_date ??
+  trend.exit_date ??
+  null;
+
+const buildLiveCanvasTrendCandleWindow = (trend = {}) => {
+  const entryDate = getTrendEntryDate(trend);
+  const exitDate = getTrendExitDate(trend) ?? entryDate;
+
+  if (!entryDate && !exitDate) {
+    return {
+      startDate: LIVE_CANVAS_START_DATE,
+      endDate: LIVE_CANVAS_END_DATE,
+      limit: LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT,
+    };
+  }
+
+  const startDate = clampServerDateText(
+    addTimeframeBars(entryDate ?? exitDate, LIVE_CANVAS_TIMEFRAME, -LIVE_CANVAS_TREND_CONTEXT_PRE_BARS),
+    LIVE_CANVAS_START_DATE,
+    LIVE_CANVAS_END_DATE
+  );
+  const endDate = clampServerDateText(
+    addTimeframeBars(exitDate ?? entryDate, LIVE_CANVAS_TIMEFRAME, LIVE_CANVAS_TREND_CONTEXT_POST_BARS),
+    LIVE_CANVAS_START_DATE,
+    LIVE_CANVAS_END_DATE
+  );
+  const startMs = getDateTimeForCompare(startDate);
+  const endMs = getDateTimeForCompare(endDate);
+  const estimatedBars =
+    startMs !== null && endMs !== null
+      ? Math.max(1, Math.ceil((endMs - startMs) / getTimeframeMs(LIVE_CANVAS_TIMEFRAME)))
+      : LIVE_CANVAS_TREND_WINDOW_MIN_LIMIT;
+  const limit = Math.min(
+    LIVE_CANVAS_TREND_WINDOW_MAX_LIMIT,
+    Math.max(LIVE_CANVAS_TREND_WINDOW_MIN_LIMIT, estimatedBars * 3 + 240)
+  );
+
+  return { startDate, endDate, limit };
 };
 
 const clipCandlesAfterCanvasEnd = (candles = [], pattern = {}) => {
@@ -1614,6 +2256,16 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   });
   const [isPatternAiExitModelTradeLoading, setPatternAiExitModelTradeLoading] = useState(false);
   const [patternAiExitModelTradeError, setPatternAiExitModelTradeError] = useState('');
+  const [patternAiExitModelTakenTradeData, setPatternAiExitModelTakenTradeData] = useState({
+    run: null,
+    summary: null,
+    totalRows: 0,
+    limit: PATTERN_AI_EXIT_TAKEN_TRADE_PAGE_SIZE,
+    offset: 0,
+    rows: [],
+  });
+  const [isPatternAiExitModelTakenTradeLoading, setPatternAiExitModelTakenTradeLoading] = useState(false);
+  const [patternAiExitModelTakenTradeError, setPatternAiExitModelTakenTradeError] = useState('');
   const [dataCenterCollapsedSections, setDataCenterCollapsedSections] = useState({});
   const [selectedPatternXaOutcomeRowKey, setSelectedPatternXaOutcomeRowKey] = useState('');
   const patternXaOutcomeTableWrapRef = useRef(null);
@@ -1767,6 +2419,158 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   const [inspectorHoveredCandle, setInspectorHoveredCandle] = useState(null);
   const [isCanvasLoading, setCanvasLoading] = useState(false);
   const [canvasError, setCanvasError] = useState('');
+  const [liveCanvasRefreshMeta, setLiveCanvasRefreshMeta] = useState({
+    checkedAt: null,
+    snapshotCheckedAt: null,
+    latestSnapshotAt: null,
+    latestSnapshotPrice: null,
+    latestCandleAt: null,
+    candleCount: 0,
+    isRefreshing: false,
+    changed: false,
+    error: '',
+  });
+  const liveCanvasCandlePageMetaRef = useRef({
+    isLoadingOlder: false,
+    hasOlder: true,
+    oldestCandleAt: null,
+    newestCandleAt: null,
+    loadedCount: 0,
+  });
+  const updateLiveCanvasCandlePageMetaRef = useRef(null);
+  updateLiveCanvasCandlePageMetaRef.current = (nextValueOrUpdater) => {
+    liveCanvasCandlePageMetaRef.current =
+      typeof nextValueOrUpdater === 'function'
+        ? nextValueOrUpdater(liveCanvasCandlePageMetaRef.current)
+        : nextValueOrUpdater;
+  };
+  const [liveTrendEvents, setLiveTrendEvents] = useState({
+    runId: null,
+    totalRows: 0,
+    checkedAt: null,
+    isLoading: false,
+    error: '',
+    rows: [],
+  });
+  const [liveOracleTrendEvents, setLiveOracleTrendEvents] = useState({
+    runId: null,
+    totalRows: 0,
+    checkedAt: null,
+    isLoading: false,
+    error: '',
+    rows: [],
+  });
+  const [liveTradeSignals, setLiveTradeSignals] = useState({
+    runId: LIVE_CANVAS_SIGNAL_RUN_ID,
+    totalRows: 0,
+    summary: null,
+    checkedAt: null,
+    isLoading: false,
+    error: '',
+    rows: [],
+  });
+  const [liveScannerActivity, setLiveScannerActivity] = useState({
+    runId: LIVE_CANVAS_TREND_RUN_ID,
+    totalRows: 0,
+    checkedAt: null,
+    isLoading: false,
+    error: '',
+    rows: [],
+  });
+  const [liveCanvasSymbol, setLiveCanvasSymbol] = useState(LIVE_CANVAS_SYMBOL);
+  const [liveTrendPanelMode, setLiveTrendPanelMode] = useState('trades');
+  const [showSkippedLiveTrends, setShowSkippedLiveTrends] = useState(false);
+  const [selectedLiveTrendKey, setSelectedLiveTrendKey] = useState('');
+  const selectedLiveTrendRef = useRef(null);
+  const liveTrendRefreshInFlightRef = useRef(false);
+  const liveOracleTrendRefreshInFlightRef = useRef(false);
+  const liveCanvasSignatureRef = useRef('');
+  const liveCanvasSnapshotSignatureRef = useRef('');
+  const liveCanvasCandlesRef = useRef([]);
+  const liveCanvasSymbolRef = useRef(LIVE_CANVAS_SYMBOL);
+  const liveCanvasRefreshInFlightRef = useRef(false);
+  const liveCanvasOlderCandlesInFlightRef = useRef(false);
+  const liveCanvasLoadedAllOlderRef = useRef(false);
+  const selectedFamilyKeyRef = useRef(selectedFamilyKey);
+
+  useEffect(() => {
+    if (!CANVAS_ONLY_MODE || typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const setLiveMobileViewportHeight = () => {
+      const height = window.visualViewport?.height || window.innerHeight;
+      if (Number.isFinite(height) && height > 0) {
+        document.documentElement.style.setProperty('--live-mobile-vh', `${height}px`);
+      }
+    };
+
+    setLiveMobileViewportHeight();
+    window.addEventListener('resize', setLiveMobileViewportHeight);
+    window.visualViewport?.addEventListener('resize', setLiveMobileViewportHeight);
+    window.visualViewport?.addEventListener('scroll', setLiveMobileViewportHeight);
+
+    return () => {
+      window.removeEventListener('resize', setLiveMobileViewportHeight);
+      window.visualViewport?.removeEventListener('resize', setLiveMobileViewportHeight);
+      window.visualViewport?.removeEventListener('scroll', setLiveMobileViewportHeight);
+      document.documentElement.style.removeProperty('--live-mobile-vh');
+    };
+  }, []);
+
+  useEffect(() => {
+    if (CANVAS_ONLY_MODE && liveTrendPanelMode !== 'trades') {
+      setLiveTrendPanelMode('trades');
+    }
+  }, [liveTrendPanelMode]);
+
+  const visibleLiveTrendRows = useMemo(
+    () => {
+      const rows = Array.isArray(liveTrendEvents.rows) ? liveTrendEvents.rows : [];
+      if (showSkippedLiveTrends) {
+        return rows;
+      }
+      return rows.filter((trend) => String(trend?.paper_entry_status || '').toLowerCase() === 'accepted');
+    },
+    [liveTrendEvents.rows, showSkippedLiveTrends]
+  );
+  const hiddenSkippedLiveTrendCount = useMemo(
+    () => {
+      const rows = Array.isArray(liveTrendEvents.rows) ? liveTrendEvents.rows : [];
+      return rows.filter((trend) => String(trend?.paper_entry_status || '').toLowerCase() !== 'accepted').length;
+    },
+    [liveTrendEvents.rows]
+  );
+  const visibleLiveOracleTrendRows = useMemo(
+    () => (Array.isArray(liveOracleTrendEvents.rows) ? liveOracleTrendEvents.rows : []),
+    [liveOracleTrendEvents.rows]
+  );
+  const liveWatchingTrendRows = useMemo(
+    () => {
+      const rows = Array.isArray(liveScannerActivity.rows) ? liveScannerActivity.rows : [];
+      const activeByUid = new Map();
+
+      rows.forEach((row) => {
+        const uid = getScannerCandidateUid(row);
+        if (!uid) {
+          return;
+        }
+
+        const eventType = String(row.event_type || '').toLowerCase();
+        if (eventType === 'level2_pick') {
+          activeByUid.set(uid, row);
+          return;
+        }
+
+        if (eventType === 'trend_confirmed' || eventType === 'stage2_expired' || eventType === 'order_signal') {
+          activeByUid.delete(uid);
+        }
+      });
+
+      return Array.from(activeByUid.values());
+    },
+    [liveScannerActivity.rows]
+  );
   const [isCanvasExpanded, setCanvasExpanded] = useState(false);
   const [showCanvasCandles, setShowCanvasCandles] = useState(true);
   const [inspectorDetailMode, setInspectorDetailMode] = useState('pattern');
@@ -1780,7 +2584,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   const simDrawdownModel = 'intraday';
   const simOneTradeAtATime = false;
   const [browsePanel, setBrowsePanel] = useState(null);
-  const [testOverviewTab, setTestOverviewTab] = useState(isEntryExitStandalone ? 'entryExit' : 'patterns');
+  const [testOverviewTab, setTestOverviewTab] = useState('patterns');
   const [selectedDataCollapseLevel, setSelectedDataCollapseLevel] = useState(isEntryExitStandalone ? 2 : 0);
   const [isInspectorCollapsed, setInspectorCollapsed] = useState(isEntryExitStandalone);
   const [isPatternCardHovered, setPatternCardHovered] = useState(false);
@@ -1798,6 +2602,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       : selectedDataCollapseLevel === 1
         ? 'Show Selection Deck header only'
         : 'Expand Selection Deck';
+
+  useEffect(() => {
+    selectedFamilyKeyRef.current = selectedFamilyKey;
+  }, [selectedFamilyKey]);
+
   const entryExitModelDatasets = useMemo(
     () =>
       entryExitBuildSummaries.map((summary, index) => ({
@@ -1845,7 +2654,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       : '';
   useEffect(() => {
     if (isEntryExitStandalone) {
-      setTestOverviewTab('entryExit');
+      setTestOverviewTab('patterns');
       setSelectedDataCollapseLevel(2);
       setInspectorCollapsed(true);
       setEntryExitProfileTab('model');
@@ -2291,6 +3100,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   const patternAiExitModelTradeRows = patternAiExitModelTradeData.rows ?? [];
   const isPatternAiExitModelMainLoaded =
     patternAiExitModelTradeData.run?.exit_model_run_id === PATTERN_AI_EXIT_MAIN_RUN_ID;
+  const patternAiExitModelTakenTradeRows = patternAiExitModelTakenTradeData.rows ?? [];
+  const isPatternAiExitModelTakenMainLoaded =
+    patternAiExitModelTakenTradeData.run?.exit_model_run_id === PATTERN_AI_EXIT_MAIN_RUN_ID;
+  const patternAiExitModelTakenTradeHasMore =
+    patternAiExitModelTakenTradeRows.length < Number(patternAiExitModelTakenTradeData.totalRows || 0);
   const patternAiExitModelOverviewItems = [
     {
       label: 'Exit Model',
@@ -2653,10 +3467,50 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     },
     []
   );
+  const loadPatternAiExitModelTakenTrades = useCallback(
+    async ({ offset = 0, append = false } = {}) => {
+      try {
+        setPatternAiExitModelTakenTradeLoading(true);
+        setPatternAiExitModelTakenTradeError('');
+        const result = await fetchPatternAiExitModelTrades({
+          exitModelRunId: PATTERN_AI_EXIT_MAIN_RUN_ID,
+          validYear: PATTERN_AI_STAGE1_DEFAULT_YEAR,
+          changedOnly: false,
+          heldLongerOnly: false,
+          limit: PATTERN_AI_EXIT_TAKEN_TRADE_PAGE_SIZE,
+          offset,
+        });
+        setPatternAiExitModelTakenTradeData((current) => ({
+          run: result.run,
+          summary: result.summary,
+          totalRows: result.total_rows,
+          limit: result.limit,
+          offset: result.offset,
+          rows: append ? [...current.rows, ...(result.rows ?? [])] : result.rows ?? [],
+        }));
+      } catch (error) {
+        console.error(error);
+        setPatternAiExitModelTakenTradeError('Could not load 180-bar AI exit taken trades.');
+        if (!append) {
+          setPatternAiExitModelTakenTradeData({
+            run: null,
+            summary: null,
+            totalRows: 0,
+            limit: PATTERN_AI_EXIT_TAKEN_TRADE_PAGE_SIZE,
+            offset: 0,
+            rows: [],
+          });
+        }
+      } finally {
+        setPatternAiExitModelTakenTradeLoading(false);
+      }
+    },
+    []
+  );
   const toggleDataCenterSection = useCallback((sectionKey) => {
     setDataCenterCollapsedSections((current) => ({
       ...current,
-      [sectionKey]: !current[sectionKey],
+      [sectionKey]: current[sectionKey] === false,
     }));
   }, []);
   const applyPatternNavigationSet = useCallback(() => {
@@ -2837,7 +3691,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     ? `${formatDecimal(selectedTradeResultR, 2)}R`
     : 'R N/A';
   const inspectorHoveredCandleStats = [
-    { label: 'Candle', value: formatInspectorHoverDate(inspectorHoveredCandle?.date), wide: true },
+    { label: 'Candle', value: inspectorHoveredCandle?.dateLabel || formatInspectorHoverDate(inspectorHoveredCandle?.date), wide: true },
     { label: 'O', value: formatInspectorHoverPrice(inspectorHoveredCandle?.open) },
     { label: 'H', value: formatInspectorHoverPrice(inspectorHoveredCandle?.high) },
     { label: 'L', value: formatInspectorHoverPrice(inspectorHoveredCandle?.low) },
@@ -3463,6 +4317,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   ];
   const selectedPatternDetailSource =
     canvasPattern ?? selectedFamilyPattern ?? selectedRouteTradeFamilyPattern ?? null;
+  const isRawCanvasView = Boolean(canvasChartData.rust_patterns?.raw_candle_view);
   const selectedPatternFamilyKey =
     selectedPatternDetailSource ? getPatternFamilyKey(selectedPatternDetailSource) : selectedFamily?.family_key ?? null;
   const selectedPatternDetailSymbol =
@@ -6585,10 +7440,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       tableRows: patternAiExitModelTradeRows,
     },
     {
-      title: 'AI 2026 Taken Trades',
+      title: 'AI 2026 Taken Trades - 180 Exit',
       variant: 'patternAiStage1TradeTable',
       wide: true,
-      tableRows: patternAiStage1TradeRows,
+      tableRows: patternAiExitModelTakenTradeRows,
     },
     {
       title: 'XA Reversal Overview',
@@ -6708,31 +7563,17 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       tableRows: patternXaOutcomeRows,
     },
   ];
-  const activeTestOverviewSections =
-    testOverviewTab === 'patterns'
-      ? patternLibrarySections
-      : testOverviewTab === 'supply'
-      ? supplyOverviewSections
-      : testOverviewTab === 'entryExit'
-      ? []
-      : testOverviewTab === 'families'
-      ? selectedRouteFamiliesSections
-      : testOverviewTab === 'family'
-      ? selectedFamilyOverviewSections
-      : testOverviewTab === 'symbols'
-      ? selectedTestSymbolSections
-      : patternLibrarySections;
+  void selectedTestSymbolSections;
+  void selectedFamilyOverviewSections;
+  void selectedRouteFamiliesSections;
+  void supplyOverviewSections;
+  const activeTestOverviewSections = patternLibrarySections;
 
   useEffect(() => {
-    const isStandaloneEntryExit = isEntryExitStandalone && testOverviewTab === 'entryExit';
-    const isTopLevelDataCenterTab = ['patterns', 'build', 'playbook', 'simTesting'].includes(testOverviewTab);
-    if (
-      ['overview', 'outcomes'].includes(testOverviewTab) ||
-      (!selectedRoute && !isTopLevelDataCenterTab && !isStandaloneEntryExit)
-    ) {
+    if (testOverviewTab !== 'patterns') {
       setTestOverviewTab('patterns');
     }
-  }, [isEntryExitStandalone, selectedRoute, testOverviewTab]);
+  }, [testOverviewTab]);
 
   useEffect(() => {
     if (testOverviewTab !== 'patterns' || patternXaOutcomeRows.length || isPatternXaOutcomeLoading) {
@@ -6777,6 +7618,28 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     isPatternAiExitModelTradeLoading,
     loadPatternAiExitModelTrades,
     patternAiExitModelTradeRows.length,
+    testOverviewTab,
+  ]);
+
+  useEffect(() => {
+    const shouldLoadAiExitTakenTrades =
+      testOverviewTab === 'patterns' ||
+      (testOverviewTab === 'simTesting' && entryExitSimulationTab === 'aiTrades');
+    if (
+      !shouldLoadAiExitTakenTrades ||
+      isPatternAiExitModelTakenTradeLoading ||
+      (isPatternAiExitModelTakenMainLoaded && patternAiExitModelTakenTradeRows.length)
+    ) {
+      return;
+    }
+
+    void loadPatternAiExitModelTakenTrades({ offset: 0, append: false });
+  }, [
+    entryExitSimulationTab,
+    isPatternAiExitModelTakenMainLoaded,
+    isPatternAiExitModelTakenTradeLoading,
+    loadPatternAiExitModelTakenTrades,
+    patternAiExitModelTakenTradeRows.length,
     testOverviewTab,
   ]);
 
@@ -6849,12 +7712,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
 
   useEffect(() => {
     if (isLoading) return;
+    if (!selectedFamilyKey) return;
 
     const selectedStillVisible = visibleFamilies.some(
       (family) => family.family_key === selectedFamilyKey
     );
     if (!selectedStillVisible) {
-      setSelectedFamilyKey(visibleFamilies[0]?.family_key ?? null);
+      setSelectedFamilyKey(null);
     }
   }, [isLoading, selectedFamilyKey, visibleFamilies]);
 
@@ -8157,6 +9021,783 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     }
   }, [routeTrades, selectedFamilyPattern, selectedPatternTrade, selectedRouteTradeKey]);
 
+  const loadLiveCanvasCandles = useCallback(
+    async ({ showLoading = false, force = false, symbol = null } = {}) => {
+      if (liveCanvasRefreshInFlightRef.current) {
+        return false;
+      }
+
+      const requestedSymbol = String(symbol || liveCanvasSymbolRef.current || LIVE_CANVAS_SYMBOL).toUpperCase();
+      const targetSymbol = LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : requestedSymbol;
+      liveCanvasSymbolRef.current = targetSymbol;
+      setLiveCanvasSymbol(targetSymbol);
+
+      liveCanvasRefreshInFlightRef.current = true;
+      setLiveCanvasRefreshMeta((current) => ({
+        ...current,
+        isRefreshing: true,
+        error: '',
+      }));
+      if (showLoading) {
+        setCanvasLoading(true);
+      }
+
+      try {
+        const candles = await getCandles(targetSymbol, {
+          rootSymbol: LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : null,
+          sourceTimeframe: LIVE_CANVAS_TIMEFRAME,
+          allContracts: LIVE_CANVAS_ALL_CONTRACTS,
+          startDate: LIVE_CANVAS_START_DATE,
+          endDate: LIVE_CANVAS_END_DATE,
+          limit: LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT : null,
+        }).then(normalizeCandles).then(addLiveCanvasDisplayDates);
+        liveCanvasCandlesRef.current = candles;
+        liveCanvasLoadedAllOlderRef.current =
+          LIVE_CANVAS_ALL_CONTRACTS && candles.length < LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT;
+        updateLiveCanvasCandlePageMetaRef.current({
+          isLoadingOlder: false,
+          hasOlder: !LIVE_CANVAS_ALL_CONTRACTS || candles.length >= LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT,
+          newestCandleAt: getLiveCanvasDisplayDate(candles[0]),
+          oldestCandleAt: getLiveCanvasDisplayDate(candles[candles.length - 1]),
+          loadedCount: candles.length,
+        });
+        const signature = `${targetSymbol}|${getLiveCanvasSignature(candles)}`;
+        const changed = force || signature !== liveCanvasSignatureRef.current;
+
+        setLiveCanvasRefreshMeta((current) => ({
+          ...current,
+          checkedAt: new Date(),
+          latestCandleAt: getLiveCanvasDisplayDate(candles[0]),
+          candleCount: candles.length,
+          isRefreshing: false,
+          changed,
+          error: '',
+        }));
+
+        if (!changed) {
+          return false;
+        }
+        if (selectedFamilyKeyRef.current) {
+          return false;
+        }
+
+        liveCanvasSignatureRef.current = signature;
+        const chartPattern = buildLiveCanvasPattern(candles, selectedLiveTrendRef.current, targetSymbol);
+        setCanvasPattern(chartPattern);
+        setCanvasChartData({
+          candles,
+          snr_lines: [],
+          rust_patterns: chartPattern,
+        });
+        setCanvasError('');
+        return true;
+      } catch (loadError) {
+        console.error(loadError);
+        setLiveCanvasRefreshMeta((current) => ({
+          ...current,
+          checkedAt: new Date(),
+          isRefreshing: false,
+          changed: false,
+          error: `Could not check ${targetSymbol} ${LIVE_CANVAS_TIMEFRAME}`,
+        }));
+        if (showLoading) {
+          setCanvasChartData({ candles: [], rust_patterns: null });
+          setCanvasPattern(null);
+          setCanvasError(`Could not load ${targetSymbol} ${LIVE_CANVAS_TIMEFRAME} candles.`);
+        }
+        return false;
+      } finally {
+        liveCanvasRefreshInFlightRef.current = false;
+        setLiveCanvasRefreshMeta((current) => (
+          current.isRefreshing ? { ...current, isRefreshing: false } : current
+        ));
+        if (showLoading) {
+          setCanvasLoading(false);
+        }
+      }
+    },
+    []
+  );
+
+  const loadLiveTrendEvents = useCallback(async () => {
+    if (liveTrendRefreshInFlightRef.current) {
+      return false;
+    }
+
+    liveTrendRefreshInFlightRef.current = true;
+    setLiveTrendEvents((current) => ({
+      ...current,
+      isLoading: true,
+      error: '',
+    }));
+
+    try {
+      const data = await fetchNinjaTraderTrendEvents({
+        rootSymbol: LIVE_CANVAS_ROOT,
+        timeframe: LIVE_CANVAS_TIMEFRAME,
+        runId: LIVE_CANVAS_TREND_RUN_ID,
+        startDate: LIVE_CANVAS_START_DATE,
+        endDate: LIVE_CANVAS_END_DATE,
+        limit: LIVE_CANVAS_TREND_LIMIT,
+      });
+
+      setLiveTrendEvents({
+        runId: data.runId ?? null,
+        totalRows: data.totalRows ?? 0,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: data.error ?? '',
+        rows: Array.isArray(data.rows) ? data.rows : [],
+      });
+      return true;
+    } catch (trendError) {
+      console.error(trendError);
+      setLiveTrendEvents((current) => ({
+        ...current,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: `Could not load ${LIVE_CANVAS_ROOT} trend events.`,
+      }));
+      return false;
+    } finally {
+      liveTrendRefreshInFlightRef.current = false;
+    }
+  }, []);
+
+  const loadLiveScannerActivity = useCallback(async () => {
+    setLiveScannerActivity((current) => ({
+      ...current,
+      isLoading: true,
+      error: '',
+    }));
+
+    try {
+      const data = await fetchNinjaTraderScannerActivity({
+        rootSymbol: LIVE_CANVAS_ROOT,
+        timeframe: LIVE_CANVAS_TIMEFRAME,
+        runId: LIVE_CANVAS_TREND_RUN_ID,
+        startDate: LIVE_CANVAS_START_DATE,
+        endDate: LIVE_CANVAS_END_DATE,
+        limit: LIVE_CANVAS_SCANNER_LIMIT,
+      });
+
+      setLiveScannerActivity({
+        runId: data.runId ?? LIVE_CANVAS_TREND_RUN_ID,
+        totalRows: data.totalRows ?? 0,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: data.error ?? '',
+        rows: Array.isArray(data.rows) ? data.rows : [],
+      });
+      return true;
+    } catch (scannerError) {
+      console.error(scannerError);
+      setLiveScannerActivity((current) => ({
+        ...current,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: `Could not load ${LIVE_CANVAS_ROOT} scanner activity.`,
+      }));
+      return false;
+    }
+  }, []);
+
+  const loadLiveTradeSignals = useCallback(async () => {
+    setLiveTradeSignals((current) => ({
+      ...current,
+      isLoading: true,
+      error: '',
+    }));
+
+    try {
+      const data = await fetchNinjaTraderSignalHistory({
+        accountName: LIVE_CANVAS_ACCOUNT_NAME,
+        instrument: LIVE_CANVAS_SIGNAL_INSTRUMENT,
+        rootSymbol: LIVE_CANVAS_ROOT,
+        expectedAiRunId: LIVE_CANVAS_SIGNAL_RUN_ID,
+        includeCancelled: false,
+        limit: 50,
+      });
+
+      setLiveTradeSignals({
+        runId: LIVE_CANVAS_SIGNAL_RUN_ID,
+        totalRows: data.totalRows ?? 0,
+        summary: data.summary ?? null,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: data.error ?? '',
+        rows: Array.isArray(data.rows) ? data.rows : [],
+      });
+      return true;
+    } catch (signalError) {
+      console.error(signalError);
+      setLiveTradeSignals((current) => ({
+        ...current,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: `Could not load ${LIVE_CANVAS_SIGNAL_INSTRUMENT} live trades.`,
+      }));
+      return false;
+    }
+  }, []);
+
+  const refreshLiveCanvasSnapshot = useCallback(async () => {
+    if (LIVE_CANVAS_FIXED_HISTORY_WINDOW || selectedFamilyKeyRef.current) {
+      return false;
+    }
+
+    try {
+      const snapshot = await fetchNinjaTraderLiveBarSnapshot({
+        rootSymbol: LIVE_CANVAS_ROOT,
+        timeframe: LIVE_CANVAS_TIMEFRAME,
+        instrument: LIVE_CANVAS_SIGNAL_INSTRUMENT,
+      });
+      const snapshotCandle = mapLiveBarSnapshotToCanvasCandle(snapshot);
+      const snapshotSignature = snapshotCandle
+        ? [
+            snapshotCandle.symbol,
+            snapshotCandle.candle_date,
+            snapshotCandle.candle_open,
+            snapshotCandle.candle_high,
+            snapshotCandle.candle_low,
+            snapshotCandle.candle_close,
+            snapshotCandle.candle_volume,
+            snapshotCandle.candle_snapshot_time,
+          ].join('|')
+        : '';
+
+      setLiveCanvasRefreshMeta((current) => ({
+        ...current,
+        snapshotCheckedAt: new Date(),
+        latestSnapshotAt: snapshotCandle?.candle_snapshot_time ?? current.latestSnapshotAt,
+        latestSnapshotPrice: snapshotCandle?.candle_last_price ?? current.latestSnapshotPrice,
+        latestCandleAt: snapshotCandle?.candle_display_date ?? current.latestCandleAt,
+        error: '',
+      }));
+
+      if (!snapshotCandle || snapshotSignature === liveCanvasSnapshotSignatureRef.current) {
+        return false;
+      }
+
+      const currentCandles = liveCanvasCandlesRef.current;
+      if (!currentCandles.length) {
+        liveCanvasSnapshotSignatureRef.current = snapshotSignature;
+        return false;
+      }
+
+      const newestLoadedTime = getDateTimeForCompare(currentCandles[0]?.candle_date);
+      const snapshotTime = getDateTimeForCompare(snapshotCandle.candle_date);
+      if (
+        newestLoadedTime !== null &&
+        snapshotTime !== null &&
+        snapshotTime < newestLoadedTime - getTimeframeMs(LIVE_CANVAS_TIMEFRAME)
+      ) {
+        liveCanvasSnapshotSignatureRef.current = snapshotSignature;
+        return false;
+      }
+
+      const mergedCandles = mergeLiveCanvasCandles(currentCandles, [snapshotCandle]);
+      const visualSignature = `${LIVE_CANVAS_ROOT}|${getLiveCanvasSignature(mergedCandles)}`;
+      liveCanvasSnapshotSignatureRef.current = snapshotSignature;
+      liveCanvasSignatureRef.current = visualSignature;
+      liveCanvasCandlesRef.current = mergedCandles;
+
+      updateLiveCanvasCandlePageMetaRef.current((current) => ({
+        ...current,
+        newestCandleAt: getLiveCanvasDisplayDate(mergedCandles[0]) ?? current.newestCandleAt,
+        oldestCandleAt: getLiveCanvasDisplayDate(mergedCandles[mergedCandles.length - 1]) ?? current.oldestCandleAt,
+        loadedCount: mergedCandles.length,
+      }));
+      setLiveCanvasRefreshMeta((current) => ({
+        ...current,
+        latestCandleAt: getLiveCanvasDisplayDate(mergedCandles[0]) ?? current.latestCandleAt,
+        candleCount: mergedCandles.length,
+        changed: true,
+      }));
+
+      const chartPattern = {
+        ...buildLiveCanvasPattern(
+          mergedCandles,
+          selectedLiveTrendRef.current,
+          LIVE_CANVAS_ROOT
+        ),
+        raw_preserve_viewport_on_count_change: true,
+        raw_prepend_candle_count: 0,
+      };
+      setCanvasPattern(chartPattern);
+      setCanvasChartData((current) => ({
+        ...current,
+        candles: mergedCandles,
+        snr_lines: current.snr_lines ?? [],
+        rust_patterns: chartPattern,
+      }));
+      return true;
+    } catch (error) {
+      console.error(error);
+      setLiveCanvasRefreshMeta((current) => ({
+        ...current,
+        snapshotCheckedAt: new Date(),
+        error: `Could not load latest ${LIVE_CANVAS_SIGNAL_INSTRUMENT} snapshot.`,
+      }));
+      return false;
+    }
+  }, []);
+
+  const refreshLatestLiveCanvasCandles = useCallback(async () => {
+    if (LIVE_CANVAS_FIXED_HISTORY_WINDOW) {
+      return false;
+    }
+
+    if (!LIVE_CANVAS_ALL_CONTRACTS) {
+      return loadLiveCanvasCandles({ showLoading: false, force: false });
+    }
+
+    if (liveCanvasRefreshInFlightRef.current) {
+      return false;
+    }
+
+    const currentCandles = liveCanvasCandlesRef.current;
+    if (!currentCandles.length) {
+      return loadLiveCanvasCandles({ showLoading: false, force: true });
+    }
+
+    const newestLoadedCandle = currentCandles[0];
+    const refreshStartDate =
+      addTimeframeBars(newestLoadedCandle?.candle_date, LIVE_CANVAS_TIMEFRAME, -3) ??
+      newestLoadedCandle?.candle_date;
+
+    if (!refreshStartDate) {
+      return false;
+    }
+
+    liveCanvasRefreshInFlightRef.current = true;
+    setLiveCanvasRefreshMeta((current) => ({
+      ...current,
+      isRefreshing: true,
+      error: '',
+    }));
+
+    try {
+      const recentCandles = await getCandles(LIVE_CANVAS_ROOT, {
+        rootSymbol: LIVE_CANVAS_ROOT,
+        sourceTimeframe: LIVE_CANVAS_TIMEFRAME,
+        allContracts: true,
+        startDate: refreshStartDate,
+        limit: LIVE_CANVAS_RECENT_REFRESH_LIMIT,
+      }).then(normalizeCandles).then(addLiveCanvasDisplayDates);
+
+      if (!recentCandles.length) {
+        setLiveCanvasRefreshMeta((current) => ({
+          ...current,
+          checkedAt: new Date(),
+          isRefreshing: false,
+          changed: false,
+          error: '',
+        }));
+        return false;
+      }
+
+      const previousNewestKey = getLiveCanvasCandleKey(currentCandles[0]);
+      const mergedCandles = mergeLiveCanvasCandles(currentCandles, recentCandles);
+      const prependCandleCount = Math.max(
+        0,
+        mergedCandles.findIndex((candle) => getLiveCanvasCandleKey(candle) === previousNewestKey)
+      );
+      const signature = `${LIVE_CANVAS_ROOT}|${getLiveCanvasSignature(mergedCandles)}`;
+      const changed = signature !== liveCanvasSignatureRef.current;
+
+      setLiveCanvasRefreshMeta((current) => ({
+        ...current,
+        checkedAt: new Date(),
+        latestCandleAt: getLiveCanvasDisplayDate(mergedCandles[0]),
+        candleCount: mergedCandles.length,
+        isRefreshing: false,
+        changed,
+        error: '',
+      }));
+      updateLiveCanvasCandlePageMetaRef.current((current) => ({
+        ...current,
+        newestCandleAt: getLiveCanvasDisplayDate(mergedCandles[0]) ?? current.newestCandleAt,
+        oldestCandleAt: getLiveCanvasDisplayDate(mergedCandles[mergedCandles.length - 1]) ?? current.oldestCandleAt,
+        loadedCount: mergedCandles.length,
+      }));
+
+      if (!changed) {
+        return false;
+      }
+
+      liveCanvasSignatureRef.current = signature;
+      liveCanvasCandlesRef.current = mergedCandles;
+
+      if (selectedFamilyKeyRef.current) {
+        return false;
+      }
+
+      const chartPattern = {
+        ...buildLiveCanvasPattern(
+          mergedCandles,
+          selectedLiveTrendRef.current,
+          LIVE_CANVAS_ROOT
+        ),
+        raw_preserve_viewport_on_count_change: true,
+        raw_prepend_candle_count: prependCandleCount,
+      };
+      setCanvasPattern(chartPattern);
+      setCanvasChartData((current) => ({
+        ...current,
+        candles: mergedCandles,
+        snr_lines: current.snr_lines ?? [],
+        rust_patterns: chartPattern,
+      }));
+      setCanvasError('');
+      return true;
+    } catch (error) {
+      console.error(error);
+      setLiveCanvasRefreshMeta((current) => ({
+        ...current,
+        checkedAt: new Date(),
+        isRefreshing: false,
+        changed: false,
+        error: `Could not refresh latest ${LIVE_CANVAS_ROOT} ${LIVE_CANVAS_TIMEFRAME}`,
+      }));
+      return false;
+    } finally {
+      liveCanvasRefreshInFlightRef.current = false;
+      setLiveCanvasRefreshMeta((current) => (
+        current.isRefreshing ? { ...current, isRefreshing: false } : current
+      ));
+    }
+  }, [loadLiveCanvasCandles]);
+
+  const loadOlderLiveCanvasCandles = useCallback(async () => {
+    if (
+      !LIVE_CANVAS_ALL_CONTRACTS ||
+      liveCanvasOlderCandlesInFlightRef.current ||
+      liveCanvasLoadedAllOlderRef.current
+    ) {
+      return false;
+    }
+
+    const currentCandles = liveCanvasCandlesRef.current;
+    const oldestCandle = currentCandles[currentCandles.length - 1];
+    const beforeDate = addTimeframeBars(oldestCandle?.candle_date, LIVE_CANVAS_TIMEFRAME, -1);
+
+    if (!beforeDate) {
+      return false;
+    }
+
+    liveCanvasOlderCandlesInFlightRef.current = true;
+    updateLiveCanvasCandlePageMetaRef.current((current) => ({
+      ...current,
+      isLoadingOlder: true,
+    }));
+
+    try {
+      const olderCandles = await getCandles(LIVE_CANVAS_ROOT, {
+        rootSymbol: LIVE_CANVAS_ROOT,
+        sourceTimeframe: LIVE_CANVAS_TIMEFRAME,
+        allContracts: true,
+        startDate: LIVE_CANVAS_START_DATE,
+        endDate: beforeDate,
+        limit: LIVE_CANVAS_CANDLE_PAGE_LIMIT,
+      }).then(normalizeCandles).then(addLiveCanvasDisplayDates);
+
+      if (!olderCandles.length) {
+        liveCanvasLoadedAllOlderRef.current = true;
+        updateLiveCanvasCandlePageMetaRef.current((current) => ({
+          ...current,
+          isLoadingOlder: false,
+          hasOlder: false,
+        }));
+        return false;
+      }
+
+      const mergedCandles = mergeLiveCanvasCandles(currentCandles, olderCandles);
+      liveCanvasCandlesRef.current = mergedCandles;
+      liveCanvasLoadedAllOlderRef.current = olderCandles.length < LIVE_CANVAS_CANDLE_PAGE_LIMIT;
+      const chartPattern = {
+        ...buildLiveCanvasPattern(
+          mergedCandles,
+          selectedLiveTrendRef.current,
+          LIVE_CANVAS_ROOT
+        ),
+        raw_preserve_viewport_on_count_change: true,
+      };
+
+      updateLiveCanvasCandlePageMetaRef.current({
+        isLoadingOlder: false,
+        hasOlder: !liveCanvasLoadedAllOlderRef.current,
+        newestCandleAt: getLiveCanvasDisplayDate(mergedCandles[0]),
+        oldestCandleAt: getLiveCanvasDisplayDate(mergedCandles[mergedCandles.length - 1]),
+        loadedCount: mergedCandles.length,
+      });
+      setLiveCanvasRefreshMeta((current) => ({
+        ...current,
+        candleCount: mergedCandles.length,
+      }));
+      setCanvasPattern(chartPattern);
+      setCanvasChartData((current) => ({
+        ...current,
+        candles: mergedCandles,
+        snr_lines: current.snr_lines ?? [],
+        rust_patterns: chartPattern,
+      }));
+      return true;
+    } catch (error) {
+      console.error(error);
+      updateLiveCanvasCandlePageMetaRef.current((current) => ({
+        ...current,
+        isLoadingOlder: false,
+      }));
+      return false;
+    } finally {
+      liveCanvasOlderCandlesInFlightRef.current = false;
+    }
+  }, []);
+
+  const loadLiveOracleTrendEvents = useCallback(async () => {
+    if (liveOracleTrendRefreshInFlightRef.current) {
+      return false;
+    }
+
+    liveOracleTrendRefreshInFlightRef.current = true;
+    setLiveOracleTrendEvents((current) => ({
+      ...current,
+      isLoading: true,
+      error: '',
+    }));
+
+    try {
+      const data = await fetchNinjaTraderOracleTrends({
+        rootSymbol: LIVE_CANVAS_ROOT,
+        timeframe: LIVE_CANVAS_TIMEFRAME,
+        runId: LIVE_CANVAS_ORACLE_RUN_ID,
+        startDate: LIVE_CANVAS_START_DATE,
+        endDate: LIVE_CANVAS_END_DATE,
+        limit: LIVE_CANVAS_ORACLE_LIMIT,
+      });
+
+      setLiveOracleTrendEvents({
+        runId: data.runId ?? LIVE_CANVAS_ORACLE_RUN_ID,
+        totalRows: data.totalRows ?? 0,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: data.error ?? '',
+        rows: Array.isArray(data.rows) ? data.rows : [],
+      });
+      return true;
+    } catch (oracleError) {
+      console.error(oracleError);
+      setLiveOracleTrendEvents((current) => ({
+        ...current,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: `Could not load ${LIVE_CANVAS_ROOT} oracle trends.`,
+      }));
+      return false;
+    } finally {
+      liveOracleTrendRefreshInFlightRef.current = false;
+    }
+  }, []);
+
+  const loadFocusedLiveCanvasCandles = useCallback(
+    async (trend, { canvasSymbol = LIVE_CANVAS_ROOT } = {}) => {
+      const requestedSymbol = String(canvasSymbol || LIVE_CANVAS_ROOT).toUpperCase();
+      const targetSymbol = LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : requestedSymbol;
+      const windowParams = buildLiveCanvasTrendCandleWindow(trend);
+
+      setCanvasLoading(true);
+      try {
+        const candles = await getCandles(targetSymbol, {
+          rootSymbol: LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : null,
+          sourceTimeframe: LIVE_CANVAS_TIMEFRAME,
+          allContracts: LIVE_CANVAS_ALL_CONTRACTS,
+          startDate: windowParams.startDate,
+          endDate: windowParams.endDate,
+          limit: windowParams.limit,
+        }).then(normalizeCandles).then(addLiveCanvasDisplayDates);
+
+        if (!candles.length) {
+          return null;
+        }
+
+        liveCanvasCandlesRef.current = candles;
+        liveCanvasLoadedAllOlderRef.current =
+          LIVE_CANVAS_ALL_CONTRACTS && candles.length < windowParams.limit;
+        liveCanvasSignatureRef.current = `${targetSymbol}|${getLiveCanvasSignature(candles)}`;
+        setLiveCanvasSymbol(targetSymbol);
+        liveCanvasSymbolRef.current = targetSymbol;
+        updateLiveCanvasCandlePageMetaRef.current({
+          isLoadingOlder: false,
+          hasOlder: !LIVE_CANVAS_ALL_CONTRACTS || candles.length >= windowParams.limit,
+          newestCandleAt: getLiveCanvasDisplayDate(candles[0]),
+          oldestCandleAt: getLiveCanvasDisplayDate(candles[candles.length - 1]),
+          loadedCount: candles.length,
+        });
+        setLiveCanvasRefreshMeta((current) => ({
+          ...current,
+          checkedAt: new Date(),
+          latestCandleAt: getLiveCanvasDisplayDate(candles[0]) ?? current.latestCandleAt,
+          candleCount: candles.length,
+          changed: true,
+          error: '',
+        }));
+
+        return candles;
+      } catch (error) {
+        console.error(error);
+        setLiveCanvasRefreshMeta((current) => ({
+          ...current,
+          checkedAt: new Date(),
+          changed: false,
+          error: `Could not load focused ${targetSymbol} ${LIVE_CANVAS_TIMEFRAME}`,
+        }));
+        return null;
+      } finally {
+        setCanvasLoading(false);
+      }
+    },
+    []
+  );
+
+  const applyLiveCanvasTrend = useCallback(
+    (trend, { canvasSymbol = LIVE_CANVAS_ROOT, preserveViewport = false } = {}) => {
+      const candles = liveCanvasCandlesRef.current.length
+        ? liveCanvasCandlesRef.current
+        : canvasChartData.candles ?? [];
+
+      if (!candles.length) {
+        return false;
+      }
+
+      const chartPattern = {
+        ...buildLiveCanvasPattern(candles, trend, canvasSymbol),
+        ...(preserveViewport ? { raw_preserve_viewport_on_count_change: true } : {}),
+      };
+      setCanvasPattern(chartPattern);
+      setCanvasChartData((current) => ({
+        ...current,
+        candles,
+        snr_lines: current.snr_lines ?? [],
+        rust_patterns: chartPattern,
+      }));
+      setCanvasError('');
+      return true;
+    },
+    [canvasChartData.candles]
+  );
+
+  const handleLiveTrendSelect = useCallback(
+    async (trend) => {
+      const trendKey = getTrendEventKey(trend);
+      const trendSymbol = String(trend?.model_symbol || LIVE_CANVAS_SYMBOL).toUpperCase();
+      const canvasSymbol = LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : trendSymbol;
+      const needsSymbolReload = !LIVE_CANVAS_ALL_CONTRACTS && trendSymbol !== liveCanvasSymbolRef.current;
+
+      selectedLiveTrendRef.current = trend ?? null;
+      setSelectedLiveTrendKey(trendKey);
+
+      if (needsSymbolReload) {
+        liveCanvasSignatureRef.current = '';
+        const focusedCandles = await loadFocusedLiveCanvasCandles(trend, { canvasSymbol });
+        if (focusedCandles?.length) {
+          applyLiveCanvasTrend(trend, { canvasSymbol });
+        } else {
+          await loadLiveCanvasCandles({ showLoading: true, force: true, symbol: canvasSymbol });
+        }
+        return;
+      }
+
+      const focusedCandles = await loadFocusedLiveCanvasCandles(trend, { canvasSymbol });
+      const candles = focusedCandles?.length
+        ? focusedCandles
+        : liveCanvasCandlesRef.current.length
+          ? liveCanvasCandlesRef.current
+          : canvasChartData.candles ?? [];
+
+      if (!candles.length) {
+        await loadLiveCanvasCandles({ showLoading: true, force: true, symbol: canvasSymbol });
+        return;
+      }
+
+      applyLiveCanvasTrend(trend, { canvasSymbol });
+    },
+    [applyLiveCanvasTrend, canvasChartData.candles, loadFocusedLiveCanvasCandles, loadLiveCanvasCandles]
+  );
+
+  const handleLiveOracleTrendSelect = useCallback(
+    async (oracleTrend) => {
+      const trend = mapOracleTrendToLiveCanvasTrend(oracleTrend);
+      const trendKey = getTrendEventKey(trend);
+      const trendSymbol = String(oracleTrend?.symbol || LIVE_CANVAS_SYMBOL).toUpperCase();
+      const canvasSymbol = LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : trendSymbol;
+      const needsSymbolReload = !LIVE_CANVAS_ALL_CONTRACTS && trendSymbol !== liveCanvasSymbolRef.current;
+
+      selectedLiveTrendRef.current = trend;
+      setSelectedLiveTrendKey(trendKey);
+
+      if (needsSymbolReload) {
+        liveCanvasSignatureRef.current = '';
+        const focusedCandles = await loadFocusedLiveCanvasCandles(trend, { canvasSymbol });
+        if (focusedCandles?.length) {
+          applyLiveCanvasTrend(trend, { canvasSymbol });
+        } else {
+          await loadLiveCanvasCandles({ showLoading: true, force: true, symbol: canvasSymbol });
+        }
+        return;
+      }
+
+      const focusedCandles = await loadFocusedLiveCanvasCandles(trend, { canvasSymbol });
+      const candles = focusedCandles?.length
+        ? focusedCandles
+        : liveCanvasCandlesRef.current.length
+          ? liveCanvasCandlesRef.current
+          : canvasChartData.candles ?? [];
+
+      if (!candles.length) {
+        await loadLiveCanvasCandles({ showLoading: true, force: true, symbol: canvasSymbol });
+        return;
+      }
+
+      applyLiveCanvasTrend(trend, { canvasSymbol });
+    },
+    [applyLiveCanvasTrend, canvasChartData.candles, loadFocusedLiveCanvasCandles, loadLiveCanvasCandles]
+  );
+
+  const handleLiveTradeSignalSelect = useCallback(
+    async (trade) => {
+      const trend = mapLiveTradeSignalToCanvasTrend(trade);
+      const trendKey = getTrendEventKey(trend);
+
+      selectedLiveTrendRef.current = trend;
+      setSelectedLiveTrendKey(trendKey);
+
+      const focusedCandles = await loadFocusedLiveCanvasCandles(trend, { canvasSymbol: LIVE_CANVAS_ROOT });
+      const candles = focusedCandles?.length
+        ? focusedCandles
+        : liveCanvasCandlesRef.current.length
+          ? liveCanvasCandlesRef.current
+          : canvasChartData.candles ?? [];
+
+      if (!candles.length) {
+        await loadLiveCanvasCandles({ showLoading: true, force: true, symbol: LIVE_CANVAS_ROOT });
+        return;
+      }
+
+      applyLiveCanvasTrend(trend, { canvasSymbol: LIVE_CANVAS_ROOT });
+    },
+    [applyLiveCanvasTrend, canvasChartData.candles, loadFocusedLiveCanvasCandles, loadLiveCanvasCandles]
+  );
+
+  const handleRawCandleViewportEdge = useCallback(
+    ({ edge }) => {
+      if (edge === 'older') {
+        void loadOlderLiveCanvasCandles();
+      }
+    },
+    [loadOlderLiveCanvasCandles]
+  );
+
   useEffect(() => {
     if (ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) {
       setCanvasChartData({ candles: [], rust_patterns: null });
@@ -8170,10 +9811,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
 
     const loadCanvasPreview = async () => {
       if (!selectedFamilyKey) {
-        setCanvasChartData({ candles: [], rust_patterns: null });
-        setCanvasPattern(null);
-        setCanvasError('');
-        setCanvasLoading(false);
+        if (!isCancelled) {
+          void loadLiveCanvasCandles({ showLoading: true, force: true });
+        }
         return;
       }
 
@@ -8267,6 +9907,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     };
   }, [
     isEntryExitStandalone,
+    loadLiveCanvasCandles,
     selectedFamilyKey,
     selectedFamilyPattern,
     selectedPatternTrade,
@@ -8275,6 +9916,157 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     timeframeFilter,
     yearFilter,
   ]);
+
+  useEffect(() => {
+    if ((ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) || selectedFamilyKey) {
+      return undefined;
+    }
+
+    void refreshLiveCanvasSnapshot();
+
+    if (LIVE_CANVAS_FIXED_HISTORY_WINDOW) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (document.hidden) {
+        return;
+      }
+
+      void refreshLiveCanvasSnapshot();
+    }, LIVE_CANVAS_SNAPSHOT_POLL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    isEntryExitStandalone,
+    refreshLiveCanvasSnapshot,
+    selectedFamilyKey,
+  ]);
+
+  useEffect(() => {
+    if ((ENTRY_EXIT_STANDALONE_BUILD_ONLY && isEntryExitStandalone) || selectedFamilyKey) {
+      return undefined;
+    }
+
+    void loadLiveTrendEvents();
+    void loadLiveScannerActivity();
+    void loadLiveTradeSignals();
+    if (liveTrendPanelMode === 'oracle') {
+      void loadLiveOracleTrendEvents();
+    }
+
+    if (LIVE_CANVAS_FIXED_HISTORY_WINDOW) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (document.hidden) {
+        return;
+      }
+
+      void refreshLatestLiveCanvasCandles();
+      void loadLiveTrendEvents();
+      void loadLiveScannerActivity();
+      void loadLiveTradeSignals();
+      if (liveTrendPanelMode === 'oracle') {
+        void loadLiveOracleTrendEvents();
+      }
+    }, LIVE_CANVAS_POLL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    isEntryExitStandalone,
+    liveTrendPanelMode,
+    loadLiveCanvasCandles,
+    loadLiveOracleTrendEvents,
+    loadLiveScannerActivity,
+    loadLiveTradeSignals,
+    loadLiveTrendEvents,
+    refreshLatestLiveCanvasCandles,
+    selectedFamilyKey,
+  ]);
+
+  useEffect(() => {
+    if (selectedFamilyKey || !canvasChartData.rust_patterns?.raw_candle_view || !canvasChartData.candles?.length) {
+      return;
+    }
+
+    const markers = buildWatchingTrendMarkers(canvasChartData.candles, liveWatchingTrendRows);
+    const currentMarkers = canvasChartData.rust_patterns.raw_watching_trends ?? [];
+
+    if (getWatchingTrendMarkerSignature(markers) === getWatchingTrendMarkerSignature(currentMarkers)) {
+      return;
+    }
+
+    const chartPattern = {
+      ...canvasChartData.rust_patterns,
+      raw_watching_trends: markers,
+    };
+
+    setCanvasPattern(chartPattern);
+    setCanvasChartData((current) => ({
+      ...current,
+      rust_patterns: chartPattern,
+    }));
+  }, [
+    canvasChartData.candles,
+    canvasChartData.rust_patterns,
+    liveWatchingTrendRows,
+    selectedFamilyKey,
+  ]);
+
+  const livePanelModeTitle =
+    liveTrendPanelMode === 'trades'
+      ? 'Live Trades'
+      : liveTrendPanelMode === 'scanner'
+        ? 'Scanner Feed'
+      : liveTrendPanelMode === 'oracle'
+        ? 'Oracle Trends'
+        : 'Trend Detector';
+  const livePanelRunId =
+    liveTrendPanelMode === 'trades'
+      ? liveTradeSignals.runId
+      : liveTrendPanelMode === 'scanner'
+        ? liveScannerActivity.runId
+      : liveTrendPanelMode === 'oracle'
+        ? liveOracleTrendEvents.runId
+        : liveTrendEvents.runId;
+  const liveTradeShownLabel = `${formatNumber(
+    liveTradeSignals.summary?.trades_taken ?? liveTradeSignals.rows.length
+  )} taken / ${formatNumber(liveTradeSignals.summary?.wins ?? 0)} wins`;
+  const liveFeedLabel = liveCanvasRefreshMeta.error
+    ? 'Error'
+    : liveCanvasRefreshMeta.latestSnapshotAt
+      ? 'Live NT'
+      : 'Live DB';
+  const liveTradePnlValue = Number(liveTradeSignals.summary?.total_accounting_pnl);
+  const liveTradePnlTone = Number.isFinite(liveTradePnlValue)
+    ? liveTradePnlValue > 0
+      ? 'win'
+      : liveTradePnlValue < 0
+        ? 'loss'
+        : 'flat'
+    : 'flat';
+  const livePanelShownLabel =
+    liveTrendPanelMode === 'trades'
+      ? liveTradeSignals.isLoading && !liveTradeSignals.rows.length && !liveTradeSignals.summary
+        ? 'Checking'
+        : liveTradeShownLabel
+      : liveTrendPanelMode === 'scanner'
+        ? liveScannerActivity.isLoading
+          ? 'Checking'
+          : `${formatNumber(liveScannerActivity.rows.length)} events`
+      : liveTrendPanelMode === 'oracle'
+        ? liveOracleTrendEvents.isLoading
+          ? 'Checking'
+          : `${formatNumber(visibleLiveOracleTrendRows.length)} shown`
+      : liveTrendEvents.isLoading
+        ? 'Checking'
+        : `${formatNumber(visibleLiveTrendRows.length)} shown`;
 
   const inspectorDetailTitle =
     inspectorDetailMode === 'trade'
@@ -8702,7 +10494,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                       {formatNullableDecimal(trade.target_price, 4)}
                     </td>
                     <td>{formatDecimal(trade.exit_price, 4)}</td>
-                    <td title={trade.pattern_family_key}>{compactText(trade.pattern_family_key || 'N/A', 12)}</td>
+                    <td className="pattern-family-template-table-family-key" title={trade.pattern_family_key}>
+                      {trade.pattern_family_key || 'N/A'}
+                    </td>
                     <td className="pattern-family-template-table-run-id pattern-family-template-table-copy-cell">
                       <span>{trade.pattern_id || trade.setup_id || 'N/A'}</span>
                       <button
@@ -12021,10 +13815,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       className={[
         'pattern-family-page',
         'pattern-family-terminal',
+        CANVAS_ONLY_MODE ? 'pattern-family-page--live-cockpit' : '',
         isEntryExitStandalone ? 'pattern-family-page--flat' : '',
       ].filter(Boolean).join(' ')}
     >
-      {!isEntryExitStandalone ? (
+      {!isEntryExitStandalone && !CANVAS_ONLY_MODE ? (
         <header className="pattern-family-terminal-bar">
           <div className="pattern-family-connection-strip">
             <span className="pattern-family-led pattern-family-led--online" />
@@ -12050,6 +13845,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           'pattern-family-one-page',
           isEntryExitStandalone ? 'pattern-family-workspace--entry-exit-only' : '',
           isInspectorCollapsed ? 'pattern-family-one-page--inspector-collapsed' : '',
+          CANVAS_ONLY_MODE ? 'pattern-family-workspace--canvas-only' : '',
         ].filter(Boolean).join(' ')}
       >
         <main
@@ -12185,61 +13981,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
               <span className="pattern-family-section-bar-line" aria-hidden="true" />
               <strong
                 className="pattern-family-section-bar-context"
-                title={
-                  testOverviewTab === 'build'
-                    ? 'Selected Build'
-                    : testOverviewTab === 'playbook'
-                      ? 'Selected Playbook'
-                      : testOverviewTab === 'simTesting'
-                        ? 'Simulation Testing'
-                    : testOverviewTab === 'patterns'
-                    ? 'Pattern Library'
-                    : selectedRoute
-                      ? selectedRoute.route_label
-                      : 'Select an Entry / Exit Test'
-                }
+                title="Pattern Library"
               >
-                {testOverviewTab === 'build' ? 'Selected Build' : testOverviewTab === 'playbook' ? 'Selected Playbook' : testOverviewTab === 'simTesting' ? 'Simulation Testing' : testOverviewTab === 'patterns' ? 'Pattern Library' : selectedRoute ? 'Test Overview' : 'No test selected'}
+                Pattern Library
               </strong>
             </div>
             <div className="pattern-family-sim-body">
-              {selectedRoute || testOverviewTab === 'patterns' || testOverviewTab === 'entryExit' || testOverviewTab === 'build' || testOverviewTab === 'playbook' || testOverviewTab === 'simTesting' ? (
+              {testOverviewTab === 'patterns' ? (
                 <div className="pattern-family-test-overview">
-                  <div className="pattern-family-test-overview-tabs" aria-label="Test overview sections">
-                    {[
-                      { id: 'build', label: 'Build' },
-                      { id: 'playbook', label: 'Playbook' },
-                      { id: 'simTesting', label: 'Sim Testing' },
-                      { id: 'patterns', label: 'Patterns' },
-                      { id: 'supply', label: 'Supply', disabled: !selectedRoute },
-                      { id: 'family', label: 'Family', disabled: !selectedRoute },
-                      { id: 'families', label: 'Families', disabled: !selectedRoute },
-                      { id: 'symbols', label: 'Symbols', disabled: !selectedRoute },
-                    ].map((tab) => (
-                      <button
-                        className={
-                          testOverviewTab === tab.id
-                            ? 'pattern-family-test-overview-tab pattern-family-test-overview-tab--active'
-                            : 'pattern-family-test-overview-tab'
-                        }
-                        disabled={tab.disabled}
-                        key={tab.id}
-                        onClick={() => {
-                          setTestOverviewTab(tab.id);
-                          if (tab.id === 'entryExit' || tab.id === 'patterns') {
-                            setSelectedDataCollapseLevel(2);
-                            setInspectorCollapsed(true);
-                          }
-                          if (tab.id === 'entryExit') {
-                            setEntryExitProfileTab('all');
-                          }
-                        }}
-                        type="button"
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
                   <div
                     className={[
                       'pattern-family-test-overview-loading',
@@ -12290,7 +14039,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                       {activeTestOverviewSections.map((section) => {
                         const usesNativeDetails = ['patternXaOutcomeTable', 'patternXaFamilyTable', 'patternReversalAiTable', 'patternReversalAiBuckets', 'patternReversalAiThresholds', 'patternAiStage1TradeTable', 'patternAiExitModelTradeTable'].includes(section.variant);
                         const sectionCollapseKey = `${testOverviewTab}:${section.variant || 'cards'}:${section.title}`;
-                        const isDataCenterSectionCollapsed = dataCenterCollapsedSections[sectionCollapseKey] === true;
+                        const isDataCenterSectionCollapsed = dataCenterCollapsedSections[sectionCollapseKey] !== false;
                         const dataCenterSectionStatus =
                           section.variant === 'patternXaOutcomeTable'
                             ? isPatternXaOutcomeLoading
@@ -12323,11 +14072,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                         ? `${formatNumber(section.tableRows.length)} loaded / ${formatNumber(patternReversalAiData.totalRows)} total`
                                         : patternReversalAiError || 'No AI rows loaded'
                                     : section.variant === 'patternAiStage1TradeTable'
-                                      ? isPatternAiStage1TradeLoading
+                                      ? isPatternAiExitModelTakenTradeLoading
                                         ? 'Loading trades'
                                         : section.tableRows?.length
-                                          ? `${formatNumber(section.tableRows.length)} loaded / ${formatNumber(patternAiStage1TradeData.totalRows)} total`
-                                          : patternAiStage1TradeError || 'No AI trade rows loaded'
+                                          ? `${formatNumber(section.tableRows.length)} loaded / ${formatNumber(patternAiExitModelTakenTradeData.totalRows)} total`
+                                          : patternAiExitModelTakenTradeError || 'No 180-bar AI exit trade rows loaded'
                                     : section.variant === 'patternAiExitModelTradeTable'
                                       ? isPatternAiExitModelTradeLoading
                                         ? 'Loading exit audit'
@@ -12814,7 +14563,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                             {correct ? 'Yes' : 'No'}
                                           </td>
                                           <td>{row.confidence_bucket || 'N/A'}</td>
-                                          <td title={row.pattern_family_key}>{compactText(row.pattern_family_key || 'N/A', 16)}</td>
+                                          <td className="pattern-family-template-table-family-key" title={row.pattern_family_key}>
+                                            {row.pattern_family_key || 'N/A'}
+                                          </td>
                                           <td className="pattern-family-template-table-features" title={featureText}>{featureText}</td>
                                           <td className="pattern-family-template-table-run-id" title={row.pattern_id || row.setup_id}>
                                             {compactText(row.pattern_id || row.setup_id || 'N/A', 16)}
@@ -13025,36 +14776,37 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                         ) : section.variant === 'patternAiStage1TradeTable' ? (
                           <details className="pattern-family-test-overview-collapsible-section" open>
                             <summary>
-                              <span>AI 2026 Taken Trades</span>
+                              <span>AI 2026 Taken Trades - 180 Exit</span>
                               <small>
-                                {isPatternAiStage1TradeLoading
+                                {isPatternAiExitModelTakenTradeLoading
                                   ? 'Loading trades'
                                   : section.tableRows?.length
-                                    ? `${formatNumber(section.tableRows.length)} loaded / ${formatNumber(patternAiStage1TradeData.totalRows)} total`
-                                    : patternAiStage1TradeError || 'No AI trade rows loaded'}
+                                    ? `${formatNumber(section.tableRows.length)} loaded / ${formatNumber(patternAiExitModelTakenTradeData.totalRows)} total`
+                                    : patternAiExitModelTakenTradeError || 'No 180-bar AI exit trade rows loaded'}
                               </small>
                             </summary>
                             <div className="pattern-family-template-table-wrap pattern-family-template-table-wrap--xa-pattern pattern-family-ai-taken-trades-table">
                               {section.tableRows?.length ? (
                                 <table className="pattern-family-template-table pattern-family-template-table--router pattern-family-template-table--ai-stage1-trades">
                                   <colgroup>
-                                    <col style={{ width: '60px' }} />
+                                    <col style={{ width: '72px' }} />
+                                    <col style={{ width: '146px' }} />
+                                    <col style={{ width: '112px' }} />
+                                    <col style={{ width: '72px' }} />
+                                    <col style={{ width: '112px' }} />
+                                    <col style={{ width: '112px' }} />
+                                    <col style={{ width: '112px' }} />
+                                    <col style={{ width: '112px' }} />
+                                    <col style={{ width: '110px' }} />
+                                    <col style={{ width: '148px' }} />
+                                    <col style={{ width: '250px' }} />
                                     <col style={{ width: '132px' }} />
-                                    <col style={{ width: '96px' }} />
-                                    <col style={{ width: '64px' }} />
-                                    <col style={{ width: '92px' }} />
-                                    <col style={{ width: '94px' }} />
-                                    <col style={{ width: '94px' }} />
-                                    <col style={{ width: '98px' }} />
-                                    <col style={{ width: '104px' }} />
-                                    <col style={{ width: '760px' }} />
-                                    <col style={{ width: '122px' }} />
-                                    <col style={{ width: '122px' }} />
-                                    <col style={{ width: '122px' }} />
-                                    <col style={{ width: '122px' }} />
-                                    <col style={{ width: '230px' }} />
-                                    <col style={{ width: '620px' }} />
+                                    <col style={{ width: '132px' }} />
+                                    <col style={{ width: '132px' }} />
+                                    <col style={{ width: '132px' }} />
                                     <col style={{ width: '420px' }} />
+                                    <col style={{ width: '520px' }} />
+                                    <col style={{ width: '760px' }} />
                                   </colgroup>
                                   <thead>
                                     <tr>
@@ -13063,10 +14815,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                       <th>Symbol</th>
                                       <th>TF</th>
                                       <th>Side</th>
-                                      <th>AI R</th>
-                                      <th>Margin</th>
-                                      <th>Result</th>
+                                      <th>Source R</th>
+                                      <th>180 R</th>
+                                      <th>Delta</th>
                                       <th>Outcome</th>
+                                      <th>Exit Change</th>
                                       <th>Template</th>
                                       <th>Entry</th>
                                       <th>SL</th>
@@ -13074,13 +14827,14 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                       <th>Exit</th>
                                       <th>Family</th>
                                       <th>Features</th>
-                                      <th>Pattern</th>
+                                      <th>Trade ID</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     {section.tableRows.map((row, rowIndex) => {
                                       const rowKey = getSimulationRawTradeKey(row, rowIndex);
                                       const resultR = Number(row.result_r || 0);
+                                      const deltaR = Number(row.delta_r || 0);
                                       const featureText = [
                                         row.harmonic_type || 'Unknown',
                                         row.market || 'N/A',
@@ -13117,14 +14871,17 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                           <td>{row.symbol || 'N/A'}</td>
                                           <td>{row.source_timeframe || 'N/A'}</td>
                                           <td>{formatRouteMode(row.trade_direction || row.market || 'N/A')}</td>
-                                          <td className={Number(row.predicted_expected_r || 0) >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
-                                            {formatDecimal(row.predicted_expected_r, 3)}R
+                                          <td className={Number(row.baseline_result_r || 0) >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
+                                            {formatDecimal(row.baseline_result_r, 3)}R
                                           </td>
-                                          <td>{formatDecimal(row.score_margin_top2, 3)}R</td>
                                           <td className={resultR >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
                                             {formatDecimal(resultR, 3)}R
                                           </td>
+                                          <td className={deltaR >= 0 ? 'pattern-family-template-table-win' : 'pattern-family-template-table-loss'}>
+                                            {deltaR >= 0 ? '+' : ''}{formatDecimal(deltaR, 3)}R
+                                          </td>
                                           <td className={outcomeClass}>{formatRouteMode(row.outcome || row.exit_reason || 'N/A')}</td>
+                                          <td>{formatRouteMode(row.exit_change || 'Unchanged')}</td>
                                           <td className="pattern-family-template-table-run-id pattern-family-ai-taken-template-cell" title={row.template_uid || row.template_name}>
                                             {row.template_name || row.template_uid || 'N/A'}
                                           </td>
@@ -13134,7 +14891,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                             {formatNullableDecimal(row.target_price, 4)}
                                           </td>
                                           <td>{formatDecimal(row.exit_price, 4)}</td>
-                                          <td title={row.pattern_family_key}>{compactText(row.pattern_family_key || 'N/A', 16)}</td>
+                                          <td className="pattern-family-template-table-family-key" title={row.pattern_family_key}>
+                                            {row.pattern_family_key || 'N/A'}
+                                          </td>
                                           <td className="pattern-family-template-table-features" title={featureText}>{featureText}</td>
                                           <td className="pattern-family-template-table-run-id pattern-family-template-table-copy-cell">
                                             <span>{auditTradeId}</span>
@@ -13158,37 +14917,37 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     })}
                                   </tbody>
                                 </table>
-                              ) : isPatternAiStage1TradeLoading ? (
-                                <div className="pattern-family-test-overview-empty">Loading AI 2026 taken trade rows...</div>
-                              ) : patternAiStage1TradeError ? (
+                              ) : isPatternAiExitModelTakenTradeLoading ? (
+                                <div className="pattern-family-test-overview-empty">Loading 180-bar AI exit taken trade rows...</div>
+                              ) : patternAiExitModelTakenTradeError ? (
                                 <div className="pattern-family-test-overview-empty pattern-family-test-overview-empty--error">
-                                  {patternAiStage1TradeError}
+                                  {patternAiExitModelTakenTradeError}
                                 </div>
                               ) : (
                                 <div className="pattern-family-test-overview-empty">
-                                  No AI 2026 taken trade rows loaded yet.
+                                  No 180-bar AI exit trade rows loaded yet.
                                 </div>
                               )}
                             </div>
                             <footer className="pattern-family-table-footer">
                               <button
-                                disabled={isPatternAiStage1TradeLoading}
-                                onClick={() => loadPatternAiStage1Trades({ offset: 0, append: false })}
+                                disabled={isPatternAiExitModelTakenTradeLoading}
+                                onClick={() => loadPatternAiExitModelTakenTrades({ offset: 0, append: false })}
                                 type="button"
                               >
                                 Refresh
                               </button>
                               <button
-                                disabled={isPatternAiStage1TradeLoading || !patternAiStage1TradeHasMore}
+                                disabled={isPatternAiExitModelTakenTradeLoading || !patternAiExitModelTakenTradeHasMore}
                                 onClick={() =>
-                                  loadPatternAiStage1Trades({
-                                    offset: patternAiStage1TradeRows.length,
+                                  loadPatternAiExitModelTakenTrades({
+                                    offset: patternAiExitModelTakenTradeRows.length,
                                     append: true,
                                   })
                                 }
                                 type="button"
                               >
-                                {patternAiStage1TradeHasMore ? 'Load More' : 'All Loaded'}
+                                {patternAiExitModelTakenTradeHasMore ? 'Load More' : 'All Loaded'}
                               </button>
                             </footer>
                           </details>
@@ -16633,26 +18392,416 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
             <section className="pattern-family-chart-bay">
               <div className="pattern-family-chart-stage">
                 {canvasChartData.candles.length && canvasChartData.rust_patterns ? (
-                  <>
-                    <div className="pattern-family-full-chart pattern-family-inspector-chart">
-                      <CandleChartPanel
-                        chartData={canvasChartData}
-                        isSectionsExpanded={isCanvasExpanded}
-                        setSectionsExpanded={setCanvasExpanded}
-                        focusMode="prop"
-                        market={canvasChartData.rust_patterns.market ?? selectedFamily?.market ?? 'Bullish'}
-                        overlayTopOffset={0}
-                        showCandles={showCanvasCandles}
-                        presentationMode="graph"
-                        routeLogicHover={routeLogicHover}
-                        onHoveredCandleChange={setInspectorHoveredCandle}
-                      />
-                    </div>
-                    {isCanvasLoading ? (
-                      <div className="pattern-family-chart-loading-badge">Updating candles...</div>
+                  <div
+                    className={[
+                      'pattern-family-live-canvas-layout',
+                      isRawCanvasView ? 'pattern-family-live-canvas-layout--raw' : '',
+                    ].filter(Boolean).join(' ')}
+                  >
+                    {isRawCanvasView ? (
+                      <aside className="pattern-family-live-trends-panel">
+                        <header className="pattern-family-live-trends-topbar">
+                          <div className="pattern-family-live-trends-identity">
+                            <span>{livePanelModeTitle}</span>
+                            <strong>
+                              {liveTrendPanelMode === 'trades'
+                                ? LIVE_CANVAS_SIGNAL_INSTRUMENT
+                                : liveTrendPanelMode === 'oracle' || liveTrendPanelMode === 'scanner'
+                                  ? LIVE_CANVAS_ROOT
+                                  : liveCanvasSymbol} {LIVE_CANVAS_TIMEFRAME}
+                            </strong>
+                          </div>
+                          <div className="pattern-family-live-trends-headline">
+                            <span>{liveTrendPanelMode === 'trades' ? 'Trade Count' : 'Rows'}</span>
+                            <strong>{livePanelShownLabel}</strong>
+                          </div>
+                        </header>
+                        <div className="pattern-family-live-trends-dashboard">
+                          <section className="pattern-family-live-status-card pattern-family-live-status-card--run">
+                            <span>Run</span>
+                            <strong title={livePanelRunId ?? undefined}>
+                              {livePanelRunId ? compactText(livePanelRunId, 22) : 'No run'}
+                            </strong>
+                          </section>
+                          <section
+                            className={[
+                              'pattern-family-live-status-card',
+                              'pattern-family-live-status-card--feed',
+                              liveCanvasRefreshMeta.error ? 'pattern-family-live-status-card--loss' : 'pattern-family-live-status-card--win',
+                            ].filter(Boolean).join(' ')}
+                          >
+                            <span>Feed</span>
+                            <strong>{liveFeedLabel}</strong>
+                          </section>
+                          <section className="pattern-family-live-status-card">
+                            <span>Candle</span>
+                            <strong>{formatLiveCanvasNtTime(liveCanvasRefreshMeta.latestCandleAt)}</strong>
+                          </section>
+                          <section className="pattern-family-live-status-card pattern-family-live-status-card--price">
+                            <span>Price</span>
+                            <strong>{formatNullableDecimal(liveCanvasRefreshMeta.latestSnapshotPrice, 4)}</strong>
+                          </section>
+                          {liveTrendPanelMode === 'trades' ? (
+                            <>
+                              <section className="pattern-family-live-status-card">
+                                <span>Record</span>
+                                <strong>
+                                {formatNumber(liveTradeSignals.summary?.wins ?? 0)} / {formatNumber(liveTradeSignals.summary?.losses ?? 0)}
+                                </strong>
+                              </section>
+                              <section
+                                className={[
+                                  'pattern-family-live-status-card',
+                                  `pattern-family-live-status-card--${liveTradePnlTone}`,
+                                ].join(' ')}
+                              >
+                                <span>P/L</span>
+                                <strong>{formatSignedLiveMoney(liveTradeSignals.summary?.total_accounting_pnl)}</strong>
+                              </section>
+                            </>
+                          ) : null}
+                          {liveTrendPanelMode === 'model' ? (
+                            <section className="pattern-family-live-status-card">
+                              <span>Skipped</span>
+                              <button
+                                type="button"
+                                className={[
+                                  'pattern-family-live-trends-toggle',
+                                  showSkippedLiveTrends ? 'pattern-family-live-trends-toggle--active' : '',
+                                ].filter(Boolean).join(' ')}
+                                onClick={() => setShowSkippedLiveTrends((current) => !current)}
+                              >
+                                {showSkippedLiveTrends
+                                  ? 'Hide skipped'
+                                  : `Show skipped ${hiddenSkippedLiveTrendCount ? `(${formatNumber(hiddenSkippedLiveTrendCount)})` : ''}`}
+                              </button>
+                            </section>
+                          ) : null}
+                        </div>
+                        <div className="pattern-family-live-trends-table" role="table" aria-label="Detected trends">
+                          <div
+                            className={[
+                              'pattern-family-live-trends-row',
+                              'pattern-family-live-trends-row--head',
+                              liveTrendPanelMode === 'trades' ? 'pattern-family-live-trends-row--trade' : '',
+                              liveTrendPanelMode === 'scanner' ? 'pattern-family-live-trends-row--scanner' : '',
+                              liveTrendPanelMode === 'oracle' ? 'pattern-family-live-trends-row--oracle' : '',
+                            ].filter(Boolean).join(' ')}
+                            role="row"
+                          >
+                            {liveTrendPanelMode === 'trades' ? (
+                              <>
+                                <span>Time</span>
+                                <span>Side</span>
+                                <span>S2</span>
+                                <span>Status</span>
+                                <span>Win</span>
+                                <span>MHO P/L</span>
+                                <span>Ticks</span>
+                              </>
+                            ) : liveTrendPanelMode === 'scanner' ? (
+                              <>
+                                <span>Time</span>
+                                <span>Event</span>
+                                <span>L1</span>
+                                <span>L2</span>
+                                <span>S2</span>
+                                <span>State</span>
+                              </>
+                            ) : liveTrendPanelMode === 'oracle' ? (
+                              <>
+                                <span>Entry</span>
+                                <span>Sym</span>
+                                <span>Dir</span>
+                                <span>Exit</span>
+                                <span>Bars</span>
+                                <span>R</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Time</span>
+                                <span>Dir</span>
+                                <span>Score</span>
+                                <span>Entry</span>
+                                <span>State</span>
+                                <span>R</span>
+                              </>
+                            )}
+                          </div>
+                          {liveTrendPanelMode === 'trades' ? (
+                            liveTradeSignals.rows.length ? (
+                              liveTradeSignals.rows.map((trade) => {
+                                const direction = String(trade.side || '').toUpperCase();
+                                const tradeKey = getLiveTradeSignalKey(trade);
+                                const resultLabel = getLiveTradeSignalResultLabel(trade);
+                                const resultTone = getLiveTradeSignalResultTone(trade);
+                                const status = String(trade.status || 'N/A');
+                                const stage2Score = getLiveTradeStage2Score(trade);
+
+                                return (
+                                  <button
+                                    type="button"
+                                    className={[
+                                      'pattern-family-live-trends-row',
+                                      'pattern-family-live-trends-row--trade',
+                                      selectedLiveTrendKey === tradeKey ? 'pattern-family-live-trends-row--selected' : '',
+                                      direction === 'LONG' ? 'pattern-family-live-trends-row--long' : '',
+                                      direction === 'SHORT' ? 'pattern-family-live-trends-row--short' : '',
+                                    ].filter(Boolean).join(' ')}
+                                    key={tradeKey}
+                                    onClick={() => handleLiveTradeSignalSelect(trade)}
+                                    role="row"
+                                    title={`${trade.signal_uid || 'Signal'} | ${formatShortDateTime(trade.triggered_at || trade.expected_time || trade.created_at)} | ${direction || 'N/A'} | S2 ${formatScorePercent(stage2Score)} | ${status} | ${resultLabel} | MHO ${formatSignedLiveMoney(trade.realized_accounting_dollars)} | ${formatNullableDecimal(trade.realized_ticks, 1)} ticks`}
+                                  >
+                                    <span>{formatShortDateTime(trade.triggered_at || trade.expected_time || trade.created_at)}</span>
+                                    <strong>{direction || 'N/A'}</strong>
+                                    <span className="pattern-family-live-trends-score">
+                                      {formatScorePercent(stage2Score)}
+                                    </span>
+                                    <span
+                                      className={[
+                                        'pattern-family-live-trends-state',
+                                        status.toLowerCase() === 'completed' ? 'pattern-family-live-trends-state--closed' : '',
+                                        status.toLowerCase() === 'triggered' ? 'pattern-family-live-trends-state--open' : '',
+                                      ].filter(Boolean).join(' ')}
+                                    >
+                                      {formatRouteMode(status)}
+                                    </span>
+                                    <em
+                                      className={[
+                                        'pattern-family-live-trends-entry',
+                                        resultTone === 'win' ? 'pattern-family-live-trends-entry--accepted' : '',
+                                        resultTone === 'loss' ? 'pattern-family-live-trends-entry--rejected_risk' : '',
+                                      ].filter(Boolean).join(' ')}
+                                    >
+                                      {resultLabel}
+                                    </em>
+                                    <span
+                                      className={[
+                                        'pattern-family-live-trends-result',
+                                        resultTone === 'win' ? 'pattern-family-live-trends-result--win' : '',
+                                        resultTone === 'loss' ? 'pattern-family-live-trends-result--loss' : '',
+                                      ].filter(Boolean).join(' ')}
+                                    >
+                                      {formatSignedLiveMoney(trade.realized_accounting_dollars)}
+                                    </span>
+                                    <span className="pattern-family-live-trends-result">
+                                      {formatNullableDecimal(trade.realized_ticks, 1)}
+                                    </span>
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              <div className="pattern-family-live-trends-empty">
+                                {liveTradeSignals.error || 'No live trades taken for this run yet.'}
+                              </div>
+                            )
+                          ) : liveTrendPanelMode === 'scanner' ? (
+                            liveScannerActivity.rows.length ? (
+                              liveScannerActivity.rows.map((row) => {
+                                const details = row.details ?? {};
+                                const eventLabel = getScannerActivityLabel(row);
+                                const eventTone = getScannerActivityTone(row);
+                                const stateLabel = getScannerActivityState(row);
+                                const eventType = String(row.event_type || '').toLowerCase();
+                                const timeValue = row.candle_time || row.ts_utc || row.created_at;
+                                const l1Value = eventType === 'cycle_scored'
+                                  ? formatScannerCount(details.stage1_rows)
+                                  : formatScannerScore(row.level2_score);
+                                const l2Value = eventType === 'cycle_scored'
+                                  ? formatScannerCount(details.level2_picks)
+                                  : formatScannerScore(row.level2_score);
+                                const s2Value = eventType === 'cycle_scored'
+                                  ? formatScannerCount(details.stage2_rows)
+                                  : formatScannerScore(row.stage2_score);
+
+                                return (
+                                  <div
+                                    className={[
+                                      'pattern-family-live-trends-row',
+                                      'pattern-family-live-trends-row--scanner',
+                                      eventType === 'trend_confirmed' ? 'pattern-family-live-trends-row--scanner-signal' : '',
+                                    ].filter(Boolean).join(' ')}
+                                    key={row.event_uid || row.id}
+                                    role="row"
+                                    title={`${eventLabel} | ${formatShortDateTime(timeValue)} | ${formatRouteMode(row.status || 'seen')} | ${details.read || row.event_uid || ''}`}
+                                  >
+                                    <span>{formatShortDateTime(timeValue)}</span>
+                                    <strong>{eventLabel}</strong>
+                                    <span>{l1Value}</span>
+                                    <span>{l2Value}</span>
+                                    <span>{s2Value}</span>
+                                    <em
+                                      className={[
+                                        'pattern-family-live-trends-entry',
+                                        eventTone === 'win' ? 'pattern-family-live-trends-entry--accepted' : '',
+                                        eventTone === 'loss' ? 'pattern-family-live-trends-entry--rejected_risk' : '',
+                                        eventTone === 'open' ? 'pattern-family-live-trends-state--open' : '',
+                                      ].filter(Boolean).join(' ')}
+                                    >
+                                      {stateLabel}
+                                    </em>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <div className="pattern-family-live-trends-empty">
+                                {liveScannerActivity.error || 'No scanner activity stored yet. Restart the live monitor after this update to log every candle check.'}
+                              </div>
+                            )
+                          ) : liveTrendPanelMode === 'oracle' ? (
+                            visibleLiveOracleTrendRows.length ? (
+                              visibleLiveOracleTrendRows.map((trend) => {
+                                const direction = String(trend.direction || '').toUpperCase();
+                                const trendKey = getOracleTrendKey(trend);
+
+                                return (
+                                  <button
+                                    type="button"
+                                    className={[
+                                      'pattern-family-live-trends-row',
+                                      'pattern-family-live-trends-row--oracle',
+                                      selectedLiveTrendKey === trendKey ? 'pattern-family-live-trends-row--selected' : '',
+                                      direction === 'LONG' ? 'pattern-family-live-trends-row--long' : '',
+                                      direction === 'SHORT' ? 'pattern-family-live-trends-row--short' : '',
+                                    ].filter(Boolean).join(' ')}
+                                    key={trendKey}
+                                    onClick={() => handleLiveOracleTrendSelect(trend)}
+                                    role="row"
+                                    title={`${trend.symbol || LIVE_CANVAS_ROOT} | ${formatShortDateTime(trend.entry_date)} to ${formatShortDateTime(trend.exit_date)} | ${direction || 'N/A'} | Q ${formatDecimal(trend.quality_score, 1)} | Result ${formatSignedR(trend.result_r)}`}
+                                  >
+                                    <span>{formatShortDateTime(trend.entry_date)}</span>
+                                    <span>{trend.symbol || LIVE_CANVAS_ROOT}</span>
+                                    <strong>{direction || 'N/A'}</strong>
+                                    <span>{formatShortDateTime(trend.exit_date)}</span>
+                                    <span>{formatNumber(trend.duration_bars)}</span>
+                                    <span
+                                      className={[
+                                        'pattern-family-live-trends-result',
+                                        Number.isFinite(Number(trend.result_r)) && Number(trend.result_r) > 0 ? 'pattern-family-live-trends-result--win' : '',
+                                        Number.isFinite(Number(trend.result_r)) && Number(trend.result_r) <= 0 ? 'pattern-family-live-trends-result--loss' : '',
+                                      ].filter(Boolean).join(' ')}
+                                    >
+                                      {formatSignedR(trend.result_r, 1)}
+                                    </span>
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              <div className="pattern-family-live-trends-empty">
+                                {liveOracleTrendEvents.error || 'No oracle trends loaded for this run.'}
+                              </div>
+                            )
+                          ) : visibleLiveTrendRows.length ? (
+                            visibleLiveTrendRows.map((trend) => {
+                              const direction = String(trend.direction || '').toUpperCase();
+                              const entryStatus = String(trend.paper_entry_status || 'confirmed').toLowerCase();
+                              const exitStatus = String(trend.paper_exit_status || '').toLowerCase();
+                              const trendKey = getTrendEventKey(trend);
+                              const resultR = Number(trend.paper_result_r);
+                              const entryLabel =
+                                entryStatus === 'accepted'
+                                  ? 'OK'
+                                  : entryStatus === 'rejected_risk'
+                                    ? 'Risk'
+                                    : 'Watch';
+                              const tradeState =
+                                exitStatus === 'closed'
+                                  ? 'Closed'
+                                  : entryStatus === 'accepted'
+                                    ? 'Open'
+                                    : 'Skipped';
+
+                              return (
+                                <button
+                                  type="button"
+                                  className={[
+                                    'pattern-family-live-trends-row',
+                                    selectedLiveTrendKey === trendKey ? 'pattern-family-live-trends-row--selected' : '',
+                                    direction === 'LONG' ? 'pattern-family-live-trends-row--long' : '',
+                                    direction === 'SHORT' ? 'pattern-family-live-trends-row--short' : '',
+                                  ].filter(Boolean).join(' ')}
+                                  key={trendKey}
+                                  onClick={() => handleLiveTrendSelect(trend)}
+                                  role="row"
+                                  title={`${trend.model_symbol || LIVE_CANVAS_ROOT} | ${formatShortDateTime(trend.candle_time)} | ${direction || 'N/A'} | Stage 2 ${formatScorePercent(trend.stage2_score)} | Entry ${formatMoney(trend.paper_entry_price ?? trend.entry_price)} | ${tradeState} | Result ${formatSignedR(trend.paper_result_r)}`}
+                                >
+                                  <span>{formatShortDateTime(trend.candle_time)}</span>
+                                  <strong>{direction || 'N/A'}</strong>
+                                  <span>{formatScorePercent(trend.stage2_score)}</span>
+                                  <em className={`pattern-family-live-trends-entry pattern-family-live-trends-entry--${entryStatus}`}>
+                                    {entryLabel}
+                                  </em>
+                                  <span
+                                    className={[
+                                      'pattern-family-live-trends-state',
+                                      tradeState === 'Closed' ? 'pattern-family-live-trends-state--closed' : '',
+                                      tradeState === 'Open' ? 'pattern-family-live-trends-state--open' : '',
+                                      tradeState === 'Skipped' ? 'pattern-family-live-trends-state--skipped' : '',
+                                    ].filter(Boolean).join(' ')}
+                                  >
+                                    {tradeState}
+                                  </span>
+                                  <span
+                                    className={[
+                                      'pattern-family-live-trends-result',
+                                      Number.isFinite(resultR) && resultR > 0 ? 'pattern-family-live-trends-result--win' : '',
+                                      Number.isFinite(resultR) && resultR <= 0 ? 'pattern-family-live-trends-result--loss' : '',
+                                    ].filter(Boolean).join(' ')}
+                                  >
+                                    {formatSignedR(trend.paper_result_r, 1)}
+                                  </span>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="pattern-family-live-trends-empty">
+                              {liveTrendEvents.error || (showSkippedLiveTrends ? 'No confirmed trends loaded.' : 'No accepted trends loaded.')}
+                            </div>
+                          )}
+                        </div>
+                      </aside>
                     ) : null}
-                    {canvasError ? <div className="pattern-family-chart-error-badge">{canvasError}</div> : null}
-                  </>
+                    <div className="pattern-family-live-chart-area">
+                      <div className="pattern-family-full-chart pattern-family-inspector-chart">
+                        <CandleChartPanel
+                          chartData={canvasChartData}
+                          isSectionsExpanded={isCanvasExpanded}
+                          setSectionsExpanded={setCanvasExpanded}
+                          focusMode={isRawCanvasView ? 'pattern' : 'prop'}
+                          market={canvasChartData.rust_patterns.market ?? selectedFamily?.market ?? 'Bullish'}
+                          overlayTopOffset={0}
+                          showCandles={showCanvasCandles}
+                          presentationMode={isRawCanvasView ? 'chart' : 'graph'}
+                          routeLogicHover={routeLogicHover}
+                          onHoveredCandleChange={setInspectorHoveredCandle}
+                          onRawCandleViewportEdge={handleRawCandleViewportEdge}
+                        />
+                      </div>
+                      {isCanvasLoading ? (
+                        <div className="pattern-family-chart-loading-badge">Updating candles...</div>
+                      ) : null}
+                      {isRawCanvasView ? (
+                        <div className="pattern-family-chart-hover-status" aria-label="Hovered candle OHLCV">
+                          {inspectorHoveredCandleStats.map((item) => (
+                            <div
+                              className={[
+                                'pattern-family-chart-hover-status__cell',
+                                item.wide ? 'pattern-family-chart-hover-status__cell--wide' : '',
+                              ].filter(Boolean).join(' ')}
+                              key={item.label}
+                            >
+                              <span>{item.label}</span>
+                              <strong style={item.label !== 'Candle' ? { color: inspectorHoveredCandle?.color } : undefined}>
+                                {item.value}
+                              </strong>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {canvasError ? <div className="pattern-family-chart-error-badge">{canvasError}</div> : null}
+                    </div>
+                  </div>
                 ) : isCanvasLoading ? (
                   <div className="pattern-family-inspector-empty">Loading family canvas...</div>
                 ) : canvasError ? (

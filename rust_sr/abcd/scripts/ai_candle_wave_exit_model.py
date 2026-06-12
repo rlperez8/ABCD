@@ -40,14 +40,22 @@ TRADE_TABLE = "ai_candle_wave_exit_model_trades"
 
 DEFAULT_SOURCE_RUN = "aicw-mtf-eg1-xtight-t014-rd3-en4-v1-2m-2026"
 
-DECISION_NUM_FEATURES = [
-    "predicted_r",
-    "bars_held",
-    "hold_minutes_so_far",
+SOURCE_EXIT_NUM_FEATURES = [
     "source_exit_signal_seen",
     "bars_since_source_exit_signal",
     "source_exit_result_seen_r",
     "current_vs_source_exit_r",
+]
+
+DECISION_NUM_FEATURES = [
+    "predicted_r",
+    "bars_held",
+    "hold_minutes_so_far",
+    "max_exit_bars",
+    "bars_remaining",
+    "window_progress",
+    "near_window_end",
+    *SOURCE_EXIT_NUM_FEATURES,
     "current_unrealized_r",
     "current_unrealized_raw_r",
     "mfe_so_far_r",
@@ -87,6 +95,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dynamic-max-bars", type=int, default=240)
     parser.add_argument("--dynamic-no-signal-exit", choices=["terminal", "source"], default="terminal")
     parser.add_argument("--exit-threshold", type=float, default=None)
+    parser.add_argument(
+        "--exclude-source-exit-features",
+        action="store_true",
+        help="Train/predict without legacy source-exit hint columns.",
+    )
+    parser.add_argument(
+        "--valid-from-candidates",
+        action="store_true",
+        help="Score/select validation trades from current candidate rows instead of ai_candle_wave_selected_trades.",
+    )
     parser.add_argument("--max-threshold-dd-r", type=float, default=0.0)
     parser.add_argument("--threshold-dd-penalty", type=float, default=0.0)
     parser.add_argument("--min-threshold-trades", type=int, default=80)
@@ -96,6 +114,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--l2-leaf-reg", type=float, default=12.0)
     parser.add_argument("--random-seed", type=int, default=73)
     return parser.parse_args()
+
+
+def exit_num_features(args: argparse.Namespace | None = None) -> list[str]:
+    features = list(EXIT_NUM_FEATURES)
+    if args is not None and bool(getattr(args, "exclude_source_exit_features", False)):
+        blocked = set(SOURCE_EXIT_NUM_FEATURES)
+        features = [feature for feature in features if feature not in blocked]
+    return features
 
 
 def exit_run_id(args: argparse.Namespace, timeframe: str) -> str:
@@ -421,6 +447,10 @@ def build_decision_rows_for_trade(
         open_next = safe_float(candles["open"].iloc[next_idx])
         if close_price <= 0 or open_next <= 0:
             continue
+        bars_held = decision_idx - entry_idx
+        max_exit_bars = max(1, int(args.dynamic_max_bars)) if mode == "dynamic" else max(1, exit_idx - entry_idx)
+        bars_remaining = max(0, max_exit_bars - bars_held)
+        window_progress = max(0.0, min(1.0, bars_held / max_exit_bars))
 
         high_so_far = safe_float(high_values.iloc[entry_idx : decision_idx + 1].max())
         low_so_far = safe_float(low_values.iloc[entry_idx : decision_idx + 1].min())
@@ -478,8 +508,12 @@ def build_decision_rows_for_trade(
             "terminal_exit_price": terminal_price,
             "terminal_result_r": terminal_result,
             "terminal_exit_reason": terminal_exit_reason,
-            "bars_held": decision_idx - entry_idx,
-            "hold_minutes_so_far": (decision_idx - entry_idx) * timeframe_minutes,
+            "bars_held": bars_held,
+            "hold_minutes_so_far": bars_held * timeframe_minutes,
+            "max_exit_bars": max_exit_bars,
+            "bars_remaining": bars_remaining,
+            "window_progress": window_progress,
+            "near_window_end": 1.0 if bars_remaining <= max(4, step * 3) else 0.0,
             "source_exit_signal_seen": source_exit_signal_seen,
             "bars_since_source_exit_signal": bars_since_source_exit_signal,
             "source_exit_result_seen_r": source_exit_result_seen,
@@ -543,17 +577,18 @@ def build_decision_rows(
     return frame
 
 
-def prepare_exit_pool(frame: pd.DataFrame, include_target: bool) -> Pool:
+def prepare_exit_pool(frame: pd.DataFrame, include_target: bool, args: argparse.Namespace | None = None) -> Pool:
     work = frame.copy()
+    num_features = exit_num_features(args)
     for col in EXIT_CAT_FEATURES:
         if col not in work.columns:
             work[col] = "unknown"
         work[col] = work[col].fillna("unknown").astype(str)
-    for col in EXIT_NUM_FEATURES:
+    for col in num_features:
         if col not in work.columns:
             work[col] = 0.0
         work[col] = pd.to_numeric(work[col], errors="coerce").replace([np.inf, -np.inf], np.nan).fillna(0.0)
-    features = EXIT_CAT_FEATURES + EXIT_NUM_FEATURES
+    features = EXIT_CAT_FEATURES + num_features
     if include_target:
         target = pd.to_numeric(work["exit_edge_r"], errors="coerce").replace([np.inf, -np.inf], np.nan).fillna(0.0)
         target = target.clip(lower=-5.0, upper=5.0)
@@ -572,15 +607,15 @@ def train_exit_model(frame: pd.DataFrame, args: argparse.Namespace) -> CatBoostR
         verbose=False,
         allow_writing_files=False,
     )
-    model.fit(prepare_exit_pool(frame, include_target=True))
+    model.fit(prepare_exit_pool(frame, include_target=True, args=args))
     return model
 
 
-def add_exit_predictions(frame: pd.DataFrame, model: CatBoostRegressor) -> pd.DataFrame:
+def add_exit_predictions(frame: pd.DataFrame, model: CatBoostRegressor, args: argparse.Namespace | None = None) -> pd.DataFrame:
     if frame.empty:
         return frame
     scored = frame.copy()
-    scored["exit_score_r"] = model.predict(prepare_exit_pool(scored, include_target=False))
+    scored["exit_score_r"] = model.predict(prepare_exit_pool(scored, include_target=False, args=args))
     return scored
 
 
@@ -599,6 +634,51 @@ def summarize_results(values: pd.Series) -> dict[str, Any]:
         "sum_r": float(result.sum()) if len(result) else 0.0,
         "max_drawdown_r": float(drawdown.max()) if len(drawdown) else 0.0,
     }
+
+
+def overlay_result_series_fast(
+    trades: pd.DataFrame,
+    decisions: pd.DataFrame,
+    threshold: float | None,
+    args: argparse.Namespace,
+) -> pd.Series:
+    baseline = pd.to_numeric(trades["result_r"], errors="coerce").fillna(0.0)
+    baseline.index = trades["candidate_uid"].astype(str)
+    mode = str(getattr(args, "mode", "early") or "early")
+    no_signal_exit = str(getattr(args, "dynamic_no_signal_exit", "terminal") or "terminal")
+    if decisions.empty:
+        return baseline.reset_index(drop=True)
+
+    work = decisions.copy()
+    work["candidate_uid"] = work["candidate_uid"].astype(str)
+    work["decision_index"] = pd.to_numeric(work.get("decision_index", 0), errors="coerce").fillna(0)
+    work["exit_score_r"] = pd.to_numeric(work.get("exit_score_r"), errors="coerce")
+    work = work.sort_values(["candidate_uid", "decision_index"])
+
+    if mode == "dynamic" and no_signal_exit == "terminal":
+        default = pd.to_numeric(
+            work.drop_duplicates("candidate_uid", keep="last").set_index("candidate_uid")["terminal_result_r"],
+            errors="coerce",
+        ).fillna(0.0)
+        result = baseline.copy()
+        result.update(default)
+    else:
+        result = baseline.copy()
+
+    if threshold is None:
+        return result.reindex(trades["candidate_uid"].astype(str)).reset_index(drop=True).fillna(0.0)
+
+    if mode == "dynamic":
+        eligible = work[work["exit_score_r"].fillna(999.0) <= threshold]
+    else:
+        eligible = work[work["exit_score_r"].fillna(-999.0) >= threshold]
+    if not eligible.empty:
+        chosen = pd.to_numeric(
+            eligible.drop_duplicates("candidate_uid", keep="first").set_index("candidate_uid")["exit_now_result_r"],
+            errors="coerce",
+        )
+        result.update(chosen)
+    return result.reindex(trades["candidate_uid"].astype(str)).reset_index(drop=True).fillna(0.0)
 
 
 def source_overlay_row(trade: pd.Series) -> dict[str, Any]:
@@ -642,7 +722,8 @@ def source_overlay_row(trade: pd.Series) -> dict[str, Any]:
 
 def apply_overlay(trades: pd.DataFrame, decisions: pd.DataFrame, threshold: float | None, args: argparse.Namespace) -> pd.DataFrame:
     mode = str(getattr(args, "mode", "early") or "early")
-    if threshold is None:
+    no_signal_exit = str(getattr(args, "dynamic_no_signal_exit", "terminal") or "terminal")
+    if threshold is None and not (mode == "dynamic" and no_signal_exit == "terminal" and not decisions.empty):
         return pd.DataFrame([source_overlay_row(trade) for _, trade in trades.iterrows()])
 
     decision_groups = {
@@ -654,7 +735,7 @@ def apply_overlay(trades: pd.DataFrame, decisions: pd.DataFrame, threshold: floa
         candidate_uid = str(trade.get("candidate_uid") or "")
         group = decision_groups.get(candidate_uid)
         chosen = None
-        if group is not None and not group.empty:
+        if threshold is not None and group is not None and not group.empty:
             scores = pd.to_numeric(group["exit_score_r"], errors="coerce")
             if mode == "dynamic":
                 eligible = group[scores.fillna(999.0) <= threshold]
@@ -667,7 +748,6 @@ def apply_overlay(trades: pd.DataFrame, decisions: pd.DataFrame, threshold: floa
         baseline_exit_date = trade.get("exit_date")
         baseline_exit_price = trade.get("exit_price")
         if chosen is None:
-            no_signal_exit = str(getattr(args, "dynamic_no_signal_exit", "terminal") or "terminal")
             if mode == "dynamic" and no_signal_exit == "source":
                 model_result = baseline_result
                 model_exit_date = baseline_exit_date
@@ -746,7 +826,7 @@ def choose_exit_threshold(trades: pd.DataFrame, decisions: pd.DataFrame, args: a
     else:
         quantiles = sorted(set(float(v) for v in scores.quantile(np.linspace(0.70, 0.995, 30)).dropna()))
         candidates = [0.0, *quantiles]
-    baseline = summarize_results(trades["result_r"])
+    baseline = summarize_results(overlay_result_series_fast(trades, decisions, None, args))
     no_exit_threshold = None if mode == "dynamic" else float(scores.max()) + max(1.0, abs(float(scores.max())) * 0.10)
     best_threshold: float | None = no_exit_threshold
     best_summary: dict[str, Any] | None = baseline
@@ -754,8 +834,8 @@ def choose_exit_threshold(trades: pd.DataFrame, decisions: pd.DataFrame, args: a
     max_dd = float(getattr(args, "max_threshold_dd_r", 0.0) or 0.0)
     print("Exit threshold calibration:")
     for threshold in candidates:
-        overlay = apply_overlay(trades, decisions, threshold, args)
-        summary = summarize_results(overlay["model_result_r"])
+        result = overlay_result_series_fast(trades, decisions, threshold, args)
+        summary = summarize_results(result)
         if summary["trades"] < int(args.min_threshold_trades):
             continue
         if max_dd > 0.0 and summary["max_drawdown_r"] > max_dd:
@@ -901,7 +981,9 @@ def save_run(
         "max_threshold_dd_r": args.max_threshold_dd_r,
         "threshold_dd_penalty": args.threshold_dd_penalty,
         "cat_features": EXIT_CAT_FEATURES,
-        "num_features": EXIT_NUM_FEATURES,
+        "num_features": exit_num_features(args),
+        "exclude_source_exit_features": bool(getattr(args, "exclude_source_exit_features", False)),
+        "valid_from_candidates": bool(getattr(args, "valid_from_candidates", False)),
         "phase": "dynamic_hold_exit_overlay" if args.mode == "dynamic" else "early_exit_overlay",
         "early_exits": early_exits,
         "late_exits": late_exits,
@@ -1031,7 +1113,10 @@ def main() -> int:
         train_years = scanner.parse_years(args.train_years)
         train_trades = selected_like_trades(conn, entry_model, entry_args, train_years, args.max_train_trades)
         threshold_trades = selected_like_trades(conn, entry_model, entry_args, [args.threshold_year], args.max_threshold_trades)
-        valid_trades = load_selected_trades(conn, args.source_model_run_id, args.max_valid_trades)
+        if args.valid_from_candidates:
+            valid_trades = selected_like_trades(conn, entry_model, entry_args, [args.valid_year], args.max_valid_trades)
+        else:
+            valid_trades = load_selected_trades(conn, args.source_model_run_id, args.max_valid_trades)
 
         print(
             f"Exit model source={args.source_model_run_id} train_trades={len(train_trades):,} "
@@ -1044,11 +1129,11 @@ def main() -> int:
         model = train_exit_model(train_decisions, args)
 
         threshold_decisions = build_decision_rows(conn, threshold_trades, table_name, timeframe_minutes, args, False, "threshold")
-        threshold_decisions = add_exit_predictions(threshold_decisions, model)
+        threshold_decisions = add_exit_predictions(threshold_decisions, model, args)
         threshold = choose_exit_threshold(threshold_trades, threshold_decisions, args)
 
         valid_decisions = build_decision_rows(conn, valid_trades, table_name, timeframe_minutes, args, False, "valid")
-        valid_decisions = add_exit_predictions(valid_decisions, model)
+        valid_decisions = add_exit_predictions(valid_decisions, model, args)
         valid_overlay = apply_overlay(valid_trades, valid_decisions, threshold, args)
         summary = save_run(
             conn,
