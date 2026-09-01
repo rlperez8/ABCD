@@ -1278,6 +1278,8 @@ export const fetchNinjaTraderTrendEvents = async ({
             paper_exit_ts_utc: row?.paper_exit_ts_utc ?? null,
             paper_exit_reason: row?.paper_exit_reason ?? null,
             level2_score: parseOptionalFloat(row?.level2_score),
+            level2_long_score: parseOptionalFloat(row?.level2_long_score),
+            level2_short_score: parseOptionalFloat(row?.level2_short_score),
             stage2_score: parseOptionalFloat(row?.stage2_score),
             entry_price: parseOptionalFloat(row?.entry_price),
             stop_price: parseOptionalFloat(row?.stop_price),
@@ -1352,12 +1354,20 @@ export const fetchNinjaTraderSignalHistory = async ({
             target_price: parseOptionalFloat(row?.target_price),
             tick_size: parseOptionalFloat(row?.tick_size),
             actual_trigger_price: parseOptionalFloat(row?.actual_trigger_price),
+            entry_execution_price: parseOptionalFloat(row?.entry_execution_price),
+            entry_execution_time: row?.entry_execution_time ?? null,
+            entry_execution_received_at: row?.entry_execution_received_at ?? null,
+            entry_execution_order_id: row?.entry_execution_order_id ?? null,
             accounting_tick_value: parseOptionalFloat(row?.accounting_tick_value),
             accounting_size_ratio: parseOptionalFloat(row?.accounting_size_ratio),
             accounting_risk_dollars: parseOptionalFloat(row?.accounting_risk_dollars),
             execution_tick_value: parseOptionalFloat(row?.execution_tick_value),
             execution_risk_dollars: parseOptionalFloat(row?.execution_risk_dollars),
             exit_price: parseOptionalFloat(row?.exit_price),
+            exit_execution_price: parseOptionalFloat(row?.exit_execution_price),
+            exit_execution_time: row?.exit_execution_time ?? null,
+            exit_execution_received_at: row?.exit_execution_received_at ?? null,
+            exit_execution_order_id: row?.exit_execution_order_id ?? null,
             realized_ticks: parseOptionalFloat(row?.realized_ticks),
             realized_execution_dollars: parseOptionalFloat(row?.realized_execution_dollars),
             realized_accounting_dollars: parseOptionalFloat(row?.realized_accounting_dollars),
@@ -1425,6 +1435,189 @@ export const fetchNinjaTraderLiveBarSnapshot = async ({
   }
 };
 
+export const fetchNinjaTraderFeedStatus = async ({
+  rootSymbol = null,
+  timeframe = null,
+  instrument = null,
+} = {}) => {
+  try {
+    const data = await postJson('/ninjatrader/feed-status', {
+      root_symbol: rootSymbol,
+      timeframe,
+      instrument,
+    });
+
+    const heartbeat = data?.heartbeat ?? null;
+    const latestCandle = data?.latest_candle ?? null;
+
+    return {
+      rootSymbol: data?.root_symbol ?? rootSymbol ?? null,
+      timeframe: data?.timeframe ?? timeframe ?? null,
+      instrument: data?.instrument ?? instrument ?? null,
+      heartbeat: heartbeat
+        ? {
+            ...heartbeat,
+            id: parseOptionalInt(heartbeat?.id) ?? 0,
+            bars_period_value: parseOptionalInt(heartbeat?.bars_period_value),
+            heartbeat_time_utc: heartbeat?.heartbeat_time_utc ?? null,
+            last_candle_time: heartbeat?.last_candle_time ?? null,
+            last_candle_time_utc: heartbeat?.last_candle_time_utc ?? null,
+            last_snapshot_time_utc: heartbeat?.last_snapshot_time_utc ?? null,
+            last_price: parseOptionalFloat(heartbeat?.last_price),
+            tick_size: parseOptionalFloat(heartbeat?.tick_size),
+            point_value: parseOptionalFloat(heartbeat?.point_value),
+            is_realtime: parseBooleanFlag(heartbeat?.is_realtime),
+            received_at: heartbeat?.received_at ?? null,
+            updated_at: heartbeat?.updated_at ?? null,
+          }
+        : null,
+      latestCandle: latestCandle
+        ? {
+            ...latestCandle,
+            id: parseOptionalInt(latestCandle?.id) ?? 0,
+            bars_period_value: parseOptionalInt(latestCandle?.bars_period_value),
+            candle_time: latestCandle?.candle_time ?? null,
+            open: parseOptionalFloat(latestCandle?.open),
+            high: parseOptionalFloat(latestCandle?.high),
+            low: parseOptionalFloat(latestCandle?.low),
+            close: parseOptionalFloat(latestCandle?.close),
+            volume: parseOptionalFloat(latestCandle?.volume),
+            tick_size: parseOptionalFloat(latestCandle?.tick_size),
+            point_value: parseOptionalFloat(latestCandle?.point_value),
+            is_realtime: parseBooleanFlag(latestCandle?.is_realtime),
+            received_at: latestCandle?.received_at ?? null,
+            updated_at: latestCandle?.updated_at ?? null,
+          }
+        : null,
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      rootSymbol,
+      timeframe,
+      instrument,
+      heartbeat: null,
+      latestCandle: null,
+      error: error.message || 'Could not load NinjaTrader feed status.',
+    };
+  }
+};
+
+export const fetchNinjaTraderLiveCandles = async ({
+  rootSymbol = null,
+  timeframe = null,
+  instrument = null,
+  startDate = null,
+  endDate = null,
+  limit = 600,
+} = {}) => {
+  try {
+    const data = await postJson('/ninjatrader/live-candles', {
+      root_symbol: rootSymbol,
+      timeframe,
+      instrument,
+      start_date: startDate,
+      end_date: endDate,
+      limit,
+    });
+
+    return {
+      rootSymbol: data?.root_symbol ?? rootSymbol ?? null,
+      timeframe: data?.timeframe ?? timeframe ?? null,
+      instrument: data?.instrument ?? instrument ?? null,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      rows: Array.isArray(data?.rows)
+        ? data.rows.map((candle) => ({
+            ...candle,
+            id: parseOptionalInt(candle?.id) ?? 0,
+            bars_period_value: parseOptionalInt(candle?.bars_period_value),
+            candle_time: candle?.candle_time ?? null,
+            open: parseOptionalFloat(candle?.open),
+            high: parseOptionalFloat(candle?.high),
+            low: parseOptionalFloat(candle?.low),
+            close: parseOptionalFloat(candle?.close),
+            volume: parseOptionalFloat(candle?.volume),
+            tick_size: parseOptionalFloat(candle?.tick_size),
+            point_value: parseOptionalFloat(candle?.point_value),
+            is_realtime: parseBooleanFlag(candle?.is_realtime),
+            received_at: candle?.received_at ?? null,
+            updated_at: candle?.updated_at ?? null,
+          }))
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      rootSymbol,
+      timeframe,
+      instrument,
+      limit,
+      rows: [],
+      error: error.message || 'Could not load NinjaTrader live candles.',
+    };
+  }
+};
+
+export const fetchNinjaTraderCandleSlotAudit = async ({
+  rootSymbol = null,
+  timeframe = null,
+  instrument = null,
+  limit = 120,
+} = {}) => {
+  try {
+    const data = await postJson('/ninjatrader/candle-slot-audit', {
+      root_symbol: rootSymbol,
+      timeframe,
+      instrument,
+      limit,
+    });
+
+    return {
+      rootSymbol: data?.root_symbol ?? rootSymbol ?? null,
+      timeframe: data?.timeframe ?? timeframe ?? null,
+      instrument: data?.instrument ?? instrument ?? null,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      rows: Array.isArray(data?.rows)
+        ? data.rows.map((row) => {
+            let details = null;
+            if (typeof row?.details_json === 'string' && row.details_json.trim()) {
+              try {
+                details = JSON.parse(row.details_json);
+              } catch (error) {
+                details = null;
+              }
+            }
+
+            return {
+              ...row,
+              id: parseOptionalInt(row?.id) ?? 0,
+              bars_period_value: parseOptionalInt(row?.bars_period_value),
+              nt_connected: parseBooleanFlag(row?.nt_connected),
+              candle_received: parseBooleanFlag(row?.candle_received),
+              trade_allowed: parseBooleanFlag(row?.trade_allowed),
+              slot_time: row?.slot_time ?? null,
+              expected_close_time: row?.expected_close_time ?? null,
+              candle_received_at: row?.candle_received_at ?? null,
+              created_at: row?.created_at ?? null,
+              updated_at: row?.updated_at ?? null,
+              details,
+            };
+          })
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      rootSymbol,
+      timeframe,
+      instrument,
+      limit,
+      rows: [],
+      error: error.message || 'Could not load NinjaTrader candle slot audit.',
+    };
+  }
+};
+
 export const fetchNinjaTraderScannerActivity = async ({
   rootSymbol = null,
   timeframe = null,
@@ -1458,6 +1651,8 @@ export const fetchNinjaTraderScannerActivity = async ({
             candle_time: row?.candle_time ?? null,
             ts_utc: row?.ts_utc ?? null,
             level2_score: parseOptionalFloat(row?.level2_score),
+            level2_long_score: parseOptionalFloat(row?.level2_long_score),
+            level2_short_score: parseOptionalFloat(row?.level2_short_score),
             stage2_score: parseOptionalFloat(row?.stage2_score),
             entry_price: parseOptionalFloat(row?.entry_price),
             stop_price: parseOptionalFloat(row?.stop_price),
@@ -1478,6 +1673,79 @@ export const fetchNinjaTraderScannerActivity = async ({
       limit,
       rows: [],
       error: error.message || 'Could not load scanner activity.',
+    };
+  }
+};
+
+export const fetchNinjaTraderScreenerRoutes = async ({
+  rootSymbol = null,
+  timeframe = null,
+  instrument = null,
+  runId = null,
+  startDate = null,
+  endDate = null,
+  limit = 120,
+} = {}) => {
+  try {
+    const data = await postJson('/ninjatrader/screener-routes', {
+      root_symbol: rootSymbol,
+      timeframe,
+      instrument,
+      run_id: runId,
+      start_date: startDate,
+      end_date: endDate,
+      limit,
+    });
+
+    return {
+      runId: data?.run_id ?? null,
+      rootSymbol: data?.root_symbol ?? rootSymbol ?? null,
+      timeframe: data?.timeframe ?? timeframe ?? null,
+      totalRows: parseOptionalInt(data?.total_rows) ?? 0,
+      limit: parseOptionalInt(data?.limit) ?? limit,
+      rows: Array.isArray(data?.rows)
+        ? data.rows.map((row) => {
+            const level2Score = parseOptionalFloat(row?.level2_score);
+            const level2LongScore = parseOptionalFloat(row?.level2_long_score);
+            const level2ShortScore = parseOptionalFloat(row?.level2_short_score);
+            const stage2Score = parseOptionalFloat(row?.stage2_score);
+            const details = parseJsonRecord(row?.details_json);
+            return {
+              ...row,
+              id: parseOptionalInt(row?.id) ?? 0,
+              candle_time: row?.candle_time ?? null,
+              ts_utc: row?.ts_utc ?? null,
+              level2_score: level2Score,
+              level2_long_score: level2LongScore,
+              level2_short_score: level2ShortScore,
+              stage2_score: stage2Score,
+              entry_price: parseOptionalFloat(row?.entry_price),
+              stop_price: parseOptionalFloat(row?.stop_price),
+              risk_ticks: parseOptionalFloat(row?.risk_ticks),
+              details: {
+                ...details,
+                level2_best_direction: details.level2_best_direction ?? row?.direction ?? null,
+                level2_best_score: details.level2_best_score ?? level2Score,
+                level2_long_score: details.level2_long_score ?? level2LongScore,
+                level2_short_score: details.level2_short_score ?? level2ShortScore,
+                stage2_best_score: details.stage2_best_score ?? stage2Score,
+              },
+              details_json: row?.details_json ?? null,
+              created_at: row?.created_at ?? null,
+            };
+          })
+        : [],
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      runId: null,
+      rootSymbol,
+      timeframe,
+      totalRows: 0,
+      limit,
+      rows: [],
+      error: error.message || 'Could not load screener routes.',
     };
   }
 };

@@ -11,6 +11,7 @@ import StrategyVariationPoolCard from '../features/strategies/StrategyVariationP
 import StorageDashboardPage from '../features/storage/StorageDashboardPage';
 import AdminRunsPage from '../features/admin/AdminRunsPage';
 import PatternFamilyUniversePage from '../features/diagnostics/PatternFamilyUniversePage';
+import CanvasTestPage from '../canvas/CanvasTestPage';
 import {
   fetchCurrentSetupStrategies,
   fetchCurrentSetups,
@@ -650,6 +651,8 @@ const parseStrategyMaxDaysOpen = (value) => {
 };
 
 const App = () => {
+
+
   const [activeAppView] = useState(APP_VIEW_FAMILY_UNIVERSE);
   const [currentSetups, setCurrentSetups] = useState([]);
   const [isLoadingCurrentSetups, setLoadingCurrentSetups] = useState(false);
@@ -2013,6 +2016,8 @@ const App = () => {
     ]
   );
 
+return <CanvasTestPage chartData={strategyChartData}/>;
+  /*
   return (
     <div className="App">
       <div className="app-inner">
@@ -2447,6 +2452,7 @@ const App = () => {
       </div>
     </div>
   );
+  */
 };
 
 export default App;

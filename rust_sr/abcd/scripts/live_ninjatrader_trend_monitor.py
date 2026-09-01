@@ -11,6 +11,7 @@ with the current Stage 1 -> Level 2 -> Stage 2 trend model, and logs events to
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import math
 import re
@@ -93,6 +94,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-loops", type=int, default=0, help="Stop after N polling loops. Zero runs forever.")
     parser.add_argument("--max-new-cycles-per-loop", type=int, default=20)
     parser.add_argument("--stale-feed-seconds", type=float, default=360.0, help="Pause new trend/trade decisions when the newest closed candle is older than this many seconds. Zero disables.")
+    parser.add_argument("--heartbeat-stale-seconds", type=float, default=20.0, help="Pause new trend/trade decisions when the latest NT heartbeat is older than this many seconds. Zero disables.")
+    parser.add_argument("--require-heartbeat", action=argparse.BooleanOptionalAction, default=True, help="Require a fresh NT heartbeat before scoring live candles.")
     parser.add_argument("--gap-tolerance-bars", type=float, default=1.5, help="Reset live scanner state when new closed candles jump by more than this many expected bars.")
 
     parser.add_argument("--governed-run-id", default=DEFAULT_GOVERNED_RUN)
@@ -155,6 +158,8 @@ def parse_csv_strings(value: str) -> set[str]:
 def to_jsonable(value: Any) -> Any:
     if isinstance(value, pd.Timestamp):
         return None if pd.isna(value) else value.isoformat()
+    if isinstance(value, (dt.datetime, dt.date)):
+        return value.isoformat()
     if isinstance(value, np.generic):
         return value.item()
     if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
@@ -226,6 +231,198 @@ def ensure_event_table(conn) -> None:
             )
             """
         )
+    conn.commit()
+
+
+def ensure_route_table(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ninjatrader_live_screener_routes (
+                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                route_uid VARCHAR(255) NOT NULL,
+                run_id VARCHAR(128) NOT NULL,
+                instrument VARCHAR(128) NULL,
+                root_symbol VARCHAR(32) NULL,
+                model_symbol VARCHAR(64) NULL,
+                timeframe VARCHAR(16) NULL,
+                candle_time DATETIME NULL,
+                ts_utc DATETIME NULL,
+                candle_id BIGINT NULL,
+                candle_revision_id BIGINT NULL,
+                candle_payload_hash VARCHAR(64) NULL,
+                open DOUBLE NULL,
+                high DOUBLE NULL,
+                low DOUBLE NULL,
+                close DOUBLE NULL,
+                volume DOUBLE NULL,
+                stage1_rows INT NULL,
+                stage1_status VARCHAR(64) NULL,
+                level2_threshold DOUBLE NULL,
+                level2_long_score DOUBLE NULL,
+                level2_short_score DOUBLE NULL,
+                level2_best_direction VARCHAR(16) NULL,
+                level2_best_score DOUBLE NULL,
+                level2_picks INT NULL,
+                stage2_rows INT NULL,
+                stage2_status VARCHAR(64) NULL,
+                stage2_threshold DOUBLE NULL,
+                stage2_best_direction VARCHAR(16) NULL,
+                stage2_best_score DOUBLE NULL,
+                stage2_confirmed_direction VARCHAR(16) NULL,
+                stage2_confirmed_score DOUBLE NULL,
+                stage2_confirm_offset_bars INT NULL,
+                pending_after INT NULL,
+                scheduled_entries_after INT NULL,
+                order_signals INT NULL,
+                order_rejects INT NULL,
+                decision_status VARCHAR(64) NULL,
+                details_json LONGTEXT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY ux_nt_live_route_uid (route_uid),
+                KEY idx_nt_live_route_run_time (run_id, ts_utc),
+                KEY idx_nt_live_route_symbol_time (root_symbol, timeframe, ts_utc),
+                KEY idx_nt_live_route_status (decision_status, stage2_status),
+                KEY idx_nt_live_route_candle_revision (candle_revision_id)
+            )
+            """
+        )
+    conn.commit()
+
+
+def ensure_feed_health_tables(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ninjatrader_feed_heartbeats (
+                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                external_key VARCHAR(255) NOT NULL,
+                source VARCHAR(64) NOT NULL DEFAULT 'ninjatrader',
+                bridge_version VARCHAR(32) NULL,
+                client_id VARCHAR(128) NULL,
+                instrument VARCHAR(64) NULL,
+                root_symbol VARCHAR(32) NULL,
+                exchange_name VARCHAR(32) NULL,
+                timeframe VARCHAR(32) NULL,
+                bars_period_type VARCHAR(32) NULL,
+                bars_period_value BIGINT NULL,
+                heartbeat_time_utc DATETIME(6) NULL,
+                last_candle_time DATETIME(6) NULL,
+                last_candle_time_utc DATETIME(6) NULL,
+                last_snapshot_time_utc DATETIME(6) NULL,
+                last_price DOUBLE NULL,
+                tick_size DOUBLE NULL,
+                point_value DOUBLE NULL,
+                is_realtime TINYINT NULL,
+                connection_status VARCHAR(64) NULL,
+                raw_payload_json LONGTEXT NULL,
+                received_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+                UNIQUE KEY uq_nt_feed_heartbeat_external_key (external_key),
+                KEY idx_nt_feed_heartbeat_root_received (root_symbol, timeframe, received_at),
+                KEY idx_nt_feed_heartbeat_instrument_received (instrument, timeframe, received_at),
+                KEY idx_nt_feed_heartbeat_received (received_at)
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ninjatrader_feed_health_events (
+                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                run_id VARCHAR(128) NOT NULL,
+                event_uid VARCHAR(255) NOT NULL,
+                event_type VARCHAR(64) NOT NULL,
+                instrument VARCHAR(128) NULL,
+                root_symbol VARCHAR(32) NULL,
+                timeframe VARCHAR(16) NULL,
+                status VARCHAR(64) NULL,
+                detected_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                restored_at DATETIME(6) NULL,
+                duration_seconds DOUBLE NULL,
+                heartbeat_received_at DATETIME(6) NULL,
+                heartbeat_age_seconds DOUBLE NULL,
+                latest_candle_ts_utc DATETIME NULL,
+                latest_candle_close_ts_utc DATETIME NULL,
+                skipped_candles INT NULL,
+                estimated_missing_bars INT NULL,
+                details_json LONGTEXT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY ux_nt_feed_health_event_uid (event_uid),
+                KEY idx_nt_feed_health_run_created (run_id, created_at),
+                KEY idx_nt_feed_health_type_status (event_type, status),
+                KEY idx_nt_feed_health_symbol_time (root_symbol, timeframe, latest_candle_ts_utc)
+            )
+            """
+        )
+    conn.commit()
+
+
+def ensure_candle_slot_audit_table(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ninjatrader_candle_slot_audit (
+                id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                external_key VARCHAR(255) NOT NULL,
+                source VARCHAR(64) NOT NULL DEFAULT 'ninjatrader',
+                bridge_version VARCHAR(32) NULL,
+                client_id VARCHAR(128) NULL,
+                instrument VARCHAR(64) NULL,
+                root_symbol VARCHAR(32) NULL,
+                exchange_name VARCHAR(32) NULL,
+                timeframe VARCHAR(32) NULL,
+                bars_period_type VARCHAR(32) NULL,
+                bars_period_value BIGINT NULL,
+                slot_time DATETIME(6) NOT NULL,
+                expected_close_time DATETIME(6) NULL,
+                nt_connected TINYINT NULL,
+                candle_received TINYINT NOT NULL DEFAULT 0,
+                candle_external_key VARCHAR(255) NULL,
+                candle_received_at DATETIME(6) NULL,
+                arrival_status VARCHAR(32) NULL,
+                scanner_run_id VARCHAR(128) NULL,
+                scanner_status VARCHAR(32) NULL,
+                trade_allowed TINYINT NULL,
+                blocked_reason VARCHAR(128) NULL,
+                details_json LONGTEXT NULL,
+                created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+                UNIQUE KEY uq_nt_candle_slot_audit_external_key (external_key),
+                KEY idx_nt_candle_slot_audit_root_slot (root_symbol, timeframe, slot_time),
+                KEY idx_nt_candle_slot_audit_instrument_slot (instrument, timeframe, slot_time),
+                KEY idx_nt_candle_slot_audit_arrival (arrival_status, slot_time),
+                KEY idx_nt_candle_slot_audit_scanner (scanner_run_id, scanner_status, slot_time),
+                KEY idx_nt_candle_slot_audit_updated (updated_at)
+            )
+            """
+        )
+    conn.commit()
+
+
+def ensure_live_candle_scanner_lock_columns(conn) -> None:
+    columns = {
+        "scanner_locked_at": "DATETIME(6) NULL",
+        "scanner_lock_run_id": "VARCHAR(128) NULL",
+    }
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COLUMN_NAME
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = 'ninjatrader_live_candles'
+            """
+        )
+        existing = {str(row["COLUMN_NAME"]) for row in cur.fetchall()}
+        for name, definition in columns.items():
+            if name not in existing:
+                cur.execute(f"ALTER TABLE ninjatrader_live_candles ADD COLUMN {name} {definition}")
+        if "scanner_locked_at" not in existing:
+            cur.execute(
+                "CREATE INDEX idx_nt_live_candle_scanner_lock ON ninjatrader_live_candles (scanner_locked_at)"
+            )
     conn.commit()
 
 
@@ -698,6 +895,7 @@ def build_live_order_signal(
     current_idx: int,
     candle_time: pd.Timestamp,
     ts_utc: pd.Timestamp,
+    candles: pd.DataFrame,
     enriched: pd.DataFrame,
     row: dict[str, Any],
     stage2_score: float,
@@ -738,6 +936,8 @@ def build_live_order_signal(
             "accounting_risk_dollars": accounting_risk_dollars,
             "min_risk_ticks": bundle["rules"]["risk_ticks_min"],
             "max_risk_ticks": bundle["rules"]["risk_ticks_max"],
+            "signal_candle": candle_audit_snapshot(candles, row.get("signal_idx")),
+            "decision_candle": candle_audit_snapshot(candles, current_idx),
             **acct,
         }
     if (
@@ -756,6 +956,8 @@ def build_live_order_signal(
             "sim_account_cash": float(args.sim_account_cash),
             "execution_tick_value": float(args.execution_tick_value),
             "quantity": quantity,
+            "signal_candle": candle_audit_snapshot(candles, row.get("signal_idx")),
+            "decision_candle": candle_audit_snapshot(candles, current_idx),
             **acct,
         }
     if (
@@ -773,6 +975,8 @@ def build_live_order_signal(
             "accounting_risk_dollars": accounting_risk_dollars,
             "max_accounting_risk_dollars": float(args.max_accounting_risk_dollars),
             "quantity": quantity,
+            "signal_candle": candle_audit_snapshot(candles, row.get("signal_idx")),
+            "decision_candle": candle_audit_snapshot(candles, current_idx),
             **acct,
         }
 
@@ -801,6 +1005,8 @@ def build_live_order_signal(
         "execution_tick_value": acct["execution_tick_value"] or None,
         "accounting_tick_value": acct["accounting_tick_value"] or None,
         "accounting_size_ratio": acct["accounting_size_ratio"],
+        "signal_candle": candle_audit_snapshot(candles, row.get("signal_idx")),
+        "decision_candle": candle_audit_snapshot(candles, current_idx),
         "read": "Live mimic signal. Market-now means NT submits on the next queue poll/tick, not a historical fill.",
     }
 
@@ -830,6 +1036,8 @@ def build_live_order_signal(
         "signal_uid": signal_uid,
         "execution_instrument": execution_instrument,
         "execution_root": execution_root,
+        "signal_candle": candle_audit_snapshot(candles, row.get("signal_idx")),
+        "decision_candle": candle_audit_snapshot(candles, current_idx),
         **acct,
     }
 
@@ -907,6 +1115,127 @@ def insert_event(
     return changed
 
 
+def insert_route_row(
+    conn,
+    *,
+    args: argparse.Namespace,
+    route_uid: str,
+    instrument: str,
+    model_symbol: str,
+    candle_snapshot: dict[str, Any] | None,
+    cycle: dict[str, Any],
+    pending_after: int,
+    scheduled_entries_after: int,
+    details: dict[str, Any] | None = None,
+) -> None:
+    payload = json.dumps(details or {}, default=to_jsonable, sort_keys=True)
+    candle_snapshot = candle_snapshot or {}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO ninjatrader_live_screener_routes (
+                route_uid, run_id, instrument, root_symbol, model_symbol, timeframe,
+                candle_time, ts_utc, candle_id, candle_revision_id, candle_payload_hash,
+                open, high, low, close, volume, stage1_rows, stage1_status,
+                level2_threshold, level2_long_score, level2_short_score,
+                level2_best_direction, level2_best_score, level2_picks,
+                stage2_rows, stage2_status, stage2_threshold, stage2_best_direction,
+                stage2_best_score, stage2_confirmed_direction, stage2_confirmed_score,
+                stage2_confirm_offset_bars, pending_after, scheduled_entries_after,
+                order_signals, order_rejects, decision_status, details_json
+            )
+            VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s
+            )
+            ON DUPLICATE KEY UPDATE
+                instrument = VALUES(instrument),
+                root_symbol = VALUES(root_symbol),
+                model_symbol = VALUES(model_symbol),
+                timeframe = VALUES(timeframe),
+                candle_time = VALUES(candle_time),
+                ts_utc = VALUES(ts_utc),
+                candle_id = VALUES(candle_id),
+                candle_revision_id = VALUES(candle_revision_id),
+                candle_payload_hash = VALUES(candle_payload_hash),
+                open = VALUES(open),
+                high = VALUES(high),
+                low = VALUES(low),
+                close = VALUES(close),
+                volume = VALUES(volume),
+                stage1_rows = VALUES(stage1_rows),
+                stage1_status = VALUES(stage1_status),
+                level2_threshold = VALUES(level2_threshold),
+                level2_long_score = VALUES(level2_long_score),
+                level2_short_score = VALUES(level2_short_score),
+                level2_best_direction = VALUES(level2_best_direction),
+                level2_best_score = VALUES(level2_best_score),
+                level2_picks = VALUES(level2_picks),
+                stage2_rows = VALUES(stage2_rows),
+                stage2_status = VALUES(stage2_status),
+                stage2_threshold = VALUES(stage2_threshold),
+                stage2_best_direction = VALUES(stage2_best_direction),
+                stage2_best_score = VALUES(stage2_best_score),
+                stage2_confirmed_direction = VALUES(stage2_confirmed_direction),
+                stage2_confirmed_score = VALUES(stage2_confirmed_score),
+                stage2_confirm_offset_bars = VALUES(stage2_confirm_offset_bars),
+                pending_after = VALUES(pending_after),
+                scheduled_entries_after = VALUES(scheduled_entries_after),
+                order_signals = VALUES(order_signals),
+                order_rejects = VALUES(order_rejects),
+                decision_status = VALUES(decision_status),
+                details_json = VALUES(details_json),
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                route_uid,
+                args.run_id,
+                instrument,
+                str(args.root).upper(),
+                model_symbol,
+                args.timeframe,
+                pd.Timestamp(cycle.get("candle_time")).to_pydatetime()
+                if cycle.get("candle_time") is not None and not pd.isna(cycle.get("candle_time"))
+                else None,
+                pd.Timestamp(cycle.get("ts_utc")).to_pydatetime()
+                if cycle.get("ts_utc") is not None and not pd.isna(cycle.get("ts_utc"))
+                else None,
+                candle_snapshot.get("candle_id"),
+                candle_snapshot.get("revision_id"),
+                candle_snapshot.get("payload_hash"),
+                wave.finite(candle_snapshot.get("open"), None),
+                wave.finite(candle_snapshot.get("high"), None),
+                wave.finite(candle_snapshot.get("low"), None),
+                wave.finite(candle_snapshot.get("close"), None),
+                wave.finite(candle_snapshot.get("volume"), None),
+                int(cycle.get("stage1_rows") or 0),
+                cycle.get("stage1_status"),
+                wave.finite(cycle.get("level2_threshold"), None),
+                wave.finite(cycle.get("level2_long_score"), None),
+                wave.finite(cycle.get("level2_short_score"), None),
+                cycle.get("level2_best_direction"),
+                wave.finite(cycle.get("level2_best_score"), None),
+                int(cycle.get("level2_picks") or 0),
+                int(cycle.get("stage2_rows") or 0),
+                cycle.get("stage2_status"),
+                wave.finite(cycle.get("stage2_threshold"), None),
+                cycle.get("stage2_best_direction"),
+                wave.finite(cycle.get("stage2_best_score"), None),
+                cycle.get("stage2_confirmed_direction"),
+                wave.finite(cycle.get("stage2_confirmed_score"), None),
+                cycle.get("stage2_confirm_offset_bars"),
+                int(pending_after),
+                int(scheduled_entries_after),
+                int(cycle.get("order_signals") or 0),
+                int(cycle.get("order_rejects") or 0),
+                cycle.get("decision_status"),
+                payload,
+            ),
+        )
+    conn.commit()
+
+
 def latest_instrument(conn, root: str, timeframe: str) -> str | None:
     with conn.cursor() as cur:
         cur.execute(
@@ -934,7 +1263,9 @@ def fetch_live_candles(conn, args: argparse.Namespace, instrument: str) -> pd.Da
                    CAST(low AS DOUBLE) AS low,
                    CAST(close AS DOUBLE) AS close,
                    CAST(volume AS DOUBLE) AS volume,
-                   is_realtime, received_at
+                   is_realtime, received_at,
+                   latest_revision_id, latest_payload_hash,
+                   scanner_locked_at, scanner_lock_run_id
             FROM ninjatrader_live_candles
             WHERE root_symbol = %s
               AND timeframe = %s
@@ -960,12 +1291,452 @@ def fetch_live_candles(conn, args: argparse.Namespace, instrument: str) -> pd.Da
     return frame.dropna(subset=["ts_utc", "open", "high", "low", "close"]).reset_index(drop=True)
 
 
+def candle_audit_snapshot(candles: pd.DataFrame, idx: int | None) -> dict[str, Any] | None:
+    if idx is None:
+        return None
+    idx_value = wave.finite(idx, None)
+    if idx_value is None:
+        return None
+    idx_int = int(idx_value)
+    if idx_int < 0 or idx_int >= len(candles):
+        return None
+    row = candles.iloc[idx_int]
+    return {
+        "candle_id": to_jsonable(row.get("id")),
+        "revision_id": to_jsonable(row.get("latest_revision_id")),
+        "payload_hash": to_jsonable(row.get("latest_payload_hash")),
+        "candle_time": to_jsonable(row.get("candle_time")),
+        "ts_utc": to_jsonable(row.get("ts_utc")),
+        "open": wave.finite(row.get("open"), None),
+        "high": wave.finite(row.get("high"), None),
+        "low": wave.finite(row.get("low"), None),
+        "close": wave.finite(row.get("close"), None),
+        "volume": wave.finite(row.get("volume"), None),
+        "is_realtime": to_jsonable(row.get("is_realtime")),
+        "received_at": to_jsonable(row.get("received_at")),
+        "scanner_locked_at": to_jsonable(row.get("scanner_locked_at")),
+        "scanner_lock_run_id": to_jsonable(row.get("scanner_lock_run_id")),
+    }
+
+
+def fetch_latest_heartbeat(conn, args: argparse.Namespace, instrument: str) -> dict[str, Any] | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, instrument, root_symbol, timeframe, heartbeat_time_utc,
+                   last_candle_time, last_candle_time_utc, last_snapshot_time_utc,
+                   last_price, connection_status, received_at
+            FROM ninjatrader_feed_heartbeats
+            WHERE root_symbol = %s
+              AND timeframe = %s
+              AND instrument = %s
+            ORDER BY received_at DESC, id DESC
+            LIMIT 1
+            """,
+            (args.root, args.timeframe, instrument),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    payload = dict(row)
+    heartbeat_ts = payload.get("heartbeat_time_utc") or payload.get("received_at")
+    payload["age_seconds"] = utc_age_seconds(heartbeat_ts)
+    return payload
+
+
 def utc_now_naive() -> pd.Timestamp:
     return pd.Timestamp.now(tz="UTC").tz_localize(None)
 
 
+def utc_age_seconds(value: Any, now_utc: pd.Timestamp | None = None) -> float | None:
+    if value is None or pd.isna(value):
+        return None
+    ts = pd.Timestamp(value)
+    if pd.isna(ts):
+        return None
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert("UTC").tz_localize(None)
+    now = now_utc if now_utc is not None else utc_now_naive()
+    return max(0.0, float((now - ts).total_seconds()))
+
+
 def timeframe_delta(timeframe: str) -> pd.Timedelta:
     return pd.to_timedelta(int(scanner.table_for_timeframe(timeframe)[1]), unit="m")
+
+
+def as_utc_naive(value: Any) -> pd.Timestamp | None:
+    if value is None or pd.isna(value):
+        return None
+    ts = pd.Timestamp(value)
+    if pd.isna(ts):
+        return None
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert("UTC").tz_localize(None)
+    return ts
+
+
+def slot_external_key(args: argparse.Namespace, instrument: str, slot_time: Any) -> str:
+    slot_ts = as_utc_naive(slot_time)
+    slot_text = "unknown" if slot_ts is None else slot_ts.isoformat()
+    raw = f"ninjatrader|{instrument}|{args.timeframe}|{slot_text}"
+    if len(raw) <= 240:
+        return raw
+    digest = sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return f"ninjatrader|{str(instrument)[:120]}|{args.timeframe}|{digest}"
+
+
+def upsert_candle_slot_audit(
+    conn,
+    *,
+    args: argparse.Namespace,
+    instrument: str,
+    slot_time: Any,
+    expected_close_time: Any = None,
+    nt_connected: bool | None = None,
+    candle_received: bool | None = None,
+    candle_external_key: str | None = None,
+    candle_received_at: Any = None,
+    arrival_status: str | None = None,
+    scanner_status: str | None = None,
+    trade_allowed: bool | None = None,
+    blocked_reason: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    slot_ts = as_utc_naive(slot_time)
+    if slot_ts is None:
+        return
+    expected_close_ts = as_utc_naive(expected_close_time) or slot_ts
+    payload = json.dumps(details or {}, default=to_jsonable, sort_keys=True) if details else None
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO ninjatrader_candle_slot_audit (
+                external_key, instrument, root_symbol, timeframe, bars_period_value,
+                slot_time, expected_close_time, nt_connected, candle_received,
+                candle_external_key, candle_received_at, arrival_status,
+                scanner_run_id, scanner_status, trade_allowed, blocked_reason, details_json
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                instrument = VALUES(instrument),
+                root_symbol = VALUES(root_symbol),
+                timeframe = VALUES(timeframe),
+                bars_period_value = VALUES(bars_period_value),
+                expected_close_time = COALESCE(VALUES(expected_close_time), expected_close_time),
+                nt_connected = COALESCE(VALUES(nt_connected), nt_connected),
+                candle_received = GREATEST(candle_received, VALUES(candle_received)),
+                candle_external_key = COALESCE(VALUES(candle_external_key), candle_external_key),
+                candle_received_at = COALESCE(VALUES(candle_received_at), candle_received_at),
+                arrival_status = COALESCE(VALUES(arrival_status), arrival_status),
+                scanner_run_id = COALESCE(VALUES(scanner_run_id), scanner_run_id),
+                scanner_status = COALESCE(VALUES(scanner_status), scanner_status),
+                trade_allowed = COALESCE(VALUES(trade_allowed), trade_allowed),
+                blocked_reason = COALESCE(VALUES(blocked_reason), blocked_reason),
+                details_json = COALESCE(VALUES(details_json), details_json),
+                updated_at = CURRENT_TIMESTAMP(6)
+            """,
+            (
+                slot_external_key(args, instrument, slot_ts),
+                instrument,
+                str(args.root).upper(),
+                args.timeframe,
+                int(scanner.table_for_timeframe(args.timeframe)[1]),
+                slot_ts.to_pydatetime(),
+                expected_close_ts.to_pydatetime(),
+                None if nt_connected is None else int(bool(nt_connected)),
+                int(bool(candle_received)) if candle_received is not None else 0,
+                candle_external_key,
+                as_utc_naive(candle_received_at).to_pydatetime()
+                if as_utc_naive(candle_received_at) is not None
+                else None,
+                arrival_status,
+                args.run_id if scanner_status or trade_allowed is not None or blocked_reason else None,
+                scanner_status,
+                None if trade_allowed is None else int(bool(trade_allowed)),
+                blocked_reason,
+                payload,
+            ),
+        )
+    conn.commit()
+
+
+def record_missing_slot_range(
+    conn,
+    *,
+    args: argparse.Namespace,
+    instrument: str,
+    start_close_ts: Any,
+    end_close_ts: Any,
+    expected_delta: pd.Timedelta,
+    nt_connected: bool,
+    blocked_reason: str,
+    details: dict[str, Any] | None = None,
+) -> int:
+    start_ts = as_utc_naive(start_close_ts)
+    end_ts = as_utc_naive(end_close_ts)
+    if start_ts is None or end_ts is None or expected_delta <= pd.Timedelta(0):
+        return 0
+    if start_ts > end_ts:
+        return 0
+    count = 0
+    slot_ts = start_ts
+    max_slots = 720
+    while slot_ts <= end_ts + pd.Timedelta(seconds=1) and count < max_slots:
+        upsert_candle_slot_audit(
+            conn,
+            args=args,
+            instrument=instrument,
+            slot_time=slot_ts,
+            expected_close_time=slot_ts,
+            nt_connected=nt_connected,
+            candle_received=False,
+            arrival_status="missing",
+            scanner_status="not_scanned",
+            trade_allowed=False,
+            blocked_reason=blocked_reason,
+            details=details,
+        )
+        count += 1
+        slot_ts += expected_delta
+    return count
+
+
+def latest_expected_close_slot(now_utc: Any, expected_delta: pd.Timedelta) -> pd.Timestamp | None:
+    now_ts = as_utc_naive(now_utc)
+    if now_ts is None or expected_delta <= pd.Timedelta(0):
+        return None
+    delta_seconds = int(expected_delta.total_seconds())
+    if delta_seconds <= 0:
+        return None
+    epoch_seconds = int(now_ts.timestamp())
+    floored = (epoch_seconds // delta_seconds) * delta_seconds
+    return pd.Timestamp.utcfromtimestamp(floored).tz_localize(None)
+
+
+def record_candle_arrival_slots(
+    conn,
+    *,
+    args: argparse.Namespace,
+    instrument: str,
+    candles: pd.DataFrame,
+    expected_delta: pd.Timedelta,
+    only_last_rows: int = 80,
+) -> None:
+    if candles.empty:
+        return
+    recent = candles.tail(max(1, int(only_last_rows)))
+    tolerance = max(expected_delta, pd.Timedelta(seconds=float(args.poll_seconds or 0) + 5.0))
+    for _, row in recent.iterrows():
+        ts_utc = as_utc_naive(row.get("ts_utc"))
+        if ts_utc is None:
+            continue
+        close_ts = ts_utc + expected_delta
+        received_ts = as_utc_naive(row.get("received_at"))
+        arrival_status = "on_time"
+        if received_ts is not None and received_ts > close_ts + tolerance:
+            arrival_status = "late"
+        external_key = f"ninjatrader|{instrument}|{args.timeframe}|{to_jsonable(row.get('candle_time'))}"
+        upsert_candle_slot_audit(
+            conn,
+            args=args,
+            instrument=instrument,
+            slot_time=close_ts,
+            expected_close_time=close_ts,
+            nt_connected=True,
+            candle_received=True,
+            candle_external_key=external_key,
+            candle_received_at=received_ts,
+            arrival_status=arrival_status,
+            details={
+                "candle_id": to_jsonable(row.get("id")),
+                "candle_time": to_jsonable(row.get("candle_time")),
+                "ts_utc": to_jsonable(ts_utc),
+                "received_at": to_jsonable(received_ts),
+                "arrival_rule": "on_time if first received before the next expected slot window passed",
+            },
+        )
+
+
+def mark_scanner_slot_status(
+    conn,
+    *,
+    args: argparse.Namespace,
+    instrument: str,
+    ts_utc: Any,
+    expected_delta: pd.Timedelta,
+    scanner_status: str,
+    trade_allowed: bool,
+    blocked_reason: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    ts = as_utc_naive(ts_utc)
+    if ts is None:
+        return
+    close_ts = ts + expected_delta
+    upsert_candle_slot_audit(
+        conn,
+        args=args,
+        instrument=instrument,
+        slot_time=close_ts,
+        expected_close_time=close_ts,
+        nt_connected=True,
+        candle_received=True,
+        scanner_status=scanner_status,
+        trade_allowed=trade_allowed,
+        blocked_reason=blocked_reason,
+        details=details,
+    )
+
+
+def lock_scanner_candle_row(
+    conn,
+    *,
+    args: argparse.Namespace,
+    candle_snapshot: dict[str, Any] | None,
+) -> None:
+    if not candle_snapshot:
+        return
+    candle_id = wave.finite(candle_snapshot.get("candle_id"), None)
+    if candle_id is None:
+        return
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE ninjatrader_live_candles
+            SET scanner_locked_at = COALESCE(scanner_locked_at, CURRENT_TIMESTAMP(6)),
+                scanner_lock_run_id = COALESCE(scanner_lock_run_id, %s)
+            WHERE id = %s
+            """,
+            (str(args.run_id), int(candle_id)),
+        )
+    conn.commit()
+
+
+def live_event_uid(run_id: str, event_type: str, count: int | None = None) -> str:
+    raw = f"{run_id}|{event_type}|{count if count is not None else 'x'}|{time.time_ns()}"
+    if len(raw) <= 240:
+        return raw
+    digest = sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return f"{str(run_id)[:170]}|{event_type}|{count if count is not None else 'x'}|{digest}"
+
+
+def is_market_session_open(now_utc: pd.Timestamp, timezone_name: str) -> bool:
+    try:
+        tz = ZoneInfo(timezone_name)
+    except Exception:
+        tz = ZoneInfo("America/Chicago")
+    ts = pd.Timestamp(now_utc)
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    else:
+        ts = ts.tz_convert("UTC")
+    local = ts.tz_convert(tz)
+    weekday = int(local.weekday())  # Monday = 0, Sunday = 6
+    minutes = local.hour * 60 + local.minute + (local.second / 60.0)
+    if weekday == 5:
+        return False
+    if weekday == 6:
+        return minutes >= 17 * 60
+    if weekday in {0, 1, 2, 3}:
+        return not (16 * 60 <= minutes < 17 * 60)
+    if weekday == 4:
+        return minutes < 16 * 60
+    return False
+
+
+def heartbeat_latest_close_ts(heartbeat: dict[str, Any] | None) -> pd.Timestamp | None:
+    if not heartbeat:
+        return None
+    value = heartbeat.get("last_candle_time_utc")
+    if value is None or pd.isna(value):
+        return None
+    ts = pd.Timestamp(value)
+    if pd.isna(ts):
+        return None
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert("UTC").tz_localize(None)
+    return ts
+
+
+def find_open_session_candle_gap(
+    times: pd.Series,
+    expected_delta: pd.Timedelta,
+    timezone_name: str,
+    latest_close_ts: pd.Timestamp | None = None,
+) -> dict[str, Any] | None:
+    clean_times = (
+        pd.to_datetime(times, errors="coerce")
+        .dropna()
+        .drop_duplicates()
+        .sort_values()
+        .reset_index(drop=True)
+    )
+    if len(clean_times) < 2 or expected_delta <= pd.Timedelta(0):
+        return None
+
+    # Check only the current live area. Sparse older historical/no-trade bars are
+    # not relevant to whether the scanner can safely score the next candle.
+    if latest_close_ts is not None and not pd.isna(latest_close_ts):
+        latest_close = pd.Timestamp(latest_close_ts)
+        if latest_close.tzinfo is not None:
+            latest_close = latest_close.tz_convert("UTC").tz_localize(None)
+        live_window = max(expected_delta * 12, pd.Timedelta(minutes=30))
+        recent_times = clean_times[clean_times >= latest_close - live_window - expected_delta].reset_index(drop=True)
+    else:
+        recent_times = clean_times.iloc[-60:].reset_index(drop=True)
+    tolerance = pd.Timedelta(seconds=1)
+    max_steps = 300
+    for idx in range(1, len(recent_times)):
+        previous_ts = pd.Timestamp(recent_times.iloc[idx - 1])
+        current_ts = pd.Timestamp(recent_times.iloc[idx])
+        expected_ts = previous_ts + expected_delta
+        missing_open_bars = 0
+        first_missing_ts = None
+        steps = 0
+        while expected_ts < current_ts - tolerance and steps < max_steps:
+            expected_close_ts = expected_ts + expected_delta
+            if is_market_session_open(expected_close_ts, timezone_name):
+                missing_open_bars += 1
+                if first_missing_ts is None:
+                    first_missing_ts = expected_ts
+            expected_ts += expected_delta
+            steps += 1
+        if missing_open_bars:
+            return {
+                "previous_ts_utc": previous_ts,
+                "next_seen_ts_utc": current_ts,
+                "first_missing_ts_utc": first_missing_ts,
+                "estimated_missing_bars": missing_open_bars,
+            }
+    return None
+
+
+def evaluate_candle_preflight(
+    *,
+    heartbeat: dict[str, Any] | None,
+    times: pd.Series,
+    latest_ts: pd.Timestamp,
+    latest_close_ts: pd.Timestamp,
+    expected_delta: pd.Timedelta,
+    args: argparse.Namespace,
+) -> dict[str, Any] | None:
+    heartbeat_close_ts = heartbeat_latest_close_ts(heartbeat)
+    if heartbeat_close_ts is not None and latest_close_ts < heartbeat_close_ts - pd.Timedelta(seconds=1):
+        return {
+            "reason": "db_behind_heartbeat",
+            "heartbeat_latest_close_ts_utc": heartbeat_close_ts,
+            "db_latest_ts_utc": latest_ts,
+            "db_latest_close_ts_utc": latest_close_ts,
+            "estimated_missing_bars": max(
+                1,
+                int(math.ceil((heartbeat_close_ts - latest_close_ts) / expected_delta)),
+            )
+            if expected_delta > pd.Timedelta(0)
+            else None,
+            "read": "NT heartbeat sees a newer closed candle than the DB. The monitor is waiting for candle storage/backfill before scanning.",
+        }
+
+    return None
 
 
 def reset_live_decision_state(
@@ -982,6 +1753,83 @@ def reset_live_decision_state(
     scheduled_entries.clear()
     next_allowed_stage1.clear()
     return cleared
+
+
+def insert_feed_health_event(
+    conn,
+    *,
+    run_id: str,
+    event_uid: str,
+    event_type: str,
+    instrument: str | None,
+    root_symbol: str | None,
+    timeframe: str | None,
+    status: str | None,
+    restored_at: Any = None,
+    duration_seconds: float | None = None,
+    heartbeat: dict[str, Any] | None = None,
+    heartbeat_age_seconds: float | None = None,
+    latest_candle_ts_utc: Any = None,
+    latest_candle_close_ts_utc: Any = None,
+    skipped_candles: int | None = None,
+    estimated_missing_bars: int | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    payload = json.dumps(details or {}, default=to_jsonable, sort_keys=True)
+    heartbeat_received_at = heartbeat.get("received_at") if heartbeat else None
+    if heartbeat_age_seconds is None and heartbeat:
+        heartbeat_age_seconds = wave.finite(heartbeat.get("age_seconds"), None)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO ninjatrader_feed_health_events (
+                run_id, event_uid, event_type, instrument, root_symbol, timeframe, status,
+                restored_at, duration_seconds, heartbeat_received_at, heartbeat_age_seconds,
+                latest_candle_ts_utc, latest_candle_close_ts_utc, skipped_candles,
+                estimated_missing_bars, details_json
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                instrument = VALUES(instrument),
+                root_symbol = VALUES(root_symbol),
+                timeframe = VALUES(timeframe),
+                status = VALUES(status),
+                restored_at = VALUES(restored_at),
+                duration_seconds = VALUES(duration_seconds),
+                heartbeat_received_at = VALUES(heartbeat_received_at),
+                heartbeat_age_seconds = VALUES(heartbeat_age_seconds),
+                latest_candle_ts_utc = VALUES(latest_candle_ts_utc),
+                latest_candle_close_ts_utc = VALUES(latest_candle_close_ts_utc),
+                skipped_candles = VALUES(skipped_candles),
+                estimated_missing_bars = VALUES(estimated_missing_bars),
+                details_json = VALUES(details_json),
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                run_id,
+                event_uid,
+                event_type,
+                instrument,
+                root_symbol,
+                timeframe,
+                status,
+                pd.Timestamp(restored_at).to_pydatetime() if restored_at is not None and not pd.isna(restored_at) else None,
+                duration_seconds,
+                heartbeat_received_at,
+                heartbeat_age_seconds,
+                pd.Timestamp(latest_candle_ts_utc).to_pydatetime()
+                if latest_candle_ts_utc is not None and not pd.isna(latest_candle_ts_utc)
+                else None,
+                pd.Timestamp(latest_candle_close_ts_utc).to_pydatetime()
+                if latest_candle_close_ts_utc is not None and not pd.isna(latest_candle_close_ts_utc)
+                else None,
+                skipped_candles,
+                estimated_missing_bars,
+                payload,
+            ),
+        )
+    conn.commit()
 
 
 def maintain_order_signal_state(
@@ -1075,6 +1923,49 @@ def load_model_bundle(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def timestamp_key(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        timestamp = pd.Timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(timestamp):
+        return None
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.tz_convert("UTC").tz_localize(None)
+    return timestamp.floor("s").isoformat()
+
+
+def timestamp_index(frame: pd.DataFrame, column: str = "ts_utc") -> dict[str, int]:
+    if column not in frame.columns:
+        return {}
+    out: dict[str, int] = {}
+    for idx, value in enumerate(frame[column]):
+        key = timestamp_key(value)
+        if key:
+            out[key] = int(idx)
+    return out
+
+
+def reanchor_pending_signal_indexes(
+    pending: dict[str, live_runner.PendingEvent],
+    enriched: pd.DataFrame,
+) -> list[str]:
+    by_time = timestamp_index(enriched, "ts_utc")
+    missing: list[str] = []
+    for uid, item in list(pending.items()):
+        key = timestamp_key(item.event.get("signal_date") or item.event.get("ts_utc"))
+        if not key:
+            continue
+        signal_idx = by_time.get(key)
+        if signal_idx is None:
+            missing.append(uid)
+            continue
+        item.signal_idx = int(signal_idx)
+    return missing
+
+
 def process_cycle(
     conn,
     *,
@@ -1087,7 +1978,7 @@ def process_cycle(
     current_idx: int,
     pending: dict[str, live_runner.PendingEvent],
     scheduled_entries: dict[tuple[str, int, str], live_runner.ScheduledEntry],
-    next_allowed_stage1: dict[tuple[str, str], int],
+    next_allowed_stage1: dict[tuple[str, str], str],
     email_config: dict[str, Any] | None = None,
     email_enabled: bool = False,
     email_started_at: Any = None,
@@ -1098,7 +1989,9 @@ def process_cycle(
     symbol = str(candles["symbol"].iloc[current_idx])
     current_indices = {symbol: int(current_idx)}
     symbol_groups = {symbol: enriched}
+    enriched_time_index = timestamp_index(enriched, "ts_utc")
     directions = live_runner.direction_for_root(root, set(bundle["rules"]["root_directions"]))
+    max_confirm_bars = int(bundle["stage2_meta"]["max_confirm_bars"])
 
     cycle = {
         "ts_utc": ts_utc,
@@ -1112,6 +2005,20 @@ def process_cycle(
         "email_notifications": 0,
         "paper_entries": 0,
         "paper_rejects": 0,
+        "level2_threshold": None,
+        "level2_best_score": None,
+        "level2_best_direction": None,
+        "level2_long_score": None,
+        "level2_short_score": None,
+        "stage1_status": None,
+        "stage2_status": None,
+        "stage2_threshold": None,
+        "stage2_best_score": None,
+        "stage2_best_direction": None,
+        "stage2_confirmed_score": None,
+        "stage2_confirmed_direction": None,
+        "stage2_confirm_offset_bars": None,
+        "decision_status": None,
     }
 
     if args.queue_orders:
@@ -1173,6 +2080,9 @@ def process_cycle(
                 "read": "Delayed audit only. This row does not submit an order.",
                 "confirm_date": scheduled.confirm_date,
                 "candidate_uid": scheduled.event.get("candidate_uid"),
+                "entry_candle": candle_audit_snapshot(candles, current_idx),
+                "confirm_candle": candle_audit_snapshot(candles, int(current_idx) - 1),
+                "signal_candle": candle_audit_snapshot(candles, scheduled.event.get("signal_idx")),
             },
         )
         if changed and risk_ok:
@@ -1206,24 +2116,46 @@ def process_cycle(
             row["timeframe_minutes"] = float(scanner.table_for_timeframe(args.timeframe)[1])
             base_rows.append(row)
     cycle["stage1_rows"] = len(base_rows)
+    cycle["stage1_status"] = "scored" if base_rows else "not_enough_warmup_or_no_direction"
+    cycle["decision_status"] = "scored_no_pick" if base_rows else "not_scored"
 
     if base_rows:
         scored = live_runner.score_level1_and_level2(base_rows, bundle["models"], bundle["l2_args"], args.timeframe)
         l2_threshold = float(bundle["l2_meta"]["selected_threshold"])
         cooldown_bars = int(bundle["l2_meta"]["event_rules"]["cooldown_bars"])
-        for row in scored.to_dict("records"):
+        cycle["level2_threshold"] = l2_threshold
+        scored_records = scored.to_dict("records")
+        for scored_row in scored_records:
+            scored_direction = str(scored_row.get("direction") or "").upper()
+            scored_score = wave.finite(scored_row.get("level2_score"), None)
+            if scored_score is None:
+                continue
+            if scored_direction == "LONG":
+                cycle["level2_long_score"] = float(scored_score)
+            elif scored_direction == "SHORT":
+                cycle["level2_short_score"] = float(scored_score)
+            if cycle["level2_best_score"] is None or float(scored_score) > float(cycle["level2_best_score"]):
+                cycle["level2_best_score"] = float(scored_score)
+                cycle["level2_best_direction"] = scored_direction or None
+        for row in scored_records:
             score = wave.finite(row.get("level2_score"), 0.0) or 0.0
             if score < l2_threshold:
                 continue
             key = (str(row["symbol"]), str(row["direction"]))
             row_signal_idx = int(row["signal_idx"])
-            if row_signal_idx < next_allowed_stage1.get(key, -1):
+            row_signal_time_key = timestamp_key(row.get("signal_date") or enriched["ts_utc"].iloc[row_signal_idx])
+            previous_signal_time_key = next_allowed_stage1.get(key)
+            previous_signal_idx = enriched_time_index.get(previous_signal_time_key) if previous_signal_time_key else None
+            if previous_signal_idx is not None and row_signal_idx - int(previous_signal_idx) <= cooldown_bars:
                 continue
-            next_allowed_stage1[key] = row_signal_idx + cooldown_bars + 1
+            if row_signal_time_key:
+                next_allowed_stage1[key] = row_signal_time_key
             row["stage1_pick"] = 1
             row["stage1_score"] = score
             pending[str(row["candidate_uid"])] = live_runner.PendingEvent(event=row, signal_idx=row_signal_idx)
             cycle["level2_picks"] += 1
+            cycle["decision_status"] = "watching_stage2"
+            cycle["stage2_status"] = "watching"
             insert_event(
                 conn,
                 run_id=args.run_id,
@@ -1241,11 +2173,48 @@ def process_cycle(
                 details={
                     "signal_date": row.get("signal_date"),
                     "signal_idx": row_signal_idx,
+                    "signal_time_key": row_signal_time_key,
+                    "max_confirm_bars": max_confirm_bars,
                     "candidate_uid": row.get("candidate_uid"),
+                    "signal_candle": candle_audit_snapshot(candles, row_signal_idx),
+                    "scanner_candle": candle_audit_snapshot(candles, current_idx),
+                    "scores": {
+                        "cat_l1_score": wave.finite(row.get("cat_l1_score"), None),
+                        "light_l1_score": wave.finite(row.get("light_l1_score"), None),
+                        "xgb_l1_score": wave.finite(row.get("xgb_l1_score"), None),
+                        "level2_score": float(score),
+                    },
                 },
             )
 
-    max_confirm_bars = int(bundle["stage2_meta"]["max_confirm_bars"])
+    expired_missing = reanchor_pending_signal_indexes(pending, enriched)
+    for uid in expired_missing:
+        item = pending.pop(uid, None)
+        if item is None:
+            continue
+        insert_event(
+            conn,
+            run_id=args.run_id,
+            event_uid=f"{args.run_id}|stage2_expired|{uid}",
+            event_type="stage2_expired",
+            instrument=instrument,
+            root_symbol=root,
+            model_symbol=symbol,
+            timeframe=args.timeframe,
+            candle_time=candle_time,
+            ts_utc=ts_utc,
+            direction=str(item.event.get("direction")),
+            level2_score=wave.finite(item.event.get("stage1_score"), None),
+            status="expired_missing_signal",
+            details={
+                "candidate_uid": uid,
+                "max_confirm_bars": max_confirm_bars,
+                "read": "Stage 2 watch expired because its signal candle left the live lookback window.",
+                "signal_candle": candle_audit_snapshot(candles, item.signal_idx),
+                "scanner_candle": candle_audit_snapshot(candles, current_idx),
+            },
+        )
+
     pending_rows = live_runner.stage2_rows_for_pending(
         list(pending.values()),
         symbol_groups,
@@ -1260,6 +2229,16 @@ def process_cycle(
         )[:, 1]
         stage2_threshold = float(bundle["stage2_meta"]["selected_stage2_threshold"])
         min_stage2_score = float(bundle["rules"]["min_stage2_score"])
+        cycle["stage2_threshold"] = stage2_threshold
+        for stage2_row in pending_rows.to_dict("records"):
+            score = wave.finite(stage2_row.get("stage2_score"), None)
+            if score is None:
+                continue
+            if cycle["stage2_best_score"] is None or float(score) > float(cycle["stage2_best_score"]):
+                cycle["stage2_best_score"] = float(score)
+                cycle["stage2_best_direction"] = str(stage2_row.get("direction") or "").upper() or None
+        if cycle["stage2_status"] is None:
+            cycle["stage2_status"] = "watching"
         hits = pending_rows[
             pd.to_numeric(pending_rows["stage2_score"], errors="coerce").fillna(0.0) >= stage2_threshold
         ].copy()
@@ -1269,6 +2248,16 @@ def process_cycle(
             stage2_score = wave.finite(row.get("stage2_score"), 0.0) or 0.0
             direction = str(row["direction"])
             status = "confirmed" if stage2_score >= min_stage2_score else "rejected_min_stage2_score"
+            if stage2_score >= min_stage2_score:
+                cycle["stage2_status"] = "confirmed"
+                cycle["stage2_confirmed_score"] = float(stage2_score)
+                cycle["stage2_confirmed_direction"] = direction
+                offset = wave.finite(row.get("confirm_offset_bars"), None)
+                cycle["stage2_confirm_offset_bars"] = int(offset) if offset is not None else None
+                cycle["decision_status"] = "confirmed"
+            else:
+                cycle["stage2_status"] = "rejected_min_stage2_score"
+                cycle["decision_status"] = "stage2_rejected"
             changed = insert_event(
                 conn,
                 run_id=args.run_id,
@@ -1290,6 +2279,15 @@ def process_cycle(
                     "confirm_offset_bars": row.get("confirm_offset_bars"),
                     "planned_entry_read": "If this were enabled for trading, the next candle open is the intended entry point.",
                     "candidate_uid": uid,
+                    "signal_candle": candle_audit_snapshot(candles, row.get("signal_idx")),
+                    "confirm_candle": candle_audit_snapshot(candles, current_idx),
+                    "scores": {
+                        "cat_l1_score": wave.finite(row.get("cat_l1_score"), None),
+                        "light_l1_score": wave.finite(row.get("light_l1_score"), None),
+                        "xgb_l1_score": wave.finite(row.get("xgb_l1_score"), None),
+                        "level2_score": wave.finite(row.get("stage1_score"), None),
+                        "stage2_score": float(stage2_score),
+                    },
                 },
             )
             if stage2_score < min_stage2_score:
@@ -1302,6 +2300,7 @@ def process_cycle(
                 active_count = active_signal_count(conn, args, execution_instrument)
                 if active_count >= int(args.max_active_signals):
                     cycle["order_rejects"] += 1
+                    cycle["decision_status"] = "blocked_active_signal"
                     signal_details = {
                         "reject_reason": "active_signal_limit",
                         "active_signals": active_count,
@@ -1339,12 +2338,14 @@ def process_cycle(
                         current_idx=int(current_idx),
                         candle_time=candle_time,
                         ts_utc=ts_utc,
+                        candles=candles,
                         enriched=enriched,
                         row=row,
                         stage2_score=float(stage2_score),
                     )
                     if payload is None:
                         cycle["order_rejects"] += 1
+                        cycle["decision_status"] = str(signal_details.get("reject_reason") or "order_rejected")
                         insert_event(
                             conn,
                             run_id=args.run_id,
@@ -1370,6 +2371,7 @@ def process_cycle(
                             response = post_order_signal(str(args.server_url), payload)
                             update_signal_accounting_columns(conn, signal_details["signal_uid"], signal_details)
                             cycle["order_signals"] += 1
+                            cycle["decision_status"] = "queued_order"
                             insert_event(
                                 conn,
                                 run_id=args.run_id,
@@ -1414,6 +2416,7 @@ def process_cycle(
                             )
                         except (URLError, TimeoutError, OSError, ValueError) as exc:
                             cycle["order_rejects"] += 1
+                            cycle["decision_status"] = "queue_failed"
                             insert_event(
                                 conn,
                                 run_id=args.run_id,
@@ -1470,6 +2473,9 @@ def process_cycle(
             continue
         if current_idx - int(item.signal_idx) >= max_confirm_bars:
             expired.append(uid)
+            cycle["stage2_status"] = "expired"
+            if cycle.get("decision_status") in {None, "watching_stage2", "scored_no_pick"}:
+                cycle["decision_status"] = "stage2_expired"
             insert_event(
                 conn,
                 run_id=args.run_id,
@@ -1526,6 +2532,10 @@ def main() -> int:
     conn = wave.connect()
     conn.autocommit(True)
     ensure_event_table(conn)
+    ensure_route_table(conn)
+    ensure_feed_health_tables(conn)
+    ensure_candle_slot_audit_table(conn)
+    ensure_live_candle_scanner_lock_columns(conn)
     ensure_order_signal_accounting_columns(conn)
     trade_email.ensure_columns(conn)
 
@@ -1580,6 +2590,11 @@ def main() -> int:
     feed_paused = False
     feed_paused_since: pd.Timestamp | None = None
     feed_pause_reason = ""
+    market_closed_logged = False
+    market_resume_pending = False
+    market_open_wait_logged = False
+    candle_sync_paused = False
+    candle_sync_wait_key = ""
     expected_delta = timeframe_delta(args.timeframe)
 
     try:
@@ -1592,8 +2607,212 @@ def main() -> int:
                 if latest:
                     instrument = latest
 
+            now_utc = utc_now_naive()
+            heartbeat = fetch_latest_heartbeat(conn, args, instrument)
+            heartbeat_age_seconds = wave.finite(heartbeat.get("age_seconds"), None) if heartbeat else None
+
+            if not is_market_session_open(now_utc, args.local_timezone):
+                raw = fetch_live_candles(conn, args, instrument)
+                loop_email_notifications = maintain_order_signal_state(
+                    conn,
+                    args,
+                    instrument,
+                    email_config=email_config,
+                    email_enabled=email_enabled,
+                    email_started_at=email_started_at,
+                )
+                latest_ts = None
+                latest_close_ts = None
+                latest_candle_time = None
+                if not raw.empty:
+                    times = pd.to_datetime(raw["ts_utc"], errors="coerce")
+                    latest_ts = pd.Timestamp(times.max())
+                    latest_close_ts = latest_ts + expected_delta
+                    latest_candle_time = raw["candle_time"].iloc[-1]
+                    last_processed_ts = latest_ts
+                if not market_closed_logged:
+                    cleared = reset_live_decision_state(pending, scheduled_entries, next_allowed_stage1)
+                    event_uid = live_event_uid(args.run_id, "market_closed", feed_outage_count)
+                    details = {
+                        **cleared,
+                        "feed_outage_count": feed_outage_count,
+                        "heartbeat_age_seconds": heartbeat_age_seconds,
+                        "heartbeat_received_at": heartbeat.get("received_at") if heartbeat else None,
+                        "heartbeat_connection_status": heartbeat.get("connection_status") if heartbeat else None,
+                        "latest_close_ts_utc": latest_close_ts,
+                        "loop_email_notifications": loop_email_notifications,
+                        "read": "Market is closed, so no new closed candle is expected. The monitor is waiting and will resume from the current candle when the session opens.",
+                    }
+                    insert_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="market_closed",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        model_symbol=nt_instrument_to_model_symbol(instrument, args.root),
+                        timeframe=args.timeframe,
+                        candle_time=latest_candle_time,
+                        ts_utc=latest_ts,
+                        direction=None,
+                        status="waiting",
+                        details=details,
+                    )
+                    insert_feed_health_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="market_closed",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        timeframe=args.timeframe,
+                        status="waiting",
+                        heartbeat=heartbeat,
+                        heartbeat_age_seconds=heartbeat_age_seconds,
+                        latest_candle_ts_utc=latest_ts,
+                        latest_candle_close_ts_utc=latest_close_ts,
+                        details=details,
+                    )
+                    current_close_slot = latest_expected_close_slot(now_utc, expected_delta)
+                    missing_start = (
+                        pd.Timestamp(last_processed_ts) + expected_delta
+                        if last_processed_ts is not None
+                        else current_close_slot
+                    )
+                    record_missing_slot_range(
+                        conn,
+                        args=args,
+                        instrument=instrument,
+                        start_close_ts=missing_start,
+                        end_close_ts=current_close_slot,
+                        expected_delta=expected_delta,
+                        nt_connected=False,
+                        blocked_reason="nt_connection_lost",
+                        details={
+                            "event_uid": event_uid,
+                            "heartbeat_age_seconds": heartbeat_age_seconds,
+                            "pause_reason": feed_pause_reason,
+                            "read": "Expected candle slot while NT bridge heartbeat was stale or missing.",
+                        },
+                    )
+                    print(
+                        json.dumps(
+                            {
+                                "event": "market_closed",
+                                "instrument": instrument,
+                                "heartbeat_age_seconds": heartbeat_age_seconds,
+                                "latest_ts_utc": to_jsonable(latest_ts),
+                                **cleared,
+                            },
+                            default=to_jsonable,
+                        ),
+                        flush=True,
+                    )
+                    market_closed_logged = True
+                    market_resume_pending = True
+                    market_open_wait_logged = False
+                    candle_sync_paused = False
+                    candle_sync_wait_key = ""
+                    feed_paused = False
+                    feed_paused_since = None
+                    feed_pause_reason = ""
+                if int(args.max_loops) > 0 and loops >= int(args.max_loops):
+                    break
+                time.sleep(max(1.0, float(args.poll_seconds)))
+                continue
+
+            market_closed_logged = False
+            heartbeat_limit = float(args.heartbeat_stale_seconds or 0.0)
+            heartbeat_unhealthy = bool(
+                args.require_heartbeat
+                and heartbeat_limit > 0
+                and (heartbeat is None or heartbeat_age_seconds is None or heartbeat_age_seconds > heartbeat_limit)
+            )
+            if heartbeat_unhealthy:
+                if not feed_paused:
+                    feed_outage_count += 1
+                    feed_paused = True
+                    feed_paused_since = utc_now_naive()
+                    feed_pause_reason = "heartbeat_stale" if heartbeat else "heartbeat_missing"
+                    cleared = reset_live_decision_state(pending, scheduled_entries, next_allowed_stage1)
+                    event_uid = live_event_uid(args.run_id, "feed_heartbeat_stale", feed_outage_count)
+                    details = {
+                        **cleared,
+                        "feed_outage_count": feed_outage_count,
+                        "pause_reason": feed_pause_reason,
+                        "heartbeat_stale_seconds": heartbeat_limit,
+                        "heartbeat_age_seconds": heartbeat_age_seconds,
+                        "heartbeat_received_at": heartbeat.get("received_at") if heartbeat else None,
+                        "heartbeat_connection_status": heartbeat.get("connection_status") if heartbeat else None,
+                        "last_processed_ts_utc": last_processed_ts,
+                        "read": "NT heartbeat is stale or missing. New trend/trade decisions are paused so any missed setup is logged as feed downtime, not scanner failure.",
+                    }
+                    insert_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="feed_heartbeat_stale",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        model_symbol=nt_instrument_to_model_symbol(instrument, args.root),
+                        timeframe=args.timeframe,
+                        candle_time=None,
+                        ts_utc=last_processed_ts,
+                        direction=None,
+                        status="paused",
+                        details=details,
+                    )
+                    insert_feed_health_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="feed_heartbeat_stale",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        timeframe=args.timeframe,
+                        status="paused",
+                        heartbeat=heartbeat,
+                        heartbeat_age_seconds=heartbeat_age_seconds,
+                        latest_candle_ts_utc=last_processed_ts,
+                        details=details,
+                    )
+                    print(
+                        json.dumps(
+                            {
+                                "event": "feed_heartbeat_stale",
+                                "instrument": instrument,
+                                "feed_outage_count": feed_outage_count,
+                                "heartbeat_age_seconds": heartbeat_age_seconds,
+                                "heartbeat_stale_seconds": heartbeat_limit,
+                                **cleared,
+                            },
+                            default=to_jsonable,
+                        ),
+                        flush=True,
+                    )
+                if int(args.max_loops) > 0 and loops >= int(args.max_loops):
+                    break
+                time.sleep(max(1.0, float(args.poll_seconds)))
+                continue
+
             raw = fetch_live_candles(conn, args, instrument)
             if raw.empty:
+                current_close_slot = latest_expected_close_slot(now_utc, expected_delta)
+                record_missing_slot_range(
+                    conn,
+                    args=args,
+                    instrument=instrument,
+                    start_close_ts=current_close_slot,
+                    end_close_ts=current_close_slot,
+                    expected_delta=expected_delta,
+                    nt_connected=True,
+                    blocked_reason="no_candles_received",
+                    details={
+                        "heartbeat_age_seconds": heartbeat_age_seconds,
+                        "heartbeat_received_at": heartbeat.get("received_at") if heartbeat else None,
+                        "read": "NT bridge is connected, but no stored candles were available to the monitor.",
+                    },
+                )
                 print(json.dumps({"event": "waiting_for_candles", "instrument": instrument}), flush=True)
             else:
                 loop_email_notifications = maintain_order_signal_state(
@@ -1608,11 +2827,205 @@ def main() -> int:
                     raw[["ts_utc", "open", "high", "low", "close", "volume"]].copy().reset_index(drop=True),
                     model_args,
                 )
+                record_candle_arrival_slots(
+                    conn,
+                    args=args,
+                    instrument=instrument,
+                    candles=raw,
+                    expected_delta=expected_delta,
+                )
                 times = pd.to_datetime(enriched["ts_utc"], errors="coerce")
                 latest_ts = pd.Timestamp(times.max())
                 latest_close_ts = latest_ts + expected_delta
                 now_utc = utc_now_naive()
                 feed_age_seconds = max(0.0, (now_utc - latest_close_ts).total_seconds())
+                heartbeat_close_ts = heartbeat_latest_close_ts(heartbeat)
+                heartbeat_is_fresh = (
+                    heartbeat is not None
+                    and heartbeat_age_seconds is not None
+                    and (heartbeat_limit <= 0 or heartbeat_age_seconds <= heartbeat_limit)
+                )
+                nt_reports_db_current = (
+                    heartbeat_close_ts is not None
+                    and latest_close_ts >= heartbeat_close_ts - pd.Timedelta(seconds=1)
+                )
+                no_new_nt_candle_expected = heartbeat_is_fresh and nt_reports_db_current
+                preflight_issue = evaluate_candle_preflight(
+                    heartbeat=heartbeat,
+                    times=times,
+                    latest_ts=latest_ts,
+                    latest_close_ts=latest_close_ts,
+                    expected_delta=expected_delta,
+                    args=args,
+                )
+                if preflight_issue:
+                    reason = str(preflight_issue.get("reason") or "candle_sync_waiting")
+                    sync_key = "|".join(
+                        [
+                            reason,
+                            str(to_jsonable(preflight_issue.get("heartbeat_latest_close_ts_utc"))),
+                            str(to_jsonable(preflight_issue.get("db_latest_close_ts_utc"))),
+                            str(to_jsonable(preflight_issue.get("first_missing_ts_utc"))),
+                        ]
+                    )
+                    if not candle_sync_paused or sync_key != candle_sync_wait_key:
+                        feed_outage_count += 1
+                        candle_sync_paused = True
+                        candle_sync_wait_key = sync_key
+                        cleared = reset_live_decision_state(pending, scheduled_entries, next_allowed_stage1)
+                        event_uid = live_event_uid(args.run_id, "candle_sync_waiting", feed_outage_count)
+                        details = {
+                            **cleared,
+                            **preflight_issue,
+                            "feed_outage_count": feed_outage_count,
+                            "heartbeat_age_seconds": heartbeat_age_seconds,
+                            "heartbeat_received_at": heartbeat.get("received_at") if heartbeat else None,
+                            "heartbeat_connection_status": heartbeat.get("connection_status") if heartbeat else None,
+                            "feed_age_seconds": round(feed_age_seconds, 3),
+                            "resume_rule": "wait_for_db_to_match_nt_heartbeat",
+                        }
+                        insert_event(
+                            conn,
+                            run_id=args.run_id,
+                            event_uid=event_uid,
+                            event_type="candle_sync_waiting",
+                            instrument=instrument,
+                            root_symbol=args.root,
+                            model_symbol=nt_instrument_to_model_symbol(instrument, args.root),
+                            timeframe=args.timeframe,
+                            candle_time=raw["candle_time"].iloc[-1],
+                            ts_utc=latest_ts,
+                            direction=None,
+                            status="waiting",
+                            details=details,
+                        )
+                        insert_feed_health_event(
+                            conn,
+                            run_id=args.run_id,
+                            event_uid=event_uid,
+                            event_type="candle_sync_waiting",
+                            instrument=instrument,
+                            root_symbol=args.root,
+                            timeframe=args.timeframe,
+                            status="waiting",
+                            heartbeat=heartbeat,
+                            heartbeat_age_seconds=heartbeat_age_seconds,
+                            latest_candle_ts_utc=latest_ts,
+                            latest_candle_close_ts_utc=latest_close_ts,
+                            estimated_missing_bars=(
+                                int(preflight_issue["estimated_missing_bars"])
+                                if preflight_issue.get("estimated_missing_bars") is not None
+                                else None
+                            ),
+                            details=details,
+                        )
+                        first_missing = preflight_issue.get("first_missing_ts_utc")
+                        if first_missing is None:
+                            first_missing = latest_close_ts + expected_delta
+                        heartbeat_close = preflight_issue.get("heartbeat_latest_close_ts_utc") or heartbeat_latest_close_ts(heartbeat)
+                        record_missing_slot_range(
+                            conn,
+                            args=args,
+                            instrument=instrument,
+                            start_close_ts=first_missing,
+                            end_close_ts=heartbeat_close,
+                            expected_delta=expected_delta,
+                            nt_connected=True,
+                            blocked_reason="connected_no_candle",
+                            details={
+                                **preflight_issue,
+                                "event_uid": event_uid,
+                                "read": "NT bridge is connected and reports a newer closed candle than the DB has stored.",
+                            },
+                        )
+                        print(
+                            json.dumps(
+                                {
+                                    "event": "candle_sync_waiting",
+                                    "instrument": instrument,
+                                    "reason": reason,
+                                    "feed_outage_count": feed_outage_count,
+                                    "latest_ts_utc": to_jsonable(latest_ts),
+                                    "heartbeat_latest_close_ts_utc": to_jsonable(preflight_issue.get("heartbeat_latest_close_ts_utc")),
+                                    "estimated_missing_bars": preflight_issue.get("estimated_missing_bars"),
+                                    **cleared,
+                                },
+                                default=to_jsonable,
+                            ),
+                            flush=True,
+                        )
+                    last_processed_ts = latest_ts
+                    if int(args.max_loops) > 0 and loops >= int(args.max_loops):
+                        break
+                    time.sleep(max(1.0, float(args.poll_seconds)))
+                    continue
+
+                if candle_sync_paused:
+                    cleared = reset_live_decision_state(pending, scheduled_entries, next_allowed_stage1)
+                    event_uid = live_event_uid(args.run_id, "candle_sync_ready", feed_outage_count)
+                    details = {
+                        **cleared,
+                        "feed_outage_count": feed_outage_count,
+                        "heartbeat_age_seconds": heartbeat_age_seconds,
+                        "heartbeat_received_at": heartbeat.get("received_at") if heartbeat else None,
+                        "heartbeat_connection_status": heartbeat.get("connection_status") if heartbeat else None,
+                        "db_latest_ts_utc": latest_ts,
+                        "db_latest_close_ts_utc": latest_close_ts,
+                        "heartbeat_latest_close_ts_utc": heartbeat_latest_close_ts(heartbeat),
+                        "resume_rule": "skip_to_current_candle",
+                        "read": "Candle preflight is clean. The monitor reset state and will resume from the next clean candle.",
+                    }
+                    insert_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="candle_sync_ready",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        model_symbol=nt_instrument_to_model_symbol(instrument, args.root),
+                        timeframe=args.timeframe,
+                        candle_time=raw["candle_time"].iloc[-1],
+                        ts_utc=latest_ts,
+                        direction=None,
+                        status="resumed_next_candle",
+                        details=details,
+                    )
+                    insert_feed_health_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="candle_sync_ready",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        timeframe=args.timeframe,
+                        status="resumed_next_candle",
+                        restored_at=now_utc,
+                        heartbeat=heartbeat,
+                        heartbeat_age_seconds=heartbeat_age_seconds,
+                        latest_candle_ts_utc=latest_ts,
+                        latest_candle_close_ts_utc=latest_close_ts,
+                        details=details,
+                    )
+                    print(
+                        json.dumps(
+                            {
+                                "event": "candle_sync_ready",
+                                "instrument": instrument,
+                                "latest_ts_utc": to_jsonable(latest_ts),
+                                **cleared,
+                            },
+                            default=to_jsonable,
+                        ),
+                        flush=True,
+                    )
+                    candle_sync_paused = False
+                    candle_sync_wait_key = ""
+                    last_processed_ts = latest_ts
+                    if int(args.max_loops) > 0 and loops >= int(args.max_loops):
+                        break
+                    time.sleep(max(1.0, float(args.poll_seconds)))
+                    continue
+
                 if last_processed_ts is None:
                     if int(args.backfill_cycles) > 0 and len(times) > int(args.backfill_cycles):
                         last_processed_ts = pd.Timestamp(times.iloc[-int(args.backfill_cycles) - 1])
@@ -1636,17 +3049,145 @@ def main() -> int:
                     )
 
                 stale_limit = float(args.stale_feed_seconds or 0.0)
-                if stale_limit > 0 and feed_age_seconds > stale_limit:
+                candle_stale_requires_pause = (
+                    stale_limit > 0
+                    and feed_age_seconds > stale_limit
+                    and not no_new_nt_candle_expected
+                )
+                if market_resume_pending:
+                    if candle_stale_requires_pause:
+                        if not market_open_wait_logged:
+                            event_uid = live_event_uid(args.run_id, "market_open_waiting", feed_outage_count)
+                            details = {
+                                "feed_outage_count": feed_outage_count,
+                                "feed_age_seconds": round(feed_age_seconds, 3),
+                                "stale_feed_seconds": stale_limit,
+                                "latest_close_ts_utc": latest_close_ts,
+                                "read": "The session is open again, but a fresh closed candle has not arrived yet. The monitor is waiting instead of calling this a feed outage.",
+                            }
+                            insert_event(
+                                conn,
+                                run_id=args.run_id,
+                                event_uid=event_uid,
+                                event_type="market_open_waiting",
+                                instrument=instrument,
+                                root_symbol=args.root,
+                                model_symbol=nt_instrument_to_model_symbol(instrument, args.root),
+                                timeframe=args.timeframe,
+                                candle_time=raw["candle_time"].iloc[-1],
+                                ts_utc=latest_ts,
+                                direction=None,
+                                status="waiting",
+                                details=details,
+                            )
+                            insert_feed_health_event(
+                                conn,
+                                run_id=args.run_id,
+                                event_uid=event_uid,
+                                event_type="market_open_waiting",
+                                instrument=instrument,
+                                root_symbol=args.root,
+                                timeframe=args.timeframe,
+                                status="waiting",
+                                heartbeat=heartbeat,
+                                heartbeat_age_seconds=heartbeat_age_seconds,
+                                latest_candle_ts_utc=latest_ts,
+                                latest_candle_close_ts_utc=latest_close_ts,
+                                details=details,
+                            )
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "market_open_waiting",
+                                        "instrument": instrument,
+                                        "feed_age_seconds": round(feed_age_seconds, 1),
+                                        "latest_ts_utc": to_jsonable(latest_ts),
+                                    },
+                                    default=to_jsonable,
+                                ),
+                                flush=True,
+                            )
+                            market_open_wait_logged = True
+                        last_processed_ts = latest_ts
+                        if int(args.max_loops) > 0 and loops >= int(args.max_loops):
+                            break
+                        time.sleep(max(1.0, float(args.poll_seconds)))
+                        continue
+
+                    cleared = reset_live_decision_state(pending, scheduled_entries, next_allowed_stage1)
+                    event_uid = live_event_uid(args.run_id, "market_resumed", feed_outage_count)
+                    details = {
+                        **cleared,
+                        "feed_outage_count": feed_outage_count,
+                        "feed_age_seconds": round(feed_age_seconds, 3),
+                        "latest_close_ts_utc": latest_close_ts,
+                        "resume_rule": "skip_to_current_candle",
+                        "read": "The market has a fresh closed candle again. The monitor reset state and will resume from the next clean candle.",
+                    }
+                    insert_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="market_resumed",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        model_symbol=nt_instrument_to_model_symbol(instrument, args.root),
+                        timeframe=args.timeframe,
+                        candle_time=raw["candle_time"].iloc[-1],
+                        ts_utc=latest_ts,
+                        direction=None,
+                        status="resumed_next_candle",
+                        details=details,
+                    )
+                    insert_feed_health_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="market_resumed",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        timeframe=args.timeframe,
+                        status="resumed_next_candle",
+                        restored_at=now_utc,
+                        heartbeat=heartbeat,
+                        heartbeat_age_seconds=heartbeat_age_seconds,
+                        latest_candle_ts_utc=latest_ts,
+                        latest_candle_close_ts_utc=latest_close_ts,
+                        details=details,
+                    )
+                    print(
+                        json.dumps(
+                            {
+                                "event": "market_resumed",
+                                "instrument": instrument,
+                                "feed_age_seconds": round(feed_age_seconds, 1),
+                                "latest_ts_utc": to_jsonable(latest_ts),
+                                **cleared,
+                            },
+                            default=to_jsonable,
+                        ),
+                        flush=True,
+                    )
+                    market_resume_pending = False
+                    market_open_wait_logged = False
+                    last_processed_ts = latest_ts
+                    if int(args.max_loops) > 0 and loops >= int(args.max_loops):
+                        break
+                        time.sleep(max(1.0, float(args.poll_seconds)))
+                        continue
+
+                if candle_stale_requires_pause:
                     if not feed_paused:
                         feed_outage_count += 1
                         feed_paused = True
                         feed_paused_since = now_utc
                         feed_pause_reason = "stale_feed"
                         cleared = reset_live_decision_state(pending, scheduled_entries, next_allowed_stage1)
+                        event_uid = live_event_uid(args.run_id, "feed_stale", feed_outage_count)
                         insert_event(
                             conn,
                             run_id=args.run_id,
-                            event_uid=f"{args.run_id}|feed_stale|{feed_outage_count}",
+                            event_uid=event_uid,
                             event_type="feed_stale",
                             instrument=instrument,
                             root_symbol=args.root,
@@ -1664,6 +3205,47 @@ def main() -> int:
                                 "latest_close_ts_utc": latest_close_ts,
                                 "loop_email_notifications": loop_email_notifications,
                                 "read": "Feed is stale. New trend/trade decisions are paused and pending watches were cleared.",
+                            },
+                        )
+                        insert_feed_health_event(
+                            conn,
+                            run_id=args.run_id,
+                            event_uid=event_uid,
+                            event_type="feed_stale",
+                            instrument=instrument,
+                            root_symbol=args.root,
+                            timeframe=args.timeframe,
+                            status="paused",
+                            heartbeat=heartbeat,
+                            heartbeat_age_seconds=heartbeat_age_seconds,
+                            latest_candle_ts_utc=latest_ts,
+                            latest_candle_close_ts_utc=latest_close_ts,
+                            details={
+                                **cleared,
+                                "feed_outage_count": feed_outage_count,
+                                "feed_age_seconds": round(feed_age_seconds, 3),
+                                "stale_feed_seconds": stale_limit,
+                                "latest_close_ts_utc": latest_close_ts,
+                                "loop_email_notifications": loop_email_notifications,
+                                "read": "Closed candles stopped advancing. New trend/trade decisions are paused.",
+                            },
+                        )
+                        current_close_slot = latest_expected_close_slot(now_utc, expected_delta)
+                        record_missing_slot_range(
+                            conn,
+                            args=args,
+                            instrument=instrument,
+                            start_close_ts=latest_close_ts + expected_delta,
+                            end_close_ts=current_close_slot,
+                            expected_delta=expected_delta,
+                            nt_connected=True,
+                            blocked_reason="connected_no_candle",
+                            details={
+                                "event_uid": event_uid,
+                                "feed_age_seconds": round(feed_age_seconds, 3),
+                                "stale_feed_seconds": stale_limit,
+                                "latest_close_ts_utc": latest_close_ts,
+                                "read": "NT bridge was connected, but closed candles stopped advancing.",
                             },
                         )
                         print(
@@ -1693,10 +3275,11 @@ def main() -> int:
                         else None
                     )
                     cleared = reset_live_decision_state(pending, scheduled_entries, next_allowed_stage1)
+                    event_uid = live_event_uid(args.run_id, "feed_restored", feed_outage_count)
                     insert_event(
                         conn,
                         run_id=args.run_id,
-                        event_uid=f"{args.run_id}|feed_restored|{feed_outage_count}",
+                        event_uid=event_uid,
                         event_type="feed_restored",
                         instrument=instrument,
                         root_symbol=args.root,
@@ -1714,6 +3297,32 @@ def main() -> int:
                             "feed_age_seconds": round(feed_age_seconds, 3),
                             "latest_close_ts_utc": latest_close_ts,
                             "read": "Feed is fresh again. The monitor reset its live state and will resume on the next clean candle.",
+                        },
+                    )
+                    insert_feed_health_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="feed_restored",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        timeframe=args.timeframe,
+                        status="resumed_next_candle",
+                        restored_at=now_utc,
+                        duration_seconds=None if duration_seconds is None else round(duration_seconds, 3),
+                        heartbeat=heartbeat,
+                        heartbeat_age_seconds=heartbeat_age_seconds,
+                        latest_candle_ts_utc=latest_ts,
+                        latest_candle_close_ts_utc=latest_close_ts,
+                        details={
+                            **cleared,
+                            "feed_outage_count": feed_outage_count,
+                            "pause_reason": feed_pause_reason,
+                            "duration_seconds": None if duration_seconds is None else round(duration_seconds, 3),
+                            "feed_age_seconds": round(feed_age_seconds, 3),
+                            "latest_close_ts_utc": latest_close_ts,
+                            "resume_rule": "skip_to_current_candle",
+                            "read": "Feed is healthy again. The monitor skipped stale backlog, reset state, and will resume from the next clean candle.",
                         },
                     )
                     print(
@@ -1749,10 +3358,11 @@ def main() -> int:
                     cleared = reset_live_decision_state(pending, scheduled_entries, next_allowed_stage1)
                     skipped = len(all_new_indices)
                     last_processed_ts = latest_ts
+                    event_uid = live_event_uid(args.run_id, "feed_backlog_reset", feed_outage_count)
                     insert_event(
                         conn,
                         run_id=args.run_id,
-                        event_uid=f"{args.run_id}|feed_backlog_reset|{feed_outage_count}",
+                        event_uid=event_uid,
                         event_type="feed_backlog_reset",
                         instrument=instrument,
                         root_symbol=args.root,
@@ -1770,6 +3380,46 @@ def main() -> int:
                             "read": "Too many unprocessed candles arrived at once. Old decisions were skipped so no stale trade can be queued.",
                         },
                     )
+                    insert_feed_health_event(
+                        conn,
+                        run_id=args.run_id,
+                        event_uid=event_uid,
+                        event_type="feed_backlog_reset",
+                        instrument=instrument,
+                        root_symbol=args.root,
+                        timeframe=args.timeframe,
+                        status="state_reset",
+                        heartbeat=heartbeat,
+                        heartbeat_age_seconds=heartbeat_age_seconds,
+                        latest_candle_ts_utc=latest_ts,
+                        latest_candle_close_ts_utc=latest_close_ts,
+                        skipped_candles=skipped,
+                        details={
+                            **cleared,
+                            "feed_outage_count": feed_outage_count,
+                            "skipped_new_candles": skipped,
+                            "max_new_cycles_per_loop": max_cycles,
+                            "resume_rule": "skip_to_current_candle",
+                            "read": "Too many candles arrived at once. The monitor skipped stale catch-up work and reset state.",
+                        },
+                    )
+                    for skipped_idx in all_new_indices:
+                        mark_scanner_slot_status(
+                            conn,
+                            args=args,
+                            instrument=instrument,
+                            ts_utc=times.iloc[skipped_idx],
+                            expected_delta=expected_delta,
+                            scanner_status="skipped_backlog",
+                            trade_allowed=False,
+                            blocked_reason="too_many_recovery_candles",
+                            details={
+                                "event_uid": event_uid,
+                                "max_new_cycles_per_loop": max_cycles,
+                                "skipped_new_candles": skipped,
+                                "read": "This candle arrived in a backlog batch and was skipped so no stale live trade could be queued.",
+                            },
+                        )
                     print(
                         json.dumps(
                             {
@@ -1785,60 +3435,15 @@ def main() -> int:
                     )
                     new_indices = []
 
-                if new_indices:
-                    first_new_ts = pd.Timestamp(times.iloc[new_indices[0]])
-                    gap_seconds = (first_new_ts - last_processed_ts).total_seconds()
-                    expected_seconds = expected_delta.total_seconds()
-                    if expected_seconds > 0 and gap_seconds > expected_seconds * float(args.gap_tolerance_bars):
-                        feed_outage_count += 1
-                        previous_processed_ts = last_processed_ts
-                        missed_bars = max(0, int(round(gap_seconds / expected_seconds)) - 1)
-                        cleared = reset_live_decision_state(pending, scheduled_entries, next_allowed_stage1)
-                        last_processed_ts = latest_ts
-                        insert_event(
-                            conn,
-                            run_id=args.run_id,
-                            event_uid=f"{args.run_id}|feed_gap_detected|{feed_outage_count}",
-                            event_type="feed_gap_detected",
-                            instrument=instrument,
-                            root_symbol=args.root,
-                            model_symbol=nt_instrument_to_model_symbol(instrument, args.root),
-                            timeframe=args.timeframe,
-                            candle_time=raw["candle_time"].iloc[-1],
-                            ts_utc=first_new_ts,
-                            direction=None,
-                            status="state_reset",
-                            details={
-                                **cleared,
-                                "feed_outage_count": feed_outage_count,
-                                "previous_processed_ts_utc": previous_processed_ts,
-                                "first_new_ts_utc": first_new_ts,
-                                "latest_ts_utc": latest_ts,
-                                "gap_seconds": round(gap_seconds, 3),
-                                "expected_seconds": round(expected_seconds, 3),
-                                "estimated_missing_bars": missed_bars,
-                                "read": "Candle sequence jumped. Pending watches were cleared and old decisions were skipped.",
-                            },
-                        )
-                        print(
-                            json.dumps(
-                                {
-                                    "event": "feed_gap_detected",
-                                    "instrument": instrument,
-                                    "feed_outage_count": feed_outage_count,
-                                    "gap_seconds": round(gap_seconds, 1),
-                                    "estimated_missing_bars": missed_bars,
-                                    "resume_rule": "next_clean_candle",
-                                    **cleared,
-                                },
-                                default=to_jsonable,
-                            ),
-                            flush=True,
-                        )
-                        new_indices = []
+                # Sparse instruments like HO may not print a candle for every 2m slot.
+                # A gap between two stored NT candles is only normal no-trade time; the
+                # real missing-candle guard is the preflight check above, where NT's
+                # heartbeat has a newer closed candle than the DB.
 
                 for idx in new_indices:
                     started = time.perf_counter()
+                    scanner_candle = candle_audit_snapshot(raw, int(idx))
+                    lock_scanner_candle_row(conn, args=args, candle_snapshot=scanner_candle)
                     cycle = process_cycle(
                         conn,
                         args=args,
@@ -1858,6 +3463,31 @@ def main() -> int:
                     elapsed_ms = (time.perf_counter() - started) * 1000.0
                     cycles_seen += 1
                     last_processed_ts = pd.Timestamp(times.iloc[idx])
+                    current_close_ts = pd.Timestamp(times.iloc[idx]) + expected_delta
+                    is_latest_tradable_slot = current_close_ts >= latest_close_ts - pd.Timedelta(seconds=1)
+                    scanner_status = "scanned_live" if is_latest_tradable_slot else "scanned_recovery"
+                    mark_scanner_slot_status(
+                        conn,
+                        args=args,
+                        instrument=instrument,
+                        ts_utc=times.iloc[idx],
+                        expected_delta=expected_delta,
+                        scanner_status=scanner_status,
+                        trade_allowed=bool(is_latest_tradable_slot),
+                        blocked_reason=None if is_latest_tradable_slot else "late_candle_not_latest",
+                        details={
+                            "cycle_ts_utc": to_jsonable(cycle["ts_utc"]),
+                            "latest_close_ts_utc": to_jsonable(latest_close_ts),
+                            "decision_status": cycle.get("decision_status"),
+                            "stage1_rows": cycle.get("stage1_rows"),
+                            "level2_picks": cycle.get("level2_picks"),
+                            "stage2_rows": cycle.get("stage2_rows"),
+                            "trend_confirms": cycle.get("trend_confirms"),
+                            "order_signals": cycle.get("order_signals"),
+                            "order_rejects": cycle.get("order_rejects"),
+                            "read": "Closed candle scored by the live monitor. Recovery candles are logged but are not the latest tradable slot.",
+                        },
+                    )
                     insert_event(
                         conn,
                         run_id=args.run_id,
@@ -1880,9 +3510,41 @@ def main() -> int:
                             "order_signals": cycle["order_signals"],
                             "order_rejects": cycle["order_rejects"],
                             "email_notifications": cycle.get("email_notifications", 0),
+                            "level2_threshold": cycle.get("level2_threshold"),
+                            "level2_best_score": cycle.get("level2_best_score"),
+                            "level2_best_direction": cycle.get("level2_best_direction"),
+                            "level2_long_score": cycle.get("level2_long_score"),
+                            "level2_short_score": cycle.get("level2_short_score"),
                             "pending": len(pending),
                             "scheduled_entries": len(scheduled_entries),
+                            "scanner_candle": scanner_candle,
                             "read": "Closed candle scored by the live trend detector.",
+                        },
+                    )
+                    route_uid = f"{args.run_id}|{instrument}|{args.timeframe}|{pd.Timestamp(cycle['ts_utc']).isoformat()}"
+                    insert_route_row(
+                        conn,
+                        args=args,
+                        route_uid=route_uid,
+                        instrument=instrument,
+                        model_symbol=nt_instrument_to_model_symbol(instrument, args.root),
+                        candle_snapshot=scanner_candle,
+                        cycle=cycle,
+                        pending_after=len(pending),
+                        scheduled_entries_after=len(scheduled_entries),
+                        details={
+                            "elapsed_ms": round(elapsed_ms, 3),
+                            "stage1_rows": cycle["stage1_rows"],
+                            "stage1_status": cycle.get("stage1_status"),
+                            "level2_picks": cycle["level2_picks"],
+                            "stage2_rows": cycle["stage2_rows"],
+                            "stage2_status": cycle.get("stage2_status"),
+                            "trend_confirms": cycle["trend_confirms"],
+                            "order_signals": cycle["order_signals"],
+                            "order_rejects": cycle["order_rejects"],
+                            "email_notifications": cycle.get("email_notifications", 0),
+                            "scanner_candle": scanner_candle,
+                            "read": "One-row route trace for this closed candle. Replay should match this when using the same candle revision.",
                         },
                     )
                     print(
@@ -1899,6 +3561,11 @@ def main() -> int:
                                 "order_signals": cycle["order_signals"],
                                 "order_rejects": cycle["order_rejects"],
                                 "email_notifications": cycle.get("email_notifications", 0),
+                                "level2_threshold": cycle.get("level2_threshold"),
+                                "level2_best_score": cycle.get("level2_best_score"),
+                                "level2_best_direction": cycle.get("level2_best_direction"),
+                                "level2_long_score": cycle.get("level2_long_score"),
+                                "level2_short_score": cycle.get("level2_short_score"),
                                 "pending": len(pending),
                                 "scheduled_entries": len(scheduled_entries),
                             },

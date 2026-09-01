@@ -117,7 +117,7 @@ export const CandleChart = ({
       : is_reversal_focus
         ? 'reversal'
         : 'pattern';
-
+  console.log(chartData)
   useEffect(() => {
     if (!hasRenderablePattern(chartData)) {
       chartStateRef.current = null;
@@ -195,6 +195,7 @@ export const CandleChart = ({
         canvasHeight,
         candles: chartData.candles,
       });
+      chartStateRef.current.theme = isRawCandleView ? 'win95' : 'dark';
       chartStateRef.current.canvas.priceWidth = priceWidth;
       chartStateRef.current.canvas.priceHeight = priceHeight;
       chartStateRef.current.canvas.dateWidth = dateWidth;
@@ -404,8 +405,8 @@ export const CandleChart = ({
         });
       }
       chartLayer.prices(ctx_price, cp);
-      chartLayer.dates(ctx_date, canvas_date);
-      chartLayer.grid_X(ctx, canvas);
+      chartLayer.dates(ctx_date, canvas_date, chartData.rust_patterns);
+      chartLayer.grid_X(ctx, canvas, chartData.rust_patterns);
       chartLayer.grid_Y(ctx, canvas);
 
       if (
@@ -468,12 +469,19 @@ export const CandleChart = ({
       }
 
       if (isRawCandleView) {
+        patternLayer.raw_live_time_slot(ctx, chartData.rust_patterns);
+        patternLayer.raw_scanner_checks(ctx, chartData.rust_patterns);
+        patternLayer.raw_stage2_window(ctx, chartData.rust_patterns);
         patternLayer.raw_watching_trends(ctx, chartData.rust_patterns);
-        patternLayer.raw_trend_event(ctx, chartData.rust_patterns);
       }
 
-      chartLayer.last_price_line(ctx, canvas);
-      chartLayer.last_price_axis(ctx_price, cp);
+      chartLayer.last_price_line(ctx, canvas, chartData.rust_patterns);
+      chartLayer.last_price_axis(ctx_price, cp, chartData.rust_patterns);
+
+      if (isRawCandleView) {
+        patternLayer.raw_trend_event(ctx, ctx_price, chartData.rust_patterns);
+      }
+
       notifyRawCandleViewportEdge();
 
       animationFrameId = null;
@@ -628,11 +636,14 @@ export const CandleChart = ({
 
       const threshold = Math.floor(chartStateRef.current.price.startingPixelsPerGrid * 0.5);
       const expandThreshold = Math.floor(chartStateRef.current.price.startingPixelsPerGrid * 1.5);
+      const stepCount = Math.min(Math.max(Math.ceil(Math.abs(event.deltaY) / 70), 1), 3);
 
-      if (event.deltaY < 0) {
-        resize.chart_zoom_in(chartStateRef, expandThreshold);
-      } else if (event.deltaY > 0) {
-        resize.chart_zoom_out(chartStateRef, threshold);
+      for (let step = 0; step < stepCount; step += 1) {
+        if (event.deltaY < 0) {
+          resize.chart_zoom_in(chartStateRef, expandThreshold);
+        } else if (event.deltaY > 0) {
+          resize.chart_zoom_out(chartStateRef, threshold);
+        }
       }
 
       requestDraw();
@@ -648,9 +659,9 @@ export const CandleChart = ({
         return;
       }
 
-      const dragSensitivity = 1 / 68;
+      const dragSensitivity = 1 / 28;
       const rawMultiplier = Math.exp(-deltaY * dragSensitivity);
-      const zoomMultiplier = Math.min(Math.max(rawMultiplier, 0.72), 1.38);
+      const zoomMultiplier = Math.min(Math.max(rawMultiplier, 0.45), 2.4);
       resize.scale_price_axis(chartStateRef, zoomMultiplier);
 
       requestDraw();

@@ -20,6 +20,19 @@ const AXIS_TEXT_COLOR = 'rgba(224, 229, 230, 0.82)';
 const AXIS_MUTED_TEXT_COLOR = 'rgba(156, 166, 169, 0.68)';
 const LAST_PRICE_MARKER_COLOR = '#ffffff';
 const LAST_PRICE_TEXT_COLOR = '#061010';
+const WIN95_CHART_THEME = {
+  grid: 'rgba(128, 128, 128, 0.28)',
+  gridMajor: 'rgba(64, 64, 64, 0.42)',
+  crosshair: 'rgba(0, 0, 0, 0.72)',
+  pricePanelBackground: '#ffffe1',
+  datePanelBackground: '#ffffe1',
+  tagBorder: '#000000',
+  axisText: '#000000',
+  axisMutedText: '#404040',
+  dateTick: 'rgba(64, 64, 64, 0.38)',
+  lastPriceMarker: '#000080',
+  lastPriceText: '#ffffff',
+};
 const TARGET_PRICE_GRID_PX = 58;
 const RETRACEMENT_COLOR = 'rgba(227, 230, 221, 0.58)';
 const LABEL_BACKGROUND = 'rgba(13, 15, 16, 0.94)';
@@ -73,11 +86,35 @@ const GRAPH_PALETTE = {
   zone: 'rgba(14, 165, 233, 0.12)',
 };
 
+const getChartVisualTheme = (chartState) =>
+  chartState?.theme === 'win95'
+    ? WIN95_CHART_THEME
+    : {
+        grid: GRID_COLOR,
+        gridMajor: GRID_MAJOR_COLOR,
+        crosshair: CROSSHAIR_COLOR,
+        pricePanelBackground: PRICE_PANEL_BACKGROUND,
+        datePanelBackground: DATE_PANEL_BACKGROUND,
+        tagBorder: TAG_BORDER_COLOR,
+        axisText: AXIS_TEXT_COLOR,
+        axisMutedText: AXIS_MUTED_TEXT_COLOR,
+        dateTick: 'rgba(93, 118, 156, 0.24)',
+        lastPriceMarker: LAST_PRICE_MARKER_COLOR,
+        lastPriceText: LAST_PRICE_TEXT_COLOR,
+      };
+
 const hasCanvasPoint = (point) =>
   Number.isFinite(Number(point?.x)) && Number.isFinite(Number(point?.y));
 
 const hasCanvasPoints = (coordinates, keys) =>
   keys.every((key) => hasCanvasPoint(coordinates?.[key]));
+
+const isDrawableCandle = (candle) =>
+  Boolean(candle) &&
+  !candle.candle_is_missing &&
+  [candle.candle_open, candle.candle_high, candle.candle_low, candle.candle_close]
+    .map(Number)
+    .every(Number.isFinite);
 
 const REVERSAL_SIGNAL_META = {
   bullish_key_reversal: 'Bullish Key Reversal',
@@ -369,7 +406,7 @@ const getReversalCandleIndexes = (pattern, activeReversalFilter) => {
 };
 
 const getCandleStrokeColor = (candle) =>
-  candle.candle_close > candle.candle_open ? BULLISH_COLOR : BEARISH_COLOR;
+  Number(candle?.candle_close) > Number(candle?.candle_open) ? BULLISH_COLOR : BEARISH_COLOR;
 
 const MONTH_YEAR_FORMATTER = new Intl.DateTimeFormat('en-US', {
   month: 'short',
@@ -409,6 +446,8 @@ const getZonedFormatter = (timeZone, style = 'short') => {
     zonedFormatterCache.set(cacheKey, new Intl.DateTimeFormat('en-US', {
       ...(style === 'date'
         ? { month: 'short', day: 'numeric' }
+        : style === 'axisTime'
+          ? { hour: '2-digit', hour12: false, minute: '2-digit' }
         : style === 'time'
           ? { hour: '2-digit', hour12: false, minute: '2-digit', timeZoneName: 'short' }
           : { month: 'short', day: 'numeric', hour: '2-digit', hour12: false, minute: '2-digit', timeZoneName: 'short' }),
@@ -433,6 +472,27 @@ const getNiceAxisStep = (rawStep) => {
   return magnitude * 10;
 };
 
+const getTimeframeMilliseconds = (timeframe) => {
+  const match = String(timeframe ?? '').trim().toLowerCase().match(/^(\d+)\s*(m|min|minute|h|hr|hour|d|day)s?$/);
+  if (!match) {
+    return 60 * 1000;
+  }
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return 60 * 1000;
+  }
+
+  const unit = match[2];
+  if (unit.startsWith('h')) {
+    return amount * 60 * 60 * 1000;
+  }
+  if (unit.startsWith('d')) {
+    return amount * 24 * 60 * 60 * 1000;
+  }
+  return amount * 60 * 1000;
+};
+
 const parseAxisDate = (value) => {
   if (!value) {
     return null;
@@ -455,6 +515,23 @@ const parseAxisDate = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const formatAxisDateValue = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const pad = (value) => String(value).padStart(2, '0');
+  return [
+    date.getUTCFullYear(),
+    pad(date.getUTCMonth() + 1),
+    pad(date.getUTCDate()),
+  ].join('-') + ` ${[
+    pad(date.getUTCHours()),
+    pad(date.getUTCMinutes()),
+    pad(date.getUTCSeconds()),
+  ].join(':')}`;
+};
+
 const formatAxisDateLabel = (value, completeWidth, gridIncrement = 1, displayTimeZone = null) => {
   const parsedDate = parseAxisDate(value);
 
@@ -464,11 +541,11 @@ const formatAxisDateLabel = (value, completeWidth, gridIncrement = 1, displayTim
 
   if (displayTimeZone) {
     if (completeWidth >= 24 || gridIncrement <= 5) {
-      return getZonedFormatter(displayTimeZone, 'short').format(parsedDate);
+      return getZonedFormatter(displayTimeZone, 'axisTime').format(parsedDate);
     }
 
-    if (completeWidth >= 10 || gridIncrement <= 25) {
-      return getZonedFormatter(displayTimeZone, 'time').format(parsedDate);
+    if (completeWidth >= 10 || gridIncrement <= 240) {
+      return getZonedFormatter(displayTimeZone, 'axisTime').format(parsedDate);
     }
 
     if (gridIncrement >= 500) {
@@ -505,6 +582,28 @@ const formatAxisDateLabel = (value, completeWidth, gridIncrement = 1, displayTim
     primary: MONTH_YEAR_FORMATTER.format(parsedDate),
     secondary: `${UTC_SHORT_DATE_FORMATTER.format(parsedDate)} UTC`,
   };
+};
+
+const getLiveDateAxisGridIncrement = (chartState, pattern, baseIncrement) => {
+  if (!pattern?.raw_candle_view) {
+    return baseIncrement;
+  }
+
+  const candleWidth = Number(chartState?.candles?.completeWidth);
+  if (!Number.isFinite(candleWidth) || candleWidth <= 0) {
+    return baseIncrement;
+  }
+
+  let liveIncrement = 10;
+  if (candleWidth >= 18) {
+    liveIncrement = 1;
+  } else if (candleWidth >= 12) {
+    liveIncrement = 2;
+  } else if (candleWidth >= 7) {
+    liveIncrement = 5;
+  }
+
+  return Math.max(1, Math.round(Math.min(baseIncrement, liveIncrement)));
 };
 
 const formatHoverDateLabel = (value, displayTimeZone = null) => {
@@ -583,12 +682,13 @@ export class Mouse {
 
   mouse_Y = (canvas, ctx) => {
     const chartState = this.chartStateRef.current;
+    const theme = getChartVisualTheme(chartState);
     const mouseY = chartState.mouse.pos.y;
 
     ctx.save();
     ctx.beginPath();
     ctx.lineWidth = 0.5;
-    ctx.strokeStyle = CROSSHAIR_COLOR;
+    ctx.strokeStyle = theme.crosshair;
     ctx.setLineDash([5, 5]);
     ctx.moveTo(0, mouseY);
     ctx.lineTo(canvas.width, mouseY);
@@ -598,6 +698,7 @@ export class Mouse {
 
   mouse_X = (canvas, ctx, hoveredIndexRef, setHoveredCandle) => {
     const chartState = this.chartStateRef.current;
+    const theme = getChartVisualTheme(chartState);
     const hoveredIndex = getHoveredCandleIndex(chartState, chartState.mouse.pos.x);
     hoveredIndexRef.current = hoveredIndex;
 
@@ -608,7 +709,7 @@ export class Mouse {
     ctx.save();
     ctx.beginPath();
     ctx.lineWidth = 0.5;
-    ctx.strokeStyle = CROSSHAIR_COLOR;
+    ctx.strokeStyle = theme.crosshair;
     ctx.setLineDash([5, 5]);
     ctx.moveTo(guideX, canvas.height);
     ctx.lineTo(guideX, 0);
@@ -667,8 +768,8 @@ export class Mouse {
 
     ctxPrice.save();
     ctxPrice.beginPath();
-    ctxPrice.fillStyle = PRICE_PANEL_BACKGROUND;
-    ctxPrice.strokeStyle = TAG_BORDER_COLOR;
+    ctxPrice.fillStyle = getChartVisualTheme(chartState).pricePanelBackground;
+    ctxPrice.strokeStyle = getChartVisualTheme(chartState).tagBorder;
     ctxPrice.lineWidth = 1;
     ctxPrice.roundRect(
       6,
@@ -681,7 +782,7 @@ export class Mouse {
     ctxPrice.stroke();
 
     ctxPrice.font = `600 ${fontSize}px "Segoe UI"`;
-    ctxPrice.fillStyle = '#FFFFFF';
+    ctxPrice.fillStyle = getChartVisualTheme(chartState).axisText;
     ctxPrice.textBaseline = 'middle';
     ctxPrice.textAlign = 'center';
     ctxPrice.fillText(priceLabel, Math.floor(canvas.width / 2), chartState.mouse.pos.y);
@@ -718,7 +819,7 @@ export class Mouse {
       canvasDate.width - pillWidth / 2 - 6
     );
 
-    ctxDate.fillStyle = '#FFFFFF';
+    ctxDate.fillStyle = getChartVisualTheme(chartState).axisText;
     ctxDate.textBaseline = 'middle';
     ctxDate.textAlign = 'center';
     ctxDate.fillText(label, clampedX, canvasDate.height / 2);
@@ -753,8 +854,8 @@ export class Mouse {
     );
 
     ctxDate.beginPath();
-    ctxDate.fillStyle = DATE_PANEL_BACKGROUND;
-    ctxDate.strokeStyle = TAG_BORDER_COLOR;
+    ctxDate.fillStyle = getChartVisualTheme(chartState).datePanelBackground;
+    ctxDate.strokeStyle = getChartVisualTheme(chartState).tagBorder;
     ctxDate.lineWidth = 1;
     ctxDate.roundRect(
       pillX,
@@ -834,15 +935,17 @@ export class Chart {
     };
   };
 
-  grid_X = (ctx, canvas) => {
+  grid_X = (ctx, canvas, pattern = null) => {
     const chartState = this.chartStateRef.current;
-    const { start, end } = this.getVisibleCandleRange(canvas.width, chartState.viewport.xGridIncrement);
-    const gridIncrement = Math.max(chartState.viewport.xGridIncrement, 1);
+    const theme = getChartVisualTheme(chartState);
+    const baseGridIncrement = Math.max(chartState.viewport.xGridIncrement, 1);
+    const gridIncrement = getLiveDateAxisGridIncrement(chartState, pattern, baseGridIncrement);
+    const { start, end } = this.getVisibleCandleRange(canvas.width, gridIncrement);
     const alignedStart = Math.max(gridIncrement, Math.ceil(start / gridIncrement) * gridIncrement);
 
     ctx.save();
     ctx.beginPath();
-    ctx.strokeStyle = GRID_MAJOR_COLOR;
+    ctx.strokeStyle = theme.gridMajor;
     ctx.lineWidth = 1;
 
     for (let candleIndex = alignedStart; candleIndex <= end; candleIndex += gridIncrement) {
@@ -852,17 +955,34 @@ export class Chart {
       ctx.lineTo(x, canvas.height);
     }
 
+    if (pattern?.raw_candle_view) {
+      for (let slotOffset = gridIncrement; slotOffset <= 90; slotOffset += gridIncrement) {
+        const x = Math.round(getCanvasX(chartState, 1 - slotOffset)) + 0.5;
+
+        if (x > canvas.width + 24) {
+          break;
+        }
+        if (x < -24) {
+          continue;
+        }
+
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+      }
+    }
+
     ctx.stroke();
     ctx.restore();
   };
 
   grid_Y = (ctx, canvas) => {
     const chartState = this.chartStateRef.current;
+    const theme = getChartVisualTheme(chartState);
     const ticks = getPriceAxisTicks(chartState, canvas.height);
 
     ctx.save();
     ctx.beginPath();
-    ctx.strokeStyle = GRID_COLOR;
+    ctx.strokeStyle = theme.grid;
     ctx.lineWidth = 1;
 
     ticks.forEach((tick) => {
@@ -875,7 +995,7 @@ export class Chart {
     const baselineTick = ticks.find((tick) => tick.isBaseline);
     if (baselineTick) {
       ctx.beginPath();
-      ctx.strokeStyle = GRID_MAJOR_COLOR;
+      ctx.strokeStyle = theme.gridMajor;
       ctx.moveTo(0, baselineTick.y);
       ctx.lineTo(canvas.width, baselineTick.y);
       ctx.stroke();
@@ -886,17 +1006,18 @@ export class Chart {
 
   prices = (ctxPrice, canvasPrice) => {
     const chartState = this.chartStateRef.current;
+    const theme = getChartVisualTheme(chartState);
     const ticks = getPriceAxisTicks(chartState, canvasPrice.height);
     const axisFontSize = canvasPrice.width <= 60 ? 11 : canvasPrice.width <= 72 ? 12 : 16;
 
     ctxPrice.save();
     ctxPrice.font = `850 ${axisFontSize}px "Segoe UI"`;
-    ctxPrice.fillStyle = AXIS_TEXT_COLOR;
+    ctxPrice.fillStyle = theme.axisText;
     ctxPrice.textAlign = 'center';
     ctxPrice.textBaseline = 'middle';
 
     ticks.forEach((tick) => {
-      ctxPrice.fillStyle = tick.isBaseline ? AXIS_TEXT_COLOR : AXIS_MUTED_TEXT_COLOR;
+      ctxPrice.fillStyle = tick.isBaseline ? theme.axisText : theme.axisMutedText;
       ctxPrice.fillText(
         formatAxisPrice(tick.price, tick.priceStep),
         canvasPrice.width / 2,
@@ -907,10 +1028,14 @@ export class Chart {
     ctxPrice.restore();
   };
 
-  getLastPriceMarker = () => {
+  getLastPriceMarker = (pattern = null) => {
     const chartState = this.chartStateRef.current;
     const latestCandle = chartState?.candles?.items?.[0];
-    const price = Number(latestCandle?.candle_close ?? latestCandle?.close);
+    const price = Number(
+      latestCandle?.candle_last_price ??
+        latestCandle?.candle_close ??
+        latestCandle?.close
+    );
 
     if (!chartState || !Number.isFinite(price)) {
       return null;
@@ -919,13 +1044,13 @@ export class Chart {
     return {
       price,
       y: getCanvasY(chartState, price),
-      color: LAST_PRICE_MARKER_COLOR,
+      color: getChartVisualTheme(chartState).lastPriceMarker,
       label: formatAxisPrice(price, Math.max(Number(chartState.price.unitAmount) || 0.0001, 0.0001)),
     };
   };
 
-  last_price_line = (ctx, canvas) => {
-    const marker = this.getLastPriceMarker();
+  last_price_line = (ctx, canvas, pattern = null) => {
+    const marker = this.getLastPriceMarker(pattern);
 
     if (!marker || marker.y < -48 || marker.y > canvas.height + 48) {
       return;
@@ -951,8 +1076,9 @@ export class Chart {
     ctx.restore();
   };
 
-  last_price_axis = (ctxPrice, canvasPrice) => {
-    const marker = this.getLastPriceMarker();
+  last_price_axis = (ctxPrice, canvasPrice, pattern = null) => {
+    const marker = this.getLastPriceMarker(pattern);
+    const theme = getChartVisualTheme(this.chartStateRef.current);
 
     if (!marker) {
       return;
@@ -974,16 +1100,18 @@ export class Chart {
     ctxPrice.stroke();
 
     ctxPrice.font = `900 ${isCompactAxis ? 11 : 15}px "Segoe UI"`;
-    ctxPrice.fillStyle = LAST_PRICE_TEXT_COLOR;
+    ctxPrice.fillStyle = theme.lastPriceText;
     ctxPrice.textAlign = 'center';
     ctxPrice.textBaseline = 'middle';
     ctxPrice.fillText(marker.label, canvasPrice.width / 2, y);
     ctxPrice.restore();
   };
 
-  dates = (ctxDate, canvasDate) => {
+  dates = (ctxDate, canvasDate, pattern = null) => {
     const chartState = this.chartStateRef.current;
-    const gridIncrement = Math.max(chartState.viewport.xGridIncrement, 1);
+    const theme = getChartVisualTheme(chartState);
+    const baseGridIncrement = Math.max(chartState.viewport.xGridIncrement, 1);
+    const gridIncrement = getLiveDateAxisGridIncrement(chartState, pattern, baseGridIncrement);
     const { start, end } = this.getVisibleCandleRange(canvasDate.width, gridIncrement);
     const alignedStart = Math.max(gridIncrement, Math.ceil(start / gridIncrement) * gridIncrement);
     const tickTop = 4;
@@ -996,65 +1124,192 @@ export class Chart {
 
     ctxDate.save();
     ctxDate.font = `650 ${primaryFontSize}px "Segoe UI"`;
-    ctxDate.fillStyle = AXIS_MUTED_TEXT_COLOR;
+    ctxDate.fillStyle = theme.axisMutedText;
     ctxDate.textAlign = 'center';
     ctxDate.textBaseline = 'middle';
-    ctxDate.strokeStyle = 'rgba(93, 118, 156, 0.24)';
+    ctxDate.strokeStyle = theme.dateTick;
     ctxDate.lineWidth = 1;
-    let lastLabelRight = -Infinity;
-    const labelGap = isCompactDateAxis ? 8 : 12;
 
-    for (let candleIndex = alignedStart; candleIndex <= end; candleIndex += gridIncrement) {
-      const candle = chartState.candles.items[candleIndex - 1];
-      const label = formatAxisDateLabel(
-        candle?.candle_display_date ?? candle?.candle_date,
-        chartState.candles.completeWidth,
-        gridIncrement,
-        candle?.candle_display_timezone ?? null
-      );
+    if (pattern?.raw_candle_view) {
+      const liveRange = this.getVisibleCandleRange(canvasDate.width, 1);
+      const candleWidth = Math.max(Number(chartState.candles.completeWidth) || 1, 1);
+      const labelEvery = Math.max(1, Math.ceil(46 / candleWidth));
+      const firstLabelIndex = Math.max(1, Math.ceil(liveRange.start / labelEvery) * labelEvery);
 
-      if (!label) {
-        continue;
+      ctxDate.fillStyle = theme.axisText;
+      ctxDate.font = `750 ${primaryFontSize}px "Segoe UI"`;
+
+      for (let candleIndex = Math.max(1, liveRange.start); candleIndex <= liveRange.end; candleIndex += 1) {
+        const candle = chartState.candles.items[candleIndex - 1];
+        const x = getCanvasX(chartState, candleIndex);
+
+        if (x < -24 || x > canvasDate.width + 24) {
+          continue;
+        }
+
+        ctxDate.beginPath();
+        ctxDate.moveTo(x, tickTop);
+        ctxDate.lineTo(x, tickBottom);
+        ctxDate.stroke();
+
+        if ((candleIndex - firstLabelIndex) % labelEvery !== 0) {
+          continue;
+        }
+
+        const label = formatAxisDateLabel(
+          candle?.candle_display_date ?? candle?.candle_date,
+          chartState.candles.completeWidth,
+          1,
+          candle?.candle_display_timezone ?? null
+        );
+        const labelText = typeof label === 'string' ? label : label?.primary;
+
+        if (labelText) {
+          ctxDate.fillText(labelText, x, primaryLabelY);
+        }
       }
 
-      const x = getCanvasX(chartState, candleIndex);
+      const newestCandle = chartState.candles.items[0];
+      const newestDisplayDate = newestCandle?.candle_display_date ?? newestCandle?.candle_date;
+      const newestDate = parseAxisDate(newestDisplayDate);
+      const timeframeMs = getTimeframeMilliseconds(pattern?.source_timeframe ?? newestCandle?.source_timeframe ?? '2m');
+      const maxFutureSlots = 90;
 
-      if (x < -24 || x > canvasDate.width + 24) {
-        continue;
+      if (newestDate && Number.isFinite(timeframeMs) && timeframeMs > 0) {
+        for (let slotOffset = 1; slotOffset <= maxFutureSlots; slotOffset += 1) {
+          const candleIndex = 1 - slotOffset;
+          const x = getCanvasX(chartState, candleIndex);
+
+          if (x > canvasDate.width + 24) {
+            break;
+          }
+          if (x < -24) {
+            continue;
+          }
+
+          ctxDate.beginPath();
+          ctxDate.moveTo(x, tickTop);
+          ctxDate.lineTo(x, tickBottom);
+          ctxDate.stroke();
+
+          if (slotOffset % labelEvery !== 0) {
+            continue;
+          }
+
+          const futureDate = formatAxisDateValue(new Date(newestDate.getTime() + timeframeMs * slotOffset));
+          const label = formatAxisDateLabel(
+            futureDate,
+            chartState.candles.completeWidth,
+            1,
+            newestCandle?.candle_display_timezone ?? null
+          );
+          const labelText = typeof label === 'string' ? label : label?.primary;
+
+          if (labelText) {
+            ctxDate.fillText(labelText, x, primaryLabelY);
+          }
+        }
       }
+    } else {
+      let lastLabelRight = -Infinity;
+      const labelGap = isCompactDateAxis ? 8 : 12;
 
-      ctxDate.beginPath();
-      ctxDate.moveTo(x, tickTop);
-      ctxDate.lineTo(x, tickBottom);
-      ctxDate.stroke();
+      for (let candleIndex = alignedStart; candleIndex <= end; candleIndex += gridIncrement) {
+        const candle = chartState.candles.items[candleIndex - 1];
+        const label = formatAxisDateLabel(
+          candle?.candle_display_date ?? candle?.candle_date,
+          chartState.candles.completeWidth,
+          gridIncrement,
+          candle?.candle_display_timezone ?? null
+        );
 
-      const primaryText = typeof label === 'string' ? label : label.primary;
-      const secondaryText = typeof label === 'string' ? '' : label.secondary;
-      ctxDate.font = `650 ${primaryFontSize}px "Segoe UI"`;
-      const primaryWidth = ctxDate.measureText(primaryText).width;
-      ctxDate.font = `600 ${secondaryFontSize}px "Segoe UI"`;
-      const secondaryWidth = secondaryText ? ctxDate.measureText(secondaryText).width : 0;
-      ctxDate.font = `650 ${primaryFontSize}px "Segoe UI"`;
-      const labelWidth = Math.max(primaryWidth, secondaryWidth);
-      const labelLeft = x - labelWidth / 2;
-      const labelRight = x + labelWidth / 2;
+        if (!label) {
+          continue;
+        }
 
-      if (labelLeft < lastLabelRight + labelGap) {
-        continue;
-      }
+        const x = getCanvasX(chartState, candleIndex);
 
-      if (typeof label === 'string') {
-        ctxDate.fillText(label, x, primaryLabelY);
-      } else {
-        ctxDate.fillStyle = AXIS_TEXT_COLOR;
-        ctxDate.fillText(label.primary, x, primaryLabelY);
-        ctxDate.fillStyle = AXIS_MUTED_TEXT_COLOR;
-        ctxDate.font = `600 ${secondaryFontSize}px "Segoe UI"`;
-        ctxDate.fillText(label.secondary, x, secondaryLabelY);
+        if (x < -24 || x > canvasDate.width + 24) {
+          continue;
+        }
+
+        ctxDate.beginPath();
+        ctxDate.moveTo(x, tickTop);
+        ctxDate.lineTo(x, tickBottom);
+        ctxDate.stroke();
+
+        const primaryText = typeof label === 'string' ? label : label.primary;
+        const secondaryText = typeof label === 'string' ? '' : label.secondary;
         ctxDate.font = `650 ${primaryFontSize}px "Segoe UI"`;
-      }
+        const primaryWidth = ctxDate.measureText(primaryText).width;
+        ctxDate.font = `600 ${secondaryFontSize}px "Segoe UI"`;
+        const secondaryWidth = secondaryText ? ctxDate.measureText(secondaryText).width : 0;
+        ctxDate.font = `650 ${primaryFontSize}px "Segoe UI"`;
+        const labelWidth = Math.max(primaryWidth, secondaryWidth);
+        const labelLeft = x - labelWidth / 2;
+        const labelRight = x + labelWidth / 2;
 
-      lastLabelRight = labelRight;
+        if (labelLeft < lastLabelRight + labelGap) {
+          continue;
+        }
+
+        if (typeof label === 'string') {
+          ctxDate.fillText(label, x, primaryLabelY);
+        } else {
+          ctxDate.fillStyle = theme.axisText;
+          ctxDate.fillText(label.primary, x, primaryLabelY);
+          ctxDate.fillStyle = theme.axisMutedText;
+          ctxDate.font = `600 ${secondaryFontSize}px "Segoe UI"`;
+          ctxDate.fillText(label.secondary, x, secondaryLabelY);
+          ctxDate.font = `650 ${primaryFontSize}px "Segoe UI"`;
+        }
+
+        lastLabelRight = labelRight;
+      }
+    }
+
+    const liveSlot = pattern?.raw_live_time_slot;
+    const liveSlotIndex = Number(liveSlot?.index);
+    const liveSlotDate = liveSlot?.slot_time;
+    if (pattern?.raw_candle_view && Number.isFinite(liveSlotIndex) && liveSlotDate) {
+      const x = getCanvasX(chartState, liveSlotIndex);
+      if (x >= -80 && x <= canvasDate.width + 80) {
+        const label = formatAxisDateLabel(
+          liveSlotDate,
+          chartState.candles.completeWidth,
+          1,
+          liveSlot?.display_timezone ?? null
+        );
+        const labelText = `LIVE ${typeof label === 'string' ? label : label?.primary ?? ''}`.trim();
+
+        if (labelText) {
+          ctxDate.font = `850 ${primaryFontSize}px "Segoe UI"`;
+          const labelWidth = Math.max(72, ctxDate.measureText(labelText).width + 16);
+          const labelHeight = Math.max(20, canvasDate.height - 8);
+          const labelX = clamp(x - labelWidth / 2, 4, canvasDate.width - labelWidth - 4);
+          const labelY = Math.max(3, Math.floor((canvasDate.height - labelHeight) / 2));
+
+          ctxDate.beginPath();
+          ctxDate.strokeStyle = '#f59e0b';
+          ctxDate.lineWidth = 1.2;
+          ctxDate.moveTo(x, tickTop);
+          ctxDate.lineTo(x, canvasDate.height - 3);
+          ctxDate.stroke();
+
+          ctxDate.beginPath();
+          ctxDate.fillStyle = 'rgba(255, 251, 235, 0.98)';
+          ctxDate.strokeStyle = '#f59e0b';
+          ctxDate.lineWidth = 1.2;
+          ctxDate.roundRect(labelX, labelY, labelWidth, labelHeight, 6);
+          ctxDate.fill();
+          ctxDate.stroke();
+
+          ctxDate.fillStyle = '#92400e';
+          ctxDate.textAlign = 'center';
+          ctxDate.textBaseline = 'middle';
+          ctxDate.fillText(labelText, labelX + labelWidth / 2, labelY + labelHeight / 2);
+        }
+      }
     }
 
     ctxDate.restore();
@@ -1143,6 +1398,9 @@ export class Chart {
 
     for (let candleIndex = start; candleIndex <= end; candleIndex += 1) {
       const candle = chartState.candles.items[candleIndex - 1];
+      if (!isDrawableCandle(candle)) {
+        continue;
+      }
       const x = getCanvasX(chartState, candleIndex);
       const isReversalSignalCandle = reversalFocusOnly && (reversalIndexes?.has(candleIndex) ?? false);
       const isEntryCandle = shouldHighlightEntryCandle && candleIndex === Math.round(entryIndex);
@@ -1440,6 +1698,10 @@ export class Chart {
   };
 
   drawCandle = (ctx, candle, x, highlight = {}) => {
+    if (!isDrawableCandle(candle)) {
+      return;
+    }
+
     const { candleLeftX, candleTopY, candleHeight, candleRenderWidth } = this.getCandleGeometry(
       candle,
       x
@@ -1506,6 +1768,10 @@ export class Chart {
   };
 
   drawWick = (ctx, candle, x, highlight = {}) => {
+    if (!isDrawableCandle(candle)) {
+      return;
+    }
+
     const { candleCenterX, highY, lowY, candleTopY, candleBottomY } = this.getCandleGeometry(
       candle,
       x
@@ -2069,7 +2335,225 @@ export class ABCD {
     });
   };
 
-  raw_trend_event = (ctx, pattern) => {
+  raw_stage2_window = (ctx, pattern) => {
+    if (!pattern?.raw_candle_view) {
+      return;
+    }
+
+    const markers = Array.isArray(pattern?.raw_stage2_window)
+      ? pattern.raw_stage2_window
+      : [];
+
+    if (!markers.length) {
+      return;
+    }
+
+    const chartState = this.chartStateRef.current;
+    const canvas = chartState?.canvas;
+
+    if (!canvas) {
+      return;
+    }
+
+    markers.forEach((marker, markerOffset) => {
+      const index = Number(marker?.index);
+      const sequence = Number(marker?.sequence);
+      const maxBars = Number(marker?.max_bars);
+
+      if (
+        !Number.isFinite(index) ||
+        index < 1 ||
+        !Number.isFinite(sequence) ||
+        sequence < 1 ||
+        !Number.isFinite(maxBars) ||
+        maxBars < 1
+      ) {
+        return;
+      }
+
+      const status = String(marker?.status || '').toLowerCase();
+      const direction = String(marker?.direction || '').toUpperCase();
+      const watchNumber = Number(marker?.watch_number);
+      const lane = Number(marker?.lane);
+      const score = toFinitePrice(marker?.level2_score);
+      const x = getCanvasX(chartState, index);
+      const candleWidth = chartState.candles.completeWidth || 8;
+      const bandWidth = Math.max(22, candleWidth * 2.2);
+      const leftX = x - bandWidth / 2;
+      const isShort = direction === 'SHORT';
+      const fillColor = isShort ? 'rgba(248, 113, 113, 0.14)' : 'rgba(56, 189, 248, 0.14)';
+      const strokeColor = status.includes('confirmed')
+        ? '#16a34a'
+        : status.includes('expired')
+          ? '#dc2626'
+          : isShort
+            ? '#ef4444'
+            : '#0284c7';
+      const watchId = Number.isFinite(lane)
+        ? `W${Math.round(lane) + 1}`
+        : Number.isFinite(watchNumber)
+          ? `W${Math.round(watchNumber)}`
+          : 'WATCH';
+      const scoreLabel = Number.isFinite(score) ? ` ${Math.round(score * 100)}%` : '';
+      const statusLabel = status.includes('expired') ? 'EXPIRED' : 'S2';
+      const label = `${watchId} ${direction || 'S2'}${scoreLabel} ${statusLabel} ${Math.round(sequence)}/${Math.round(maxBars)}`;
+      const labelHeight = 22;
+      const labelY = clamp(
+        canvas.height - 34 - markerOffset * (labelHeight + 4),
+        8,
+        canvas.height - labelHeight - 8
+      );
+
+      ctx.save();
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(leftX, 0, bandWidth, canvas.height);
+
+      ctx.font = '950 11px "Segoe UI"';
+      const labelWidth = Math.max(116, ctx.measureText(label).width + 14);
+      const labelX = clamp(x - labelWidth / 2, 6, canvas.width - labelWidth - 6);
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 1.3;
+      ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = isShort ? '#7f1d1d' : '#075985';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
+      ctx.restore();
+    });
+  };
+
+  raw_live_time_slot = (ctx, pattern) => {
+    if (!pattern?.raw_candle_view || !pattern?.raw_live_time_slot) {
+      return;
+    }
+
+    const chartState = this.chartStateRef.current;
+    const canvas = chartState?.canvas;
+    const index = Number(pattern.raw_live_time_slot.index);
+
+    if (!canvas || !Number.isFinite(index)) {
+      return;
+    }
+
+    const x = getCanvasX(chartState, index);
+    const candleWidth = chartState.candles.completeWidth || 8;
+    const bandWidth = Math.max(18, candleWidth * 1.8);
+    const leftX = x - bandWidth / 2;
+    const label = 'LIVE';
+    const labelHeight = 22;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.10)';
+    ctx.fillRect(leftX, 0, bandWidth, canvas.height);
+
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+
+    ctx.font = '950 11px "Segoe UI"';
+    const labelWidth = Math.max(48, ctx.measureText(label).width + 16);
+    const labelX = clamp(x - labelWidth / 2, 8, canvas.width - labelWidth - 8);
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(255, 251, 235, 0.98)';
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1.2;
+    ctx.roundRect(labelX, 38, labelWidth, labelHeight, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#92400e';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, labelX + labelWidth / 2, 38 + labelHeight / 2);
+    ctx.restore();
+  };
+
+  raw_scanner_checks = (ctx, pattern) => {
+    if (!pattern?.raw_candle_view) {
+      return;
+    }
+
+    const markers = Array.isArray(pattern?.raw_scanner_checks)
+      ? pattern.raw_scanner_checks
+      : [];
+
+    if (!markers.length) {
+      return;
+    }
+
+    const chartState = this.chartStateRef.current;
+    const canvas = chartState?.canvas;
+
+    if (!canvas) {
+      return;
+    }
+
+    markers.forEach((marker) => {
+      const index = Number(marker?.index);
+      if (!Number.isFinite(index) || index < 1) {
+        return;
+      }
+
+      const x = getCanvasX(chartState, index);
+      const bandWidth = Math.max(20, (chartState.candles.completeWidth || 8) * 2.1);
+      const leftX = x - bandWidth / 2;
+      const longScore = toFinitePrice(marker?.level2_long_score);
+      const shortScore = toFinitePrice(marker?.level2_short_score);
+      const bestScore = toFinitePrice(marker?.level2_best_score);
+      const bestDirection = String(marker?.level2_best_direction || '').toUpperCase();
+      const picks = toFinitePrice(marker?.level2_picks);
+      const scoreLabel = Number.isFinite(bestScore)
+        ? `${bestDirection ? `${bestDirection} ` : ''}${Math.round(bestScore * 100)}%`
+        : Number.isFinite(longScore) || Number.isFinite(shortScore)
+          ? `L ${Number.isFinite(longScore) ? Math.round(longScore * 100) : '-'}% / S ${Number.isFinite(shortScore) ? Math.round(shortScore * 100) : '-'}%`
+          : Number.isFinite(picks) && picks > 0
+            ? `${picks} watch`
+            : 'checked';
+      const label = `SCANNED ${scoreLabel}`.trim();
+      const labelHeight = 24;
+      const labelY = 10;
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(14, 165, 233, 0.10)';
+      ctx.fillRect(leftX, 0, bandWidth, canvas.height);
+
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.font = '950 11px "Segoe UI"';
+      const labelWidth = Math.max(104, ctx.measureText(label).width + 18);
+      const labelX = clamp(x - labelWidth / 2, 8, canvas.width - labelWidth - 8);
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(240, 249, 255, 0.96)';
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 1.2;
+      ctx.roundRect(labelX, labelY, labelWidth, labelHeight, 7);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#075985';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, labelX + labelWidth / 2, labelY + labelHeight / 2);
+      ctx.restore();
+    });
+  };
+
+  raw_trend_event = (ctx, ctxPrice, pattern) => {
     if (!pattern?.raw_candle_view || !pattern?.raw_selected_trend) {
       return;
     }
@@ -2088,10 +2572,14 @@ export class ABCD {
     const exitPrice = toFinitePrice(pattern?.trade_exit_price ?? pattern?.exit_price);
     const direction = getTradeDirectionLabel(pattern);
     const isOracleTrend = String(pattern?.raw_trend_source || '').toLowerCase() === 'oracle';
-    const isLiveSignal = String(pattern?.raw_trend_source || '').toLowerCase() === 'live_signal';
     const resultR = Number(pattern?.result_r);
     const isWin = Number.isFinite(resultR) ? resultR > 0 : null;
     const outcomeColor = isWin === false ? TRADE_STOP_COLOR : TRADE_TARGET_COLOR;
+    const usePriceColumnLabels =
+      Boolean(ctxPrice?.canvas) &&
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(max-width: 720px)').matches;
+    const priceColumnTags = [];
 
     const drawColumn = (index, label, color, fillColor, stackOrder = 0) => {
       const markerIndex = Number(index);
@@ -2101,41 +2589,25 @@ export class ABCD {
       }
 
       const x = getCanvasX(chartState, markerIndex);
-      const candle = chartState?.candles?.items?.[Math.round(markerIndex) - 1];
-      const geometry = candle ? new Chart(this.chartStateRef).getCandleGeometry(candle, x) : null;
       const bandWidth = Math.max(24, (chartState.candles.completeWidth || 8) * 2.5);
       const leftX = x - bandWidth / 2;
       const labelHeight = 24;
-      const labelY = 10 + stackOrder * 30;
+      const labelY = Math.max(8, canvas.height - labelHeight - 10);
 
       ctx.save();
       ctx.fillStyle = fillColor;
       ctx.fillRect(leftX, 0, bandWidth, canvas.height);
 
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2.2;
+      ctx.globalAlpha = 0.72;
+      ctx.lineWidth = 1.2;
       ctx.setLineDash([7, 5]);
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, canvas.height);
       ctx.stroke();
       ctx.setLineDash([]);
-
-      if (geometry) {
-        const top = Math.max(2, Math.min(geometry.highY, geometry.candleTopY) - 10);
-        const bottom = Math.min(
-          canvas.height - 2,
-          Math.max(geometry.lowY, geometry.candleBottomY) + 10
-        );
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.strokeRect(
-          geometry.candleLeftX - 5,
-          top,
-          geometry.candleRenderWidth + 10,
-          Math.max(bottom - top, 24)
-        );
-      }
+      ctx.globalAlpha = 1;
 
       ctx.font = '950 12px "Segoe UI"';
       const labelWidth = Math.max(62, ctx.measureText(label).width + 18);
@@ -2170,13 +2642,26 @@ export class ABCD {
 
       ctx.save();
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2.2;
+      ctx.globalAlpha = 0.72;
+      ctx.lineWidth = 1.2;
       ctx.setLineDash(dash);
       ctx.beginPath();
       ctx.moveTo(0, lineY);
       ctx.lineTo(canvas.width, lineY);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+
+      if (usePriceColumnLabels) {
+        priceColumnTags.push({
+          color: label === 'ENTRY' ? TRADE_ENTRY_COLUMN_COLOR : color,
+          key: label.toLowerCase(),
+          price,
+          y: lineY,
+        });
+        ctx.restore();
+        return;
+      }
 
       ctx.font = '950 13px "Segoe UI"';
       const text = `${label} ${formatLevelPrice(price)}`;
@@ -2198,6 +2683,91 @@ export class ABCD {
       ctx.textBaseline = 'middle';
       ctx.fillText(text, labelX + labelWidth / 2, labelY + labelHeight / 2);
       ctx.restore();
+    };
+
+    const drawMobilePriceColumnTags = () => {
+      if (!usePriceColumnLabels || !priceColumnTags.length) {
+        return;
+      }
+
+      const tagHeight = 26;
+      const tagGap = 3;
+      const pricePixelRatio = Math.max(1, Number(ctxPrice.getTransform?.().a) || 1);
+      const priceCanvasWidth = Math.max(1, ctxPrice.canvas.width / pricePixelRatio);
+      const priceCanvasHeight = Math.max(1, ctxPrice.canvas.height / pricePixelRatio);
+      const tagWidth = Math.max(34, priceCanvasWidth - 4);
+      const tagX = Math.max(1, (priceCanvasWidth - tagWidth) / 2);
+      const sortedTags = priceColumnTags
+        .sort((left, right) => left.y - right.y)
+        .map((level) => ({
+          ...level,
+          tagY: clamp(
+            level.y - tagHeight / 2,
+            2,
+            priceCanvasHeight - tagHeight - 2
+          ),
+        }));
+
+      sortedTags.forEach((level, index) => {
+        if (index === 0) {
+          return;
+        }
+
+        const previous = sortedTags[index - 1];
+        level.tagY = Math.max(level.tagY, previous.tagY + tagHeight + tagGap);
+      });
+
+      const overflow = sortedTags.length
+        ? sortedTags[sortedTags.length - 1].tagY + tagHeight + 2 - priceCanvasHeight
+        : 0;
+
+      if (overflow > 0) {
+        for (let index = sortedTags.length - 1; index >= 0; index -= 1) {
+          sortedTags[index].tagY -= overflow;
+        }
+      }
+
+      ctxPrice.save();
+      ctxPrice.globalAlpha = 1;
+      ctxPrice.globalCompositeOperation = 'source-over';
+      ctxPrice.shadowColor = 'transparent';
+      ctxPrice.shadowBlur = 0;
+      ctxPrice.font = '950 14px "Segoe UI"';
+      ctxPrice.textAlign = 'center';
+      ctxPrice.textBaseline = 'middle';
+
+      sortedTags.forEach((level) => {
+        const centerY = level.tagY + tagHeight / 2;
+        const priceText = formatLevelPrice(level.price) || '--';
+        let priceFontSize = 14;
+
+        ctxPrice.beginPath();
+        ctxPrice.strokeStyle = level.color;
+        ctxPrice.lineWidth = 1;
+        ctxPrice.setLineDash([3, 3]);
+        ctxPrice.moveTo(2, level.y);
+        ctxPrice.lineTo(tagX, centerY);
+        ctxPrice.stroke();
+        ctxPrice.setLineDash([]);
+
+        ctxPrice.beginPath();
+        ctxPrice.fillStyle = '#000000';
+        ctxPrice.strokeStyle = level.color;
+        ctxPrice.lineWidth = 1.5;
+        ctxPrice.roundRect(tagX, level.tagY, tagWidth, tagHeight, 4);
+        ctxPrice.fill();
+        ctxPrice.stroke();
+
+        ctxPrice.font = `950 ${priceFontSize}px "Segoe UI"`;
+        while (priceFontSize > 9 && ctxPrice.measureText(priceText).width > tagWidth - 4) {
+          priceFontSize -= 1;
+          ctxPrice.font = `950 ${priceFontSize}px "Segoe UI"`;
+        }
+        ctxPrice.fillStyle = '#ffffff';
+        ctxPrice.fillText(priceText, tagX + tagWidth / 2, centerY);
+      });
+
+      ctxPrice.restore();
     };
 
     const drawTradePath = () => {
@@ -2226,15 +2796,14 @@ export class ABCD {
         ? `${resultR > 0 ? '+' : ''}${resultR.toFixed(1)}R`
         : 'TRADE PATH';
       const angle = Math.atan2(exitY - entryY, exitX - entryX);
-      const arrowLength = 15;
+      const arrowLength = 11;
       const arrowSpread = Math.PI / 7;
-      const midX = (entryX + exitX) / 2;
       const midY = (entryY + exitY) / 2;
 
       ctx.save();
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
-      ctx.lineWidth = 3.4;
+      ctx.lineWidth = 1.8;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.shadowColor = 'rgba(0, 0, 0, 0.72)';
@@ -2262,17 +2831,17 @@ export class ABCD {
       ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
       ctx.beginPath();
-      ctx.arc(entryX, entryY, 5, 0, Math.PI * 2);
+      ctx.arc(entryX, entryY, 3.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(exitX, exitY, 6, 0, Math.PI * 2);
+      ctx.arc(exitX, exitY, 4.5, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.font = '950 13px "Segoe UI"';
       const labelWidth = Math.max(58, ctx.measureText(labelText).width + 18);
       const labelHeight = 24;
-      const labelX = clamp(midX - labelWidth / 2, 8, canvas.width - labelWidth - 8);
-      const labelY = clamp(midY - labelHeight - 10, 8, canvas.height - labelHeight - 8);
+      const labelX = Math.max(8, canvas.width - labelWidth - 10);
+      const labelY = clamp(midY - labelHeight / 2, 8, canvas.height - labelHeight - 8);
       ctx.beginPath();
       ctx.fillStyle = 'rgba(6, 10, 12, 0.94)';
       ctx.strokeStyle = color;
@@ -2298,9 +2867,10 @@ export class ABCD {
     drawLevel(entryPrice, 'ENTRY', TRADE_ENTRY_COLUMN_COLOR, [8, 5]);
     drawLevel(stopPrice, 'STOP', TRADE_STOP_COLOR, []);
     drawLevel(exitPrice, 'EXIT', outcomeColor, [8, 5]);
+    drawMobilePriceColumnTags();
     drawTradePath();
 
-    const heading = `${isOracleTrend ? 'ORACLE' : isLiveSignal ? 'LIVE TRADE' : ''} ${direction}`.trim();
+    const heading = isOracleTrend ? `ORACLE ${direction}` : '';
     if (heading) {
       ctx.save();
       ctx.font = '950 15px "Segoe UI"';
@@ -2912,7 +3482,7 @@ export class ABCD {
             key: 'entry',
             label: 'D',
             price: toFinitePrice(pattern?.xa_start_price),
-            color: '#ffffff',
+            color: TRADE_ENTRY_COLUMN_COLOR,
             dash: [3, 5],
           },
           {
@@ -2936,7 +3506,7 @@ export class ABCD {
             key: 'entry',
             label: 'ENT',
             price: toFinitePrice(pattern?.trade_enter_price),
-            color: '#ffffff',
+            color: TRADE_ENTRY_COLUMN_COLOR,
             dash: [3, 5],
           },
           {
@@ -3044,8 +3614,11 @@ export class ABCD {
     ctxPrice.textAlign = 'center';
     ctxPrice.textBaseline = 'middle';
     const tagHeight = 32;
-    const tagWidth = Math.max(58, ctxPrice.canvas.width - 6);
-    const tagX = Math.max(4, (ctxPrice.canvas.width - tagWidth) / 2);
+    const pricePixelRatio = Math.max(1, Number(ctxPrice.getTransform?.().a) || 1);
+    const priceCanvasWidth = Math.max(1, ctxPrice.canvas.width / pricePixelRatio);
+    const priceCanvasHeight = Math.max(1, ctxPrice.canvas.height / pricePixelRatio);
+    const tagWidth = Math.max(58, priceCanvasWidth - 6);
+    const tagX = Math.max(4, (priceCanvasWidth - tagWidth) / 2);
     const tagGap = 4;
     const sortedTags = [...drawableLevels]
       .sort((left, right) => left.y - right.y)
@@ -3053,7 +3626,7 @@ export class ABCD {
         ...level,
         tagY: Math.min(
           Math.max(level.y - tagHeight / 2, 4),
-          ctxPrice.canvas.height - tagHeight - 4
+          priceCanvasHeight - tagHeight - 4
         ),
       }));
 
@@ -3067,7 +3640,7 @@ export class ABCD {
     });
 
     const overflow = sortedTags.length
-      ? sortedTags[sortedTags.length - 1].tagY + tagHeight + 4 - ctxPrice.canvas.height
+      ? sortedTags[sortedTags.length - 1].tagY + tagHeight + 4 - priceCanvasHeight
       : 0;
     if (overflow > 0) {
       for (let index = sortedTags.length - 1; index >= 0; index -= 1) {
@@ -3095,9 +3668,10 @@ export class ABCD {
       ctxPrice.fill();
       ctxPrice.stroke();
 
-      ctxPrice.fillStyle = level.color;
+      const priceText = formatLevelPrice(level.price) || '--';
+      ctxPrice.fillStyle = '#ffffff';
       ctxPrice.font = '950 16px "Segoe UI"';
-      ctxPrice.fillText(formatLevelPrice(level.price), tagX + tagWidth / 2, level.tagY + tagHeight / 2);
+      ctxPrice.fillText(priceText, tagX + tagWidth / 2, level.tagY + tagHeight / 2);
     });
 
     ctxPrice.restore();

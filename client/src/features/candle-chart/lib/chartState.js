@@ -20,19 +20,37 @@ const getNiceCandleIncrement = (rawIncrement) => {
   return magnitude * 10;
 };
 
+const getFiniteCandlePrice = (candle, ...keys) => {
+  for (const key of keys) {
+    const value = Number(candle?.[key]);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
 const buildTrendSeries = (candles, period) => {
   const values = Array(candles.length).fill(null);
   const chronologicalCandles = [...candles].reverse();
   let rollingSum = 0;
+  const rollingCloses = [];
 
   chronologicalCandles.forEach((candle, index) => {
-    rollingSum += candle?.candle_close ?? 0;
-
-    if (index >= period) {
-      rollingSum -= chronologicalCandles[index - period]?.candle_close ?? 0;
+    const close = getFiniteCandlePrice(candle, 'candle_close');
+    if (close === null) {
+      return;
     }
 
-    if (index >= period - 1) {
+    rollingCloses.push(close);
+    rollingSum += close;
+
+    if (rollingCloses.length > period) {
+      rollingSum -= rollingCloses.shift();
+    }
+
+    if (rollingCloses.length >= period) {
       values[candles.length - 1 - index] = rollingSum / period;
     }
   });
@@ -68,7 +86,10 @@ export const commitInteractionState = (chartState) => {
 export const createChartState = ({ canvasWidth, canvasHeight, candles }) => {
   const initialCandleWidth = 11;
   const initialSpacing = 5;
-  const initialPrice = candles[0]?.candle_open ?? 0;
+  const initialPrice =
+    candles
+      .map((candle) => getFiniteCandlePrice(candle, 'candle_open', 'candle_close', 'candle_high', 'candle_low'))
+      .find((value) => value !== null) ?? 0;
   const pixelsPerGrid = Math.max(canvasHeight / 10, 1);
 
   const chartState = {

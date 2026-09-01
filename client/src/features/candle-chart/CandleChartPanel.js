@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CandleChart } from './CandleChart';
 import PatternTable from '../../components/PatternTable';
 import Section from '../../components/Section';
@@ -187,6 +187,7 @@ const CandleChartPanel = ({
   const [isTrend12M, setTrend12M] = useState(false);
   const [isExpandedChart, setExpandedChart] = useState(false);
   const [propFocusScope, setPropFocusScope] = useState('trade');
+  const hoveredCandleLastNotifyRef = useRef(0);
   const [hoveredCandle, setHoveredCandle] = useState({
     date: null,
     high: null,
@@ -473,6 +474,11 @@ const CandleChartPanel = ({
   ) : null;
 
   useEffect(() => {
+    const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    if (now - hoveredCandleLastNotifyRef.current < 90) {
+      return;
+    }
+    hoveredCandleLastNotifyRef.current = now;
     onHoveredCandleChange?.(hoveredCandle);
   }, [hoveredCandle, onHoveredCandleChange]);
 
@@ -664,7 +670,7 @@ const CandleChartPanel = ({
         <div className="margin-">{renderChartShell()}</div>
       </div>
 
-      {isExpandedChart && (
+      {/* {isExpandedChart && (
         <div
           className="chart-overlay"
           style={{ top: `${overlayTopOffset}px` }}
@@ -683,7 +689,7 @@ const CandleChartPanel = ({
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </>
   );
 };

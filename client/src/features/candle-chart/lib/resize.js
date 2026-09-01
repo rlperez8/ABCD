@@ -11,9 +11,13 @@ const MIN_FIT_PRICE_SPAN_RATIO = 0.001;
 const PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO = 0.00005;
 const GRAPH_MIN_FIT_PRICE_SPAN_RATIO = 0.00001;
 const MIN_FIT_PRICE_SPAN_ABSOLUTE = 0.01;
+const RAW_TRADE_MIN_PRICE_SPAN_ABSOLUTE = 0.002;
 const MIN_FIT_COMPLETE_CANDLE_WIDTH = 0.18;
 const MIN_RAW_ALL_FIT_COMPLETE_CANDLE_WIDTH = 0.001;
 const MAX_FIT_COMPLETE_CANDLE_WIDTH = 180;
+const MOBILE_RAW_TRADE_BREAKPOINT = 720;
+const MOBILE_RAW_TRADE_MIN_WINDOW_CANDLES = 24;
+const DESKTOP_RAW_TRADE_MIN_WINDOW_CANDLES = 52;
 
 const getMinimumFitPriceSpan = (
   referencePrice,
@@ -31,6 +35,39 @@ const toFinitePrice = (value) => {
 };
 
 const finitePrices = (...values) => values.map(toFinitePrice).filter((value) => Number.isFinite(value));
+
+const getBoundedCandleIndex = (value, candleCount) => {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  const index = Math.round(parsed);
+  return index >= 1 && index <= candleCount ? index : null;
+};
+
+const getCenteredIndexWindow = (minCoreIndex, maxCoreIndex, desiredWindow, candleCount) => {
+  const boundedWindow = Math.max(1, Math.min(candleCount, Math.round(desiredWindow)));
+  const centerIndex = (minCoreIndex + maxCoreIndex) / 2;
+  let minIndex = Math.round(centerIndex - boundedWindow / 2);
+  let maxIndex = minIndex + boundedWindow - 1;
+
+  if (minIndex < 1) {
+    maxIndex += 1 - minIndex;
+    minIndex = 1;
+  }
+
+  if (maxIndex > candleCount) {
+    minIndex -= maxIndex - candleCount;
+    maxIndex = candleCount;
+  }
+
+  minIndex = Math.max(1, Math.min(minIndex, minCoreIndex));
+  maxIndex = Math.min(candleCount, Math.max(maxIndex, maxCoreIndex));
+
+  return { minIndex, maxIndex };
+};
 
 const REVERSAL_TYPE_TO_SIGNAL_KEY = {
   BullishKeyReversal: 'bullish_key_reversal',
@@ -369,6 +406,100 @@ const getRawCandleFocusBounds = (chartStateRef, rustPattern) => {
       focusCandle?.candle_open ??
       focusCandle?.open
   );
+  const selectedTradeIndexes = [
+    getBoundedCandleIndex(rustPattern?.entry, candles.length),
+    getBoundedCandleIndex(rustPattern?.exit_date, candles.length),
+    getBoundedCandleIndex(rustPattern?.trend_confirm_index, candles.length),
+  ].filter((index) => index !== null);
+  const isMobileRawTradeFit = chartState.canvas.width <= MOBILE_RAW_TRADE_BREAKPOINT;
+  const isSelectedTradeFit =
+    Boolean(rustPattern?.raw_selected_trend) &&
+    !showAllCandles &&
+    selectedTradeIndexes.length > 0;
+
+  if (isSelectedTradeFit) {
+    const hasExitIndex = getBoundedCandleIndex(rustPattern?.exit_date, candles.length) !== null;
+    const coreIndexes = hasExitIndex
+      ? selectedTradeIndexes
+      : [...selectedTradeIndexes, 1];
+    const minCoreIndex = Math.max(1, Math.min(...coreIndexes));
+    const maxCoreIndex = Math.min(candles.length, Math.max(...coreIndexes));
+    const coreSpan = Math.max(maxCoreIndex - minCoreIndex + 1, 1);
+    const contextPadding = isMobileRawTradeFit
+      ? coreSpan <= 8
+        ? 10
+        : coreSpan <= 40
+          ? 14
+          : Math.min(80, Math.ceil(coreSpan * 0.2))
+      : coreSpan <= 8
+        ? 18
+        : coreSpan <= 40
+          ? 24
+          : Math.min(140, Math.ceil(coreSpan * 0.24));
+    const desiredWindow = Math.max(
+      isMobileRawTradeFit ? MOBILE_RAW_TRADE_MIN_WINDOW_CANDLES : DESKTOP_RAW_TRADE_MIN_WINDOW_CANDLES,
+      coreSpan + contextPadding * 2
+    );
+    const focusedWindow = getCenteredIndexWindow(
+      minCoreIndex,
+      maxCoreIndex,
+      desiredWindow,
+      candles.length
+    );
+    let minSelectedPrice = Number.POSITIVE_INFINITY;
+    let maxSelectedPrice = Number.NEGATIVE_INFINITY;
+    let selectedPriceCount = 0;
+    const addSelectedTradePrice = (value) => {
+      const price = toFinitePrice(value);
+
+      if (!Number.isFinite(price) || price <= 0) {
+        return;
+      }
+
+      minSelectedPrice = Math.min(minSelectedPrice, price);
+      maxSelectedPrice = Math.max(maxSelectedPrice, price);
+      selectedPriceCount += 1;
+    };
+
+    for (let index = focusedWindow.minIndex; index <= focusedWindow.maxIndex; index += 1) {
+      const candle = candles[index - 1];
+      addSelectedTradePrice(candle?.candle_low);
+      addSelectedTradePrice(candle?.candle_high);
+    }
+
+    [
+      rustPattern?.trade_enter_price,
+      rustPattern?.trade_risk_exit_price,
+      rustPattern?.trade_reward_exit_price,
+      rustPattern?.trade_exit_price,
+      rustPattern?.trade_current_price,
+      rustPattern?.target_close,
+      rustPattern?.exit_price,
+    ].forEach(addSelectedTradePrice);
+
+    if (selectedPriceCount) {
+      const minimumSpan = getMinimumFitPriceSpan(
+        maxSelectedPrice,
+        PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO,
+        RAW_TRADE_MIN_PRICE_SPAN_ABSOLUTE
+      );
+      const pricePadding = Math.max(
+        (maxSelectedPrice - minSelectedPrice) * 0.14,
+        minimumSpan * 0.25
+      );
+
+      return {
+        minPrice: minSelectedPrice - pricePadding,
+        maxPrice: maxSelectedPrice + pricePadding,
+        minIndex: focusedWindow.minIndex,
+        maxIndex: focusedWindow.maxIndex,
+        anchorIndex: (minCoreIndex + maxCoreIndex) / 2,
+        centerFocusAtMidpoint: true,
+        minPriceSpanRatio: PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO,
+        minPriceSpanAbsolute: RAW_TRADE_MIN_PRICE_SPAN_ABSOLUTE,
+      };
+    }
+  }
   const halfWindow = Math.floor(visibleCount / 2);
   let minIndex = 1;
   let maxIndex = visibleCount;
@@ -493,15 +624,19 @@ const applyVerticalFit = (chartStateRef, minPrice, maxPrice, options = {}) => {
   const chartState = chartStateRef.current;
   const isPropTradeFocus = options.focusMode === 'propTrade';
   const isGraphFocus = options.focusMode === 'graph';
+  const fitPriceSpanRatio =
+    options.minPriceSpanRatio ??
+    (isGraphFocus
+      ? GRAPH_MIN_FIT_PRICE_SPAN_RATIO
+      : isPropTradeFocus
+        ? PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO
+        : MIN_FIT_PRICE_SPAN_RATIO);
   const priceSpan = Math.max(
     maxPrice - minPrice,
     getMinimumFitPriceSpan(
       maxPrice,
-      isGraphFocus
-        ? GRAPH_MIN_FIT_PRICE_SPAN_RATIO
-        : isPropTradeFocus
-          ? PROP_TRADE_MIN_FIT_PRICE_SPAN_RATIO
-          : MIN_FIT_PRICE_SPAN_RATIO
+      fitPriceSpanRatio,
+      options.minPriceSpanAbsolute ?? MIN_FIT_PRICE_SPAN_ABSOLUTE
     )
   );
   const verticalTopPadding = Math.min(
@@ -559,7 +694,7 @@ const applyVerticalZoomMultiplier = (chartStateRef, multiplier) => {
     return;
   }
 
-  const zoomMultiplier = Math.min(parsedMultiplier, 8);
+  const zoomMultiplier = Math.min(parsedMultiplier, 48);
   chartState.price.pixelsPerGrid *= zoomMultiplier;
   chartState.price.prevPixelsPerGrid *= zoomMultiplier;
   chartState.price.startingPixelsPerGrid *= zoomMultiplier;
@@ -619,7 +754,7 @@ export const scale_price_axis = (chartStateRef, multiplier) => {
   const nextPixelsPerGrid = clamp(
     chartState.price.pixelsPerGrid * parsedMultiplier,
     Math.max(chartState.price.startingPixelsPerGrid * 0.12, 2),
-    Math.max(chartState.price.startingPixelsPerGrid * 24, 24)
+    Math.max(chartState.price.startingPixelsPerGrid * 420, 420)
   );
   const appliedMultiplier = nextPixelsPerGrid / chartState.price.pixelsPerGrid;
 
@@ -678,6 +813,8 @@ export const reposition_candles = (chartStateRef, rustPattern, options = {}) => 
     ...options,
     centerPriceAtMidpoint: bounds.centerPriceAtMidpoint,
     anchorPrice: bounds.anchorPrice,
+    minPriceSpanRatio: bounds.minPriceSpanRatio,
+    minPriceSpanAbsolute: bounds.minPriceSpanAbsolute,
   });
   if (rustPattern?.raw_candle_view) {
     applyVerticalZoomMultiplier(chartStateRef, rustPattern?.raw_vertical_zoom);

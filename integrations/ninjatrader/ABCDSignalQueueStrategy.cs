@@ -39,6 +39,8 @@ namespace NinjaTrader.NinjaScript.Strategies
         private bool timeExitSubmitted;
         private Timer queueTimer;
         private DateTime lastTimerErrorUtc = DateTime.MinValue;
+        private DateTime activeEntryTime = DateTime.MinValue;
+        private DateTime lastOpenSignalRecoveryUtc = DateTime.MinValue;
 
         protected override void OnStateChange()
         {
@@ -142,6 +144,7 @@ namespace NinjaTrader.NinjaScript.Strategies
             {
                 activeSignalUid = signalUid;
                 activeEntryOrderTag = execution.Order.Name;
+                activeEntryTime = time;
                 timeExitSubmitted = false;
                 PostStatus(signalUid, "triggered", orderId, price, "execution received");
 
@@ -159,6 +162,7 @@ namespace NinjaTrader.NinjaScript.Strategies
                 quickExitSignals.Remove(activeSignalUid);
                 activeSignalUid = null;
                 activeEntryOrderTag = null;
+                activeEntryTime = DateTime.MinValue;
                 timeExitSubmitted = false;
             }
         }
@@ -171,23 +175,113 @@ namespace NinjaTrader.NinjaScript.Strategies
             if (MaxHoldBars <= 0 || timeExitSubmitted)
                 return;
 
-            if (string.IsNullOrWhiteSpace(activeSignalUid) || string.IsNullOrWhiteSpace(activeEntryOrderTag))
-                return;
-
             if (Position.MarketPosition == MarketPosition.Flat)
                 return;
 
-            int barsSinceEntry = BarsSinceEntryExecution(0, activeEntryOrderTag, 0);
+            SignalRow recoveredSignal = null;
+            if (string.IsNullOrWhiteSpace(activeSignalUid))
+            {
+                recoveredSignal = RecoverOpenSignalForPosition();
+                if (recoveredSignal == null)
+                    return;
+
+                activeSignalUid = recoveredSignal.signal_uid;
+                activeEntryOrderTag = BuildOrderTag(recoveredSignal);
+                activeEntryTime = BestSignalTime(recoveredSignal);
+                timeExitSubmitted = false;
+                Log("ABCD Signal Queue recovered open signal " + activeSignalUid + " for time-exit management.");
+            }
+
+            int barsSinceEntry = -1;
+            if (!string.IsNullOrWhiteSpace(activeEntryOrderTag))
+                barsSinceEntry = BarsSinceEntryExecution(0, activeEntryOrderTag, 0);
+
+            if (barsSinceEntry < 0 && activeEntryTime != DateTime.MinValue)
+            {
+                double minutes = Math.Max(0, (Time[0] - activeEntryTime).TotalMinutes);
+                double barMinutes = BarsPeriod != null && BarsPeriod.BarsPeriodType == BarsPeriodType.Minute
+                    ? Math.Max(1, BarsPeriod.Value)
+                    : 2;
+                barsSinceEntry = (int)Math.Floor(minutes / barMinutes);
+            }
+
             if (barsSinceEntry < MaxHoldBars)
                 return;
 
             timeExitSubmitted = true;
+            bool hasTrackedEntry = !string.IsNullOrWhiteSpace(activeEntryOrderTag)
+                && BarsSinceEntryExecution(0, activeEntryOrderTag, 0) >= 0;
+
             if (Position.MarketPosition == MarketPosition.Long)
-                ExitLong("ABCD_TIME_EXIT", activeEntryOrderTag);
+            {
+                if (hasTrackedEntry)
+                    ExitLong("ABCD_TIME_EXIT", activeEntryOrderTag);
+                else
+                    ExitLong("ABCD_TIME_EXIT");
+            }
             else if (Position.MarketPosition == MarketPosition.Short)
-                ExitShort("ABCD_TIME_EXIT", activeEntryOrderTag);
+            {
+                if (hasTrackedEntry)
+                    ExitShort("ABCD_TIME_EXIT", activeEntryOrderTag);
+                else
+                    ExitShort("ABCD_TIME_EXIT");
+            }
 
             Log("ABCD Signal Queue time exit submitted after " + barsSinceEntry + " bars for " + activeSignalUid);
+        }
+
+        private SignalRow RecoverOpenSignalForPosition()
+        {
+            if ((DateTime.UtcNow - lastOpenSignalRecoveryUtc).TotalSeconds < 10)
+                return null;
+            lastOpenSignalRecoveryUtc = DateTime.UtcNow;
+
+            try
+            {
+                string body = "{"
+                    + JsonPair("account_name", AccountName)
+                    + JsonPair("instrument", Instrument.FullName)
+                    + "\"include_cancelled\":true,"
+                    + "\"limit\":20"
+                    + "}";
+                string response = PostJson(BridgeBaseUrl + "/ninjatrader/signals/history", body);
+                foreach (SignalRow signal in ParseSignals(response))
+                {
+                    if (signal == null)
+                        continue;
+                    if (!string.Equals(signal.status, "triggered", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (!string.Equals(signal.instrument, Instrument.FullName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (Position.MarketPosition == MarketPosition.Long
+                        && string.Equals(signal.side, "LONG", StringComparison.OrdinalIgnoreCase))
+                        return signal;
+                    if (Position.MarketPosition == MarketPosition.Short
+                        && string.Equals(signal.side, "SHORT", StringComparison.OrdinalIgnoreCase))
+                        return signal;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("ABCD Signal Queue open signal recovery failed: " + ex.Message);
+            }
+
+            return null;
+        }
+
+        private static DateTime BestSignalTime(SignalRow signal)
+        {
+            if (signal == null)
+                return DateTime.MinValue;
+
+            DateTime parsed;
+            if (TryParseBridgeDateTime(signal.entry_execution_time, out parsed))
+                return parsed;
+            if (TryParseBridgeDateTime(signal.triggered_at, out parsed))
+                return parsed;
+            if (TryParseBridgeDateTime(signal.expected_time, out parsed))
+                return parsed;
+            return DateTime.MinValue;
         }
 
         private void PollIfNeeded()
@@ -385,12 +479,15 @@ namespace NinjaTrader.NinjaScript.Strategies
                     side = JsonString(item, "side"),
                     quantity = Math.Max(1, JsonInt(item, "quantity")),
                     expected_price = JsonDouble(item, "expected_price"),
+                    expected_time = JsonString(item, "expected_time"),
                     stop_price = JsonDouble(item, "stop_price"),
                     target_price = JsonDouble(item, "target_price"),
                     tick_size = JsonDouble(item, "tick_size"),
                     expected_ai_run_id = JsonString(item, "expected_ai_run_id"),
                     expected_setup_id = JsonString(item, "expected_setup_id"),
                     expected_template_uid = JsonString(item, "expected_template_uid"),
+                    entry_execution_time = JsonString(item, "entry_execution_time"),
+                    triggered_at = JsonString(item, "triggered_at"),
                     notes = JsonString(item, "notes")
                 });
 
@@ -463,6 +560,29 @@ namespace NinjaTrader.NinjaScript.Strategies
             return int.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out int parsed) ? parsed : 0;
         }
 
+        private static bool TryParseBridgeDateTime(string value, out DateTime parsed)
+        {
+            parsed = DateTime.MinValue;
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            value = value.Trim().TrimEnd('Z');
+            string[] formats = new[]
+            {
+                "yyyy-MM-dd'T'HH:mm:ss.ffffff",
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd HH:mm:ss.ffffff",
+                "yyyy-MM-dd HH:mm:ss"
+            };
+            return DateTime.TryParseExact(
+                value,
+                formats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeLocal,
+                out parsed
+            ) || DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out parsed);
+        }
+
         private static string JsonNumberToken(string json, string key)
         {
             string marker = "\"" + key + "\":";
@@ -533,12 +653,15 @@ namespace NinjaTrader.NinjaScript.Strategies
             public string side;
             public int quantity;
             public double expected_price;
+            public string expected_time;
             public double stop_price;
             public double target_price;
             public double tick_size;
             public string expected_ai_run_id;
             public string expected_setup_id;
             public string expected_template_uid;
+            public string entry_execution_time;
+            public string triggered_at;
             public string notes;
         }
     }

@@ -28,8 +28,11 @@ import {
   fetchPatternReversalAiScores,
   fetchPatternXaOutcomes,
   fetchNinjaTraderOracleTrends,
+  fetchNinjaTraderFeedStatus,
+  fetchNinjaTraderLiveCandles,
+  fetchNinjaTraderCandleSlotAudit,
   fetchNinjaTraderLiveBarSnapshot,
-  fetchNinjaTraderScannerActivity,
+  fetchNinjaTraderScreenerRoutes,
   fetchNinjaTraderSignalHistory,
   fetchNinjaTraderTrendEvents,
   fetchPhase1FamilyPatterns,
@@ -53,9 +56,10 @@ const LIVE_CANVAS_ROOT = 'HO';
 const LIVE_CANVAS_SYMBOL = 'HO';
 const LIVE_CANVAS_TIMEFRAME = '2m';
 const LIVE_CANVAS_TREND_RUN_ID = 'ho-mho-audit-full-2m-v1-20210425-20260608';
-const LIVE_CANVAS_SIGNAL_RUN_ID = 'nt-live-ho-5k-demo-20260610-v2';
+const LIVE_CANVAS_SIGNAL_RUN_ID = 'nt-live-ho-5k-demo-current-20260624-v1';
+const LIVE_CANVAS_TRADE_HISTORY_RUN_ID = '';
 const LIVE_CANVAS_ACCOUNT_NAME = 'DEMO5859105';
-const LIVE_CANVAS_SIGNAL_INSTRUMENT = 'HO JUL26';
+const LIVE_CANVAS_DEFAULT_SIGNAL_INSTRUMENT = 'HO CURRENT';
 const LIVE_CANVAS_ORACLE_RUN_ID = 'oracle-long-trends-v3-10r-2m-HO-2024_2026';
 const LIVE_CANVAS_DISPLAY_TIME_ZONE = 'America/Chicago';
 const LIVE_CANVAS_START_DATE = null;
@@ -70,9 +74,10 @@ const LIVE_CANVAS_TREND_CONTEXT_PRE_BARS = 900;
 const LIVE_CANVAS_TREND_CONTEXT_POST_BARS = 420;
 const LIVE_CANVAS_TREND_WINDOW_MIN_LIMIT = 2200;
 const LIVE_CANVAS_TREND_WINDOW_MAX_LIMIT = 20000;
-const LIVE_CANVAS_RECENT_REFRESH_LIMIT = 600;
+const LIVE_CANVAS_RECENT_REFRESH_LIMIT = 180;
+const LIVE_CANVAS_RECENT_NT_CANDLE_LIMIT = 240;
 const LIVE_CANVAS_POLL_MS = 5000;
-const LIVE_CANVAS_SNAPSHOT_POLL_MS = 1000;
+const LIVE_CANVAS_SNAPSHOT_POLL_MS = 2500;
 const LIVE_CANVAS_TREND_LIMIT = 80;
 const LIVE_CANVAS_ORACLE_LIMIT = 10000;
 const LIVE_CANVAS_SCANNER_LIMIT = 120;
@@ -112,45 +117,225 @@ const formatTime = (value) => {
   return timePart ? timePart.slice(0, 5) : text.slice(11, 16) || 'N/A';
 };
 
-const parseServerUtcDate = (value) => {
-  if (!value) return null;
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-
-  const text = String(value);
-  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?/);
-  if (match) {
-    const parsed = new Date(Date.UTC(
-      Number(match[1]),
-      Number(match[2]) - 1,
-      Number(match[3]),
-      Number(match[4] ?? 0),
-      Number(match[5] ?? 0),
-      Number(match[6] ?? 0)
-    ));
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  const parsed = new Date(text);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const formatLiveCanvasNtTime = (value) => {
-  const parsed = parseServerUtcDate(value);
-  if (!parsed) return 'N/A';
-  return parsed.toLocaleString('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    hour12: false,
-    minute: '2-digit',
-    timeZone: LIVE_CANVAS_DISPLAY_TIME_ZONE,
-    timeZoneName: 'short',
-  });
-};
-
 const formatShortDateTime = (value) => {
   if (!value) return 'N/A';
   return `${formatDate(value).slice(5)} ${formatTime(value)}`;
+};
+
+const formatShortDate = (value) => {
+  if (!value) return 'N/A';
+  return formatDate(value).slice(5);
+};
+
+const formatShortClock = (value) => {
+  if (!value) return 'N/A';
+  return formatTime(value);
+};
+
+const formatClock12Hour = (value) => {
+  const text = String(value || '').trim();
+  const match = text.match(/(?:T|\s|^)(\d{1,2}):(\d{2})/);
+  if (!match) return 'N/A';
+
+  const hour24 = Number(match[1]);
+  const minute = match[2];
+  if (!Number.isFinite(hour24)) return 'N/A';
+
+  const suffix = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${minute} ${suffix}`;
+};
+
+const parseUtcTimestamp = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value : null;
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text);
+  const normalized = text.replace(' ', 'T');
+  const parsed = new Date(hasZone ? normalized : `${normalized}Z`);
+
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+};
+
+const getLiveLocalDateTimeParts = (value) => {
+  const parsed = parseUtcTimestamp(value);
+  if (!parsed) return null;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: LIVE_CANVAS_DISPLAY_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(parsed);
+  const partText = (type) => parts.find((part) => part.type === type)?.value ?? '';
+  const hour = partText('hour') === '24' ? '00' : partText('hour');
+
+  return {
+    date: `${partText('month')}-${partText('day')}`,
+    clock: formatClock12Hour(`${hour}:${partText('minute')}`),
+  };
+};
+
+const formatLiveLocalShortDate = (value) =>
+  getLiveLocalDateTimeParts(value)?.date ?? formatShortDate(value);
+
+const formatLiveLocalShortClock = (value) =>
+  getLiveLocalDateTimeParts(value)?.clock ?? formatClock12Hour(value);
+
+const formatLiveLocalShortDateTime = (value) => {
+  const parts = getLiveLocalDateTimeParts(value);
+  return parts ? `${parts.date} ${parts.clock}` : formatShortDateTime(value);
+};
+
+const getDatePartsInTimeZone = (value, timeZone = LIVE_CANVAS_DISPLAY_TIME_ZONE) => {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(parsed);
+
+  const partValue = (type) => Number(parts.find((part) => part.type === type)?.value);
+  const year = partValue('year');
+  const month = partValue('month');
+  const day = partValue('day');
+
+  return Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)
+    ? { year, month, day }
+    : null;
+};
+
+const getDateTimePartsInTimeZone = (value, timeZone = LIVE_CANVAS_DISPLAY_TIME_ZONE) => {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZoneName: 'short',
+  }).formatToParts(parsed);
+
+  const partText = (type) => parts.find((part) => part.type === type)?.value ?? '';
+  const partNumber = (type) => Number(partText(type));
+  const weekdayText = partText('weekday');
+  const weekdayIndex = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekdayText);
+  const hour = partNumber('hour');
+  const minute = partNumber('minute');
+
+  return {
+    weekdayText,
+    weekdayIndex,
+    year: partNumber('year'),
+    month: partNumber('month'),
+    day: partNumber('day'),
+    hour: hour === 24 ? 0 : hour,
+    minute,
+    timeZoneName: partText('timeZoneName'),
+  };
+};
+
+const isLiveMarketOpenAt = (value = new Date()) => {
+  const parts = getDateTimePartsInTimeZone(value, LIVE_CANVAS_DISPLAY_TIME_ZONE);
+  if (!parts || !Number.isFinite(parts.weekdayIndex) || !Number.isFinite(parts.hour) || !Number.isFinite(parts.minute)) {
+    return true;
+  }
+
+  const minutes = parts.hour * 60 + parts.minute;
+  const sessionOpenMinutes = 17 * 60;
+  const sessionCloseMinutes = 16 * 60;
+  const isSunday = parts.weekdayIndex === 0;
+  const isFriday = parts.weekdayIndex === 5;
+  const isSaturday = parts.weekdayIndex === 6;
+
+  if (isSaturday) {
+    return false;
+  }
+
+  if (isSunday) {
+    return minutes >= sessionOpenMinutes;
+  }
+
+  if (isFriday) {
+    return minutes < sessionCloseMinutes;
+  }
+
+  return minutes < sessionCloseMinutes || minutes >= sessionOpenMinutes;
+};
+
+const formatLiveMarketCountdown = (milliseconds) => {
+  const totalMinutes = Math.max(0, Math.ceil(Number(milliseconds || 0) / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours <= 0) {
+    return `${minutes}m`;
+  }
+
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+};
+
+const getLiveMarketSession = (value = new Date()) => {
+  const now = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(now.getTime()) || isLiveMarketOpenAt(now)) {
+    return { isOpen: true, countdownLabel: '', opensLabel: '' };
+  }
+
+  let nextOpenMs = Math.ceil(now.getTime() / 60000) * 60000;
+  for (let step = 0; step < 7 * 24 * 60; step += 1) {
+    if (isLiveMarketOpenAt(new Date(nextOpenMs))) {
+      const countdownLabel = formatLiveMarketCountdown(nextOpenMs - now.getTime());
+      return {
+        isOpen: false,
+        countdownLabel,
+        opensLabel: `Opens in ${countdownLabel}`,
+      };
+    }
+    nextOpenMs += 60000;
+  }
+
+  return { isOpen: false, countdownLabel: 'N/A', opensLabel: 'Opens in N/A' };
+};
+
+const countWeekdaysBetween = (startValue, endValue, timeZone = LIVE_CANVAS_DISPLAY_TIME_ZONE) => {
+  const startParts = getDatePartsInTimeZone(startValue, timeZone);
+  const endParts = getDatePartsInTimeZone(endValue, timeZone);
+  if (!startParts || !endParts) return null;
+
+  let currentDay = Date.UTC(startParts.year, startParts.month - 1, startParts.day);
+  const endDay = Date.UTC(endParts.year, endParts.month - 1, endParts.day);
+  if (currentDay > endDay) {
+    [currentDay] = [endDay];
+  }
+
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  let tradingDays = 0;
+
+  for (let day = currentDay; day <= endDay; day += oneDayMs) {
+    const weekday = new Date(day).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) {
+      tradingDays += 1;
+    }
+  }
+
+  return Math.max(tradingDays, 1);
 };
 
 const formatTimelineTick = (value) => {
@@ -1314,7 +1499,7 @@ const formatCandleDateForChart = (value) => {
     return value;
   }
 
-  return formatDateTimeForServer(parsed);
+  return formatUtcDateTimeFromMs(parsed.getTime());
 };
 
 const getTimeframePaddingMs = (timeframe) => {
@@ -1366,13 +1551,119 @@ const getTimeframeMs = (timeframe) => {
 };
 
 const addTimeframeBars = (value, timeframe, bars) => {
-  const parsed = new Date(value);
+  const parsedMs = parseUtcLikeMs(value);
   const barCount = Number(bars);
-  if (Number.isNaN(parsed.getTime()) || !Number.isFinite(barCount)) {
+  if (parsedMs === null || !Number.isFinite(barCount)) {
     return null;
   }
 
-  return formatDateTimeForServer(new Date(parsed.getTime() + getTimeframeMs(timeframe) * barCount));
+  return formatUtcDateTimeFromMs(parsedMs + getTimeframeMs(timeframe) * barCount);
+};
+
+const parseUtcLikeMs = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+  const hasZone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(text);
+  const normalized = text.replace(' ', 'T');
+  const ms = Date.parse(hasZone ? normalized : `${normalized}Z`);
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const formatUtcDateTimeFromMs = (milliseconds) => {
+  const parsed = new Date(milliseconds);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return [
+    parsed.getUTCFullYear(),
+    padDatePart(parsed.getUTCMonth() + 1),
+    padDatePart(parsed.getUTCDate()),
+  ].join('-') + ` ${[
+    padDatePart(parsed.getUTCHours()),
+    padDatePart(parsed.getUTCMinutes()),
+    padDatePart(parsed.getUTCSeconds()),
+  ].join(':')}`;
+};
+
+const parseDateTimeTextParts = (value) => {
+  if (!value) return null;
+  const match = String(value).trim().match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/
+  );
+  if (!match) return null;
+
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4] ?? 0),
+    minute: Number(match[5] ?? 0),
+    second: Number(match[6] ?? 0),
+  };
+};
+
+const getTimeZoneOffsetMsAtUtc = (utcMs, timeZone = LIVE_CANVAS_DISPLAY_TIME_ZONE) => {
+  const parts = getDateTimePartsInTimeZone(new Date(utcMs), timeZone);
+  if (!parts) return 0;
+  const wallAsUtcMs = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    0,
+    0
+  );
+  return wallAsUtcMs - utcMs;
+};
+
+const localWallDateTimeToUtcMs = (value, timeZone = LIVE_CANVAS_DISPLAY_TIME_ZONE) => {
+  const parts = parseDateTimeTextParts(value);
+  if (!parts) return null;
+
+  const wallAsUtcMs = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    0
+  );
+  let utcMs = wallAsUtcMs;
+  for (let index = 0; index < 3; index += 1) {
+    const nextUtcMs = wallAsUtcMs - getTimeZoneOffsetMsAtUtc(utcMs, timeZone);
+    if (Math.abs(nextUtcMs - utcMs) < 1000) {
+      return nextUtcMs;
+    }
+    utcMs = nextUtcMs;
+  }
+  return utcMs;
+};
+
+const localWallDateTimeToUtcText = (value, timeZone = LIVE_CANVAS_DISPLAY_TIME_ZONE) => {
+  const utcMs = localWallDateTimeToUtcMs(value, timeZone);
+  return utcMs === null ? null : formatUtcDateTimeFromMs(utcMs);
+};
+
+const formatUtcDateTimeInLiveZone = (value) => {
+  const ms = parseUtcLikeMs(value);
+  if (ms === null) return 'N/A';
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: LIVE_CANVAS_DISPLAY_TIME_ZONE,
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(ms));
+  const partText = (type) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${partText('month')}-${partText('day')} ${partText('hour')}:${partText('minute')}`;
 };
 
 const getExitModelWindowBars = (trade = {}) => {
@@ -1473,6 +1764,18 @@ const addLiveCanvasDisplayDates = (candles = []) =>
 const getLiveCanvasDisplayDate = (candle) =>
   candle?.candle_display_date ?? candle?.candle_date ?? null;
 
+const getLatestClosedLiveCanvasCandle = (candles = []) => {
+  const rows = Array.isArray(candles) ? candles : [];
+  return rows.find((candle) => {
+    if (candle?.candle_is_live_snapshot || candle?.candle_is_missing) {
+      return false;
+    }
+
+    const close = Number(candle?.candle_close ?? candle?.close);
+    return Number.isFinite(close);
+  }) ?? rows.find((candle) => !candle?.candle_is_live_snapshot && !candle?.candle_is_missing) ?? rows[0] ?? null;
+};
+
 const deriveNinjaTraderModelSymbol = (instrument = '', rootSymbol = LIVE_CANVAS_ROOT) => {
   const root = String(rootSymbol || LIVE_CANVAS_ROOT).toUpperCase();
   const text = String(instrument || '').toUpperCase().trim();
@@ -1533,6 +1836,58 @@ const mapLiveBarSnapshotToCanvasCandle = (snapshot = null) => {
     candle_last_price: Number.isFinite(Number(snapshot.last_price)) ? Number(snapshot.last_price) : close,
   };
 };
+
+const mapNinjaTraderLiveCandleToCanvasCandle = (latestCandle = null, closeTimeUtc = null) => {
+  if (!latestCandle) {
+    return null;
+  }
+
+  const closeTime =
+    formatCandleDateForChart(closeTimeUtc) ??
+    localWallDateTimeToUtcText(latestCandle.candle_time, LIVE_CANVAS_DISPLAY_TIME_ZONE) ??
+    formatCandleDateForChart(latestCandle.candle_time);
+  const bucketTime = addTimeframeBars(closeTime, LIVE_CANVAS_TIMEFRAME, -1) ?? closeTime;
+  const candleDate = formatCandleDateForChart(bucketTime);
+  const displayDate = formatCandleDateForChart(closeTime) ?? addTimeframeBars(candleDate, LIVE_CANVAS_TIMEFRAME, 1) ?? candleDate;
+  const open = Number(latestCandle.open);
+  const high = Number(latestCandle.high);
+  const low = Number(latestCandle.low);
+  const close = Number(latestCandle.close);
+
+  if (!candleDate || !Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)) {
+    return null;
+  }
+
+  const rootSymbol = String(latestCandle.root_symbol || LIVE_CANVAS_ROOT).toUpperCase();
+  const symbol = deriveNinjaTraderModelSymbol(latestCandle.instrument, rootSymbol);
+  const volume = Number.isFinite(Number(latestCandle.volume)) ? Number(latestCandle.volume) : null;
+
+  return {
+    symbol,
+    root_symbol: rootSymbol,
+    candle_date: candleDate,
+    candle_display_date: displayDate,
+    candle_display_timezone: LIVE_CANVAS_DISPLAY_TIME_ZONE,
+    open,
+    high,
+    low,
+    close,
+    volume,
+    candle_open: open,
+    candle_high: high,
+    candle_low: low,
+    candle_close: close,
+    candle_volume: volume,
+    candle_is_live_closed: true,
+    candle_nt_close_time: formatCandleDateForChart(latestCandle.candle_time),
+    candle_received_at: latestCandle.received_at ?? latestCandle.updated_at ?? null,
+  };
+};
+
+const mapNinjaTraderLiveCandlesToCanvasCandles = (rows = []) =>
+  (Array.isArray(rows) ? rows : [])
+    .map((row) => mapNinjaTraderLiveCandleToCanvasCandle(row))
+    .filter(Boolean);
 
 const getTrendEventKey = (trend) => String(trend?.event_uid ?? trend?.id ?? '');
 const getOracleTrendKey = (trend) => `oracle:${trend?.oracle_trade_id ?? trend?.symbol ?? 'trend'}:${trend?.entry_date ?? ''}`;
@@ -1637,7 +1992,23 @@ const getLiveTradeStage2Score = (trade = {}) => {
 const mapLiveTradeSignalToCanvasTrend = (trade = {}) => {
   const notes = parseLiveTradeNotes(trade);
   const direction = String(trade.side || '').toUpperCase();
-  const entryPrice = trade.actual_trigger_price ?? trade.expected_price ?? null;
+  const tradeInstrument = String(trade.instrument || LIVE_CANVAS_DEFAULT_SIGNAL_INSTRUMENT).toUpperCase();
+  const modelSymbol = deriveNinjaTraderModelSymbol(tradeInstrument, trade.root_symbol || LIVE_CANVAS_ROOT);
+  const entryPrice = trade.entry_execution_price ?? trade.actual_trigger_price ?? trade.expected_price ?? null;
+  const entryCanvasTime =
+    trade.entry_execution_received_at ??
+    trade.triggered_at ??
+    trade.claimed_at ??
+    trade.expected_time ??
+    trade.created_at ??
+    null;
+  const entryDisplayTime = trade.entry_execution_time ?? entryCanvasTime;
+  const exitPrice = trade.exit_execution_price ?? trade.exit_price ?? null;
+  const exitCanvasTime =
+    trade.exit_execution_received_at ??
+    trade.exit_received_at ??
+    null;
+  const exitDisplayTime = trade.exit_execution_time ?? exitCanvasTime;
   const stopPrice = trade.stop_price ?? null;
   const tickSize = Number(trade.tick_size);
   const riskTicks =
@@ -1653,31 +2024,37 @@ const mapLiveTradeSignalToCanvasTrend = (trade = {}) => {
     raw_source: 'live_signal',
     event_uid: getLiveTradeSignalKey(trade),
     event_type: 'live_trade_signal',
-    model_symbol: trade.instrument ?? LIVE_CANVAS_SIGNAL_INSTRUMENT,
+    model_symbol: modelSymbol,
+    instrument: tradeInstrument,
     root_symbol: trade.root_symbol ?? LIVE_CANVAS_ROOT,
     timeframe: LIVE_CANVAS_TIMEFRAME,
-    candle_time: trade.triggered_at ?? trade.expected_time ?? trade.created_at ?? null,
-    ts_utc: trade.triggered_at ?? trade.expected_time ?? trade.created_at ?? null,
+    candle_time: entryDisplayTime,
+    ts_utc: entryCanvasTime,
     direction,
     level2_score: trade.level2_score ?? notes.level2_score ?? null,
     stage2_score: trade.stage2_score ?? notes.stage2_score ?? null,
     status: trade.status ?? null,
     paper_entry_status: String(trade.status || '').toLowerCase() === 'completed' ? 'accepted' : trade.status ?? null,
     paper_exit_status: String(trade.status || '').toLowerCase() === 'completed' ? 'closed' : trade.status ?? null,
-    paper_entry_candle_time: trade.triggered_at ?? trade.expected_time ?? trade.created_at ?? null,
-    paper_entry_ts_utc: trade.triggered_at ?? trade.expected_time ?? trade.created_at ?? null,
-    paper_exit_candle_time: trade.exit_received_at ?? null,
-    paper_exit_ts_utc: trade.exit_received_at ?? null,
+    paper_entry_candle_time: entryDisplayTime,
+    paper_entry_ts_utc: entryCanvasTime,
+    paper_exit_candle_time: exitDisplayTime,
+    paper_exit_ts_utc: exitCanvasTime,
     entry_price: entryPrice,
     stop_price: stopPrice,
+    tick_size: trade.tick_size ?? null,
     risk_ticks: riskTicks,
     paper_entry_price: entryPrice,
     paper_stop_price: stopPrice,
     paper_risk_ticks: riskTicks,
-    paper_exit_price: trade.exit_price ?? null,
+    paper_exit_price: exitPrice,
     paper_exit_reason: getLiveTradeSignalResultLabel(trade),
     paper_result_r: resultR,
     signal_uid: trade.signal_uid ?? null,
+    entry_execution_time: trade.entry_execution_time ?? null,
+    entry_execution_received_at: trade.entry_execution_received_at ?? null,
+    exit_execution_time: trade.exit_execution_time ?? null,
+    exit_execution_received_at: trade.exit_execution_received_at ?? null,
   };
 };
 
@@ -1686,7 +2063,29 @@ const getDateMinuteKey = (value) => {
     return '';
   }
 
+  const utcMs = parseUtcLikeMs(value);
+  if (utcMs !== null) {
+    return formatUtcDateTimeFromMs(utcMs).slice(0, 16);
+  }
+
   return String(value).replace('T', ' ').slice(0, 16);
+};
+
+const parseServerUtcMs = (value) => {
+  return parseUtcLikeMs(value);
+};
+
+const getServerUtcAgeSeconds = (value) => {
+  const ms = parseServerUtcMs(value);
+  return ms === null ? null : Math.max(0, (Date.now() - ms) / 1000);
+};
+
+const formatAgeSeconds = (seconds) => {
+  const value = Number(seconds);
+  if (!Number.isFinite(value)) return 'N/A';
+  if (value < 60) return `${Math.round(value)}s ago`;
+  if (value < 3600) return `${Math.round(value / 60)}m ago`;
+  return `${formatNullableDecimal(value / 3600, 1)}h ago`;
 };
 
 const getNearestCandleIndexByTime = (candles = [], value, timeframe = LIVE_CANVAS_TIMEFRAME) => {
@@ -1725,9 +2124,19 @@ const findCandleIndexByTime = (candles = [], value) => {
   }
 
   const matchIndex = candles.findIndex((candle) => getDateMinuteKey(candle?.candle_date) === targetKey);
-  return matchIndex >= 0
-    ? matchIndex + 1
-    : getNearestCandleIndexByTime(candles, value, LIVE_CANVAS_TIMEFRAME);
+  if (matchIndex >= 0) {
+    return matchIndex + 1;
+  }
+
+  const bucketKey = getDateMinuteKey(floorDateTimeToTimeframe(value, LIVE_CANVAS_TIMEFRAME));
+  if (bucketKey && bucketKey !== targetKey) {
+    const bucketMatchIndex = candles.findIndex((candle) => getDateMinuteKey(candle?.candle_date) === bucketKey);
+    if (bucketMatchIndex >= 0) {
+      return bucketMatchIndex + 1;
+    }
+  }
+
+  return getNearestCandleIndexByTime(candles, value, LIVE_CANVAS_TIMEFRAME);
 };
 
 const findCandleIndexByTimes = (candles = [], values = []) => {
@@ -1740,6 +2149,145 @@ const findCandleIndexByTimes = (candles = [], values = []) => {
   }
 
   return null;
+};
+
+const findExactCandleIndexByTime = (candles = [], value) => {
+  const targetKey = getDateMinuteKey(value);
+
+  if (!targetKey) {
+    return null;
+  }
+
+  const matchIndex = candles.findIndex((candle) => getDateMinuteKey(candle?.candle_date) === targetKey);
+  if (matchIndex >= 0) {
+    return matchIndex + 1;
+  }
+
+  const bucketKey = getDateMinuteKey(floorDateTimeToTimeframe(value, LIVE_CANVAS_TIMEFRAME));
+  if (bucketKey && bucketKey !== targetKey) {
+    const bucketMatchIndex = candles.findIndex((candle) => getDateMinuteKey(candle?.candle_date) === bucketKey);
+    if (bucketMatchIndex >= 0) {
+      return bucketMatchIndex + 1;
+    }
+  }
+
+  return null;
+};
+
+const findExactCandleIndexByTimes = (candles = [], values = []) => {
+  for (const value of values) {
+    const matchIndex = findExactCandleIndexByTime(candles, value);
+
+    if (matchIndex !== null) {
+      return matchIndex;
+    }
+  }
+
+  return null;
+};
+
+const getCurrentLiveTimeSlot = (timeframe = LIVE_CANVAS_TIMEFRAME, now = new Date()) => {
+  const timeframeMs = getTimeframeMs(timeframe);
+  const parsedTime = now instanceof Date ? now.getTime() : new Date(now).getTime();
+
+  if (!Number.isFinite(timeframeMs) || timeframeMs <= 0 || !Number.isFinite(parsedTime)) {
+    return null;
+  }
+
+  return formatUtcDateTimeFromMs(Math.floor(parsedTime / timeframeMs) * timeframeMs + timeframeMs);
+};
+
+const findLiveSlotCandleIndexByTime = (candles = [], value) => {
+  const targetKey = getDateMinuteKey(value);
+
+  if (!targetKey) {
+    return null;
+  }
+
+  const matchIndex = candles.findIndex((candle) =>
+    getDateMinuteKey(candle?.candle_display_date ?? candle?.candle_date) === targetKey
+  );
+
+  return matchIndex >= 0 ? matchIndex + 1 : null;
+};
+
+const buildLiveTimeSlotMarker = (candles = [], clockValue = Date.now()) => {
+  const slotTime = getCurrentLiveTimeSlot(LIVE_CANVAS_TIMEFRAME, new Date(clockValue));
+  const slotMs = getDateTimeForCompare(slotTime);
+  const timeframeMs = getTimeframeMs(LIVE_CANVAS_TIMEFRAME);
+
+  if (!slotTime || slotMs === null || !Array.isArray(candles) || !candles.length) {
+    return null;
+  }
+
+  const exactIndex = findLiveSlotCandleIndexByTime(candles, slotTime);
+  if (exactIndex !== null) {
+    return {
+      index: exactIndex,
+      slot_time: slotTime,
+      display_timezone: LIVE_CANVAS_DISPLAY_TIME_ZONE,
+    };
+  }
+
+  const newestTime = getDateTimeForCompare(candles[0]?.candle_display_date ?? candles[0]?.candle_date);
+  if (newestTime === null || !Number.isFinite(timeframeMs) || timeframeMs <= 0 || slotMs < newestTime) {
+    return null;
+  }
+
+  const barsAhead = Math.round((slotMs - newestTime) / timeframeMs);
+  return {
+    index: 1 - Math.max(0, barsAhead),
+    slot_time: slotTime,
+    display_timezone: LIVE_CANVAS_DISPLAY_TIME_ZONE,
+  };
+};
+
+const getLiveTimeSlotMarkerSignature = (marker = null) =>
+  marker ? `${marker.index}:${marker.slot_time ?? ''}` : '';
+
+const getScannerCandleTimeCandidates = (row = {}) => {
+  const localCloseUtc =
+    localWallDateTimeToUtcText(row.candle_time, LIVE_CANVAS_DISPLAY_TIME_ZONE) ??
+    null;
+  const localBucketUtc = localCloseUtc
+    ? addTimeframeBars(localCloseUtc, LIVE_CANVAS_TIMEFRAME, -1)
+    : null;
+
+  return [
+    row.ts_utc,
+    localBucketUtc,
+    localCloseUtc,
+    row.candle_time,
+    row.created_at,
+  ].filter(Boolean);
+};
+
+const getFillCandleMismatchTicks = (candles = [], index, price, tickSize = null) => {
+  const candleIndex = Math.round(Number(index));
+  const fillPrice = Number(price);
+  const candle = Number.isFinite(candleIndex) && candleIndex >= 1 ? candles[candleIndex - 1] : null;
+  const high = Number(candle?.candle_high);
+  const low = Number(candle?.candle_low);
+
+  if (
+    !candle ||
+    candle.candle_is_missing ||
+    !Number.isFinite(fillPrice) ||
+    !Number.isFinite(high) ||
+    !Number.isFinite(low)
+  ) {
+    return null;
+  }
+
+  const outsidePoints = fillPrice > high ? fillPrice - high : fillPrice < low ? low - fillPrice : 0;
+  if (outsidePoints <= 0) {
+    return 0;
+  }
+
+  const parsedTickSize = Number(tickSize);
+  return Number.isFinite(parsedTickSize) && parsedTickSize > 0
+    ? outsidePoints / parsedTickSize
+    : outsidePoints;
 };
 
 const buildLiveCanvasPattern = (candles = [], selectedTrend = null, canvasSymbol = LIVE_CANVAS_SYMBOL) => {
@@ -1765,6 +2313,21 @@ const buildLiveCanvasPattern = (candles = [], selectedTrend = null, canvasSymbol
   const focusIndex = entryIndex ?? confirmIndex ?? exitIndex ?? (centerLatestCandle ? 1 : null);
   const direction = String(selectedTrend?.direction ?? '').toUpperCase();
   const trendKey = getTrendEventKey(selectedTrend);
+  const entryMismatchTicks = getFillCandleMismatchTicks(
+    candles,
+    entryIndex,
+    selectedTrend?.paper_entry_price ?? selectedTrend?.entry_price,
+    selectedTrend?.tick_size ?? selectedTrend?.trade_tick_size
+  );
+  const exitMismatchTicks = getFillCandleMismatchTicks(
+    candles,
+    exitIndex,
+    selectedTrend?.paper_exit_price,
+    selectedTrend?.tick_size ?? selectedTrend?.trade_tick_size
+  );
+  const hasFillCandleMismatch =
+    (Number.isFinite(Number(entryMismatchTicks)) && Number(entryMismatchTicks) > 0) ||
+    (Number.isFinite(Number(exitMismatchTicks)) && Number(exitMismatchTicks) > 0);
 
   return {
     raw_candle_view: true,
@@ -1802,28 +2365,52 @@ const buildLiveCanvasPattern = (candles = [], selectedTrend = null, canvasSymbol
     exit_price: selectedTrend?.paper_exit_price ?? null,
     result_r: selectedTrend?.paper_result_r ?? null,
     exit_reason: selectedTrend?.paper_exit_reason ?? null,
+    trade_entry_fill_mismatch_ticks: entryMismatchTicks,
+    trade_exit_fill_mismatch_ticks: exitMismatchTicks,
+    trade_has_fill_candle_mismatch: hasFillCandleMismatch,
     pattern_ABCD_bar_length: candles.length,
   };
 };
 
 const getLiveCanvasSignature = (candles = []) => {
-  const latestCandle = candles[0] ?? {};
-  return [
-    candles.length,
-    latestCandle.candle_date ?? '',
-    latestCandle.candle_open ?? '',
-    latestCandle.candle_high ?? '',
-    latestCandle.candle_low ?? '',
-    latestCandle.candle_close ?? '',
-    latestCandle.candle_volume ?? '',
-  ].join('|');
+  const headCandles = candles.slice(0, 16).map((candle) => [
+    getLiveCanvasCandleKey(candle),
+    candle?.candle_open ?? '',
+    candle?.candle_high ?? '',
+    candle?.candle_low ?? '',
+    candle?.candle_close ?? '',
+    candle?.candle_volume ?? '',
+    candle?.candle_is_live_snapshot ? 'snapshot' : '',
+    candle?.candle_is_live_closed ? 'closed' : '',
+    candle?.candle_is_missing ? 'missing' : '',
+    candle?.candle_snapshot_time ?? '',
+    candle?.candle_received_at ?? '',
+  ].join(':'));
+
+  return [candles.length, ...headCandles].join('|');
 };
+
+const getLivePollSignature = (payload = {}, rows = []) =>
+  JSON.stringify({
+    totalRows: payload?.totalRows ?? payload?.total_rows ?? 0,
+    summary: payload?.summary ?? null,
+    rows: (Array.isArray(rows) ? rows : []).map((row) => [
+      row?.id,
+      row?.event_type,
+      row?.status,
+      row?.candle_time,
+      row?.ts_utc,
+      row?.direction,
+      row?.signal_uid,
+      row?.updated_at,
+      row?.exit_price,
+      row?.realized_accounting_dollars,
+      row?.details_json,
+    ]),
+  });
 
 const getLiveCanvasCandleKey = (candle = {}) =>
   `${String(candle.symbol ?? candle.root_symbol ?? '').toUpperCase()}|${getDateMinuteKey(candle.candle_date)}`;
-
-const formatScannerCount = (value) =>
-  Number.isFinite(Number(value)) ? formatNumber(Number(value)) : '-';
 
 const formatScannerScore = (value) =>
   Number.isFinite(Number(value)) ? formatScorePercent(value, 0) : '-';
@@ -1836,6 +2423,12 @@ const getScannerActivityLabel = (row = {}) => {
   if (eventType === 'stage2_expired') return 'Expired';
   if (eventType === 'order_signal') return 'Order';
   if (eventType === 'heartbeat') return 'Heartbeat';
+  if (eventType === 'market_closed') return 'Market Closed';
+  if (eventType === 'market_open_waiting') return 'Market Waiting';
+  if (eventType === 'market_resumed') return 'Market Resumed';
+  if (eventType === 'candle_sync_waiting') return 'Candle Sync';
+  if (eventType === 'candle_sync_ready') return 'Candles Ready';
+  if (eventType === 'feed_heartbeat_stale') return 'NT Offline';
   if (eventType === 'feed_stale') return 'Feed Paused';
   if (eventType === 'feed_restored') return 'Feed Restored';
   if (eventType === 'feed_gap_detected') return 'Feed Gap';
@@ -1843,40 +2436,52 @@ const getScannerActivityLabel = (row = {}) => {
   return formatRouteMode(row.event_type || 'Event');
 };
 
-const getScannerActivityState = (row = {}) => {
+const getScannerStage1TrendLabel = (row = {}) => {
   const details = row.details ?? {};
-  const eventType = String(row.event_type || '').toLowerCase();
-  if (eventType === 'cycle_scored') {
-    const confirms = Number(details.trend_confirms ?? 0);
-    const picks = Number(details.level2_picks ?? 0);
-    if (confirms > 0) return `${formatNumber(confirms)} confirm`;
-    if (picks > 0) return `${formatNumber(picks)} watch`;
-    return 'Scored';
+  const picks = Number(details.level2_picks ?? 0);
+  const status = String(row.status || '').toLowerCase();
+  if (picks <= 0 && status !== 'watching_stage2') {
+    return '';
   }
-  if (eventType.startsWith('feed_')) {
-    const outageCount = Number(details.feed_outage_count ?? 0);
-    const status = formatRouteMode(row.status || row.event_type || 'Seen');
-    return outageCount > 0 ? `${status} #${formatNumber(outageCount)}` : status;
-  }
-  return formatRouteMode(row.status || row.event_type || 'Seen');
+  return 'Confirmed';
 };
 
-const getScannerActivityTone = (row = {}) => {
-  const eventType = String(row.event_type || '').toLowerCase();
-  const status = String(row.status || '').toLowerCase();
-  if (eventType === 'cycle_scored') return 'open';
-  if (eventType === 'heartbeat') return 'open';
-  if (eventType === 'feed_restored') return 'win';
-  if (eventType === 'feed_stale' || eventType === 'feed_gap_detected' || eventType === 'feed_backlog_reset') return 'loss';
-  if (status.includes('confirmed') || status.includes('queued')) return 'win';
-  if (status.includes('rejected') || status.includes('expired') || status.includes('blocked') || status.includes('failed')) {
-    return 'loss';
-  }
-  return '';
+const getScannerStage1ThresholdLabel = (rows = []) => {
+  const latest = Array.isArray(rows) && rows.length ? rows[rows.length - 1] : null;
+  const details = latest?.details ?? {};
+  return latest ? formatScannerScore(details.level2_threshold ?? latest.level2_threshold) : '-';
 };
 
 const getScannerCandidateUid = (row = {}) =>
   String(row?.details?.candidate_uid ?? row?.candidate_uid ?? '').trim();
+
+const SCANNER_WATCH_CLOSE_EVENTS = new Set([
+  'trend_confirmed',
+  'stage2_expired',
+  'order_signal',
+]);
+
+const SCANNER_WATCH_CLEAR_EVENTS = new Set([
+  'candle_sync_waiting',
+  'candle_sync_ready',
+  'feed_heartbeat_stale',
+  'feed_stale',
+  'feed_restored',
+  'feed_gap_detected',
+  'feed_backlog_reset',
+  'market_closed',
+  'market_open_waiting',
+  'market_resumed',
+]);
+
+const DEFAULT_STAGE2_CONFIRM_BARS = 16;
+
+const getScannerPendingWatchCount = (row = {}) => {
+  const details = row.details ?? {};
+  const value = details.pending ?? details.pending_events ?? details.pending_events_cleared;
+  const count = Number(value);
+  return Number.isFinite(count) ? count : null;
+};
 
 const getWatchingTrendMarkerSignature = (markers = []) =>
   markers
@@ -1889,17 +2494,122 @@ const getWatchingTrendMarkerSignature = (markers = []) =>
     ].join(':'))
     .join('|');
 
-const buildWatchingTrendMarkers = (candles = [], rows = []) =>
-  rows
+const getScannerCheckMarkerSignature = (markers = []) =>
+  markers
+    .map((marker) => [
+      marker.event_uid,
+      marker.index,
+      marker.candle_time,
+      marker.stage1_rows,
+      marker.level2_picks,
+      marker.level2_best_direction,
+      marker.level2_best_score,
+    ].join(':'))
+    .join('|');
+
+const getStage2WindowMarkerSignature = (markers = []) =>
+  markers
+    .map((marker) => [
+      marker.candidate_uid,
+      marker.index,
+      marker.sequence,
+      marker.max_bars,
+      marker.overrun_bars,
+      marker.watch_number,
+      marker.direction,
+      marker.status,
+    ].join(':'))
+    .join('|');
+
+const buildScannerCheckMarkers = (candles = [], rows = []) => {
+  const cycleRows = (Array.isArray(rows) ? rows : [])
+    .filter((row) => String(row?.event_type || '').toLowerCase() === 'cycle_scored');
+  const row = cycleRows[cycleRows.length - 1] ?? null;
+
+  if (!row) {
+    return [];
+  }
+
+  const details = row.details ?? {};
+  const index = findExactCandleIndexByTimes(candles, getScannerCandleTimeCandidates(row));
+
+  if (!index) {
+    return [];
+  }
+
+  return [{
+    event_uid: row.event_uid ?? row.id ?? null,
+    index,
+    candle_time: row.candle_time ?? row.ts_utc ?? null,
+    stage1_rows: details.stage1_rows ?? null,
+    level2_picks: details.level2_picks ?? null,
+    level2_best_direction: details.level2_best_direction ?? null,
+    level2_best_score: details.level2_best_score ?? null,
+    level2_long_score: details.level2_long_score ?? null,
+    level2_short_score: details.level2_short_score ?? null,
+    level2_threshold: details.level2_threshold ?? null,
+    pending: details.pending ?? null,
+  }];
+};
+
+const getLatestScannerCycleIndex = (candles = [], rows = []) => {
+  const latestCycleRow = (Array.isArray(rows) ? rows : [])
+    .filter((row) => String(row?.event_type || '').toLowerCase() === 'cycle_scored')
+    .slice(-1)[0] ?? null;
+
+  return latestCycleRow
+    ? findExactCandleIndexByTimes(candles, getScannerCandleTimeCandidates(latestCycleRow))
+    : null;
+};
+
+const countRealCandlesBetweenIndexes = (candles = [], startIndex = null, endIndex = null) => {
+  const start = Number(startIndex);
+  const end = Number(endIndex);
+
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 1 || end < 1 || end > start) {
+    return null;
+  }
+
+  let count = 0;
+  for (let candleIndex = start; candleIndex >= end; candleIndex -= 1) {
+    const candle = candles[candleIndex - 1];
+    if (candle && !candle.candle_is_missing) {
+      count += 1;
+    }
+  }
+
+  return count;
+};
+
+const buildWatchingTrendMarkers = (candles = [], rows = [], activityRows = []) => {
+  const latestCycleIndex = getLatestScannerCycleIndex(candles, activityRows);
+
+  return rows
     .map((row) => {
       const details = row.details ?? {};
-      const index = findCandleIndexByTimes(candles, [
-        details.signal_date,
+      const index = findExactCandleIndexByTimes(candles, [
         row.ts_utc,
-        row.candle_time,
+        details.signal_date,
+        ...getScannerCandleTimeCandidates(row),
       ]);
 
       if (!index) {
+        return null;
+      }
+
+      const parsedMaxBars = Number(
+        details.max_confirm_bars ??
+        details.stage2_max_confirm_bars ??
+        DEFAULT_STAGE2_CONFIRM_BARS
+      );
+      const maxBars = Number.isFinite(parsedMaxBars) && parsedMaxBars > 0
+        ? Math.round(parsedMaxBars)
+        : DEFAULT_STAGE2_CONFIRM_BARS;
+      const sequence = latestCycleIndex
+        ? countRealCandlesBetweenIndexes(candles, index, latestCycleIndex)
+        : null;
+
+      if (Number.isFinite(sequence) && sequence > maxBars) {
         return null;
       }
 
@@ -1915,6 +2625,73 @@ const buildWatchingTrendMarkers = (candles = [], rows = []) =>
       };
     })
     .filter(Boolean);
+};
+
+const buildStage2WindowMarkers = (candles = [], rows = [], activityRows = []) => {
+  const latestCycleIndex = getLatestScannerCycleIndex(candles, activityRows);
+  const directionCounts = new Map();
+
+  return (Array.isArray(rows) ? rows : []).flatMap((row, rowIndex) => {
+    const details = row.details ?? {};
+    const startIndex = findExactCandleIndexByTimes(candles, [
+      row.ts_utc,
+      details.signal_date,
+      ...getScannerCandleTimeCandidates(row),
+    ]);
+
+    if (!startIndex || !latestCycleIndex || latestCycleIndex > startIndex) {
+      return [];
+    }
+
+    const parsedMaxBars = Number(
+      details.max_confirm_bars ??
+      details.stage2_max_confirm_bars ??
+      DEFAULT_STAGE2_CONFIRM_BARS
+    );
+    const maxBars = Number.isFinite(parsedMaxBars) && parsedMaxBars > 0
+      ? Math.round(parsedMaxBars)
+      : DEFAULT_STAGE2_CONFIRM_BARS;
+    let sequence = 0;
+    let anchorIndex = null;
+
+    for (let candleIndex = startIndex; candleIndex >= latestCycleIndex; candleIndex -= 1) {
+      const candle = candles[candleIndex - 1];
+
+      if (!candle || candle.candle_is_missing) {
+        continue;
+      }
+
+      sequence += 1;
+      anchorIndex = candleIndex;
+    }
+
+    if (!anchorIndex || sequence < 1) {
+      return [];
+    }
+
+    const isExpiredByCount = sequence > maxBars;
+    const displaySequence = Math.min(sequence, maxBars);
+    const direction = String(row.direction || '').toUpperCase();
+    const nextDirectionCount = (directionCounts.get(direction) ?? 0) + 1;
+    directionCounts.set(direction, nextDirectionCount);
+
+    return [{
+      event_uid: row.event_uid ?? null,
+      candidate_uid: getScannerCandidateUid(row),
+      index: anchorIndex,
+      sequence: displaySequence,
+      max_bars: maxBars,
+      overrun_bars: isExpiredByCount ? sequence - maxBars : 0,
+      lane: rowIndex,
+      watch_number: nextDirectionCount,
+      direction: row.direction ?? null,
+      level2_score: row.level2_score ?? null,
+      stage2_score: row.stage2_score ?? null,
+      status: isExpiredByCount ? 'expired' : row.status ?? 'watching_stage2',
+      candle_time: candles[anchorIndex - 1]?.candle_date ?? row.candle_time ?? row.ts_utc ?? null,
+    }];
+  });
+};
 
 const mergeLiveCanvasCandles = (...candleSets) => {
   const merged = new Map();
@@ -1936,14 +2713,69 @@ const mergeLiveCanvasCandles = (...candleSets) => {
   });
 };
 
+const finalizeLiveCanvasCandles = (...candleSets) =>
+  addLiveCanvasDisplayDates(fillLiveCanvasTimeSlots(mergeLiveCanvasCandles(...candleSets)));
+
 const getDateTimeForCompare = (value) => {
-  const formattedValue = formatDateTimeForServer(value);
-  if (!formattedValue) {
+  return parseUtcLikeMs(value);
+};
+
+const floorDateTimeToTimeframe = (value, timeframe = LIVE_CANVAS_TIMEFRAME) => {
+  const parsedMs = parseUtcLikeMs(value);
+  const timeframeMs = getTimeframeMs(timeframe);
+
+  if (parsedMs === null || !Number.isFinite(timeframeMs) || timeframeMs <= 0) {
     return null;
   }
 
-  const parsed = new Date(formattedValue.replace(' ', 'T'));
-  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+  return formatUtcDateTimeFromMs(Math.floor(parsedMs / timeframeMs) * timeframeMs);
+};
+
+const LIVE_CANVAS_MAX_SYNTHETIC_GAP_BARS = 180;
+
+const fillLiveCanvasTimeSlots = (candles = [], timeframe = LIVE_CANVAS_TIMEFRAME) => {
+  const timeframeMs = getTimeframeMs(timeframe);
+  if (!Array.isArray(candles) || candles.length < 2 || !Number.isFinite(timeframeMs) || timeframeMs <= 0) {
+    return candles;
+  }
+
+  const filled = [];
+
+  for (let index = 0; index < candles.length - 1; index += 1) {
+    const newerCandle = candles[index];
+    const olderCandle = candles[index + 1];
+    filled.push(newerCandle);
+
+    const newerTime = getDateTimeForCompare(newerCandle?.candle_date);
+    const olderTime = getDateTimeForCompare(olderCandle?.candle_date);
+    if (newerTime === null || olderTime === null || newerTime <= olderTime) {
+      continue;
+    }
+
+    const missingBars = Math.round((newerTime - olderTime) / timeframeMs) - 1;
+    if (missingBars <= 0 || missingBars > LIVE_CANVAS_MAX_SYNTHETIC_GAP_BARS) {
+      continue;
+    }
+
+    for (let missingIndex = 1; missingIndex <= missingBars; missingIndex += 1) {
+      const candleDate = formatUtcDateTimeFromMs(newerTime - timeframeMs * missingIndex);
+      filled.push({
+        symbol: newerCandle?.symbol ?? olderCandle?.symbol ?? LIVE_CANVAS_SYMBOL,
+        root_symbol: newerCandle?.root_symbol ?? olderCandle?.root_symbol ?? LIVE_CANVAS_ROOT,
+        source_timeframe: timeframe,
+        candle_date: candleDate,
+        candle_open: null,
+        candle_high: null,
+        candle_low: null,
+        candle_close: null,
+        candle_volume: null,
+        candle_is_missing: true,
+      });
+    }
+  }
+
+  filled.push(candles[candles.length - 1]);
+  return filled;
 };
 
 const clampServerDateText = (value, minValue = null, maxValue = null) => {
@@ -1980,6 +2812,23 @@ const getTrendExitDate = (trend = {}) =>
   trend.target_date ??
   trend.exit_date ??
   null;
+
+const isClosedLiveTrendWindow = (trend = null) => {
+  if (!trend) {
+    return false;
+  }
+
+  const statusText = [
+    trend.paper_exit_status,
+    trend.paper_entry_status,
+    trend.status,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  return Boolean(getTrendExitDate(trend)) ||
+    statusText.includes('closed') ||
+    statusText.includes('completed') ||
+    statusText.includes('exit');
+};
 
 const buildLiveCanvasTrendCandleWindow = (trend = {}) => {
   const entryDate = getTrendEntryDate(trend);
@@ -2430,6 +3279,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     changed: false,
     error: '',
   });
+  void liveCanvasRefreshMeta;
   const liveCanvasCandlePageMetaRef = useRef({
     isLoadingOlder: false,
     hasOlder: true,
@@ -2470,24 +3320,46 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     rows: [],
   });
   const [liveScannerActivity, setLiveScannerActivity] = useState({
-    runId: LIVE_CANVAS_TREND_RUN_ID,
+    runId: LIVE_CANVAS_SIGNAL_RUN_ID,
     totalRows: 0,
     checkedAt: null,
     isLoading: false,
     error: '',
     rows: [],
   });
+  const [liveCandleSlotAudit, setLiveCandleSlotAudit] = useState({
+    totalRows: 0,
+    checkedAt: null,
+    isLoading: false,
+    error: '',
+    rows: [],
+  });
+  const [liveFeedStatus, setLiveFeedStatus] = useState({
+    instrument: null,
+    heartbeat: null,
+    latestCandle: null,
+    checkedAt: null,
+    isLoading: false,
+    error: '',
+  });
   const [liveCanvasSymbol, setLiveCanvasSymbol] = useState(LIVE_CANVAS_SYMBOL);
   const [liveTrendPanelMode, setLiveTrendPanelMode] = useState('trades');
-  const [showSkippedLiveTrends, setShowSkippedLiveTrends] = useState(false);
   const [selectedLiveTrendKey, setSelectedLiveTrendKey] = useState('');
+  const [liveMarketClock, setLiveMarketClock] = useState(() => Date.now());
   const selectedLiveTrendRef = useRef(null);
   const liveTrendRefreshInFlightRef = useRef(false);
   const liveOracleTrendRefreshInFlightRef = useRef(false);
+  const liveTrendEventsSignatureRef = useRef('');
+  const liveOracleTrendEventsSignatureRef = useRef('');
+  const liveScannerActivitySignatureRef = useRef('');
+  const liveCandleSlotAuditSignatureRef = useRef('');
+  const liveTradeSignalsSignatureRef = useRef('');
+  const liveFeedStatusSignatureRef = useRef('');
   const liveCanvasSignatureRef = useRef('');
   const liveCanvasSnapshotSignatureRef = useRef('');
   const liveCanvasCandlesRef = useRef([]);
   const liveCanvasSymbolRef = useRef(LIVE_CANVAS_SYMBOL);
+  const liveActiveInstrumentRef = useRef(null);
   const liveCanvasRefreshInFlightRef = useRef(false);
   const liveCanvasOlderCandlesInFlightRef = useRef(false);
   const liveCanvasLoadedAllOlderRef = useRef(false);
@@ -2519,25 +3391,19 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   }, []);
 
   useEffect(() => {
-    if (CANVAS_ONLY_MODE && liveTrendPanelMode !== 'trades') {
-      setLiveTrendPanelMode('trades');
-    }
-  }, [liveTrendPanelMode]);
+    const intervalId = window.setInterval(() => {
+      setLiveMarketClock(Date.now());
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const visibleLiveTrendRows = useMemo(
     () => {
       const rows = Array.isArray(liveTrendEvents.rows) ? liveTrendEvents.rows : [];
-      if (showSkippedLiveTrends) {
-        return rows;
-      }
       return rows.filter((trend) => String(trend?.paper_entry_status || '').toLowerCase() === 'accepted');
-    },
-    [liveTrendEvents.rows, showSkippedLiveTrends]
-  );
-  const hiddenSkippedLiveTrendCount = useMemo(
-    () => {
-      const rows = Array.isArray(liveTrendEvents.rows) ? liveTrendEvents.rows : [];
-      return rows.filter((trend) => String(trend?.paper_entry_status || '').toLowerCase() !== 'accepted').length;
     },
     [liveTrendEvents.rows]
   );
@@ -2551,18 +3417,25 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       const activeByUid = new Map();
 
       rows.forEach((row) => {
-        const uid = getScannerCandidateUid(row);
-        if (!uid) {
-          return;
+        const eventType = String(row.event_type || '').toLowerCase();
+        const pendingWatchCount = getScannerPendingWatchCount(row);
+
+        if (SCANNER_WATCH_CLEAR_EVENTS.has(eventType) || pendingWatchCount === 0) {
+          activeByUid.clear();
         }
 
-        const eventType = String(row.event_type || '').toLowerCase();
+        const uid = getScannerCandidateUid(row);
+
         if (eventType === 'level2_pick') {
+          if (!uid) {
+            return;
+          }
+
           activeByUid.set(uid, row);
           return;
         }
 
-        if (eventType === 'trend_confirmed' || eventType === 'stage2_expired' || eventType === 'order_signal') {
+        if (uid && SCANNER_WATCH_CLOSE_EVENTS.has(eventType)) {
           activeByUid.delete(uid);
         }
       });
@@ -9022,13 +9895,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   }, [routeTrades, selectedFamilyPattern, selectedPatternTrade, selectedRouteTradeKey]);
 
   const loadLiveCanvasCandles = useCallback(
-    async ({ showLoading = false, force = false, symbol = null } = {}) => {
+    async ({ showLoading = false, force = false, symbol = null, allContracts = LIVE_CANVAS_ALL_CONTRACTS } = {}) => {
       if (liveCanvasRefreshInFlightRef.current) {
         return false;
       }
 
       const requestedSymbol = String(symbol || liveCanvasSymbolRef.current || LIVE_CANVAS_SYMBOL).toUpperCase();
-      const targetSymbol = LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : requestedSymbol;
+      const targetSymbol = allContracts ? LIVE_CANVAS_ROOT : requestedSymbol;
       liveCanvasSymbolRef.current = targetSymbol;
       setLiveCanvasSymbol(targetSymbol);
 
@@ -9043,20 +9916,35 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       }
 
       try {
-        const candles = await getCandles(targetSymbol, {
-          rootSymbol: LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : null,
-          sourceTimeframe: LIVE_CANVAS_TIMEFRAME,
-          allContracts: LIVE_CANVAS_ALL_CONTRACTS,
-          startDate: LIVE_CANVAS_START_DATE,
-          endDate: LIVE_CANVAS_END_DATE,
-          limit: LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT : null,
-        }).then(normalizeCandles).then(addLiveCanvasDisplayDates);
+        const [historicalCandles, ntLiveCandles] = await Promise.all([
+          getCandles(targetSymbol, {
+            rootSymbol: allContracts ? LIVE_CANVAS_ROOT : null,
+            sourceTimeframe: LIVE_CANVAS_TIMEFRAME,
+            allContracts,
+            startDate: LIVE_CANVAS_START_DATE,
+            endDate: LIVE_CANVAS_END_DATE,
+            limit: allContracts ? LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT : null,
+          }).then(normalizeCandles),
+          fetchNinjaTraderLiveCandles({
+            rootSymbol: LIVE_CANVAS_ROOT,
+            timeframe: LIVE_CANVAS_TIMEFRAME,
+            instrument: liveActiveInstrumentRef.current,
+            limit: LIVE_CANVAS_RECENT_NT_CANDLE_LIMIT,
+          }).then((data) => {
+            const activeInstrument = data.instrument || data.rows?.[data.rows.length - 1]?.instrument || data.rows?.[0]?.instrument;
+            if (activeInstrument) {
+              liveActiveInstrumentRef.current = activeInstrument;
+            }
+            return mapNinjaTraderLiveCandlesToCanvasCandles(data.rows);
+          }),
+        ]);
+        const candles = finalizeLiveCanvasCandles(historicalCandles, ntLiveCandles);
         liveCanvasCandlesRef.current = candles;
         liveCanvasLoadedAllOlderRef.current =
-          LIVE_CANVAS_ALL_CONTRACTS && candles.length < LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT;
+          allContracts && candles.length < LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT;
         updateLiveCanvasCandlePageMetaRef.current({
           isLoadingOlder: false,
-          hasOlder: !LIVE_CANVAS_ALL_CONTRACTS || candles.length >= LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT,
+          hasOlder: !allContracts || candles.length >= LIVE_CANVAS_INITIAL_CANDLE_PAGE_LIMIT,
           newestCandleAt: getLiveCanvasDisplayDate(candles[0]),
           oldestCandleAt: getLiveCanvasDisplayDate(candles[candles.length - 1]),
           loadedCount: candles.length,
@@ -9125,11 +10013,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     }
 
     liveTrendRefreshInFlightRef.current = true;
-    setLiveTrendEvents((current) => ({
-      ...current,
-      isLoading: true,
-      error: '',
-    }));
+    setLiveTrendEvents((current) => (
+      current.rows?.length || current.checkedAt ? current : { ...current, isLoading: true, error: '' }
+    ));
 
     try {
       const data = await fetchNinjaTraderTrendEvents({
@@ -9141,13 +10027,23 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         limit: LIVE_CANVAS_TREND_LIMIT,
       });
 
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const signature = getLivePollSignature(data, rows);
+      if (signature === liveTrendEventsSignatureRef.current) {
+        setLiveTrendEvents((current) => (
+          current.isLoading || current.error ? { ...current, isLoading: false, error: '' } : current
+        ));
+        return false;
+      }
+
+      liveTrendEventsSignatureRef.current = signature;
       setLiveTrendEvents({
         runId: data.runId ?? null,
         totalRows: data.totalRows ?? 0,
         checkedAt: new Date(),
         isLoading: false,
         error: data.error ?? '',
-        rows: Array.isArray(data.rows) ? data.rows : [],
+        rows,
       });
       return true;
     } catch (trendError) {
@@ -9165,29 +10061,37 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   }, []);
 
   const loadLiveScannerActivity = useCallback(async () => {
-    setLiveScannerActivity((current) => ({
-      ...current,
-      isLoading: true,
-      error: '',
-    }));
+    setLiveScannerActivity((current) => (
+      current.rows?.length || current.checkedAt ? current : { ...current, isLoading: true, error: '' }
+    ));
 
     try {
-      const data = await fetchNinjaTraderScannerActivity({
+      const data = await fetchNinjaTraderScreenerRoutes({
         rootSymbol: LIVE_CANVAS_ROOT,
         timeframe: LIVE_CANVAS_TIMEFRAME,
-        runId: LIVE_CANVAS_TREND_RUN_ID,
+        runId: LIVE_CANVAS_SIGNAL_RUN_ID,
         startDate: LIVE_CANVAS_START_DATE,
         endDate: LIVE_CANVAS_END_DATE,
         limit: LIVE_CANVAS_SCANNER_LIMIT,
       });
 
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const signature = getLivePollSignature(data, rows);
+      if (signature === liveScannerActivitySignatureRef.current) {
+        setLiveScannerActivity((current) => (
+          current.isLoading || current.error ? { ...current, isLoading: false, error: '' } : current
+        ));
+        return false;
+      }
+
+      liveScannerActivitySignatureRef.current = signature;
       setLiveScannerActivity({
-        runId: data.runId ?? LIVE_CANVAS_TREND_RUN_ID,
+        runId: data.runId ?? LIVE_CANVAS_SIGNAL_RUN_ID,
         totalRows: data.totalRows ?? 0,
         checkedAt: new Date(),
         isLoading: false,
         error: data.error ?? '',
-        rows: Array.isArray(data.rows) ? data.rows : [],
+        rows,
       });
       return true;
     } catch (scannerError) {
@@ -9202,31 +10106,86 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     }
   }, []);
 
+  const loadLiveCandleSlotAudit = useCallback(async () => {
+    setLiveCandleSlotAudit((current) => (
+      current.rows?.length || current.checkedAt ? current : { ...current, isLoading: true, error: '' }
+    ));
+
+    try {
+      const data = await fetchNinjaTraderCandleSlotAudit({
+        rootSymbol: LIVE_CANVAS_ROOT,
+        timeframe: LIVE_CANVAS_TIMEFRAME,
+        instrument: liveActiveInstrumentRef.current,
+        limit: 120,
+      });
+
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const activeInstrument = data.instrument || rows[0]?.instrument || liveActiveInstrumentRef.current;
+      if (activeInstrument) {
+        liveActiveInstrumentRef.current = activeInstrument;
+      }
+      const signature = getLivePollSignature(data, rows);
+      if (signature === liveCandleSlotAuditSignatureRef.current) {
+        setLiveCandleSlotAudit((current) => (
+          current.isLoading || current.error ? { ...current, isLoading: false, error: '' } : current
+        ));
+        return false;
+      }
+
+      liveCandleSlotAuditSignatureRef.current = signature;
+      setLiveCandleSlotAudit({
+        totalRows: data.totalRows ?? rows.length,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: data.error ?? '',
+        rows,
+      });
+      return true;
+    } catch (auditError) {
+      console.error(auditError);
+      setLiveCandleSlotAudit((current) => ({
+        ...current,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: `Could not load ${LIVE_CANVAS_ROOT} candle slot audit.`,
+      }));
+      return false;
+    }
+  }, []);
+
   const loadLiveTradeSignals = useCallback(async () => {
-    setLiveTradeSignals((current) => ({
-      ...current,
-      isLoading: true,
-      error: '',
-    }));
+    setLiveTradeSignals((current) => (
+      current.rows?.length || current.checkedAt ? current : { ...current, isLoading: true, error: '' }
+    ));
 
     try {
       const data = await fetchNinjaTraderSignalHistory({
         accountName: LIVE_CANVAS_ACCOUNT_NAME,
-        instrument: LIVE_CANVAS_SIGNAL_INSTRUMENT,
+        instrument: null,
         rootSymbol: LIVE_CANVAS_ROOT,
-        expectedAiRunId: LIVE_CANVAS_SIGNAL_RUN_ID,
+        expectedAiRunId: LIVE_CANVAS_TRADE_HISTORY_RUN_ID || null,
         includeCancelled: false,
         limit: 50,
       });
 
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const signature = getLivePollSignature(data, rows);
+      if (signature === liveTradeSignalsSignatureRef.current) {
+        setLiveTradeSignals((current) => (
+          current.isLoading || current.error ? { ...current, isLoading: false, error: '' } : current
+        ));
+        return false;
+      }
+
+      liveTradeSignalsSignatureRef.current = signature;
       setLiveTradeSignals({
-        runId: LIVE_CANVAS_SIGNAL_RUN_ID,
+        runId: LIVE_CANVAS_TRADE_HISTORY_RUN_ID || 'all-live-ho',
         totalRows: data.totalRows ?? 0,
         summary: data.summary ?? null,
         checkedAt: new Date(),
         isLoading: false,
         error: data.error ?? '',
-        rows: Array.isArray(data.rows) ? data.rows : [],
+        rows,
       });
       return true;
     } catch (signalError) {
@@ -9235,7 +10194,131 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         ...current,
         checkedAt: new Date(),
         isLoading: false,
-        error: `Could not load ${LIVE_CANVAS_SIGNAL_INSTRUMENT} live trades.`,
+        error: `Could not load ${liveActiveInstrumentRef.current || LIVE_CANVAS_ROOT} live trades.`,
+      }));
+      return false;
+    }
+  }, []);
+
+  const loadLiveFeedStatus = useCallback(async () => {
+    setLiveFeedStatus((current) => (
+      current.heartbeat || current.latestCandle || current.checkedAt
+        ? current
+        : { ...current, isLoading: true, error: '' }
+    ));
+
+    try {
+      const data = await fetchNinjaTraderFeedStatus({
+        rootSymbol: LIVE_CANVAS_ROOT,
+        timeframe: LIVE_CANVAS_TIMEFRAME,
+        instrument: null,
+      });
+      const activeInstrument =
+        data.instrument ||
+        data.heartbeat?.instrument ||
+        data.latestCandle?.instrument ||
+        null;
+      if (activeInstrument) {
+        liveActiveInstrumentRef.current = activeInstrument;
+      }
+
+      const signature = JSON.stringify({
+        instrument: activeInstrument,
+        heartbeatTime: data.heartbeat?.heartbeat_time_utc ?? data.heartbeat?.received_at ?? null,
+        candle: data.heartbeat?.last_candle_time ?? data.latestCandle?.candle_time ?? null,
+        status: data.heartbeat?.connection_status ?? null,
+        price: data.heartbeat?.last_price ?? null,
+        latest: data.latestCandle?.candle_time ?? null,
+      });
+      if (signature !== liveFeedStatusSignatureRef.current) {
+        liveFeedStatusSignatureRef.current = signature;
+        setLiveFeedStatus({
+          instrument: activeInstrument,
+          heartbeat: data.heartbeat ?? null,
+          latestCandle: data.latestCandle ?? null,
+          checkedAt: new Date(),
+          isLoading: false,
+          error: data.error ?? '',
+        });
+      } else {
+        setLiveFeedStatus((current) => (
+          current.isLoading || current.error ? { ...current, isLoading: false, error: '' } : current
+        ));
+      }
+
+      const feedCandle = mapNinjaTraderLiveCandleToCanvasCandle(
+        data.latestCandle,
+        data.heartbeat?.last_candle_time_utc
+      );
+      if (
+        feedCandle &&
+        !LIVE_CANVAS_FIXED_HISTORY_WINDOW &&
+        !selectedFamilyKeyRef.current &&
+        !isClosedLiveTrendWindow(selectedLiveTrendRef.current)
+      ) {
+        const currentCandles = liveCanvasCandlesRef.current;
+        if (currentCandles.length) {
+          const newestLoadedTime = getDateTimeForCompare(currentCandles[0]?.candle_date);
+          const feedCandleTime = getDateTimeForCompare(feedCandle.candle_date);
+          if (
+            newestLoadedTime === null ||
+            feedCandleTime === null ||
+            feedCandleTime >= newestLoadedTime - getTimeframeMs(LIVE_CANVAS_TIMEFRAME)
+          ) {
+            const previousNewestKey = getLiveCanvasCandleKey(currentCandles[0]);
+            const mergedCandles = mergeLiveCanvasCandles(currentCandles, [feedCandle]);
+            const visualSignature = `${LIVE_CANVAS_ROOT}|${getLiveCanvasSignature(mergedCandles)}`;
+
+            if (visualSignature !== liveCanvasSignatureRef.current) {
+              const prependCandleCount = Math.max(
+                0,
+                mergedCandles.findIndex((candle) => getLiveCanvasCandleKey(candle) === previousNewestKey)
+              );
+              liveCanvasSignatureRef.current = visualSignature;
+              liveCanvasCandlesRef.current = mergedCandles;
+              updateLiveCanvasCandlePageMetaRef.current((current) => ({
+                ...current,
+                newestCandleAt: getLiveCanvasDisplayDate(mergedCandles[0]) ?? current.newestCandleAt,
+                oldestCandleAt: getLiveCanvasDisplayDate(mergedCandles[mergedCandles.length - 1]) ?? current.oldestCandleAt,
+                loadedCount: mergedCandles.length,
+              }));
+              setLiveCanvasRefreshMeta((current) => ({
+                ...current,
+                latestCandleAt: getLiveCanvasDisplayDate(mergedCandles[0]) ?? current.latestCandleAt,
+                candleCount: mergedCandles.length,
+                changed: true,
+                error: '',
+              }));
+
+              const chartPattern = {
+                ...buildLiveCanvasPattern(
+                  mergedCandles,
+                  selectedLiveTrendRef.current,
+                  LIVE_CANVAS_ROOT
+                ),
+                raw_preserve_viewport_on_count_change: true,
+                raw_prepend_candle_count: prependCandleCount,
+              };
+              setCanvasPattern(chartPattern);
+              setCanvasChartData((current) => ({
+                ...current,
+                candles: mergedCandles,
+                snr_lines: current.snr_lines ?? [],
+                rust_patterns: chartPattern,
+              }));
+              setCanvasError('');
+            }
+          }
+        }
+      }
+      return true;
+    } catch (feedError) {
+      console.error(feedError);
+      setLiveFeedStatus((current) => ({
+        ...current,
+        checkedAt: new Date(),
+        isLoading: false,
+        error: 'Could not load NinjaTrader feed status.',
       }));
       return false;
     }
@@ -9250,8 +10333,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       const snapshot = await fetchNinjaTraderLiveBarSnapshot({
         rootSymbol: LIVE_CANVAS_ROOT,
         timeframe: LIVE_CANVAS_TIMEFRAME,
-        instrument: LIVE_CANVAS_SIGNAL_INSTRUMENT,
+        instrument: liveActiveInstrumentRef.current,
       });
+      if (snapshot?.instrument) {
+        liveActiveInstrumentRef.current = snapshot.instrument;
+      }
       const snapshotCandle = mapLiveBarSnapshotToCanvasCandle(snapshot);
       const snapshotSignature = snapshotCandle
         ? [
@@ -9266,18 +10352,27 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           ].join('|')
         : '';
 
+      if (!snapshotCandle) {
+        return false;
+      }
+
+      if (isClosedLiveTrendWindow(selectedLiveTrendRef.current)) {
+        liveCanvasSnapshotSignatureRef.current = snapshotSignature;
+        return false;
+      }
+
+      if (snapshotSignature === liveCanvasSnapshotSignatureRef.current) {
+        return false;
+      }
+
       setLiveCanvasRefreshMeta((current) => ({
         ...current,
         snapshotCheckedAt: new Date(),
-        latestSnapshotAt: snapshotCandle?.candle_snapshot_time ?? current.latestSnapshotAt,
-        latestSnapshotPrice: snapshotCandle?.candle_last_price ?? current.latestSnapshotPrice,
-        latestCandleAt: snapshotCandle?.candle_display_date ?? current.latestCandleAt,
+        latestSnapshotAt: snapshotCandle.candle_snapshot_time ?? current.latestSnapshotAt,
+        latestSnapshotPrice: snapshotCandle.candle_last_price ?? current.latestSnapshotPrice,
+        latestCandleAt: snapshotCandle.candle_display_date ?? current.latestCandleAt,
         error: '',
       }));
-
-      if (!snapshotCandle || snapshotSignature === liveCanvasSnapshotSignatureRef.current) {
-        return false;
-      }
 
       const currentCandles = liveCanvasCandlesRef.current;
       if (!currentCandles.length) {
@@ -9337,7 +10432,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       setLiveCanvasRefreshMeta((current) => ({
         ...current,
         snapshotCheckedAt: new Date(),
-        error: `Could not load latest ${LIVE_CANVAS_SIGNAL_INSTRUMENT} snapshot.`,
+        error: `Could not load latest ${liveActiveInstrumentRef.current || LIVE_CANVAS_ROOT} snapshot.`,
       }));
       return false;
     }
@@ -9345,6 +10440,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
 
   const refreshLatestLiveCanvasCandles = useCallback(async () => {
     if (LIVE_CANVAS_FIXED_HISTORY_WINDOW) {
+      return false;
+    }
+
+    if (isClosedLiveTrendWindow(selectedLiveTrendRef.current)) {
       return false;
     }
 
@@ -9378,15 +10477,29 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     }));
 
     try {
-      const recentCandles = await getCandles(LIVE_CANVAS_ROOT, {
-        rootSymbol: LIVE_CANVAS_ROOT,
-        sourceTimeframe: LIVE_CANVAS_TIMEFRAME,
-        allContracts: true,
-        startDate: refreshStartDate,
-        limit: LIVE_CANVAS_RECENT_REFRESH_LIMIT,
-      }).then(normalizeCandles).then(addLiveCanvasDisplayDates);
+      const [recentCandles, ntLiveCandles] = await Promise.all([
+        getCandles(LIVE_CANVAS_ROOT, {
+          rootSymbol: LIVE_CANVAS_ROOT,
+          sourceTimeframe: LIVE_CANVAS_TIMEFRAME,
+          allContracts: true,
+          startDate: refreshStartDate,
+          limit: LIVE_CANVAS_RECENT_REFRESH_LIMIT,
+        }).then(normalizeCandles),
+        fetchNinjaTraderLiveCandles({
+          rootSymbol: LIVE_CANVAS_ROOT,
+          timeframe: LIVE_CANVAS_TIMEFRAME,
+          instrument: liveActiveInstrumentRef.current,
+          limit: LIVE_CANVAS_RECENT_NT_CANDLE_LIMIT,
+        }).then((data) => {
+          const activeInstrument = data.instrument || data.rows?.[data.rows.length - 1]?.instrument || data.rows?.[0]?.instrument;
+          if (activeInstrument) {
+            liveActiveInstrumentRef.current = activeInstrument;
+          }
+          return mapNinjaTraderLiveCandlesToCanvasCandles(data.rows);
+        }),
+      ]);
 
-      if (!recentCandles.length) {
+      if (!recentCandles.length && !ntLiveCandles.length) {
         setLiveCanvasRefreshMeta((current) => ({
           ...current,
           checkedAt: new Date(),
@@ -9398,7 +10511,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       }
 
       const previousNewestKey = getLiveCanvasCandleKey(currentCandles[0]);
-      const mergedCandles = mergeLiveCanvasCandles(currentCandles, recentCandles);
+      const mergedCandles = finalizeLiveCanvasCandles(currentCandles, recentCandles, ntLiveCandles);
       const prependCandleCount = Math.max(
         0,
         mergedCandles.findIndex((candle) => getLiveCanvasCandleKey(candle) === previousNewestKey)
@@ -9500,7 +10613,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         startDate: LIVE_CANVAS_START_DATE,
         endDate: beforeDate,
         limit: LIVE_CANVAS_CANDLE_PAGE_LIMIT,
-      }).then(normalizeCandles).then(addLiveCanvasDisplayDates);
+      }).then(normalizeCandles).then(fillLiveCanvasTimeSlots).then(addLiveCanvasDisplayDates);
 
       if (!olderCandles.length) {
         liveCanvasLoadedAllOlderRef.current = true;
@@ -9561,11 +10674,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     }
 
     liveOracleTrendRefreshInFlightRef.current = true;
-    setLiveOracleTrendEvents((current) => ({
-      ...current,
-      isLoading: true,
-      error: '',
-    }));
+    setLiveOracleTrendEvents((current) => (
+      current.rows?.length || current.checkedAt ? current : { ...current, isLoading: true, error: '' }
+    ));
 
     try {
       const data = await fetchNinjaTraderOracleTrends({
@@ -9577,13 +10688,23 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
         limit: LIVE_CANVAS_ORACLE_LIMIT,
       });
 
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const signature = getLivePollSignature(data, rows);
+      if (signature === liveOracleTrendEventsSignatureRef.current) {
+        setLiveOracleTrendEvents((current) => (
+          current.isLoading || current.error ? { ...current, isLoading: false, error: '' } : current
+        ));
+        return false;
+      }
+
+      liveOracleTrendEventsSignatureRef.current = signature;
       setLiveOracleTrendEvents({
         runId: data.runId ?? LIVE_CANVAS_ORACLE_RUN_ID,
         totalRows: data.totalRows ?? 0,
         checkedAt: new Date(),
         isLoading: false,
         error: data.error ?? '',
-        rows: Array.isArray(data.rows) ? data.rows : [],
+        rows,
       });
       return true;
     } catch (oracleError) {
@@ -9601,21 +10722,21 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   }, []);
 
   const loadFocusedLiveCanvasCandles = useCallback(
-    async (trend, { canvasSymbol = LIVE_CANVAS_ROOT } = {}) => {
+    async (trend, { canvasSymbol = LIVE_CANVAS_ROOT, allContracts = LIVE_CANVAS_ALL_CONTRACTS } = {}) => {
       const requestedSymbol = String(canvasSymbol || LIVE_CANVAS_ROOT).toUpperCase();
-      const targetSymbol = LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : requestedSymbol;
+      const targetSymbol = allContracts ? LIVE_CANVAS_ROOT : requestedSymbol;
       const windowParams = buildLiveCanvasTrendCandleWindow(trend);
 
       setCanvasLoading(true);
       try {
         const candles = await getCandles(targetSymbol, {
-          rootSymbol: LIVE_CANVAS_ALL_CONTRACTS ? LIVE_CANVAS_ROOT : null,
+          rootSymbol: allContracts ? LIVE_CANVAS_ROOT : null,
           sourceTimeframe: LIVE_CANVAS_TIMEFRAME,
-          allContracts: LIVE_CANVAS_ALL_CONTRACTS,
+          allContracts,
           startDate: windowParams.startDate,
           endDate: windowParams.endDate,
           limit: windowParams.limit,
-        }).then(normalizeCandles).then(addLiveCanvasDisplayDates);
+        }).then(normalizeCandles).then(fillLiveCanvasTimeSlots).then(addLiveCanvasDisplayDates);
 
         if (!candles.length) {
           return null;
@@ -9623,13 +10744,13 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
 
         liveCanvasCandlesRef.current = candles;
         liveCanvasLoadedAllOlderRef.current =
-          LIVE_CANVAS_ALL_CONTRACTS && candles.length < windowParams.limit;
+          allContracts && candles.length < windowParams.limit;
         liveCanvasSignatureRef.current = `${targetSymbol}|${getLiveCanvasSignature(candles)}`;
         setLiveCanvasSymbol(targetSymbol);
         liveCanvasSymbolRef.current = targetSymbol;
         updateLiveCanvasCandlePageMetaRef.current({
           isLoadingOlder: false,
-          hasOlder: !LIVE_CANVAS_ALL_CONTRACTS || candles.length >= windowParams.limit,
+          hasOlder: !allContracts || candles.length >= windowParams.limit,
           newestCandleAt: getLiveCanvasDisplayDate(candles[0]),
           oldestCandleAt: getLiveCanvasDisplayDate(candles[candles.length - 1]),
           loadedCount: candles.length,
@@ -9768,11 +10889,15 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     async (trade) => {
       const trend = mapLiveTradeSignalToCanvasTrend(trade);
       const trendKey = getTrendEventKey(trend);
+      const tradeSymbol = String(trend.model_symbol || LIVE_CANVAS_SYMBOL).toUpperCase();
 
       selectedLiveTrendRef.current = trend;
       setSelectedLiveTrendKey(trendKey);
 
-      const focusedCandles = await loadFocusedLiveCanvasCandles(trend, { canvasSymbol: LIVE_CANVAS_ROOT });
+      const focusedCandles = await loadFocusedLiveCanvasCandles(trend, {
+        canvasSymbol: tradeSymbol,
+        allContracts: false,
+      });
       const candles = focusedCandles?.length
         ? focusedCandles
         : liveCanvasCandlesRef.current.length
@@ -9780,11 +10905,16 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
           : canvasChartData.candles ?? [];
 
       if (!candles.length) {
-        await loadLiveCanvasCandles({ showLoading: true, force: true, symbol: LIVE_CANVAS_ROOT });
+        await loadLiveCanvasCandles({
+          showLoading: true,
+          force: true,
+          symbol: tradeSymbol,
+          allContracts: false,
+        });
         return;
       }
 
-      applyLiveCanvasTrend(trend, { canvasSymbol: LIVE_CANVAS_ROOT });
+      applyLiveCanvasTrend(trend, { canvasSymbol: tradeSymbol });
     },
     [applyLiveCanvasTrend, canvasChartData.candles, loadFocusedLiveCanvasCandles, loadLiveCanvasCandles]
   );
@@ -9951,7 +11081,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
     }
 
     void loadLiveTrendEvents();
+    void loadLiveFeedStatus();
     void loadLiveScannerActivity();
+    void loadLiveCandleSlotAudit();
     void loadLiveTradeSignals();
     if (liveTrendPanelMode === 'oracle') {
       void loadLiveOracleTrendEvents();
@@ -9968,7 +11100,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
 
       void refreshLatestLiveCanvasCandles();
       void loadLiveTrendEvents();
+      void loadLiveFeedStatus();
       void loadLiveScannerActivity();
+      void loadLiveCandleSlotAudit();
       void loadLiveTradeSignals();
       if (liveTrendPanelMode === 'oracle') {
         void loadLiveOracleTrendEvents();
@@ -9981,7 +11115,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   }, [
     isEntryExitStandalone,
     liveTrendPanelMode,
+    loadLiveFeedStatus,
     loadLiveCanvasCandles,
+    loadLiveCandleSlotAudit,
     loadLiveOracleTrendEvents,
     loadLiveScannerActivity,
     loadLiveTradeSignals,
@@ -9995,16 +11131,46 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
       return;
     }
 
-    const markers = buildWatchingTrendMarkers(canvasChartData.candles, liveWatchingTrendRows);
-    const currentMarkers = canvasChartData.rust_patterns.raw_watching_trends ?? [];
+    const selectedSource = String(selectedLiveTrendRef.current?.raw_source || '').toLowerCase();
+    const hideLiveHelperMarkers = selectedSource === 'live_signal';
+    const watchMarkers = hideLiveHelperMarkers
+      ? []
+      : buildWatchingTrendMarkers(
+          canvasChartData.candles,
+          liveWatchingTrendRows,
+          liveScannerActivity.rows
+        );
+    const scannerMarkers = hideLiveHelperMarkers
+      ? []
+      : buildScannerCheckMarkers(canvasChartData.candles, liveScannerActivity.rows);
+    const stage2WindowMarkers = hideLiveHelperMarkers
+      ? []
+      : buildStage2WindowMarkers(
+          canvasChartData.candles,
+          liveWatchingTrendRows,
+          liveScannerActivity.rows
+        );
+    const liveTimeSlotMarker = buildLiveTimeSlotMarker(canvasChartData.candles, liveMarketClock);
+    const currentWatchMarkers = canvasChartData.rust_patterns.raw_watching_trends ?? [];
+    const currentScannerMarkers = canvasChartData.rust_patterns.raw_scanner_checks ?? [];
+    const currentStage2WindowMarkers = canvasChartData.rust_patterns.raw_stage2_window ?? [];
+    const currentLiveTimeSlotMarker = canvasChartData.rust_patterns.raw_live_time_slot ?? null;
 
-    if (getWatchingTrendMarkerSignature(markers) === getWatchingTrendMarkerSignature(currentMarkers)) {
+    if (
+      getWatchingTrendMarkerSignature(watchMarkers) === getWatchingTrendMarkerSignature(currentWatchMarkers) &&
+      getScannerCheckMarkerSignature(scannerMarkers) === getScannerCheckMarkerSignature(currentScannerMarkers) &&
+      getStage2WindowMarkerSignature(stage2WindowMarkers) === getStage2WindowMarkerSignature(currentStage2WindowMarkers) &&
+      getLiveTimeSlotMarkerSignature(liveTimeSlotMarker) === getLiveTimeSlotMarkerSignature(currentLiveTimeSlotMarker)
+    ) {
       return;
     }
 
     const chartPattern = {
       ...canvasChartData.rust_patterns,
-      raw_watching_trends: markers,
+      raw_live_time_slot: liveTimeSlotMarker,
+      raw_scanner_checks: scannerMarkers,
+      raw_stage2_window: stage2WindowMarkers,
+      raw_watching_trends: watchMarkers,
     };
 
     setCanvasPattern(chartPattern);
@@ -10015,6 +11181,8 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   }, [
     canvasChartData.candles,
     canvasChartData.rust_patterns,
+    liveMarketClock,
+    liveScannerActivity.rows,
     liveWatchingTrendRows,
     selectedFamilyKey,
   ]);
@@ -10022,52 +11190,175 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
   const livePanelModeTitle =
     liveTrendPanelMode === 'trades'
       ? 'Live Trades'
+      : liveTrendPanelMode === 'audit'
+        ? 'Candle Audit'
       : liveTrendPanelMode === 'scanner'
         ? 'Scanner Feed'
       : liveTrendPanelMode === 'oracle'
         ? 'Oracle Trends'
         : 'Trend Detector';
-  const livePanelRunId =
-    liveTrendPanelMode === 'trades'
-      ? liveTradeSignals.runId
-      : liveTrendPanelMode === 'scanner'
-        ? liveScannerActivity.runId
-      : liveTrendPanelMode === 'oracle'
-        ? liveOracleTrendEvents.runId
-        : liveTrendEvents.runId;
-  const liveTradeShownLabel = `${formatNumber(
-    liveTradeSignals.summary?.trades_taken ?? liveTradeSignals.rows.length
-  )} taken / ${formatNumber(liveTradeSignals.summary?.wins ?? 0)} wins`;
-  const liveFeedLabel = liveCanvasRefreshMeta.error
+  const liveMarketSession = getLiveMarketSession();
+  const liveResolvedInstrument =
+    liveFeedStatus.instrument ||
+    liveActiveInstrumentRef.current ||
+    LIVE_CANVAS_DEFAULT_SIGNAL_INSTRUMENT;
+  const liveInstrumentMeta = liveMarketSession.isOpen
+    ? LIVE_CANVAS_TIMEFRAME
+    : `${LIVE_CANVAS_TIMEFRAME} | ${liveMarketSession.opensLabel}`;
+  const liveHeartbeat = liveFeedStatus.heartbeat;
+  const liveLatestStoredCandle = liveFeedStatus.latestCandle;
+  const liveHeartbeatAgeSeconds = getServerUtcAgeSeconds(liveHeartbeat?.heartbeat_time_utc || liveHeartbeat?.received_at);
+  const liveHeartbeatFresh = Number.isFinite(Number(liveHeartbeatAgeSeconds)) && Number(liveHeartbeatAgeSeconds) <= 20;
+  const liveHeartbeatCandleLocalKey = getDateMinuteKey(liveHeartbeat?.last_candle_time);
+  const liveStoredCandleLocalKey = getDateMinuteKey(liveLatestStoredCandle?.candle_time);
+  const liveHeartbeatCandleUtcTime =
+    formatCandleDateForChart(liveHeartbeat?.last_candle_time_utc) ??
+    localWallDateTimeToUtcText(liveHeartbeat?.last_candle_time, LIVE_CANVAS_DISPLAY_TIME_ZONE) ??
+    liveHeartbeat?.last_candle_time;
+  const liveStoredCandleUtcTime =
+    liveHeartbeatCandleLocalKey &&
+    liveStoredCandleLocalKey &&
+    liveHeartbeatCandleLocalKey === liveStoredCandleLocalKey &&
+    liveHeartbeatCandleUtcTime
+      ? liveHeartbeatCandleUtcTime
+      : localWallDateTimeToUtcText(liveLatestStoredCandle?.candle_time, LIVE_CANVAS_DISPLAY_TIME_ZONE) ??
+        liveLatestStoredCandle?.candle_time;
+  const liveHeartbeatCandleKey = getDateMinuteKey(liveHeartbeatCandleUtcTime);
+  const liveStoredCandleKey = getDateMinuteKey(liveStoredCandleUtcTime);
+  const liveCanvasRows = canvasChartData.candles?.length ? canvasChartData.candles : liveCanvasCandlesRef.current;
+  const liveCanvasLatestVisualCandle = liveCanvasRows?.[0] ?? null;
+  const liveCanvasLatestClosedCandle = getLatestClosedLiveCanvasCandle(liveCanvasRows);
+  const liveCanvasLatestVisualCandleTime = getLiveCanvasDisplayDate(liveCanvasLatestVisualCandle);
+  const liveCanvasLatestClosedCandleTime = getLiveCanvasDisplayDate(liveCanvasLatestClosedCandle);
+  const liveCanvasCandleKey = getDateMinuteKey(liveCanvasLatestClosedCandleTime);
+  const liveFeedCandlesSynced = Boolean(liveHeartbeatCandleKey && liveStoredCandleKey && liveHeartbeatCandleKey === liveStoredCandleKey);
+  const liveCanvasFocusedOnSelection = Boolean(selectedLiveTrendKey);
+  const liveCanvasCandlesSynced = Boolean(liveStoredCandleKey && liveCanvasCandleKey && liveStoredCandleKey === liveCanvasCandleKey);
+  const liveCanvasReadyForCurrentFeed = liveCanvasFocusedOnSelection || liveCanvasCandlesSynced;
+  const liveFeedStateLabel = liveFeedStatus.error
     ? 'Error'
-    : liveCanvasRefreshMeta.latestSnapshotAt
-      ? 'Live NT'
-      : 'Live DB';
-  const liveTradePnlValue = Number(liveTradeSignals.summary?.total_accounting_pnl);
-  const liveTradePnlTone = Number.isFinite(liveTradePnlValue)
-    ? liveTradePnlValue > 0
-      ? 'win'
-      : liveTradePnlValue < 0
-        ? 'loss'
-        : 'flat'
-    : 'flat';
-  const livePanelShownLabel =
-    liveTrendPanelMode === 'trades'
-      ? liveTradeSignals.isLoading && !liveTradeSignals.rows.length && !liveTradeSignals.summary
+    : !liveHeartbeat
+      ? 'No Heartbeat'
+      : liveHeartbeatFresh
+        ? liveMarketSession.isOpen
+          ? liveFeedCandlesSynced
+            ? liveCanvasReadyForCurrentFeed
+              ? 'Ready'
+              : 'Canvas Lag'
+            : 'Syncing'
+          : liveFeedCandlesSynced && !liveCanvasReadyForCurrentFeed
+            ? 'Canvas Lag'
+            : 'Waiting'
+        : 'Offline';
+  const liveFeedStateTone = liveFeedStateLabel === 'Ready' || liveFeedStateLabel === 'Waiting'
+    ? 'win'
+    : liveFeedStateLabel === 'Syncing' || liveFeedStateLabel === 'Canvas Lag'
+      ? 'open'
+      : 'loss';
+  const liveFeedStatusLine = liveFeedStatus.error
+    ? liveFeedStatus.error
+    : liveHeartbeatFresh
+      ? liveMarketSession.isOpen
+        ? liveFeedCandlesSynced
+          ? liveCanvasFocusedOnSelection
+            ? 'chart focused on selected trade'
+            : liveCanvasCandlesSynced
+              ? 'DB + canvas current'
+              : 'canvas behind DB'
+          : 'DB behind NT'
+        : liveFeedCandlesSynced && !liveCanvasReadyForCurrentFeed
+          ? 'canvas behind DB'
+          : liveMarketSession.opensLabel
+      : liveHeartbeat
+        ? `last ${formatAgeSeconds(liveHeartbeatAgeSeconds)}`
+        : 'waiting for NT';
+  const liveLatestScannerActivity = liveScannerActivity.rows?.length
+    ? liveScannerActivity.rows[liveScannerActivity.rows.length - 1]
+    : null;
+  const liveLatestScannerEventType = String(liveLatestScannerActivity?.event_type || '').toLowerCase();
+  const liveLatestScannerEventLabel = liveLatestScannerActivity
+    ? getScannerActivityLabel(liveLatestScannerActivity)
+    : 'No Events';
+  const liveScannerActivityAgeSeconds = getServerUtcAgeSeconds(liveLatestScannerActivity?.created_at);
+  const liveScannerStaleLimitSeconds = liveMarketSession.isOpen ? 180 : 1800;
+  const liveScannerActivityFresh =
+    Number.isFinite(Number(liveScannerActivityAgeSeconds)) &&
+    Number(liveScannerActivityAgeSeconds) <= liveScannerStaleLimitSeconds;
+  const liveScannerIsPausedEvent = [
+    'feed_heartbeat_stale',
+    'feed_stale',
+    'feed_gap_detected',
+    'feed_backlog_reset',
+  ].includes(liveLatestScannerEventType);
+  const liveScannerSyncClearedByFeed =
+    liveLatestScannerEventType === 'candle_sync_waiting' &&
+    liveHeartbeatFresh &&
+    liveFeedCandlesSynced &&
+    liveCanvasReadyForCurrentFeed;
+  const liveScannerStateLabel = liveScannerActivity.error
+    ? 'Error'
+    : !liveLatestScannerActivity
+      ? liveScannerActivity.isLoading
         ? 'Checking'
-        : liveTradeShownLabel
-      : liveTrendPanelMode === 'scanner'
-        ? liveScannerActivity.isLoading
-          ? 'Checking'
-          : `${formatNumber(liveScannerActivity.rows.length)} events`
-      : liveTrendPanelMode === 'oracle'
-        ? liveOracleTrendEvents.isLoading
-          ? 'Checking'
-          : `${formatNumber(visibleLiveOracleTrendRows.length)} shown`
-      : liveTrendEvents.isLoading
-        ? 'Checking'
-        : `${formatNumber(visibleLiveTrendRows.length)} shown`;
-
+        : 'No Events'
+      : liveScannerIsPausedEvent
+        ? 'Paused'
+        : !liveScannerActivityFresh
+          ? 'Stale'
+          : liveLatestScannerEventType === 'market_closed' || liveLatestScannerEventType === 'market_open_waiting'
+            ? 'Waiting'
+            : liveLatestScannerEventType === 'candle_sync_waiting'
+              ? liveScannerSyncClearedByFeed
+                ? 'Running'
+                : 'Syncing'
+              : 'Running';
+  const liveScannerStateTone = liveScannerStateLabel === 'Running' || liveScannerStateLabel === 'Waiting'
+    ? 'win'
+    : liveScannerStateLabel === 'Syncing' || liveScannerStateLabel === 'Checking'
+      ? 'open'
+      : 'loss';
+  const liveScannerStatusLine = liveScannerActivity.error
+    ? liveScannerActivity.error
+    : liveScannerSyncClearedByFeed
+      ? `Feed matched | last scanner wait ${formatAgeSeconds(liveScannerActivityAgeSeconds)}`
+    : liveLatestScannerActivity
+      ? `${liveLatestScannerEventLabel} | ${formatAgeSeconds(liveScannerActivityAgeSeconds)}`
+      : 'waiting for live scanner events';
+  const liveCompletedTradeRows = liveTradeSignals.rows.filter((trade) => String(trade.status || '').toLowerCase() === 'completed');
+  const liveCompletedPnlRows = liveCompletedTradeRows
+    .map((trade) => Number(trade.realized_accounting_dollars))
+    .filter(Number.isFinite);
+  const liveAccountStartCash = (() => {
+    const fromRows = liveTradeSignals.rows
+      .map((trade) => Number(parseLiveTradeNotes(trade).sim_account_cash))
+      .find(Number.isFinite);
+    return Number.isFinite(fromRows) ? fromRows : 5000;
+  })();
+  const liveAccountTotalPnl = Number.isFinite(Number(liveTradeSignals.summary?.total_accounting_pnl))
+    ? Number(liveTradeSignals.summary.total_accounting_pnl)
+    : liveCompletedPnlRows.reduce((sum, value) => sum + value, 0);
+  const liveAccountBalance = liveAccountStartCash + liveAccountTotalPnl;
+  const liveTradeCount = Number(liveTradeSignals.summary?.trades_taken ?? liveTradeSignals.rows.length);
+  const liveCompletedCount = Number(liveTradeSignals.summary?.completed_trades ?? liveCompletedTradeRows.length);
+  const liveWinsCount = Number(liveTradeSignals.summary?.wins ?? 0);
+  const liveLossesCount = Number(liveTradeSignals.summary?.losses ?? 0);
+  const liveWinRate = liveCompletedCount > 0 ? liveWinsCount / liveCompletedCount : null;
+  const liveAvgTradePnl = liveCompletedCount > 0 ? liveAccountTotalPnl / liveCompletedCount : null;
+  const liveBestTradePnl = liveCompletedPnlRows.length ? Math.max(...liveCompletedPnlRows) : null;
+  const liveWorstTradePnl = liveCompletedPnlRows.length ? Math.min(...liveCompletedPnlRows) : null;
+  const liveAccountReturnPct = liveAccountStartCash > 0 ? liveAccountTotalPnl / liveAccountStartCash : null;
+  const liveTradeTimestampValues = liveTradeSignals.rows
+    .map((trade) => trade.triggered_at || trade.expected_time || trade.created_at)
+    .map((value) => Date.parse(value))
+    .filter(Number.isFinite);
+  const liveTradingDaySpan = liveTradeTimestampValues.length
+    ? countWeekdaysBetween(
+        Math.min(...liveTradeTimestampValues),
+        Math.max(...liveTradeTimestampValues),
+        LIVE_CANVAS_DISPLAY_TIME_ZONE
+      )
+    : null;
+  const liveAvgTradesPerDay = liveTradingDaySpan ? liveTradeCount / liveTradingDaySpan : null;
   const inspectorDetailTitle =
     inspectorDetailMode === 'trade'
       ? 'Current Trade'
@@ -18399,98 +19690,196 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                     ].filter(Boolean).join(' ')}
                   >
                     {isRawCanvasView ? (
-                      <aside className="pattern-family-live-trends-panel">
-                        <header className="pattern-family-live-trends-topbar">
-                          <div className="pattern-family-live-trends-identity">
+                      <aside className="pattern-family-live-control-column">
+                        <section className="pattern-family-live-control-hero">
+                          <div className="pattern-family-live-control-title">
                             <span>{livePanelModeTitle}</span>
                             <strong>
                               {liveTrendPanelMode === 'trades'
-                                ? LIVE_CANVAS_SIGNAL_INSTRUMENT
+                                ? liveResolvedInstrument
                                 : liveTrendPanelMode === 'oracle' || liveTrendPanelMode === 'scanner'
                                   ? LIVE_CANVAS_ROOT
-                                  : liveCanvasSymbol} {LIVE_CANVAS_TIMEFRAME}
+                                  : liveCanvasSymbol}
                             </strong>
+                            <small>{liveInstrumentMeta}</small>
                           </div>
-                          <div className="pattern-family-live-trends-headline">
-                            <span>{liveTrendPanelMode === 'trades' ? 'Trade Count' : 'Rows'}</span>
-                            <strong>{livePanelShownLabel}</strong>
-                          </div>
-                        </header>
-                        <div className="pattern-family-live-trends-dashboard">
-                          <section className="pattern-family-live-status-card pattern-family-live-status-card--run">
-                            <span>Run</span>
-                            <strong title={livePanelRunId ?? undefined}>
-                              {livePanelRunId ? compactText(livePanelRunId, 22) : 'No run'}
-                            </strong>
-                          </section>
-                          <section
+                          <div
                             className={[
-                              'pattern-family-live-status-card',
-                              'pattern-family-live-status-card--feed',
-                              liveCanvasRefreshMeta.error ? 'pattern-family-live-status-card--loss' : 'pattern-family-live-status-card--win',
-                            ].filter(Boolean).join(' ')}
+                              'pattern-family-live-feed-status',
+                              `pattern-family-live-feed-status--${liveFeedStateTone}`,
+                            ].join(' ')}
+                            title={liveFeedStatusLine}
                           >
-                            <span>Feed</span>
-                            <strong>{liveFeedLabel}</strong>
-                          </section>
-                          <section className="pattern-family-live-status-card">
-                            <span>Candle</span>
-                            <strong>{formatLiveCanvasNtTime(liveCanvasRefreshMeta.latestCandleAt)}</strong>
-                          </section>
-                          <section className="pattern-family-live-status-card pattern-family-live-status-card--price">
-                            <span>Price</span>
-                            <strong>{formatNullableDecimal(liveCanvasRefreshMeta.latestSnapshotPrice, 4)}</strong>
-                          </section>
-                          {liveTrendPanelMode === 'trades' ? (
-                            <>
-                              <section className="pattern-family-live-status-card">
-                                <span>Record</span>
+                            <div className="pattern-family-live-feed-status-main">
+                              <span>NT Heartbeat</span>
+                              <strong>{liveFeedStateLabel}</strong>
+                              <em>{liveHeartbeat ? formatAgeSeconds(liveHeartbeatAgeSeconds) : 'N/A'}</em>
+                            </div>
+                            <div className="pattern-family-live-feed-closed-sync" aria-label="Closed candle sync">
+                              <div>
+                                <span>NT</span>
+                                <strong>{formatShortDateTime(liveHeartbeat?.last_candle_time)}</strong>
+                              </div>
+                              <div>
+                                <span>DB</span>
+                                <strong>{formatShortDateTime(liveLatestStoredCandle?.candle_time)}</strong>
+                              </div>
+                              <div>
+                                <span>Canvas</span>
+                                <strong>{formatUtcDateTimeInLiveZone(liveCanvasLatestClosedCandleTime)}</strong>
+                              </div>
+                              <div>
+                                <span>Sync</span>
                                 <strong>
-                                {formatNumber(liveTradeSignals.summary?.wins ?? 0)} / {formatNumber(liveTradeSignals.summary?.losses ?? 0)}
+                                  {liveFeedCandlesSynced && liveCanvasReadyForCurrentFeed
+                                    ? 'Matched'
+                                    : liveHeartbeat
+                                      ? 'Waiting'
+                                      : 'N/A'}
                                 </strong>
-                              </section>
-                              <section
-                                className={[
-                                  'pattern-family-live-status-card',
-                                  `pattern-family-live-status-card--${liveTradePnlTone}`,
-                                ].join(' ')}
-                              >
-                                <span>P/L</span>
-                                <strong>{formatSignedLiveMoney(liveTradeSignals.summary?.total_accounting_pnl)}</strong>
-                              </section>
-                            </>
+                              </div>
+                            </div>
+                            <div className="pattern-family-live-feed-live-bar">
+                              <span>Live Bar</span>
+                              <strong>{formatUtcDateTimeInLiveZone(liveCanvasLatestVisualCandleTime)}</strong>
+                              <small>{formatRouteMode(liveHeartbeat?.connection_status || 'N/A')}</small>
+                            </div>
+                            <small>{liveFeedStatusLine}</small>
+                          </div>
+                          <div className="pattern-family-live-system-status" aria-label="Live system connection status">
+                            <div
+                              className={[
+                                'pattern-family-live-system-node',
+                                `pattern-family-live-system-node--${liveFeedStateTone}`,
+                              ].join(' ')}
+                              title={liveFeedStatusLine}
+                            >
+                              <span>NT Candle Feed</span>
+                              <strong>
+                                {liveFeedStateLabel === 'Ready' || liveFeedStateLabel === 'Waiting'
+                                  ? 'Connected'
+                                  : liveFeedStateLabel}
+                              </strong>
+                              <small>{liveFeedStatusLine}</small>
+                            </div>
+                            <div
+                              className={[
+                                'pattern-family-live-system-node',
+                                `pattern-family-live-system-node--${liveScannerStateTone}`,
+                              ].join(' ')}
+                              title={liveScannerStatusLine}
+                            >
+                              <span>Screener Loop</span>
+                              <strong>{liveScannerStateLabel}</strong>
+                              <small>{liveScannerStatusLine}</small>
+                            </div>
+                          </div>
+                        </section>
+                        <section className="pattern-family-live-control-panels" aria-label="Live account and performance summary">
+                          <div className="pattern-family-live-control-panel">
+                            <header>Account</header>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Start</span>
+                              <strong>{formatLiveMoney(liveAccountStartCash)}</strong>
+                            </div>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Balance</span>
+                              <strong>{formatLiveMoney(liveAccountBalance)}</strong>
+                            </div>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Total P/L</span>
+                              <strong className={liveAccountTotalPnl >= 0 ? 'is-win' : 'is-loss'}>
+                                {formatSignedLiveMoney(liveAccountTotalPnl)}
+                              </strong>
+                            </div>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Return</span>
+                              <strong className={liveAccountTotalPnl >= 0 ? 'is-win' : 'is-loss'}>
+                                {Number.isFinite(Number(liveAccountReturnPct)) ? formatScorePercent(liveAccountReturnPct, 1) : 'N/A'}
+                              </strong>
+                            </div>
+                          </div>
+                          <div className="pattern-family-live-control-panel">
+                            <header>Performance</header>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Record</span>
+                              <strong>{formatNumber(liveWinsCount)}W / {formatNumber(liveLossesCount)}L</strong>
+                            </div>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Win Rate</span>
+                              <strong>{liveCompletedCount ? formatScorePercent(liveWinRate, 1) : 'N/A'}</strong>
+                            </div>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Trades</span>
+                              <strong>{formatNumber(liveTradeCount)}</strong>
+                            </div>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Avg / Trading Day</span>
+                              <strong>{Number.isFinite(Number(liveAvgTradesPerDay)) ? formatNullableDecimal(liveAvgTradesPerDay, 1) : 'N/A'}</strong>
+                            </div>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Avg</span>
+                              <strong className={Number(liveAvgTradePnl) >= 0 ? 'is-win' : 'is-loss'}>
+                                {formatSignedLiveMoney(liveAvgTradePnl)}
+                              </strong>
+                            </div>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Best</span>
+                              <strong className="is-win">{formatSignedLiveMoney(liveBestTradePnl)}</strong>
+                            </div>
+                            <div className="pattern-family-live-control-panel-row">
+                              <span>Worst</span>
+                              <strong className="is-loss">{formatSignedLiveMoney(liveWorstTradePnl)}</strong>
+                            </div>
+                          </div>
+                        </section>
+                        <section className="pattern-family-live-control-activity">
+                          <header className="pattern-family-live-control-activity-head">
+                            <nav className="pattern-family-live-mode-tabs" aria-label="Live panel mode">
+                              {[
+                                { key: 'trades', label: 'Trades' },
+                                { key: 'audit', label: 'Audit' },
+                                { key: 'scanner', label: 'Scanner' },
+                              ].map((item) => (
+                                <button
+                                  className={liveTrendPanelMode === item.key ? 'pattern-family-live-mode-tab pattern-family-live-mode-tab--active' : 'pattern-family-live-mode-tab'}
+                                  key={item.key}
+                                  onClick={() => setLiveTrendPanelMode(item.key)}
+                                  type="button"
+                                >
+                                  {item.label}
+                                </button>
+                              ))}
+                            </nav>
+                          </header>
+                        <div
+                          className={[
+                            'pattern-family-live-trends-table',
+                            liveTrendPanelMode === 'scanner' ? 'pattern-family-live-trends-table--scanner' : '',
+                          ].filter(Boolean).join(' ')}
+                          role="table"
+                          aria-label="Detected trends"
+                        >
+                          {liveTrendPanelMode === 'scanner' ? (
+                            <div className="pattern-family-live-scanner-threshold">
+                              S1 Threshold {getScannerStage1ThresholdLabel(liveScannerActivity.rows)}
+                            </div>
                           ) : null}
-                          {liveTrendPanelMode === 'model' ? (
-                            <section className="pattern-family-live-status-card">
-                              <span>Skipped</span>
-                              <button
-                                type="button"
-                                className={[
-                                  'pattern-family-live-trends-toggle',
-                                  showSkippedLiveTrends ? 'pattern-family-live-trends-toggle--active' : '',
-                                ].filter(Boolean).join(' ')}
-                                onClick={() => setShowSkippedLiveTrends((current) => !current)}
-                              >
-                                {showSkippedLiveTrends
-                                  ? 'Hide skipped'
-                                  : `Show skipped ${hiddenSkippedLiveTrendCount ? `(${formatNumber(hiddenSkippedLiveTrendCount)})` : ''}`}
-                              </button>
-                            </section>
-                          ) : null}
-                        </div>
-                        <div className="pattern-family-live-trends-table" role="table" aria-label="Detected trends">
                           <div
                             className={[
                               'pattern-family-live-trends-row',
                               'pattern-family-live-trends-row--head',
                               liveTrendPanelMode === 'trades' ? 'pattern-family-live-trends-row--trade' : '',
+                              liveTrendPanelMode === 'audit' ? 'pattern-family-live-trends-row--audit' : '',
                               liveTrendPanelMode === 'scanner' ? 'pattern-family-live-trends-row--scanner' : '',
                               liveTrendPanelMode === 'oracle' ? 'pattern-family-live-trends-row--oracle' : '',
+                              liveTrendPanelMode === 'model' ? 'pattern-family-live-trends-row--model' : '',
                             ].filter(Boolean).join(' ')}
                             role="row"
                           >
                             {liveTrendPanelMode === 'trades' ? (
                               <>
+                                <span>Date</span>
                                 <span>Time</span>
                                 <span>Side</span>
                                 <span>S2</span>
@@ -18499,26 +19888,39 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                 <span>MHO P/L</span>
                                 <span>Ticks</span>
                               </>
+                            ) : liveTrendPanelMode === 'audit' ? (
+                              <>
+                                <span>Date</span>
+                                <span>Time</span>
+                                <span>Contract</span>
+                                <span>Arrival</span>
+                                <span>NT</span>
+                                <span>Candle</span>
+                                <span>Scan</span>
+                                <span>Reason</span>
+                              </>
                             ) : liveTrendPanelMode === 'scanner' ? (
                               <>
+                                <span>Date</span>
                                 <span>Time</span>
-                                <span>Event</span>
-                                <span>L1</span>
-                                <span>L2</span>
-                                <span>S2</span>
-                                <span>State</span>
+                                <span>Long</span>
+                                <span>Short</span>
+                                <span>Trend</span>
                               </>
                             ) : liveTrendPanelMode === 'oracle' ? (
                               <>
-                                <span>Entry</span>
+                                <span>Entry Date</span>
+                                <span>Entry Time</span>
                                 <span>Sym</span>
                                 <span>Dir</span>
-                                <span>Exit</span>
+                                <span>Exit Date</span>
+                                <span>Exit Time</span>
                                 <span>Bars</span>
                                 <span>R</span>
                               </>
                             ) : (
                               <>
+                                <span>Date</span>
                                 <span>Time</span>
                                 <span>Dir</span>
                                 <span>Score</span>
@@ -18537,6 +19939,19 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                 const resultTone = getLiveTradeSignalResultTone(trade);
                                 const status = String(trade.status || 'N/A');
                                 const stage2Score = getLiveTradeStage2Score(trade);
+                                const tradeTimeValue =
+                                  trade.entry_execution_time ||
+                                  trade.triggered_at ||
+                                  trade.expected_time ||
+                                  trade.created_at;
+                                const realizedAccountingPnl = Number(trade.realized_accounting_dollars);
+                                const pnlTone = Number.isFinite(realizedAccountingPnl)
+                                  ? realizedAccountingPnl > 0
+                                    ? 'win'
+                                    : realizedAccountingPnl < 0
+                                      ? 'loss'
+                                      : 'flat'
+                                  : '';
 
                                 return (
                                   <button
@@ -18551,9 +19966,10 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     key={tradeKey}
                                     onClick={() => handleLiveTradeSignalSelect(trade)}
                                     role="row"
-                                    title={`${trade.signal_uid || 'Signal'} | ${formatShortDateTime(trade.triggered_at || trade.expected_time || trade.created_at)} | ${direction || 'N/A'} | S2 ${formatScorePercent(stage2Score)} | ${status} | ${resultLabel} | MHO ${formatSignedLiveMoney(trade.realized_accounting_dollars)} | ${formatNullableDecimal(trade.realized_ticks, 1)} ticks`}
+                                    title={`${trade.signal_uid || 'Signal'} | ${formatShortDateTime(tradeTimeValue)} | ${direction || 'N/A'} | S2 ${formatScorePercent(stage2Score)} | ${status} | ${resultLabel} | MHO ${formatSignedLiveMoney(trade.realized_accounting_dollars)} | ${formatNullableDecimal(trade.realized_ticks, 1)} ticks`}
                                   >
-                                    <span>{formatShortDateTime(trade.triggered_at || trade.expected_time || trade.created_at)}</span>
+                                    <span>{formatShortDate(tradeTimeValue)}</span>
+                                    <span>{formatShortClock(tradeTimeValue)}</span>
                                     <strong>{direction || 'N/A'}</strong>
                                     <span className="pattern-family-live-trends-score">
                                       {formatScorePercent(stage2Score)}
@@ -18579,8 +19995,9 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     <span
                                       className={[
                                         'pattern-family-live-trends-result',
-                                        resultTone === 'win' ? 'pattern-family-live-trends-result--win' : '',
-                                        resultTone === 'loss' ? 'pattern-family-live-trends-result--loss' : '',
+                                        'pattern-family-live-trends-pnl',
+                                        pnlTone === 'win' ? 'pattern-family-live-trends-pnl--win' : '',
+                                        pnlTone === 'loss' ? 'pattern-family-live-trends-pnl--loss' : '',
                                       ].filter(Boolean).join(' ')}
                                     >
                                       {formatSignedLiveMoney(trade.realized_accounting_dollars)}
@@ -18596,24 +20013,85 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                 {liveTradeSignals.error || 'No live trades taken for this run yet.'}
                               </div>
                             )
+                          ) : liveTrendPanelMode === 'audit' ? (
+                            liveCandleSlotAudit.rows.length ? (
+                              liveCandleSlotAudit.rows.map((row) => {
+                                const arrivalStatus = String(row.arrival_status || 'unknown').toLowerCase();
+                                const slotTime = row.slot_time || row.expected_close_time;
+                                const ntLabel = row.nt_connected ? 'Connected' : 'No NT';
+                                const candleLabel = row.candle_received ? 'Received' : 'Missing';
+                                const scanLabel = formatRouteMode(row.scanner_status || 'not_scanned');
+                                const reasonLabel = row.blocked_reason
+                                  ? formatRouteMode(row.blocked_reason)
+                                  : row.candle_received
+                                    ? 'OK'
+                                    : 'N/A';
+
+                                return (
+                                  <div
+                                    className={[
+                                      'pattern-family-live-trends-row',
+                                      'pattern-family-live-trends-row--audit',
+                                      arrivalStatus === 'on_time' ? 'pattern-family-live-trends-row--audit-ok' : '',
+                                      arrivalStatus === 'late' ? 'pattern-family-live-trends-row--audit-late' : '',
+                                      arrivalStatus === 'missing' ? 'pattern-family-live-trends-row--audit-missing' : '',
+                                    ].filter(Boolean).join(' ')}
+                                    key={row.id || `${row.instrument || LIVE_CANVAS_ROOT}-${slotTime}`}
+                                    role="row"
+                                    title={`${row.instrument || liveResolvedInstrument} | ${formatShortDateTime(slotTime)} | ${formatRouteMode(arrivalStatus)} | ${ntLabel} | ${candleLabel} | ${reasonLabel}`}
+                                  >
+                                    <span>{formatShortDate(slotTime)}</span>
+                                    <span>{formatShortClock(slotTime)}</span>
+                                    <strong>{row.instrument || liveResolvedInstrument}</strong>
+                                    <span
+                                      className={[
+                                        'pattern-family-live-trends-state',
+                                        arrivalStatus === 'on_time' ? 'pattern-family-live-trends-entry--accepted' : '',
+                                        arrivalStatus === 'late' ? 'pattern-family-live-trends-state--open' : '',
+                                        arrivalStatus === 'missing' ? 'pattern-family-live-trends-entry--rejected_risk' : '',
+                                      ].filter(Boolean).join(' ')}
+                                    >
+                                      {formatRouteMode(arrivalStatus)}
+                                    </span>
+                                    <span>{ntLabel}</span>
+                                    <em
+                                      className={[
+                                        'pattern-family-live-trends-entry',
+                                        row.candle_received ? 'pattern-family-live-trends-entry--accepted' : 'pattern-family-live-trends-entry--rejected_risk',
+                                      ].filter(Boolean).join(' ')}
+                                    >
+                                      {candleLabel}
+                                    </em>
+                                    <span>{scanLabel}</span>
+                                    <span>{reasonLabel}</span>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <div className="pattern-family-live-trends-empty">
+                                {liveCandleSlotAudit.error || 'No candle audit slots loaded yet.'}
+                              </div>
+                            )
                           ) : liveTrendPanelMode === 'scanner' ? (
                             liveScannerActivity.rows.length ? (
-                              liveScannerActivity.rows.map((row) => {
+                              [...liveScannerActivity.rows].reverse().map((row) => {
                                 const details = row.details ?? {};
                                 const eventLabel = getScannerActivityLabel(row);
-                                const eventTone = getScannerActivityTone(row);
-                                const stateLabel = getScannerActivityState(row);
                                 const eventType = String(row.event_type || '').toLowerCase();
                                 const timeValue = row.candle_time || row.ts_utc || row.created_at;
-                                const l1Value = eventType === 'cycle_scored'
-                                  ? formatScannerCount(details.stage1_rows)
-                                  : formatScannerScore(row.level2_score);
-                                const l2Value = eventType === 'cycle_scored'
-                                  ? formatScannerCount(details.level2_picks)
-                                  : formatScannerScore(row.level2_score);
-                                const s2Value = eventType === 'cycle_scored'
-                                  ? formatScannerCount(details.stage2_rows)
-                                  : formatScannerScore(row.stage2_score);
+                                const dateLabel = row.candle_time
+                                  ? formatShortDate(row.candle_time)
+                                  : formatLiveLocalShortDate(timeValue);
+                                const clockLabel = row.candle_time
+                                  ? formatClock12Hour(row.candle_time)
+                                  : formatLiveLocalShortClock(timeValue);
+                                const titleTimeLabel = row.candle_time
+                                  ? formatShortDateTime(row.candle_time)
+                                  : formatLiveLocalShortDateTime(timeValue);
+                                const longScoreValue = formatScannerScore(row.level2_long_score ?? details.level2_long_score);
+                                const shortScoreValue = formatScannerScore(row.level2_short_score ?? details.level2_short_score);
+                                const trendLabel = getScannerStage1TrendLabel(row);
+                                const trendDetected = Boolean(trendLabel);
 
                                 return (
                                   <div
@@ -18624,22 +20102,19 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     ].filter(Boolean).join(' ')}
                                     key={row.event_uid || row.id}
                                     role="row"
-                                    title={`${eventLabel} | ${formatShortDateTime(timeValue)} | ${formatRouteMode(row.status || 'seen')} | ${details.read || row.event_uid || ''}`}
+                                    title={`${eventLabel} | ${titleTimeLabel} | ${formatRouteMode(row.status || 'seen')} | ${details.read || row.event_uid || ''}`}
                                   >
-                                    <span>{formatShortDateTime(timeValue)}</span>
-                                    <strong>{eventLabel}</strong>
-                                    <span>{l1Value}</span>
-                                    <span>{l2Value}</span>
-                                    <span>{s2Value}</span>
+                                    <span>{dateLabel}</span>
+                                    <span>{clockLabel}</span>
+                                    <span>{longScoreValue}</span>
+                                    <span>{shortScoreValue}</span>
                                     <em
                                       className={[
-                                        'pattern-family-live-trends-entry',
-                                        eventTone === 'win' ? 'pattern-family-live-trends-entry--accepted' : '',
-                                        eventTone === 'loss' ? 'pattern-family-live-trends-entry--rejected_risk' : '',
-                                        eventTone === 'open' ? 'pattern-family-live-trends-state--open' : '',
+                                        'pattern-family-live-scanner-trend-cell',
+                                        trendDetected ? 'pattern-family-live-scanner-trend-cell--confirmed' : '',
                                       ].filter(Boolean).join(' ')}
                                     >
-                                      {stateLabel}
+                                      {trendLabel}
                                     </em>
                                   </div>
                                 );
@@ -18670,10 +20145,12 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                     role="row"
                                     title={`${trend.symbol || LIVE_CANVAS_ROOT} | ${formatShortDateTime(trend.entry_date)} to ${formatShortDateTime(trend.exit_date)} | ${direction || 'N/A'} | Q ${formatDecimal(trend.quality_score, 1)} | Result ${formatSignedR(trend.result_r)}`}
                                   >
-                                    <span>{formatShortDateTime(trend.entry_date)}</span>
+                                    <span>{formatShortDate(trend.entry_date)}</span>
+                                    <span>{formatShortClock(trend.entry_date)}</span>
                                     <span>{trend.symbol || LIVE_CANVAS_ROOT}</span>
                                     <strong>{direction || 'N/A'}</strong>
-                                    <span>{formatShortDateTime(trend.exit_date)}</span>
+                                    <span>{formatShortDate(trend.exit_date)}</span>
+                                    <span>{formatShortClock(trend.exit_date)}</span>
                                     <span>{formatNumber(trend.duration_bars)}</span>
                                     <span
                                       className={[
@@ -18717,6 +20194,7 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                   type="button"
                                   className={[
                                     'pattern-family-live-trends-row',
+                                    'pattern-family-live-trends-row--model',
                                     selectedLiveTrendKey === trendKey ? 'pattern-family-live-trends-row--selected' : '',
                                     direction === 'LONG' ? 'pattern-family-live-trends-row--long' : '',
                                     direction === 'SHORT' ? 'pattern-family-live-trends-row--short' : '',
@@ -18726,7 +20204,8 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                                   role="row"
                                   title={`${trend.model_symbol || LIVE_CANVAS_ROOT} | ${formatShortDateTime(trend.candle_time)} | ${direction || 'N/A'} | Stage 2 ${formatScorePercent(trend.stage2_score)} | Entry ${formatMoney(trend.paper_entry_price ?? trend.entry_price)} | ${tradeState} | Result ${formatSignedR(trend.paper_result_r)}`}
                                 >
-                                  <span>{formatShortDateTime(trend.candle_time)}</span>
+                                  <span>{formatShortDate(trend.candle_time)}</span>
+                                  <span>{formatShortClock(trend.candle_time)}</span>
                                   <strong>{direction || 'N/A'}</strong>
                                   <span>{formatScorePercent(trend.stage2_score)}</span>
                                   <em className={`pattern-family-live-trends-entry pattern-family-live-trends-entry--${entryStatus}`}>
@@ -18756,10 +20235,11 @@ const PatternFamilyUniversePage = ({ initialFamilyKey = null, entryExitOnly = fa
                             })
                           ) : (
                             <div className="pattern-family-live-trends-empty">
-                              {liveTrendEvents.error || (showSkippedLiveTrends ? 'No confirmed trends loaded.' : 'No accepted trends loaded.')}
+                              {liveTrendEvents.error || 'No accepted trends loaded.'}
                             </div>
                           )}
                         </div>
+                        </section>
                       </aside>
                     ) : null}
                     <div className="pattern-family-live-chart-area">
